@@ -4,11 +4,14 @@ import { BrainCircuitIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import {
+  GlobalControlPlaneAccessError,
   getEvolutionStatus,
   type EvolutionStatus,
 } from "@/core/observability/api";
 import { useI18n } from "@/core/i18n/hooks";
+import { canAccessGlobalControlPlane } from "@/core/auth/control-plane-access";
 import { cn } from "@/lib/utils";
+import { useOptionalAuth } from "@/providers/AuthProvider";
 
 import { EvolutionPanel } from "./evolution-panel";
 
@@ -27,11 +30,24 @@ export function EvolutionIndicator({
   quiet = false,
 }: EvolutionIndicatorProps) {
   const { t } = useI18n();
-  const { data } = useQuery<EvolutionStatus, Error>({
+  const auth = useOptionalAuth();
+  const { data, error } = useQuery<EvolutionStatus, Error>({
     queryKey: ["evolution", "status"],
     queryFn: ({ signal }) => getEvolutionStatus(signal),
-    refetchInterval: 60_000, // 1 min
-    retry: 1,
+    enabled: canAccessGlobalControlPlane(
+      auth?.authStatus ?? null,
+      auth?.user ?? null,
+    ),
+    refetchInterval: (query) =>
+      query.state.error instanceof GlobalControlPlaneAccessError
+        ? false
+        : 60_000, // 1 min
+    retry: (failureCount, failure) =>
+      !(failure instanceof GlobalControlPlaneAccessError) && failureCount < 1,
+    refetchOnWindowFocus: (query) =>
+      !(query.state.error instanceof GlobalControlPlaneAccessError),
+    refetchOnReconnect: (query) =>
+      !(query.state.error instanceof GlobalControlPlaneAccessError),
     staleTime: 30_000,
   });
 
@@ -59,6 +75,12 @@ export function EvolutionIndicator({
     prevRef.current = { rules, memories };
   }, [data]);
 
+  if (error instanceof GlobalControlPlaneAccessError) {
+    // Evolution is optional. A tenant-scoped user lacking global
+    // observability access must not see that background 403 as a composer or
+    // task error; the dedicated observability page keeps its explicit gate.
+    return null;
+  }
   if (!data || data.enabled === false) return null;
   const rules = data.rules_count ?? 0;
   const memories = data.memories_count ?? 0;

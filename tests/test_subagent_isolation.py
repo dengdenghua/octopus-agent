@@ -47,6 +47,62 @@ def test_no_op_runner_returns_files_touched_empty(monkeypatch) -> None:
         _restore_runner(orig)
 
 
+def test_empty_runner_output_is_not_reported_as_success() -> None:
+    received: list[dict[str, Any]] = []
+
+    def _runner(prompt, *, subagent_name, context):
+        del prompt, subagent_name, context
+        return ""
+
+    orig = bridge._RUNNER
+    bridge._RUNNER = _runner
+    try:
+        result = bridge.call_subagent(
+            agent_id="explore",
+            prompt="inspect the project",
+            event_emitter=received.append,
+        )
+    finally:
+        _restore_runner(orig)
+
+    assert result["success"] is False
+    assert result["status"] == "empty_output"
+    assert "without usable output" in result["error"]
+    finished = [event for event in received if event["type"] == "subagent_finished"]
+    assert len(finished) == 1
+    assert finished[0]["ok"] is False
+    assert finished[0]["status"] == "empty_output"
+
+
+def test_blackboard_delivery_is_valid_completion_evidence() -> None:
+    def _runner(prompt, *, subagent_name, context):
+        del prompt, subagent_name
+        context["event_emitter"](
+            {
+                "type": "sub_tool_end",
+                "skill": "bb_write",
+                "args": {"key": "plan"},
+                "status": "success",
+                "round": 1,
+            }
+        )
+        return ""
+
+    orig = bridge._RUNNER
+    bridge._RUNNER = _runner
+    try:
+        result = bridge.call_subagent(
+            agent_id="x",
+            role="planner",
+            prompt="make a plan",
+        )
+    finally:
+        _restore_runner(orig)
+
+    assert result["success"] is True
+    assert result.get("error") is None
+
+
 def test_files_touched_captured_via_emitter(monkeypatch) -> None:
     """When the subagent emits sub_tool_end events for write skills,
     bridge captures the touched paths into the augmented result."""
@@ -319,6 +375,41 @@ def test_timeout_worker_inherits_ambient_session_and_blackboard_scope() -> None:
     assert captured["turn_id"] == turn_id
     assert captured["write"]["ok"] is True
     assert get_blackboard(turn_id).read("worker-result") == {"ok": True}
+
+
+def test_flipped_child_keeps_parent_artifact_root(tmp_path, monkeypatch) -> None:
+    captured: dict[str, Any] = {}
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path))
+
+    def _runner(prompt, *, subagent_name, context):
+        del prompt, subagent_name, context
+        active = current_session()
+        assert active is not None
+        captured["thread_id"] = active.thread_id
+        captured["artifact_root"] = active.metadata.get("_artifact_output_root")
+        return "ok"
+
+    orig = bridge._RUNNER
+    bridge._RUNNER = _runner
+    try:
+        result = bridge.call_subagent(
+            agent_id="x",
+            prompt="p",
+            session=Session(
+                thread_id="parent-thread",
+                turn_id="parent-turn",
+                metadata={"mode": "code"},
+            ),
+            context={"flip_subagent_thread": True},
+        )
+    finally:
+        _restore_runner(orig)
+
+    assert result["success"] is True
+    assert captured["thread_id"] != "parent-thread"
+    assert captured["artifact_root"] == str(
+        tmp_path / "workspaces" / "parent-thread" / "output" / "final"
+    )
 
 
 def test_parent_message_count_unchanged(monkeypatch) -> None:

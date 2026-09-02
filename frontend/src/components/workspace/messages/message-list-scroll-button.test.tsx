@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type * as React from "react";
 import { describe, expect, test, vi } from "vitest";
 
@@ -12,6 +12,8 @@ import { renderWithProviders } from "@/test/harness";
 import { ThreadProviders } from "./context";
 import type { LiveToolEvent } from "../live-tool-timeline";
 import {
+  buildTurnMarkers,
+  HistoricalTurnBoundary,
   MessageList,
   nearestTurnKeyByViewportCenter,
   partitionMessageGroupsIntoTurns,
@@ -107,6 +109,47 @@ Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
 });
 
 describe("MessageList scroll-to-latest affordance", () => {
+  test("unmounts distant historical turn content until it nears the viewport", () => {
+    let notify: IntersectionObserverCallback | null = null;
+    class MockIntersectionObserver implements IntersectionObserver {
+      readonly root = null;
+      readonly rootMargin = "1200px 0px";
+      readonly thresholds = [0];
+      constructor(callback: IntersectionObserverCallback) {
+        notify = callback;
+      }
+      disconnect() {}
+      observe() {}
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+      unobserve() {}
+    }
+    const originalIntersectionObserver = window.IntersectionObserver;
+    window.IntersectionObserver = MockIntersectionObserver;
+    try {
+      const view = render(
+        <HistoricalTurnBoundary cacheKey="thread:turn" virtualize>
+          <span>heavy historical content</span>
+        </HistoricalTurnBoundary>,
+      );
+      const boundary = view.container.firstElementChild;
+      expect(boundary).toHaveAttribute("data-turn-mounted", "false");
+      expect(screen.queryByText("heavy historical content")).toBeNull();
+
+      act(() => {
+        notify?.(
+          [{ isIntersecting: true } as IntersectionObserverEntry],
+          {} as IntersectionObserver,
+        );
+      });
+      expect(boundary).toHaveAttribute("data-turn-mounted", "true");
+      expect(screen.getByText("heavy historical content")).toBeInTheDocument();
+    } finally {
+      window.IntersectionObserver = originalIntersectionObserver;
+    }
+  });
+
   beforeEach(() => {
     scrollIntoViewMock.mockClear();
   });
@@ -134,8 +177,38 @@ describe("MessageList scroll-to-latest affordance", () => {
       bottom: "calc(var(--chat-input-overlay-height, 160px) + 12px)",
     });
     expect(screen.getByTestId("conversation-bottom-safe-area")).toHaveStyle({
-      height:
-        "calc(max(180px, var(--chat-input-overlay-height, 180px)) + 56px)",
+      height: "max(0px, calc(var(--chat-input-overlay-height, 180px) - 52px))",
+    });
+    expect(screen.getByTestId("conversation-bottom-safe-area")).toHaveAttribute(
+      "data-clearance-mode",
+      "composer-overlap-only",
+    );
+  });
+
+  test("uses the measured composer height instead of preserving the fallback floor", () => {
+    const thread = mockThread();
+
+    renderWithProviders(
+      <div
+        style={
+          { "--chat-input-overlay-height": "112px" } as React.CSSProperties
+        }
+      >
+        <SubtasksProvider>
+          <ThreadProviders thread={thread}>
+            <MessageList
+              threadId="thread-1"
+              thread={thread}
+              paddingBottom={180}
+            />
+          </ThreadProviders>
+        </SubtasksProvider>
+      </div>,
+      { initialRoute: "/workspace/realtime/thread-1" },
+    );
+
+    expect(screen.getByTestId("conversation-bottom-safe-area")).toHaveStyle({
+      height: "max(0px, calc(var(--chat-input-overlay-height, 180px) - 52px))",
     });
   });
 
@@ -231,6 +304,42 @@ describe("MessageList scroll-to-latest affordance", () => {
     expect(turns.map((turn) => turn.groupIndexes)).toEqual([[0], [1, 2], [3]]);
     expect(turns[0]?.key).toMatch(/^prelude:/);
     expect(turns[1]?.key).toMatch(/^human:/);
+  });
+
+  test("builds locator markers from turn boundaries without including a prelude", () => {
+    const grouped = groupMessages(
+      [
+        { id: "assistant-prelude", type: "ai", content: "restored context" },
+        { id: "user-1", type: "human", content: "  first   request  " },
+        {
+          id: "assistant-1",
+          type: "ai",
+          content: "planned answer",
+          additional_kwargs: { phase_id: "phase-1" },
+        },
+        { id: "user-2", type: "human", content: "" },
+        { id: "assistant-2", type: "ai", content: "short answer" },
+      ] as Message[],
+      (group) => group,
+    );
+    const turns = partitionMessageGroupsIntoTurns(grouped);
+
+    expect(
+      buildTurnMarkers(grouped, turns, (number) => `Turn ${number}`),
+    ).toEqual([
+      {
+        key: turns[1]!.key,
+        kind: "phase",
+        label: "first request",
+        number: 1,
+      },
+      {
+        key: turns[2]!.key,
+        kind: "dot",
+        label: "Turn 2",
+        number: 2,
+      },
+    ]);
   });
 
   test("renders explicitly phased turns as quiet bars and short turns as dots", () => {

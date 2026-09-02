@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertTriangleIcon,
-  LoaderCircleIcon,
   PlusIcon,
   RefreshCwIcon,
   TrashIcon,
@@ -22,11 +21,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { RoutedWebLink } from "@/components/ui/routed-web-link";
 import { getBackendBaseURL } from "@/core/config";
 import { jsonAuthHeaders } from "@/core/auth/api";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
-import { SearxngControl } from "@/components/workspace/searxng-control";
+import { ReachControl } from "@/components/workspace/reach-control";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -749,14 +749,13 @@ export default function PrivacySettingsPage() {
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">
               {copy.profileDescription}{" "}
-              <a
+              <RoutedWebLink
                 href="https://github.com/dengdenghua/octopus-agent/blob/main/docs/constitution.md"
                 className="underline underline-offset-2"
-                target="_blank"
-                rel="noreferrer"
+                openTargetSource="privacy-documentation"
               >
                 {copy.profileDocLabel}
-              </a>
+              </RoutedWebLink>
             </p>
 
             {profileLoadState === "ready" && profile ? (
@@ -840,8 +839,7 @@ export default function PrivacySettingsPage() {
             )}
           </div>
 
-          {/* ─── Local private web-search backend (one-click SearXNG) ─── */}
-          <SearxngControl />
+          <ReachControl />
 
           {/* ─── Alternative unlock paths ─── */}
           <details className="group rounded-lg border border-border-subtle bg-muted/20 p-4">

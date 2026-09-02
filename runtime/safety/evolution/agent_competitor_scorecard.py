@@ -11,6 +11,9 @@ from runtime.safety.evolution._agent_competitor_scorecard_models import (
     DIMENSIONS,
     EXTERNAL_COMPETITORS,
     OCTOPUS_COMPETITOR,
+    SCORECARD_CALIBRATION_AS_OF,
+    SCORECARD_CALIBRATION_MAX_AGE_DAYS,
+    SCORECARD_CALIBRATION_SOURCE_REVISION,
     ScoreDimension,
 )
 from runtime.safety.evolution._agent_competitor_scorecard_scoring import (
@@ -132,7 +135,9 @@ def compute_agent_competitor_scorecard(
                 "status": "estimated",
                 "octopus_score": overall["octopus"],
                 "codex_score": overall["codex"],
-                "source": "current_combined_architecture_baseline",
+                "source": "version_controlled_architecture_calibration",
+                "source_revision": SCORECARD_CALIBRATION_SOURCE_REVISION,
+                "as_of": SCORECARD_CALIBRATION_AS_OF,
             },
             "static_certification": {
                 "status": ("certified" if parity_certification.get("ready") else "not_certified"),
@@ -217,6 +222,9 @@ __all__ = [
     "COMPETITORS",
     "DEFAULT_TARGET_SCORE",
     "DIMENSIONS",
+    "SCORECARD_CALIBRATION_AS_OF",
+    "SCORECARD_CALIBRATION_MAX_AGE_DAYS",
+    "SCORECARD_CALIBRATION_SOURCE_REVISION",
     "ScoreDimension",
     "compute_agent_competitor_scorecard",
 ]

@@ -24,20 +24,37 @@ the existing ``SqliteBlackboard`` namespaced by thread id.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, cast
 
 MemberKind = Literal["agent", "human"]
 MemberRole = Literal["participant", "observer"]
 GrantScope = Literal["all", "from_join", "range", "summary"]
-GroupMode = Literal["chat", "cluster", "swarm", "project"]
+GroupMode = Literal["chat", "cluster", "swarm"]
 
 EventAction = Literal["invite", "leave", "mute", "unmute", "mode", "room_link", "workspace_link"]
 
 DEFAULT_MODE: GroupMode = "chat"
-# "project" is the milestone-driven collaboration mode — there is no separate
-# "project mode" entity; a project is just a group running in this mode (the
-# Project OS engine drives task dispatch over the same roster).
-VALID_MODES: frozenset[str] = frozenset({"chat", "cluster", "swarm", "project"})
+VALID_MODES: frozenset[str] = frozenset({"chat", "cluster", "swarm"})
+LEGACY_PROJECT_MODE = "project"
+
+
+def normalize_group_mode(value: object) -> GroupMode | None:
+    """Project the old four-mode wire/storage contract onto response modes.
+
+    ``project`` used to mean both "this thread has project state" and "route
+    the next chat message into Project OS".  A project binding is now an
+    independent capability, so legacy events and old clients safely fall back
+    to ordinary chat.  Unknown values remain invalid instead of silently
+    widening the response contract.
+    """
+
+    if not isinstance(value, str):
+        return None
+    if value == LEGACY_PROJECT_MODE:
+        return DEFAULT_MODE
+    if value in VALID_MODES:
+        return cast("GroupMode", value)
+    return None
 
 
 @dataclass(frozen=True)
@@ -111,7 +128,7 @@ class MemberEvent:
             "workspace_link",
         ):
             raise ValueError(f"unknown member event action: {action!r}")
-        mode = raw.get("mode")
+        mode = normalize_group_mode(raw.get("mode"))
         ws_raw = raw.get("workspace")
         workspace = dict(ws_raw) if isinstance(ws_raw, dict) else None
         return cls(
@@ -121,7 +138,7 @@ class MemberEvent:
             target_kind="human" if raw.get("target_kind") == "human" else "agent",
             role="observer" if raw.get("role") == "observer" else "participant",
             grant=ContextGrant.from_dict(raw.get("grant")),
-            mode=mode if mode in VALID_MODES else None,
+            mode=mode,
             at_message=_as_int(raw.get("at_message")),
             ts=str(raw.get("ts") or ""),
             seq=int(raw.get("seq") or 0),
@@ -230,8 +247,10 @@ def fold_state(events: list[MemberEvent], until_seq: int | None = None) -> Group
             m = members.get(ev.target_id)
             if m is not None:
                 m.muted = ev.action == "mute"
-        elif ev.action == "mode" and ev.mode in VALID_MODES:
-            mode = ev.mode  # type: ignore[assignment]
+        elif ev.action == "mode":
+            normalized_mode = normalize_group_mode(ev.mode)
+            if normalized_mode is not None:
+                mode = normalized_mode
         elif ev.action == "room_link":
             room_id = ev.target_id or None
         elif ev.action == "workspace_link":
@@ -276,14 +295,10 @@ def responders(state: GroupState, addressed: list[str] | None = None) -> list[st
                  nobody (wait for an @mention) — like a real group chat.
       - cluster: the leader (first agent participant) orchestrates.
       - swarm:   every unmuted agent participant works in parallel.
-      - project: the milestone engine assigns tasks per milestone, so chat-style
-                 turn responders don't apply — returns [] (the Project OS drives).
     Observers and muted members never respond; humans aren't auto-driven."""
     agents = [
         m for m in state.roster if m.kind == "agent" and m.role == "participant" and not m.muted
     ]
-    if state.mode == "project":
-        return []  # the Project OS engine dispatches tasks, not the chat turn
     if addressed:
         targeted = [m.id for m in agents if m.id in set(addressed)]
         if targeted:

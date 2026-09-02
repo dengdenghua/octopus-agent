@@ -114,7 +114,7 @@ export function IframeRenderer({
       <iframe
         ref={iframeRef}
         src={url}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+        sandbox="allow-scripts allow-forms allow-popups"
         style={{
           width: typeof width === "number" ? `${width}px` : width,
           height: "100%",

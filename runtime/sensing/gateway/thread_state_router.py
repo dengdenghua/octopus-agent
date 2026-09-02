@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 try:
     from fastapi import APIRouter, HTTPException, Query, Request
@@ -22,7 +24,48 @@ except ImportError:  # pragma: no cover
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
+from ._thread_state_auto_title import build_auto_title_service
+from ._thread_state_search_projection import project_visible_search_page, search_select_fields
+from .thread_workspace import (
+    _create_workspace_directory,
+    _remove_workspace_directory_if_unchanged,
+    managed_workspace_metadata,
+    strip_client_workspace_metadata,
+    verified_managed_workspace,
+)
+
 _logger = logging.getLogger(__name__)
+_PUBLIC_NO_STORE_HEADERS = {
+    "Cache-Control": "no-store",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+
+
+def _positive_env_int(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.environ.get(name, str(default))))
+    except (TypeError, ValueError):
+        return default
+
+
+def _canonical_public_share_url(token: str) -> str | None:
+    base = str(os.environ.get("OCTOPUS_PUBLIC_SHARE_BASE_URL") or "").strip().rstrip("/")
+    if not base:
+        return None
+    parsed = urlparse(base)
+    is_loopback_http = parsed.scheme == "http" and parsed.hostname in {
+        "127.0.0.1",
+        "localhost",
+        "::1",
+    }
+    if (parsed.scheme != "https" and not is_loopback_http) or not parsed.netloc:
+        _logger.warning("ignored invalid OCTOPUS_PUBLIC_SHARE_BASE_URL")
+        return None
+    if parsed.query or parsed.fragment or parsed.username or parsed.password:
+        _logger.warning("ignored unsafe OCTOPUS_PUBLIC_SHARE_BASE_URL")
+        return None
+    return f"{base}/#/share/{token}"
 
 
 def _seed_child_realtime_log(
@@ -103,13 +146,49 @@ def create_thread_state_router(
     session_titles: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
+    allow_local_workspace_access: bool = False,
     jwt_secret: str | None = None,
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
+    workspace_root: Path | str | None = None,
+    group_store: Any = None,
+    collaboration_store: Any = None,
+    team_rooms_router: Any = None,
+    project_store: Any = None,
 ) -> Any:
     require_fastapi(__name__)
+    managed_workspace_required = require_auth and not allow_local_workspace_access
 
     router = APIRouter(tags=["threads"])
+
+    from .thread_access import ThreadAccessResolver
+
+    access_resolver = ThreadAccessResolver(
+        thread_store=store,
+        group_store=group_store,
+        collaboration_store=collaboration_store,
+        team_rooms_router=team_rooms_router,
+        identity_store=identity_store,
+    )
+    share_store = None
+    if logs_root is not None:
+        from .thread_share_store import ThreadShareStore
+
+        share_store = ThreadShareStore(
+            Path(logs_root).parent / "thread-shares",
+            ttl_seconds=_positive_env_int("OCTOPUS_THREAD_SHARE_TTL_SECONDS", 30 * 86400),
+            max_active_per_owner=_positive_env_int(
+                "OCTOPUS_THREAD_SHARE_MAX_ACTIVE_PER_OWNER", 100
+            ),
+            max_snapshot_bytes=_positive_env_int(
+                "OCTOPUS_THREAD_SHARE_MAX_SNAPSHOT_BYTES", 1_200_000
+            ),
+        )
+    from .thread_share_relay import ThreadShareRelayClient
+
+    # Optional managed-cloud relay. Explicit misconfiguration fails startup so
+    # the UI never mints a link that looks public while the snapshot stayed local.
+    share_relay = ThreadShareRelayClient.from_env()
 
     def _auth(request: Any) -> str | None:
         from runtime.safety.auth.principal import resolve_principal
@@ -134,6 +213,125 @@ def create_thread_state_router(
         if store is None:
             raise HTTPException(503, "thread state unavailable")
 
+    def _project_store_for_delete() -> Any:
+        if project_store is None:
+            return None
+        resolved = project_store() if callable(project_store) else project_store
+        if resolved is None:
+            raise HTTPException(503, "thread project deletion fence unavailable")
+        return resolved
+
+    def _assign_managed_workspace(
+        thread: dict[str, Any],
+        *,
+        actor_id: str,
+        tenant_id: str,
+    ) -> dict[str, Any]:
+        """Allocate and persist the authenticated thread's server-owned root."""
+        if workspace_root is None:
+            raise HTTPException(503, "managed thread workspace unavailable")
+        thread_id = thread.get("thread_id")
+        if not isinstance(thread_id, str) or not thread_id:
+            raise HTTPException(503, "thread store returned an invalid thread id")
+        try:
+            allocation = managed_workspace_metadata(
+                workspace_root,
+                tenant_id=tenant_id,
+                actor_id=actor_id,
+                thread_id=thread_id,
+            )
+            workspace = Path(allocation["workspace_path"])
+            directory_identity = _create_workspace_directory(workspace)
+        except FileExistsError:
+            # A prior/concurrent request is successful only when the store has
+            # the exact server-derived allocation for this principal.
+            current = store.get(thread_id) if hasattr(store, "get") else None
+            raw_metadata = current.get("metadata") if isinstance(current, dict) else None
+            current_metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+            verified = verified_managed_workspace(
+                workspace_root,
+                thread_id=thread_id,
+                metadata=current_metadata,
+            )
+            if (
+                isinstance(current, dict)
+                and verified is not None
+                and current_metadata.get("owner_actor_id") == actor_id
+                and current_metadata.get("tenant_id") == tenant_id
+            ):
+                return current
+            raise HTTPException(409, "managed thread workspace already exists") from None
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            _logger.error("managed workspace allocation failed for %s: %s", thread_id, exc)
+            raise HTTPException(503, "managed thread workspace unavailable") from exc
+
+        def _recover_committed() -> dict[str, Any] | None:
+            try:
+                current = store.get(thread_id) if hasattr(store, "get") else None
+                raw_metadata = current.get("metadata") if isinstance(current, dict) else None
+                current_metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+                verified = verified_managed_workspace(
+                    workspace_root,
+                    thread_id=thread_id,
+                    metadata=current_metadata,
+                )
+            except (OSError, RuntimeError, TypeError, ValueError):
+                return None
+            if (
+                isinstance(current, dict)
+                and verified is not None
+                and current_metadata.get("owner_actor_id") == actor_id
+                and current_metadata.get("tenant_id") == tenant_id
+            ):
+                return current
+            return None
+
+        def _rollback_uncommitted() -> None:
+            # ``thread`` was created/forked by this request. Compare-and-delete
+            # under the store lock; if anything changed, assume another request
+            # took it over and leave both state and directory untouched.
+            delete_if_unchanged = getattr(store, "delete_if_unchanged", None)
+            if not callable(delete_if_unchanged):
+                return
+            try:
+                deleted = bool(delete_if_unchanged(thread_id, thread))
+            except (OSError, RuntimeError, TypeError, ValueError):
+                return
+            if deleted:
+                _remove_workspace_directory_if_unchanged(workspace, directory_identity)
+
+        try:
+            if not hasattr(store, "update_state"):
+                raise RuntimeError("thread store cannot persist managed workspace metadata")
+            store.update_state(thread_id, metadata=allocation)
+            updated = store.get(thread_id) if hasattr(store, "get") else None
+        except Exception as exc:  # noqa: BLE001 - compensate every ordinary adapter failure
+            recovered = _recover_committed()
+            if recovered is not None:
+                return recovered
+            _rollback_uncommitted()
+            _logger.error("managed workspace allocation failed for %s: %s", thread_id, exc)
+            raise HTTPException(503, "managed thread workspace unavailable") from exc
+        raw_updated_metadata = updated.get("metadata") if isinstance(updated, dict) else None
+        updated_metadata = raw_updated_metadata if isinstance(raw_updated_metadata, dict) else {}
+        verified = verified_managed_workspace(
+            workspace_root,
+            thread_id=thread_id,
+            metadata=updated_metadata,
+        )
+        if (
+            not isinstance(updated, dict)
+            or verified is None
+            or updated_metadata.get("owner_actor_id") != actor_id
+            or updated_metadata.get("tenant_id") != tenant_id
+        ):
+            recovered = _recover_committed()
+            if recovered is not None:
+                return recovered
+            _rollback_uncommitted()
+            raise HTTPException(503, "managed thread workspace persistence failed")
+        return updated
+
     def _title_service() -> Any:
         if store is None:
             raise HTTPException(503, "thread state unavailable")
@@ -151,7 +349,7 @@ def create_thread_state_router(
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
 
-    def _can_access(
+    def _can_manage(
         thread: dict[str, Any] | None,
         actor_id: str | None,
         tenant_id: str | None = None,
@@ -168,13 +366,45 @@ def create_thread_state_router(
         owner = metadata.get("owner_actor_id") or metadata.get("actor_id")
         return not isinstance(owner, str) or not owner.strip() or owner.strip() == actor_id
 
+    def _can_read(
+        thread: dict[str, Any] | None,
+        actor_id: str | None,
+        tenant_id: str | None = None,
+    ) -> bool:
+        if _can_manage(thread, actor_id, tenant_id):
+            return True
+        if not require_auth or not isinstance(thread, dict):
+            return False
+        thread_id = thread.get("thread_id")
+        if not isinstance(thread_id, str) or not thread_id:
+            return False
+        return access_resolver.resolve(thread_id, actor_id, tenant_id).can_read
+
+    def _visible_thread(thread_id: str) -> dict[str, Any] | None:
+        from runtime.memory.threads import ThreadPermanentlyDeletedError
+
+        try:
+            return store.get(thread_id)
+        except ThreadPermanentlyDeletedError:
+            return None
+
     def _get_owned_thread(
         thread_id: str,
         actor_id: str | None,
         tenant_id: str | None = None,
     ) -> dict[str, Any] | None:
-        thread = store.get(thread_id)
-        if not _can_access(thread, actor_id, tenant_id):
+        thread = _visible_thread(thread_id)
+        if not _can_manage(thread, actor_id, tenant_id):
+            return None
+        return thread
+
+    def _get_accessible_thread(
+        thread_id: str,
+        actor_id: str | None,
+        tenant_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        thread = _visible_thread(thread_id)
+        if not _can_read(thread, actor_id, tenant_id):
             return None
         return thread
 
@@ -200,9 +430,25 @@ def create_thread_state_router(
             # server-derived and cannot be assigned to another actor.
             metadata["owner_actor_id"] = actor_id
             metadata["tenant_id"] = tenant_id or ""
+        if managed_workspace_required:
+            # A shared-mode client may describe presentation state, but it can
+            # never choose a host filesystem root or forge the server marker.
+            metadata = strip_client_workspace_metadata(metadata)
         raw_values = payload.get("values")
         values = raw_values if isinstance(raw_values, dict) else {}
-        return store.create(metadata=metadata, values=values)
+        created = store.create(metadata=metadata, values=values)
+        if managed_workspace_required:
+            # ``_auth`` is fail-closed above, so these values are guaranteed in
+            # authenticated mode. Keep the guard explicit for type safety and
+            # for custom identity-store adapters.
+            if not actor_id:
+                raise HTTPException(401, "authentication required")
+            return _assign_managed_workspace(
+                created,
+                actor_id=actor_id,
+                tenant_id=tenant_id or f"legacy:{actor_id}",
+            )
+        return created
 
     @router.get("/api/threads/search")
     def search_threads_get(
@@ -216,7 +462,7 @@ def create_thread_state_router(
         needle = (q or "").strip().lower()
         results: list[dict[str, Any]] = []
         for thread in store.search(limit=500, offset=0):
-            if not _can_access(thread, actor_id, tenant_id):
+            if not _can_read(thread, actor_id, tenant_id):
                 continue
             thread_id = thread.get("thread_id")
             if isinstance(thread_id, str) and _is_archived(thread_id):
@@ -253,7 +499,48 @@ def create_thread_state_router(
                 break
         return {"threads": results}
 
-    # DSH P2: Full-text search endpoint
+    @router.get("/api/threads/diagnostics/errors")
+    def conversation_error_diagnostics(
+        request: Request,
+        thread_limit: int = Query(100, ge=1, le=500),  # type: ignore[misc]
+        message_limit: int = Query(500, ge=1, le=5_000),  # type: ignore[misc]
+        sample_limit: int = Query(20, ge=0, le=100),  # type: ignore[misc]
+    ) -> dict[str, Any]:
+        """Return an owner-filtered, privacy-bounded conversation error summary."""
+
+        actor_id = _auth(request)
+        tenant_id = _tenant(request)
+        _require_store()
+        visible: list[dict[str, Any]] = []
+        # Apply the public limit after ACL filtering. Limiting the global store
+        # first lets another tenant's newer threads crowd the caller's rows out
+        # of a small diagnostic request.
+        for thread in store.search(
+            limit=500,
+            offset=0,
+            sort_by="updated_at",
+            sort_order="desc",
+        ):
+            if not _can_read(thread, actor_id, tenant_id):
+                continue
+            thread_id = thread.get("thread_id")
+            if isinstance(thread_id, str) and _is_archived(thread_id):
+                continue
+            visible.append(thread)
+            if len(visible) >= thread_limit:
+                break
+
+        from ._conversation_error_diagnostics import build_conversation_error_diagnostics
+
+        report = build_conversation_error_diagnostics(
+            visible,
+            message_limit=message_limit,
+            sample_limit=sample_limit,
+        )
+        report["bounds"]["thread_limit"] = thread_limit
+        return report
+
+    # Octopus Native Session API v2: full-text search endpoint
     @router.get("/api/threads/fts")
     def full_text_search(
         request: Request,
@@ -297,11 +584,11 @@ def create_thread_state_router(
                 "updated_at": r.updated_at,
             }
             for r in results
-            if _can_access(store.get(r.thread_id), actor_id, tenant_id)
+            if _can_read(_visible_thread(r.thread_id), actor_id, tenant_id)
         ]
         return {"results": filtered, "count": len(filtered)}
 
-    # DSH P2: Export thread as Markdown (before {thread_id} to avoid conflict)
+    # Octopus Native Session API v2: Markdown export (before {thread_id})
     @router.get("/api/threads/{thread_id}/export")
     def export_thread(
         request: Request,
@@ -313,7 +600,7 @@ def create_thread_state_router(
         thread_id = _require_thread_id(thread_id)
         if _is_archived(thread_id):
             raise HTTPException(404, f"thread not found: {thread_id}")
-        if _get_owned_thread(thread_id, actor_id, tenant_id) is None:
+        if _get_accessible_thread(thread_id, actor_id, tenant_id) is None:
             raise HTTPException(404, f"thread not found: {thread_id}")
         if not hasattr(store, "export_thread_markdown"):
             raise HTTPException(501, "markdown export not enabled")
@@ -330,7 +617,7 @@ def create_thread_state_router(
             headers={"Content-Disposition": f'attachment; filename="{thread_id}.md"'},
         )
 
-    # DSH P2: Feedback endpoints (before {thread_id} to avoid conflict)
+    # Octopus Native Session API v2: feedback endpoints (before {thread_id})
     @router.post("/api/threads/{thread_id}/feedback")
     def add_feedback(
         request: Request,
@@ -356,9 +643,7 @@ def create_thread_state_router(
         if not isinstance(message_index, int) or message_index < 0:
             raise HTTPException(400, "message_index must be non-negative integer")
         if feedback_type not in ("thumbs_up", "thumbs_down"):
-            raise HTTPException(
-                400, "feedback_type must be 'thumbs_up' or 'thumbs_down'"
-            )
+            raise HTTPException(400, "feedback_type must be 'thumbs_up' or 'thumbs_down'")
         if not isinstance(tags, list):
             raise HTTPException(400, "tags must be a list")
         try:
@@ -396,7 +681,7 @@ def create_thread_state_router(
         thread_id = _require_thread_id(thread_id)
         if _is_archived(thread_id):
             raise HTTPException(404, f"thread not found: {thread_id}")
-        if _get_owned_thread(thread_id, actor_id, tenant_id) is None:
+        if _get_accessible_thread(thread_id, actor_id, tenant_id) is None:
             raise HTTPException(404, f"thread not found: {thread_id}")
         if not hasattr(store, "get_feedback_stats"):
             raise HTTPException(501, "feedback system not enabled")
@@ -421,7 +706,7 @@ def create_thread_state_router(
         thread_id = _require_thread_id(thread_id)
         if _is_archived(thread_id):
             raise HTTPException(404, f"thread not found: {thread_id}")
-        if _get_owned_thread(thread_id, actor_id, tenant_id) is None:
+        if _get_accessible_thread(thread_id, actor_id, tenant_id) is None:
             raise HTTPException(404, f"thread not found: {thread_id}")
         if not hasattr(store, "get_message_feedback"):
             raise HTTPException(501, "feedback system not enabled")
@@ -458,7 +743,7 @@ def create_thread_state_router(
         thread_id = _require_thread_id(thread_id)
         if _is_archived(thread_id):
             raise HTTPException(404, f"thread not found: {thread_id}")
-        thread = _get_owned_thread(thread_id, actor_id, tenant_id)
+        thread = _get_accessible_thread(thread_id, actor_id, tenant_id)
         if thread is None:
             raise HTTPException(404, f"thread not found: {thread_id}")
         return thread
@@ -471,17 +756,25 @@ def create_thread_state_router(
         tenant_id = _tenant(request)
         _require_store()
         thread_id = _require_thread_id(thread_id)
-        existing = store.get(thread_id)
-        if existing is not None and not _can_access(existing, actor_id, tenant_id):
+        existing = _visible_thread(thread_id)
+        if existing is not None and not _can_manage(existing, actor_id, tenant_id):
             raise HTTPException(404, f"thread not found: {thread_id}")
-        deleted_state = store.delete(thread_id)
-        archived_log = False
-        if logs_root is not None:
-            from runtime.memory.threads.event_log import archive_thread
+        from ._thread_state_delete import delete_thread_state
 
-            archived_log = archive_thread(logs_root, thread_id)
-        if not deleted_state and not archived_log:
-            raise HTTPException(404, f"thread not found: {thread_id}")
+        delete_thread_state(
+            store=store,
+            thread_id=thread_id,
+            existing=existing,
+            actor_id=actor_id,
+            tenant_id=tenant_id,
+            require_auth=managed_workspace_required,
+            workspace_root=workspace_root,
+            logs_root=logs_root,
+            is_archived=_is_archived,
+            project_store=_project_store_for_delete(),
+            group_store=group_store,
+            logger=_logger,
+        )
 
     @router.post("/api/threads/search")
     def search_threads_post(
@@ -496,25 +789,36 @@ def create_thread_state_router(
         metadata = dict(metadata) if metadata is not None else None
         if actor_id is not None:
             metadata = metadata or {}
-            metadata["owner_actor_id"] = actor_id
+            metadata.pop("owner_actor_id", None)
+            metadata.pop("actor_id", None)
             metadata["tenant_id"] = tenant_id or ""
         limit = int(payload.get("limit", 50) or 50)
         offset = int(payload.get("offset", 0) or 0)
         sort_by = str(payload.get("sortBy") or "updated_at")
         sort_order = str(payload.get("sortOrder") or "desc")
+        select, internal_select = search_select_fields(payload)
+        # A tenant can contain both owned and joined-room threads. Fetch a
+        # bounded tenant slice first, apply the dynamic room ACL, then paginate
+        # the visible result so same-tenant private threads cannot starve joined
+        # conversations from the sidebar.
+        fetch_limit = max(500, min(2000, offset + limit * 5)) if require_auth else limit
         results = store.search(
-            limit=limit,
-            offset=offset,
+            limit=fetch_limit,
+            offset=0 if require_auth else offset,
             metadata=metadata,
             sort_by=sort_by,
             sort_order=sort_order,
+            select=internal_select or None,
         )
-        return [
+        visible = [
             thread
             for thread in results
-            if _can_access(thread, actor_id, tenant_id)
+            if _can_read(thread, actor_id, tenant_id)
             if not (isinstance(thread.get("thread_id"), str) and _is_archived(thread["thread_id"]))
         ]
+        return project_visible_search_page(
+            visible, select=select, offset=offset, limit=limit, require_auth=require_auth
+        )
 
     @router.get("/api/threads/{thread_id}/state")
     def get_thread_state(request: Request, thread_id: str) -> dict[str, Any]:
@@ -524,12 +828,195 @@ def create_thread_state_router(
         thread_id = _require_thread_id(thread_id)
         if _is_archived(thread_id):
             raise HTTPException(404, f"thread not found: {thread_id}")
-        if _get_owned_thread(thread_id, actor_id, tenant_id) is None:
+        if _get_accessible_thread(thread_id, actor_id, tenant_id) is None:
             raise HTTPException(404, f"thread not found: {thread_id}")
         state = store.get_state(thread_id)
         if state is None:
             raise HTTPException(404, f"thread not found: {thread_id}")
         return state
+
+    @router.post("/api/threads/{thread_id}/shares", status_code=201)
+    def create_thread_share(
+        request: Request,
+        thread_id: str,
+    ) -> dict[str, Any]:
+        """Capture a sanitised, immutable public snapshot of one thread."""
+        actor_id = _auth(request)
+        tenant_id = _tenant(request)
+        _require_store()
+        thread_id = _require_thread_id(thread_id)
+        if share_store is None:
+            raise HTTPException(503, "thread sharing unavailable")
+        thread = _get_owned_thread(thread_id, actor_id, tenant_id)
+        if thread is None or _is_archived(thread_id):
+            raise HTTPException(404, f"thread not found: {thread_id}")
+        state = store.get_state(thread_id)
+        if not isinstance(state, dict):
+            raise HTTPException(404, f"thread not found: {thread_id}")
+        from .thread_share_store import build_public_thread_snapshot
+
+        try:
+            snapshot = build_public_thread_snapshot(thread, state)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        if share_relay is not None:
+            from .thread_share_relay import ThreadShareRelayError
+
+            try:
+                return share_relay.create(
+                    source_thread_id=thread_id,
+                    snapshot=snapshot,
+                    actor_id=actor_id or "",
+                    tenant_id=tenant_id or "",
+                )
+            except ThreadShareRelayError as exc:
+                raise HTTPException(502, str(exc)) from exc
+        try:
+            record = share_store.create(
+                thread_id=thread_id,
+                actor_id=actor_id or "",
+                tenant_id=tenant_id or "",
+                snapshot=snapshot,
+            )
+        except ValueError as exc:
+            raise HTTPException(413, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(429, str(exc)) from exc
+        token = str(record["token"])
+        response = {
+            "token": token,
+            "share_id": record["share_id"],
+            # Hash-only paths preserve either the Vite root shell or /ui/.
+            "share_path": f"#/share/{token}",
+            "created_at": record["created_at"],
+            "expires_at": record["expires_at"],
+        }
+        share_url = _canonical_public_share_url(token)
+        if share_url:
+            response["share_url"] = share_url
+        return response
+
+    @router.get("/api/threads/{thread_id}/shares")
+    def list_thread_shares(request: Request, thread_id: str) -> dict[str, Any]:
+        """List owner-manageable share metadata without returning capabilities."""
+        actor_id = _auth(request)
+        tenant_id = _tenant(request)
+        _require_store()
+        thread_id = _require_thread_id(thread_id)
+        if share_store is None:
+            raise HTTPException(503, "thread sharing unavailable")
+        if _get_owned_thread(thread_id, actor_id, tenant_id) is None or _is_archived(thread_id):
+            raise HTTPException(404, f"thread not found: {thread_id}")
+        if share_relay is not None:
+            from .thread_share_relay import ThreadShareRelayError
+
+            try:
+                return {
+                    "shares": share_relay.list_for_thread(
+                        source_thread_id=thread_id,
+                        actor_id=actor_id or "",
+                        tenant_id=tenant_id or "",
+                    )
+                }
+            except ThreadShareRelayError as exc:
+                raise HTTPException(502, str(exc)) from exc
+        return {
+            "shares": share_store.list_for_thread(
+                thread_id=thread_id,
+                actor_id=actor_id or "",
+                tenant_id=tenant_id or "",
+            )
+        }
+
+    @router.post("/api/public/thread-shares/resolve")
+    def resolve_public_thread_share(body: dict[str, Any], response: Response) -> dict[str, Any]:
+        """Resolve a capability from the request body so it never enters access logs."""
+        if share_store is None:
+            raise HTTPException(
+                503,
+                "thread sharing unavailable",
+                headers=_PUBLIC_NO_STORE_HEADERS,
+            )
+        token = str(body.get("token") or "").strip()
+        record = share_store.get(token)
+        if record is None:
+            raise HTTPException(
+                404,
+                "shared task not found, expired, or revoked",
+                headers=_PUBLIC_NO_STORE_HEADERS,
+            )
+        response.headers.update(_PUBLIC_NO_STORE_HEADERS)
+        return share_store.public_record(record)
+
+    @router.get("/api/public/thread-shares/{token}")
+    def get_public_thread_share(token: str, response: Response) -> dict[str, Any]:
+        """Legacy anonymous read; new clients use the body-based resolve route."""
+        if share_store is None:
+            raise HTTPException(
+                503,
+                "thread sharing unavailable",
+                headers=_PUBLIC_NO_STORE_HEADERS,
+            )
+        record = share_store.get(token)
+        if record is None:
+            raise HTTPException(
+                404,
+                "shared task not found or revoked",
+                headers=_PUBLIC_NO_STORE_HEADERS,
+            )
+        response.headers.update(_PUBLIC_NO_STORE_HEADERS)
+        response.headers["Deprecation"] = "true"
+        return share_store.public_record(record)
+
+    @router.delete(
+        "/api/thread-shares/by-id/{share_id}",
+        status_code=204,
+        response_class=Response,
+        response_model=None,
+    )
+    def revoke_thread_share_by_id(request: Request, share_id: str) -> Response:
+        actor_id = _auth(request)
+        tenant_id = _tenant(request)
+        if share_store is None:
+            raise HTTPException(503, "thread sharing unavailable")
+        if share_relay is not None:
+            from .thread_share_relay import ThreadShareRelayError
+
+            try:
+                share_relay.revoke(
+                    share_id,
+                    actor_id=actor_id or "",
+                    tenant_id=tenant_id or "",
+                )
+            except ThreadShareRelayError as exc:
+                raise HTTPException(502, str(exc)) from exc
+            return Response(status_code=204)
+        if not share_store.revoke_by_id(
+            share_id,
+            actor_id=actor_id or "",
+            tenant_id=tenant_id or "",
+        ):
+            raise HTTPException(404, "shared task not found")
+        return Response(status_code=204)
+
+    @router.delete(
+        "/api/thread-shares/{token}",
+        status_code=204,
+        response_class=Response,
+        response_model=None,
+    )
+    def revoke_thread_share(request: Request, token: str) -> Response:
+        actor_id = _auth(request)
+        tenant_id = _tenant(request)
+        if share_store is None:
+            raise HTTPException(503, "thread sharing unavailable")
+        if not share_store.revoke(
+            token,
+            actor_id=actor_id or "",
+            tenant_id=tenant_id or "",
+        ):
+            raise HTTPException(404, "shared task not found")
+        return Response(status_code=204)
 
     @router.post("/api/threads/{thread_id}/state")
     def update_thread_state(
@@ -548,6 +1035,8 @@ def create_thread_state_router(
         try:
             metadata = body.get("metadata") if isinstance(body.get("metadata"), dict) else None
             metadata = dict(metadata) if metadata is not None else None
+            if managed_workspace_required and metadata is not None:
+                metadata = strip_client_workspace_metadata(metadata)
             if actor_id is not None:
                 metadata = metadata or {}
                 metadata["owner_actor_id"] = actor_id
@@ -573,7 +1062,7 @@ def create_thread_state_router(
         thread_id = _require_thread_id(thread_id)
         if _is_archived(thread_id):
             return []
-        if _get_owned_thread(thread_id, actor_id, tenant_id) is None:
+        if _get_accessible_thread(thread_id, actor_id, tenant_id) is None:
             return []
         payload = body or {}
         limit = int(payload.get("limit", 50) or 50)
@@ -612,6 +1101,14 @@ def create_thread_state_router(
             raise HTTPException(404, f"thread not found: {thread_id}") from exc
         except ForkUnavailableError as exc:
             raise HTTPException(409, "fork-unavailable") from exc
+        if managed_workspace_required:
+            if not actor_id:
+                raise HTTPException(401, "authentication required")
+            child = _assign_managed_workspace(
+                child,
+                actor_id=actor_id,
+                tenant_id=tenant_id or f"legacy:{actor_id}",
+            )
         _seed_child_realtime_log(logs_root, thread_id, child["thread_id"], at_index)
         values = child.get("values") if isinstance(child.get("values"), dict) else {}
         seeded = values.get("messages") or []
@@ -673,65 +1170,6 @@ def create_thread_state_router(
         return snapshot.to_wire()
 
     return router
-
-
-def build_auto_title_service(store: Any, *, model_router: Any = None) -> Any:
-    """Wire a ``SessionTitleService`` for first-turn auto-title (dsh auto-title).
-
-    ``store`` ``None`` → ``None`` (auto-title disabled). With a model router a
-    named ``llm`` provider is registered so the first completed turn upgrades
-    the fallback title to a short LLM summary; without one the service still
-    works (fallback titles) but nothing is regenerated. Provider registration
-    failures degrade to a provider-less service and never raise.
-    """
-    if store is None:
-        return None
-    from runtime.memory.threads.session_title import SessionTitleService
-
-    service = SessionTitleService(store)
-    if model_router is None:
-        return service
-    try:
-        from runtime.projectos.llm_hooks import DEFAULT_MODEL as _TITLE_MODEL
-        from runtime.sensing.model_router import Message, ModelRequest
-
-        def _llm_title_provider(thread: dict[str, Any]) -> str | None:
-            values = thread.get("values") or {}
-            messages = values.get("messages") or []
-            first_human = next(
-                (
-                    m
-                    for m in messages
-                    if isinstance(m, dict)
-                    and m.get("type") == "human"
-                    and isinstance(m.get("content"), str)
-                    and m["content"].strip()
-                ),
-                None,
-            )
-            if first_human is None:
-                return None
-            prompt = (
-                "You are a session-title assistant. Write a concise "
-                "conversation title (under 60 characters, plain text, "
-                "no quotes or punctuation at the end) for a thread that "
-                "starts with this user message:\n\n"
-                f"{first_human['content'].strip()[:400]}"
-            )
-            resp = model_router.call(
-                ModelRequest(
-                    model=_TITLE_MODEL,
-                    messages=[Message(role="user", content=prompt)],
-                    max_tokens=60,
-                    temperature=0.2,
-                )
-            )
-            return resp.text or None
-
-        service.register_provider("llm", _llm_title_provider, model=_TITLE_MODEL)
-    except Exception as exc:  # noqa: BLE001 — auto-title is best-effort
-        _logger.warning("session title provider unavailable: %s", exc)
-    return service
 
 
 __all__ = ["build_auto_title_service", "create_thread_state_router"]

@@ -65,13 +65,66 @@ def _goal_tokens(goal: str) -> frozenset[str]:
     """
     _stop = frozenset(
         {
-            "the", "a", "an", "and", "or", "for", "with", "into", "from",
-            "this", "that", "these", "those", "please", "help", "me", "i",
-            "you", "we", "my", "your", "of", "to", "in", "on", "at", "by",
-            "is", "are", "was", "be", "do", "does", "did", "can", "could",
-            "should", "would", "will", "what", "when", "where", "which",
-            "how", "who", "there", "about", "it", "as", "if", "not", "no",
-            "using", "use", "want", "need", "then", "than", "so", "also",
+            "the",
+            "a",
+            "an",
+            "and",
+            "or",
+            "for",
+            "with",
+            "into",
+            "from",
+            "this",
+            "that",
+            "these",
+            "those",
+            "please",
+            "help",
+            "me",
+            "i",
+            "you",
+            "we",
+            "my",
+            "your",
+            "of",
+            "to",
+            "in",
+            "on",
+            "at",
+            "by",
+            "is",
+            "are",
+            "was",
+            "be",
+            "do",
+            "does",
+            "did",
+            "can",
+            "could",
+            "should",
+            "would",
+            "will",
+            "what",
+            "when",
+            "where",
+            "which",
+            "how",
+            "who",
+            "there",
+            "about",
+            "it",
+            "as",
+            "if",
+            "not",
+            "no",
+            "using",
+            "use",
+            "want",
+            "need",
+            "then",
+            "than",
+            "so",
+            "also",
         }
     )
     text = (goal or "").lower()
@@ -117,9 +170,6 @@ def _relevance_score(name: str, description: str, tokens: frozenset[str]) -> int
         elif tok in text:
             score += 1
     return score
-
-
-
 
 
 TASK_CHAIN_MODES: frozenset[str] = frozenset(
@@ -179,6 +229,14 @@ def _input_schema_from_handler(handler: Any) -> tuple[dict[str, Any], ...]:
         "bool_": "boolean",
     }
 
+    # A VAR_KEYWORD (``**kwargs``) handler legitimately accepts arbitrary
+    # parameters, so its schema must stay permissive; without one we close
+    # ``additionalProperties`` so the model cannot smuggle internal privilege
+    # overrides (``allow_sensitive`` / ``allow_private``) past the published
+    # tool schema (audit C2). The executor still strips them at dispatch as a
+    # second, independent boundary.
+    has_var_keyword = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+
     for pname, param in sig.parameters.items():
         if pname in _INTERNAL_PARAMS or pname.startswith("_"):
             continue
@@ -227,7 +285,7 @@ def _input_schema_from_handler(handler: Any) -> tuple[dict[str, Any], ...]:
     schema: dict[str, Any] = {
         "type": "object",
         "properties": properties,
-        "additionalProperties": True,
+        "additionalProperties": has_var_keyword,
     }
     if required:
         schema["required"] = required

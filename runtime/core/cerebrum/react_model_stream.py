@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import re
 import time
 from collections.abc import Callable, Generator
 from typing import Any
@@ -42,6 +43,7 @@ from runtime.core.cerebrum.react_parsing import (
 )
 from runtime.core.cerebrum.react_types import _safe_react_error_message
 from runtime.platform.models.llm import (
+    LLMResponseFormatError,
     Message,
     ModelRequest,
     thinking_budget_for_effort,
@@ -70,6 +72,59 @@ def _stream_answer_body(text: str) -> str:
 
     final_match = _FINAL_RE.search(text or "")
     return final_match.group(1) if final_match else (text or "")
+
+
+_PUBLIC_UPDATE_LINE_RE = re.compile(r"^\s*(?:Update|Progress)\s*:", re.IGNORECASE)
+
+
+def _strip_public_update_paragraphs(text: str) -> str:
+    """Remove ``Update:``/``Progress:`` checkpoint paragraphs from the answer lane.
+
+    In the ReAct protocol these paragraphs are public progress checkpoints that
+    PHASE 6d surfaces as commentary (``commentary_delta``), never as answer
+    prose. When the model writes them inside plain zero-anchor text the
+    ``Final Answer:`` anchor is absent, so ``_stream_answer_body`` would
+    otherwise leak the whole checkpoint into the visible answer message and the
+    same sentence would appear twice (answer tail + commentary). Stripping here
+    keeps the answer lane clean while the parser still recovers the checkpoint
+    text for the commentary channel.
+
+    A checkpoint paragraph starts at a line whose first token is
+    ``Update:``/``Progress:`` and runs until the next blank line or end of
+    text. The paragraph's trailing blank line is dropped too so the answer
+    never ends up with a doubled separator.
+    """
+    if not text:
+        return text
+    out: list[str] = []
+    skipping = False
+    for line in text.split("\n"):
+        stripped = line.lstrip()
+        if skipping:
+            if not stripped:
+                # Blank line terminates the paragraph; swallow it so the
+                # separator that preceded the checkpoint is the only one kept.
+                skipping = False
+            continue
+        if _PUBLIC_UPDATE_LINE_RE.match(line):
+            skipping = True
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
+def _stream_answer_lane(text: str) -> str:
+    """Return the visible answer lane, stripping public checkpoints.
+
+    Anchored text (has a ``Final Answer:``/``<final_answer>`` marker) is
+    terminal prose and is returned as-is. Zero-anchor prose additionally
+    strips ``Update:``/``Progress:`` paragraphs so the parser's checkpoint
+    (surfaced by PHASE 6d as commentary) does not also leak into the answer.
+    """
+    body = _stream_answer_body(text)
+    if _FINAL_RE.search(text or ""):
+        return body
+    return _strip_public_update_paragraphs(body)
 
 
 def _safe_stream_end(text: str) -> int:
@@ -183,6 +238,7 @@ def _phase_6b_model_stream(
     _native_mode = state.native_mode
     _evidence_convergence_active = state.evidence_convergence_active
     _force_convergence_next = state.force_convergence_next
+    _terminal_convergence_active = state.terminal_convergence_active
     _last_public_update_key = state.last_public_update_key
     _throughput_chars = state.throughput_chars
     _final_stream_started = state.final_stream_started
@@ -232,7 +288,12 @@ def _phase_6b_model_stream(
                         if _request_has_tool_evidence
                         else _native_public_update_tool_specs
                     )
-                    if _native_mode and _evidence_convergence_active is None
+                    if (
+                        _native_mode
+                        and _evidence_convergence_active is None
+                        and not _iteration_recovery_mode
+                        and not _terminal_convergence_active
+                    )
                     else []
                 ),
                 # Action-deficit forcing. A model that answered the previous
@@ -249,6 +310,7 @@ def _phase_6b_model_stream(
                     _native_mode
                     and _evidence_convergence_active is None
                     and not _iteration_recovery_mode
+                    and not _terminal_convergence_active
                     and _zero_action_rounds > 0
                 ),
             )
@@ -349,9 +411,23 @@ def _phase_6b_model_stream(
                 except (ImportError, AttributeError, TypeError, UnboundLocalError):  # noqa: BLE001 — cancellation subsystem unavailable; mid-stream cancel check skipped
                     pass
                 if _ct_inner is not None and _ct_inner.is_cancelled:
-                    break
+                    # A provider may have streamed answer-like prose before
+                    # its terminal done/tool-call envelope. Cancellation is
+                    # atomic: discard that pending lane and let PHASE 7 emit
+                    # the explicit cancellation outcome.
+                    terminated_reason = "cancelled"
+                    return _LoopControl.BREAK
                 if evt.type == "text_delta":
                     text_parts.append(evt.delta)
+                    # A native provider may stream polished-looking answer prose and
+                    # only reveal its structured tool calls in the terminal ``done``
+                    # event. Hold the complete answer lane atomically whenever this
+                    # request advertised native tools. PHASE 6c publishes it after
+                    # ``done`` only when the final response has no tool calls.
+                    # Thinking, structured commentary, and tool lifecycle events keep
+                    # their existing live paths.
+                    if _native_mode and bool(req.tools):
+                        continue
                     joined = "".join(text_parts)
                     if _final_stream_started:
                         # Already past the anchor.  Re-evaluate the complete
@@ -360,7 +436,7 @@ def _phase_6b_model_stream(
                         # prose, and the marker itself may straddle chunks.
                         if evt.delta:
                             joined = "".join(text_parts)
-                            answer_so_far = _stream_answer_body(joined)
+                            answer_so_far = _stream_answer_lane(joined)
                             if (
                                 _stream_has_protocol(answer_so_far)
                                 or _looks_like_observation_echo(answer_so_far)
@@ -543,10 +619,14 @@ def _phase_6b_model_stream(
                             # frontend typewriter has real deltas to play —
                             # yielding the whole joined buffer here would
                             # dump the 24+ chars accumulated so far in one
-                            # frame, defeating the streaming UX.
-                            safe_end = _safe_stream_end(joined)
+                            # frame, defeating the streaming UX. The lane is
+                            # the raw zero-anchor prose minus any
+                            # ``Update:``/``Progress:`` checkpoints (PHASE 6d
+                            # surfaces those as commentary, not answer text).
+                            answer_so_far = _stream_answer_lane(joined)
+                            safe_end = _safe_stream_end(answer_so_far)
                             if safe_end > _streamed_final_chars:
-                                delta_out = joined[_streamed_final_chars:safe_end]
+                                delta_out = answer_so_far[_streamed_final_chars:safe_end]
                                 _emit_assistant_chunk(
                                     stack,
                                     iteration=i + 1,
@@ -604,7 +684,7 @@ def _phase_6b_model_stream(
                     # and obtain a fresh, clean final answer on the next round.
                     if _final_stream_started and not _final_stream_guarded:
                         joined = "".join(text_parts)
-                        answer_so_far = _stream_answer_body(joined)
+                        answer_so_far = _stream_answer_lane(joined)
                         if (
                             _stream_has_protocol(answer_so_far)
                             or _looks_like_observation_echo(answer_so_far)
@@ -638,6 +718,36 @@ def _phase_6b_model_stream(
                                 yield _tp
                     resp = evt.final
             if resp is None:
+                # The provider iterator may end immediately after arranging
+                # cancellation, leaving no next event on which the in-loop
+                # check can run. Re-check before synthesizing a response from
+                # pending prose; an EOF without ``done`` is not permission to
+                # publish a cancelled answer lane.
+                try:
+                    from runtime.safety.approval.cancellation import (
+                        current_cancellation_token,
+                    )
+
+                    _ct_after_stream = current_cancellation_token()
+                except (ImportError, AttributeError, TypeError, UnboundLocalError):  # noqa: BLE001
+                    _ct_after_stream = None
+                if _ct_after_stream is not None and _ct_after_stream.is_cancelled:
+                    terminated_reason = "cancelled"
+                    return _LoopControl.BREAK
+                if _native_mode and bool(req.tools):
+                    # Native providers are allowed to stream answer-looking
+                    # prose before revealing structured tool calls in the
+                    # terminal envelope.  An EOF without ``done``, or a
+                    # ``done`` event without its final response, is a
+                    # protocol/transport failure, never evidence that the
+                    # buffered prose is the final answer. Phrase this as an
+                    # upstream EOF/reset so the existing model failover and
+                    # transient-recovery policy can retry safely: no answer
+                    # delta from this request has been exposed.
+                    raise LLMResponseFormatError(
+                        "terminal done event was missing or lacked its final response "
+                        "(connection reset / protocol EOF)"
+                    )
                 from runtime.platform.models.llm import ModelResponse
 
                 resp = ModelResponse(

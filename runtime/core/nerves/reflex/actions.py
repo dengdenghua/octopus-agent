@@ -62,7 +62,8 @@ def _run_webhook(rule_id: str, cfg: dict[str, Any]) -> ActionResult:
         return ActionResult(rule_id, "webhook", False, 0.0, error="missing url")
     method = str(cfg.get("method") or "POST").upper()
     timeout_s = float(cfg.get("timeout_ms") or 1000) / 1000.0
-    headers = cfg.get("headers") if isinstance(cfg.get("headers"), dict) else {}
+    raw_headers = cfg.get("headers")
+    headers: dict[Any, Any] = raw_headers if isinstance(raw_headers, dict) else {}
     body = cfg.get("body")
 
     data: bytes | None = None
@@ -70,6 +71,16 @@ def _run_webhook(rule_id: str, cfg: dict[str, Any]) -> ActionResult:
     if body is not None and method != "GET":
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
         req_headers.setdefault("Content-Type", "application/json")
+
+    # SSRF guard (audit C4): block private/internal targets unless the rule
+    # explicitly opts in via ``allow_private: true``.
+    from runtime.safety.auth.url_guard import check_url
+
+    verdict = check_url(url, allow_private=bool(cfg.get("allow_private", False)))
+    if not verdict.allow:
+        return ActionResult(
+            rule_id, "webhook", False, 0.0, error=f"url_guard rejected: {verdict.reason}"
+        )
 
     try:
         req = urllib.request.Request(

@@ -3,7 +3,10 @@ import { describe, expect, test, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 
 import { AllProviders } from "@/test/harness";
-import type { EvolutionStatus } from "@/core/observability/api";
+import {
+  GlobalControlPlaneAccessError,
+  type EvolutionStatus,
+} from "@/core/observability/api";
 
 // Mock the API module BEFORE importing the component under test so
 // the query hook picks up the mock factory.
@@ -20,6 +23,17 @@ vi.mock("@/core/observability/api", async () => {
 import { getEvolutionStatus } from "@/core/observability/api";
 
 import { EvolutionIndicator } from "./evolution-indicator";
+
+vi.mock("@/providers/AuthProvider", () => ({
+  useAuth: () => ({
+    authStatus: { enabled: false },
+    user: null,
+  }),
+  useOptionalAuth: () => ({
+    authStatus: { enabled: false },
+    user: null,
+  }),
+}));
 
 const mockedGetStatus = vi.mocked(getEvolutionStatus);
 
@@ -52,6 +66,20 @@ describe("EvolutionIndicator", () => {
     await waitFor(() => expect(mockedGetStatus).toHaveBeenCalled());
     expect(
       container.querySelector("[data-testid=evolution-indicator]"),
+    ).toBeNull();
+  });
+
+  test("hides the optional indicator and does not retry a 403", async () => {
+    mockedGetStatus.mockRejectedValue(new GlobalControlPlaneAccessError());
+    const { container } = render(
+      <AllProviders locale="en-US">
+        <EvolutionIndicator />
+      </AllProviders>,
+    );
+
+    await waitFor(() => expect(mockedGetStatus).toHaveBeenCalledTimes(1));
+    expect(
+      container.querySelector("[data-testid=evolution-admin-gate]"),
     ).toBeNull();
   });
 

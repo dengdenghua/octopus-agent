@@ -106,6 +106,13 @@ class McpRouter:
 # ═══════════════════════════════════════════════════════════
 
 
+def _mask_client_id(cid: str) -> str:
+    """OAuth App client_id 掩码(仅回显首尾,绝不暴露明文 secret)。"""
+    if not cid:
+        return ""
+    return f"{cid[:4]}…{cid[-4:]}" if len(cid) > 8 else "…"
+
+
 def create_mcp_router(
     *,
     registry: Any,
@@ -511,52 +518,97 @@ def create_mcp_router(
         if not url:
             raise HTTPException(400, "url required")
 
-        from runtime.adapters.mcp_client import oauth, oauth_discovery
+        from runtime.adapters.mcp_client import oauth, oauth_discovery, oauth_providers
 
+        redirect_uri = _oauth_redirect_uri(request)
+        tenant_id = _tenant_id(request)
+        store = oauth.get_oauth_store(tenant_id)
+
+        # 1) 标准 MCP OAuth:先做 .well-known 发现(PKCE + 动态客户端注册)。
         endpoints = oauth_discovery.discover(url)
-        if endpoints is None:
+        if endpoints is not None:
+            client_id = store.get_client(endpoints.issuer)
+            if not client_id and endpoints.registration_url:
+                client_id = oauth_discovery.register_client(
+                    endpoints.registration_url,
+                    redirect_uri=redirect_uri,
+                )
+                if client_id:
+                    store.save_client(endpoints.issuer, client_id)
+            if not client_id:
+                raise HTTPException(
+                    400,
+                    "no client_id available for this server — it doesn't "
+                    "support dynamic client registration; configure headers "
+                    "with a manually-issued token instead.",
+                )
+
+            verifier, challenge = oauth.new_pkce()
+            state = store.start_pending(
+                server=server,
+                code_verifier=verifier,
+                redirect_uri=redirect_uri,
+                token_url=endpoints.token_url,
+                client_id=client_id,
+            )
+            authorize_url = oauth.build_authorize_url(
+                authorize_url=endpoints.authorize_url,
+                client_id=client_id,
+                redirect_uri=redirect_uri,
+                scopes=list(endpoints.scopes) or None,
+                state=state,
+                code_challenge=challenge,
+            )
+            return {"ok": True, "authorize_url": authorize_url}
+
+        # 2) 服务商直连 OAuth App(GitHub / GitLab 等 WorkBuddy server-side 连接器):
+        #    用户在自己账号下注册 OAuth App(client_id/secret 加密存本地),授权页
+        #    回调到我们后端换 token —— 和 WorkBuddy 靠它平台 OAuth App 登录一个原理。
+        provider_id = str(body.get("provider") or "").strip() or None
+        prov = oauth_providers.get_provider(provider_id) if provider_id else None
+        if prov is None:
             raise HTTPException(
                 400,
                 "OAuth discovery failed — the server may not support OAuth, "
                 "or the well-known metadata endpoints are unreachable.",
             )
 
-        redirect_uri = _oauth_redirect_uri(request)
-        tenant_id = _tenant_id(request)
-        store = oauth.get_oauth_store(tenant_id)
-        client_id = store.get_client(endpoints.issuer)
-        if not client_id and endpoints.registration_url:
-            client_id = oauth_discovery.register_client(
-                endpoints.registration_url,
-                redirect_uri=redirect_uri,
-            )
-            if client_id:
-                store.save_client(endpoints.issuer, client_id)
+        app = store.get_app_client(prov.id)
+        if not app:
+            # 还没配置 OAuth App 凭据:让前端弹窗引导用户创建并填写。
+            return {
+                "ok": False,
+                "needs_app_credentials": True,
+                "provider": prov.id,
+                "provider_name": prov.name,
+                "authorize_url": prov.authorize_url,
+                "token_url": prov.token_url,
+                "scopes": list(prov.scopes),
+                "docs_url": prov.docs_url,
+                "redirect_uri": redirect_uri,
+                "requires_client_secret": prov.requires_client_secret,
+            }
+        client_id = str(app.get("client_id") or "")
         if not client_id:
-            raise HTTPException(
-                400,
-                "no client_id available for this server — it doesn't "
-                "support dynamic client registration; configure headers "
-                "with a manually-issued token instead.",
-            )
-
-        verifier, challenge = oauth.new_pkce()
+            raise HTTPException(400, "OAuth App client_id 缺失,请重新配置凭据。")
         state = store.start_pending(
             server=server,
-            code_verifier=verifier,
+            code_verifier="",
             redirect_uri=redirect_uri,
-            token_url=endpoints.token_url,
+            token_url=prov.token_url,
             client_id=client_id,
+            client_secret=str(app.get("client_secret") or ""),
+            use_pkce=False,
         )
         authorize_url = oauth.build_authorize_url(
-            authorize_url=endpoints.authorize_url,
+            authorize_url=prov.authorize_url,
             client_id=client_id,
             redirect_uri=redirect_uri,
-            scopes=list(endpoints.scopes) or None,
+            scopes=list(prov.scopes) or None,
             state=state,
-            code_challenge=challenge,
+            code_challenge=None,
         )
-        return {"ok": True, "authorize_url": authorize_url}
+        return {"ok": True, "authorize_url": authorize_url, "provider": prov.id}
 
     @router.get("/api/mcp/oauth/callback")
     def api_mcp_oauth_callback(
@@ -603,8 +655,9 @@ window.close();
             token_response = oauth.exchange_code(
                 token_url=pending.token_url,
                 code=code,
-                code_verifier=pending.code_verifier,
+                code_verifier=pending.code_verifier if pending.use_pkce else None,
                 client_id=pending.client_id,
+                client_secret=pending.client_secret or None,
                 redirect_uri=pending.redirect_uri,
             )
         except Exception as exc:  # noqa: BLE001 — surface to the popup, not a 500
@@ -632,6 +685,67 @@ window.close();
         from runtime.adapters.mcp_client import oauth
 
         return {"ok": oauth.get_oauth_store(_tenant_id(request)).forget(server_name)}
+
+    # ── 服务商 OAuth App 凭据管理(BYO OAuth)──────────────
+    # GitHub / GitLab 等不暴露 .well-known 元数据的连接器,靠用户自己注册的
+    # OAuth App(client_id + client_secret)完成网页登录。凭据与 token 一起
+    # 加密存到 ~/.octopus/mcp_oauth.json,接口不返回明文 secret。
+
+    @router.get("/api/mcp/oauth/app/{provider}")
+    def api_mcp_oauth_app_get(provider: str, request: Request) -> dict[str, Any]:
+        from runtime.adapters.mcp_client import oauth, oauth_providers
+
+        prov = oauth_providers.get_provider(provider)
+        if prov is None:
+            raise HTTPException(404, f"unknown oauth provider: {provider}")
+        app = oauth.get_oauth_store(_tenant_id(request)).get_app_client(prov.id)
+        cid = (app or {}).get("client_id", "")
+        return {
+            "provider": prov.id,
+            "provider_name": prov.name,
+            "has_app": bool(app and cid),
+            "configured": bool(app and cid),
+            "client_id_masked": _mask_client_id(cid),
+        }
+
+    @router.post("/api/mcp/oauth/app/{provider}", dependencies=[Depends(_operator_dep)])
+    def api_mcp_oauth_app_save(
+        provider: str,
+        body: dict[str, Any],
+        request: Request,
+    ) -> dict[str, Any]:
+        from runtime.adapters.mcp_client import oauth, oauth_providers
+
+        prov = oauth_providers.get_provider(provider)
+        if prov is None:
+            raise HTTPException(404, f"unknown oauth provider: {provider}")
+        client_id = str(body.get("client_id") or "").strip()
+        client_secret = str(body.get("client_secret") or "").strip()
+        if not client_id:
+            raise HTTPException(400, "client_id required")
+        if prov.requires_client_secret and not client_secret:
+            raise HTTPException(400, f"{prov.name} 需要 client_secret")
+        oauth.get_oauth_store(_tenant_id(request)).save_app_client(
+            prov.id,
+            client_id,
+            client_secret,
+        )
+        return {
+            "ok": True,
+            "provider": prov.id,
+            "provider_name": prov.name,
+            "client_id_masked": _mask_client_id(client_id),
+        }
+
+    @router.delete("/api/mcp/oauth/app/{provider}", dependencies=[Depends(_operator_dep)])
+    def api_mcp_oauth_app_delete(provider: str, request: Request) -> dict[str, Any]:
+        from runtime.adapters.mcp_client import oauth, oauth_providers
+
+        prov = oauth_providers.get_provider(provider)
+        if prov is None:
+            raise HTTPException(404, f"unknown oauth provider: {provider}")
+        ok = oauth.get_oauth_store(_tenant_id(request)).forget_app_client(prov.id)
+        return {"ok": ok, "provider": prov.id, "provider_name": prov.name}
 
     @router.delete("/api/mcp/trust/{server_name}", dependencies=[Depends(_operator_dep)])
     def api_mcp_trust_revoke(server_name: str, request: Request) -> dict[str, Any]:

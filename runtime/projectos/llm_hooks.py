@@ -96,6 +96,20 @@ def parse_tasks(text: str, milestone_id: str) -> list[Task]:
         goal = str(item.get("goal") or item.get("title") or tid)
         label_to_id[goal] = tid
         label_to_id[str(i)] = tid
+        team_mode = (
+            item.get("team_mode")
+            if item.get("team_mode") in ("single", "swarm", "cluster")
+            else "single"
+        )
+        priority = (
+            str(item.get("priority")).upper()
+            if str(item.get("priority") or "").upper() in ("P0", "P1", "P2", "P3")
+            else "P2"
+        )
+        try:
+            estimate = float(item.get("estimate") or 0)
+        except (TypeError, ValueError):
+            estimate = 0.0
         out.append(
             Task(
                 id=tid,
@@ -103,6 +117,11 @@ def parse_tasks(text: str, milestone_id: str) -> list[Task]:
                 type=ttype,
                 goal=goal,
                 assigned_role=ROLE_FOR_TASK.get(ttype, "engineer"),
+                team_mode=team_mode,
+                priority=priority,
+                estimate=max(0.0, estimate),
+                due_at=str(item.get("due_at") or ""),
+                acceptance_criteria=[str(c) for c in (item.get("acceptance_criteria") or [])],
                 depends_on=[str(d) for d in (item.get("depends_on") or [])],
             )
         )
@@ -151,7 +170,13 @@ def llm_decompose_tasks(router: Any, *, model: str = DEFAULT_MODEL):
         prompt = (
             "Decompose this milestone into 2–5 tasks forming a small DAG. Reply "
             'ONLY a JSON array; each item: {"type":"design|code|research|analysis|'
-            'review","goal","depends_on":[earlier goals]}.'
+            'review","goal","team_mode":"single|swarm|cluster",'
+            '"priority":"P0|P1|P2|P3","estimate":1.5,"due_at":"YYYY-MM-DD",'
+            '"acceptance_criteria":["..."],"depends_on":[earlier goals]}. '
+            "team_mode=swarm for research that benefits from diverse angles; "
+            "team_mode=cluster for big build tasks that need orchestration; "
+            "single otherwise. Keep estimates in person-days and due dates within "
+            "the milestone window."
             f"\n\nMilestone: {ms.goal}\nSpec: {json.dumps(ms.spec, ensure_ascii=False)}"
             f"\nSuccess criteria: {ms.success_criteria}"
         )
@@ -165,7 +190,12 @@ def llm_decompose_tasks(router: Any, *, model: str = DEFAULT_MODEL):
     return _decompose
 
 
-def subagent_execute_task(task: Task, context: dict[str, Any]) -> str:
+def subagent_execute_task(
+    task: Task,
+    context: dict[str, Any],
+    *,
+    subagent_runner: Callable[..., str] | None = None,
+) -> str:
     """Run a task through the production subagent path (the cowork bridge)."""
     from runtime.execution.subagents import call_subagent
 
@@ -173,13 +203,61 @@ def subagent_execute_task(task: Task, context: dict[str, Any]) -> str:
     prompt = task.goal
     if context.get("milestone_goal"):
         prompt = f"Milestone: {context['milestone_goal']}\nTask: {task.goal}"
-    result = call_subagent(
-        agent,
-        prompt,
-        context={"source": "projectos_task", "task_id": task.id, "projectos": context},
-        timeout_s=900,
-        timeout_seconds=900.0,
+    thread_id = str(context.get("thread_id") or "")
+    actor = str(context.get("owner_actor_id") or context.get("owner_id") or "")
+    tenant_id = str(context.get("tenant_id") or "")
+    project_id = str(context.get("project_id") or "")
+    inherited_runtime_metadata = context.get("runtime_session_metadata")
+    runtime_session_metadata = (
+        dict(inherited_runtime_metadata) if isinstance(inherited_runtime_metadata, dict) else {}
     )
+    runtime_session_metadata.update(
+        {
+            "source": "projectos_task",
+            "project_id": project_id,
+            "tenant_id": tenant_id,
+        }
+    )
+    dispatch_context: dict[str, Any] = {
+        "source": "projectos_task",
+        "task_id": task.id,
+        "projectos": context,
+        "runtime_session_metadata": runtime_session_metadata,
+    }
+    if thread_id:
+        dispatch_context["thread_id"] = thread_id
+    if actor:
+        dispatch_context["actor"] = actor
+    if tenant_id:
+        dispatch_context["tenant_id"] = tenant_id
+    workspace_path = context.get("workspace_path")
+    if isinstance(workspace_path, str) and workspace_path:
+        dispatch_context["workspace_path"] = workspace_path
+        runtime_session_metadata["workspace_path"] = workspace_path
+
+    # Project OS is a trusted, non-interactive server orchestrator. Carry its
+    # authenticated project principal as a real Session so production Codex
+    # account selection never falls back to an ordinary context dictionary.
+    # No approval provider is attached: the Coder backend therefore retains
+    # its explicit AutoDeny default for risky actions.
+    from runtime.platform.process.session import Session
+
+    project_session = Session(
+        actor=actor or None,
+        thread_id=thread_id or None,
+        conversation_id=thread_id or None,
+        metadata=dict(runtime_session_metadata),
+    )
+
+    call_kwargs: dict[str, Any] = {
+        "context": dispatch_context,
+        "session": project_session,
+        "timeout_s": 900,
+        "timeout_seconds": 900.0,
+    }
+    if subagent_runner is not None:
+        call_kwargs["runner"] = subagent_runner
+    result = call_subagent(agent, prompt, **call_kwargs)
     if not result.get("success"):
         raise RuntimeError(str(result.get("error") or "subagent failed"))
     return str(result.get("output") or result.get("parsed") or "")
@@ -235,11 +313,24 @@ def _criterion_touched(criterion: str, output: str) -> bool:
     return any(w in low for w in words) if words else True
 
 
-def create_llm_hooks(router: Any, *, model: str = DEFAULT_MODEL) -> dict[str, Any]:
+def create_llm_hooks(
+    router: Any,
+    *,
+    model: str = DEFAULT_MODEL,
+    subagent_runner: Callable[..., str] | None = None,
+) -> dict[str, Any]:
     """Hook kwargs for ProjectEngine: LLM milestones/tasks/QA + subagent execute."""
+
+    def _execute_task(task: Task, context: dict[str, Any]) -> str:
+        return subagent_execute_task(
+            task,
+            context,
+            subagent_runner=subagent_runner,
+        )
+
     return {
         "generate_milestones": llm_generate_milestones(router, model=model),
         "decompose_tasks": llm_decompose_tasks(router, model=model),
-        "execute_task": subagent_execute_task,
+        "execute_task": _execute_task,
         "qa_task": spec_qa(router, model=model),
     }

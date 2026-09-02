@@ -9,12 +9,22 @@ describe("tool effect receipt refresh cadence", () => {
     ).toBe(false);
   });
 
-  it("keeps a short recovery poll only while the turn is active", () => {
+  it("polls quickly only while a receipt can still change automatically", () => {
+    expect(toolEffectsRefetchInterval(true, [{ state: "started" }])).toBe(
+      3_000,
+    );
+    expect(
+      toolEffectsRefetchInterval(true, [{ state: "retry_authorized" }]),
+    ).toBe(3_000);
+  });
+
+  it("keeps a modest discovery poll for settled or human-review receipts", () => {
     expect(toolEffectsRefetchInterval(true, [{ state: "indeterminate" }])).toBe(
-      2_000,
+      5_000,
     );
     expect(toolEffectsRefetchInterval(true, [{ state: "committed" }])).toBe(
-      10_000,
+      5_000,
     );
+    expect(toolEffectsRefetchInterval(true, [])).toBe(5_000);
   });
 });

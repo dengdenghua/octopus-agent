@@ -9,8 +9,12 @@ import type {
   CollaborationSession,
   CoworkGroupResponse,
   CoworkInviteInput,
+  CoworkMessageProjectActionInput,
+  CoworkMessageProjectActionResponse,
   CoworkMode,
   CoworkPresenceResponse,
+  CoworkRosterInput,
+  CoworkRosterResponse,
   CoworkSearchKind,
   CoworkSearchResponse,
 } from "./types";
@@ -92,6 +96,21 @@ export async function setCoworkMode(
     state: CoworkGroupResponse["state"];
   }>(res, "Set cowork mode");
   return data.state;
+}
+
+export async function replaceCoworkRoster(
+  threadId: string,
+  input: CoworkRosterInput,
+): Promise<CoworkRosterResponse> {
+  const res = await fetch(`${BASE()}/${encodeURIComponent(threadId)}/roster`, {
+    method: "PUT",
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify(input),
+    // The payload is tiny and this is the user's explicit roster save. Let the
+    // browser finish it when a refresh immediately follows the click.
+    keepalive: true,
+  });
+  return parseJson<CoworkRosterResponse>(res, "Replace cowork roster");
 }
 
 export async function searchCowork(
@@ -209,8 +228,41 @@ export async function postCollabRoomMessage(
         text: input.text,
         participant_id: input.participant_id ?? "",
         display_name: input.display_name ?? "",
+        ...(input.source_message_id
+          ? { source_message_id: input.source_message_id }
+          : {}),
+        ...(input.message_type ? { message_type: input.message_type } : {}),
+        ...(input.entity_refs?.length
+          ? { entity_refs: input.entity_refs }
+          : {}),
+        ...(input.system_card ? { system_card: input.system_card } : {}),
+        ...(input.metadata && Object.keys(input.metadata).length > 0
+          ? { metadata: input.metadata }
+          : {}),
       }),
     },
   );
   return parseJson<CollabRoomMessageResponse>(res, "Post collab room message");
+}
+
+/** Promote one timeline message into the bound Project OS project. */
+export async function applyCollabRoomMessageProjectAction(
+  threadId: string,
+  messageSeq: number,
+  input: CoworkMessageProjectActionInput,
+): Promise<CoworkMessageProjectActionResponse> {
+  const res = await fetch(
+    `${COLLAB_BASE()}/${encodeURIComponent(threadId)}/room-messages/${encodeURIComponent(
+      String(messageSeq),
+    )}/project-actions`,
+    {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify(input),
+    },
+  );
+  return parseJson<CoworkMessageProjectActionResponse>(
+    res,
+    "Apply room message project action",
+  );
 }

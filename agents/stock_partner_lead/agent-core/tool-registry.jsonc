@@ -1,0 +1,20 @@
+{
+  "arms": [
+    "web_read",
+    "fs_writer",
+    "shell"
+  ],
+  "extra_affinity": [
+    "估值定价",
+    "资金风向",
+    "短线节奏",
+    "finance"
+  ],
+  "private_skills": [
+    "westock-data",
+    "westock-tool",
+    "md-to-html"
+  ],
+  "workbuddy_team": true,
+  "workbuddy_lead_agent": "stock-partner-lead"
+}

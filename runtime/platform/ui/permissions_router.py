@@ -98,6 +98,19 @@ def create_permissions_router(
             jwt_audience=jwt_audience,
         )
 
+    def _admin_dep(request: Request) -> None:
+        from runtime.safety.auth.principal import require_roles
+
+        require_roles(
+            request,
+            identity_store,
+            require_auth,
+            ("admin",),
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     router = APIRouter(
         prefix="/api/permissions",
         tags=["permissions"],
@@ -109,7 +122,11 @@ def create_permissions_router(
         policy = load_policy(path_getter())
         return _PolicyOut(rules=[_to_out(r) for r in policy.rules])
 
-    @router.post("/rules", response_model=_PolicyOut)
+    @router.post(
+        "/rules",
+        response_model=_PolicyOut,
+        dependencies=[Depends(_admin_dep)],
+    )
     def add_rule(rule: _RuleIn) -> _PolicyOut:
         new = ApprovalRule(
             effect=rule.effect,
@@ -120,7 +137,11 @@ def create_permissions_router(
         policy = append_rule(path_getter(), new)
         return _PolicyOut(rules=[_to_out(r) for r in policy.rules])
 
-    @router.delete("/rules/{index}", response_model=_PolicyOut)
+    @router.delete(
+        "/rules/{index}",
+        response_model=_PolicyOut,
+        dependencies=[Depends(_admin_dep)],
+    )
     def remove_rule(index: int) -> _PolicyOut:
         path = path_getter()
         policy = load_policy(path)
@@ -131,7 +152,11 @@ def create_permissions_router(
         save_policy(path, next_policy)
         return _PolicyOut(rules=[_to_out(r) for r in next_policy.rules])
 
-    @router.post("/rules/{index}/move", response_model=_PolicyOut)
+    @router.post(
+        "/rules/{index}/move",
+        response_model=_PolicyOut,
+        dependencies=[Depends(_admin_dep)],
+    )
     def reorder_rule(index: int, body: _MoveIn) -> _PolicyOut:
         path = path_getter()
         try:

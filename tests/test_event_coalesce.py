@@ -138,7 +138,8 @@ def test_coalesce_shrinks_and_preserves_semantics(tmp_path: Path) -> None:
     assert len(coalesced) < len(raw)
 
     kinds = [event.event for _, event in coalesced]
-    # The completed item's start + 4 pre-completion deltas are gone...
+    # The completed item's 4 pre-completion deltas are gone, while its start
+    # remains to preserve insertion order among legacy unsequenced items.
     message_deltas = [
         e for _, e in coalesced if e.event == "item_delta" and e.payload.get("itemId") == "a1"
     ]
@@ -189,3 +190,107 @@ def test_coalesce_empty_and_passthrough(tmp_path: Path) -> None:
     log.turn_completed("th2", "t1", TurnStatus.COMPLETED)
     raw = list(log.snapshot().events)
     assert coalesce_events(raw) == raw
+
+
+def test_physical_compaction_shrinks_log_and_forces_cursor_reset(tmp_path: Path) -> None:
+    log = _build_log(tmp_path / "physical.jsonl")
+    before_snapshot = log.snapshot()
+    before_replay = [
+        turn.model_dump(by_alias=True, mode="json") for turn in before_snapshot.replay()
+    ]
+    before_stream_id = before_snapshot.stream_id
+
+    result = log.compact_if_needed(threshold_bytes=0, min_savings_bytes=1)
+
+    after_snapshot = log.snapshot()
+    after_replay = [turn.model_dump(by_alias=True, mode="json") for turn in after_snapshot.replay()]
+    assert result.compacted is True
+    assert result.bytes_after < result.bytes_before
+    assert result.events_after < result.events_before
+    assert after_replay == before_replay
+    assert after_snapshot.stream_id != before_stream_id
+    assert after_snapshot.cursor < before_snapshot.cursor
+
+    changed, cursor, requires_reset = log.cursor_delta(before_snapshot.cursor)
+    assert changed == []
+    assert cursor == after_snapshot.cursor
+    assert requires_reset is True
+
+    # The rewritten log remains appendable and keeps the completed state.
+    log.item_delta("th", "t2", "c2", "commandOutput", "line4\n")
+    replayed = log.replay()
+    command = next(item for item in replayed[-1].items if item.id == "c2")
+    assert command.aggregated_output.endswith("line4\n")
+
+
+def test_physical_compaction_respects_threshold_and_minimum_savings(tmp_path: Path) -> None:
+    log = _build_log(tmp_path / "bounded.jsonl")
+    original = log.path.read_bytes()
+
+    below_threshold = log.compact_if_needed(
+        threshold_bytes=len(original) + 1,
+        min_savings_bytes=0,
+    )
+    assert below_threshold.compacted is False
+    assert log.path.read_bytes() == original
+
+    insufficient_savings = log.compact_if_needed(
+        threshold_bytes=0,
+        min_savings_bytes=len(original),
+    )
+    assert insufficient_savings.compacted is False
+    assert log.path.read_bytes() == original
+
+
+def test_coalesce_keeps_start_when_completion_lacks_timeline_ancestry(tmp_path: Path) -> None:
+    log = EventLog(tmp_path / "timeline.jsonl")
+    log.thread_started("th")
+    log.turn_started("th", Turn(id="t1", threadId="th"))
+    log.item_started(
+        "th",
+        "t1",
+        AgentMessageItem(
+            id="answer",
+            status="inProgress",
+            text="",
+            timelineSequence=7,
+            parentItemId="reasoning",
+            phaseId="phase-1",
+        ),
+    )
+    log.item_delta("th", "t1", "answer", "agentMessage", "done")
+    log.item_completed(
+        "th",
+        "t1",
+        AgentMessageItem(id="answer", status="completed", text="done"),
+    )
+    raw = list(log.snapshot().events)
+    coalesced = coalesce_events(raw)
+
+    assert _replay(coalesced) == _replay(raw)
+    starts = [event for _, event in coalesced if event.event == "item_started"]
+    assert len(starts) == 1
+    assert not [event for _, event in coalesced if event.event == "item_delta"]
+
+
+def test_coalesce_scopes_reused_item_ids_to_their_turn(tmp_path: Path) -> None:
+    log = EventLog(tmp_path / "reused.jsonl")
+    log.thread_started("th")
+    for turn_id, text in (("t1", "first"), ("t2", "second")):
+        log.turn_started("th", Turn(id=turn_id, threadId="th"))
+        log.item_started(
+            "th",
+            turn_id,
+            AgentMessageItem(id="shared", status="inProgress", text=""),
+        )
+        log.item_delta("th", turn_id, "shared", "agentMessage", text)
+        log.item_completed(
+            "th",
+            turn_id,
+            AgentMessageItem(id="shared", status="completed", text=text),
+        )
+        log.turn_completed("th", turn_id, TurnStatus.COMPLETED)
+
+    raw = list(log.snapshot().events)
+    coalesced = coalesce_events(raw)
+    assert _replay(coalesced) == _replay(raw)

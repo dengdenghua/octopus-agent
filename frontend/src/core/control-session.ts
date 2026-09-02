@@ -346,6 +346,21 @@ export async function getControlSessionReplay(
   );
 }
 
+export async function setControlSessionState(
+  sessionId: string,
+  action: "pause" | "resume" | "stop" | "takeover",
+  reason: string,
+): Promise<ControlSessionRecord> {
+  const data = await fetchControlJson<{ session: ControlSessionRecord }>(
+    `/${encodeURIComponent(sessionId)}/${action}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    },
+  );
+  return data.session;
+}
+
 export async function getControlSessionTimeline(
   sessionId: string,
   options: { after?: number; afterCursor?: string; limit?: number } = {},

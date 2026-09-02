@@ -55,6 +55,7 @@ def _effective_flat_limit() -> int:
         pass
     return _PER_TURN_ABSOLUTE_LIMIT
 
+
 # Per-turn state. OrderedDict for LRU eviction.
 _TURN_DELEGATIONS: OrderedDict[str, int] = OrderedDict()
 _TURN_FAILED_FINGERPRINTS: OrderedDict[str, set[str]] = OrderedDict()

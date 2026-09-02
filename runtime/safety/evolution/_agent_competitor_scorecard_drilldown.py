@@ -72,26 +72,29 @@ def _operator_evidence_links(
                 "href": "/api/evolution/agent-loop-quality",
             }
         )
-    if dimension_id == "local_cli_partner_interop" or "local_cli_partner_interop" in evidence_ids:
+    if (
+        dimension_id == "model_provider_plugin_interop"
+        or "model_provider_plugin_interop" in evidence_ids
+    ):
         links.extend(
             [
                 {
-                    "id": "local_partners",
-                    "label": "Local CLI partners",
+                    "id": "model_provider_plugins",
+                    "label": "Model-provider plugins",
                     "method": "GET",
-                    "href": "/api/agents/local-partners",
+                    "href": "/api/capabilities",
                 },
                 {
-                    "id": "cli_team_status",
-                    "label": "CLI team status",
+                    "id": "opencode_zen_status",
+                    "label": "OpenCode Zen adapter status",
                     "method": "GET",
-                    "href": "/api/cli-team/status",
+                    "href": "/api/capabilities/opencode-zen/status",
                 },
                 {
-                    "id": "cli_partner_probe",
-                    "label": "Probe local CLI partner",
+                    "id": "opencode_zen_connect",
+                    "label": "Connect OpenCode Zen adapter",
                     "method": "POST",
-                    "href": "/api/agents/local-partners/{partner_id}/probe",
+                    "href": "/api/capabilities/opencode-zen/connect",
                 },
             ]
         )

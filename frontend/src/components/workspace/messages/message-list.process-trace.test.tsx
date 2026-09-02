@@ -8,7 +8,11 @@ import { SubtasksProvider } from "@/core/tasks/context";
 import { renderWithProviders } from "@/test/harness";
 
 import type { LiveToolEvent } from "../live-tool-timeline";
-import { AGENT_WORKBENCH_OPEN_EVENT } from "../agent-workbench-events";
+import {
+  AGENT_WORKBENCH_FOCUS_EVENT,
+  AGENT_WORKBENCH_OPEN_EVENT,
+  type AgentWorkbenchFocusDetail,
+} from "../agent-workbench-events";
 import { ThreadProviders } from "./context";
 import {
   MESSAGE_LIST_TIMEOUT_WARNING_MS,
@@ -16,6 +20,12 @@ import {
   streamingMessageProgressKey,
 } from "./message-list";
 import { messageClipboardText } from "./message-list-item";
+import {
+  deriveInlineSubagents,
+  deriveSubagentMissionFromMessages,
+  deriveSubagentsFromMessages,
+  InlineSubagentCards,
+} from "./inline-subagent-cards";
 
 vi.mock("../artifacts", () => ({
   useArtifacts: () => ({
@@ -165,6 +175,580 @@ function renderMessageList(args: {
 }
 
 describe("MessageList process trace lifecycle", () => {
+  test("does not settle an inline agent from child tool completion", () => {
+    const base = [
+      toolEvent("subagent", {
+        id: "spawn-reader",
+        lifecycle: "spawned",
+        status: "running",
+        agentId: "reader",
+        subagentCodename: "Quark-d9c",
+      }),
+      toolEvent("report", {
+        id: "report-reader",
+        status: "done",
+        agentId: "reader",
+        subagentCodename: "Quark-d9c",
+      }),
+      toolEvent("read_file", {
+        id: "read-reader",
+        status: "error",
+        agentId: "reader",
+        subagentCodename: "Quark-d9c",
+        output: "missing file",
+      }),
+    ];
+
+    expect(deriveInlineSubagents(base)).toEqual([
+      expect.objectContaining({
+        id: "reader",
+        name: "Quark-d9c",
+        status: "running",
+        error: undefined,
+      }),
+    ]);
+
+    expect(
+      deriveInlineSubagents([
+        ...base,
+        toolEvent("subagent", {
+          id: "finish-reader",
+          lifecycle: "finished",
+          status: "done",
+          agentId: "reader",
+          subagentCodename: "Quark-d9c",
+        }),
+      ])[0]?.status,
+    ).toBe("done");
+  });
+
+  test("does not manufacture Agent cards for a batch rejected before spawn", () => {
+    const failedDispatch: AIMessage = {
+      id: "failed-dispatch",
+      type: "ai",
+      content: "",
+      tool_calls: [
+        {
+          id: "parallel-invalid",
+          name: "call_agent_parallel",
+          args: {
+            specs: [
+              { role: "reader", goal: "read README" },
+              { role: "reader", goal: "read pyproject" },
+            ],
+            output:
+              '(工具失败) status=success error=structured_error\n{"ok":false,"count":0}',
+          },
+        },
+      ],
+    };
+
+    expect(deriveSubagentsFromMessages([failedDispatch])).toEqual([]);
+  });
+
+  test("replays successful legacy role/goal specs with stable identities", () => {
+    const legacyDispatch: AIMessage = {
+      id: "legacy-dispatch",
+      type: "ai",
+      content: "",
+      tool_calls: [
+        {
+          id: "parallel-legacy",
+          name: "call_agent_parallel",
+          args: {
+            specs: [
+              { role: "schema_reader", goal: "读取 schema" },
+              { role: "final_reader", goal: "读取 final" },
+            ],
+            output: '{"ok":true,"count":2,"succeeded":2,"failed":0}',
+          },
+        },
+      ],
+    };
+
+    expect(deriveSubagentsFromMessages([legacyDispatch])).toEqual([
+      expect.objectContaining({
+        id: "schema_reader",
+        name: "schema_reader",
+        task: "读取 schema",
+        status: "done",
+      }),
+      expect.objectContaining({
+        id: "final_reader",
+        name: "final_reader",
+        task: "读取 final",
+        status: "done",
+      }),
+    ]);
+  });
+
+  test("decodes stringified parallel specs without creating an anonymous extra Agent", () => {
+    const legacyDispatch: AIMessage = {
+      id: "legacy-stringified-dispatch",
+      type: "ai",
+      content: "",
+      tool_calls: [
+        {
+          id: "parallel-stringified",
+          name: "call_agent_parallel",
+          args: {
+            specs: JSON.stringify([
+              { agent_id: "security-review", prompt: "审计后端" },
+              { agent_id: "reviewer", prompt: "审计前端" },
+              { agent_id: "explorer", prompt: "审计构建" },
+            ]),
+            output: '{"ok":true,"count":3,"succeeded":3,"failed":0}',
+          },
+        },
+      ],
+    };
+
+    const agents = deriveSubagentsFromMessages([legacyDispatch]);
+    expect(agents).toHaveLength(3);
+    expect(agents.map((agent) => agent.id)).toEqual([
+      "security-review",
+      "reviewer",
+      "explorer",
+    ]);
+  });
+
+  test("keeps same-role parallel lanes distinct and merges lifecycle aliases", () => {
+    renderWithProviders(
+      <InlineSubagentCards
+        settled
+        agents={[
+          {
+            id: "reader_readme",
+            name: "README 检查",
+            role: "explorer",
+            status: "running",
+            task: "读取 README.md",
+            filesTouchedCount: 0,
+          },
+          {
+            id: "reader_pyproject",
+            name: "配置检查",
+            role: "explorer",
+            status: "running",
+            task: "读取 pyproject.toml",
+            filesTouchedCount: 0,
+          },
+        ]}
+        events={[
+          toolEvent("subagent", {
+            id: "spawn-readme",
+            lifecycle: "spawned",
+            status: "running",
+            agentId: "reader_readme",
+            subAgentRole: "explorer",
+            subagentCodename: "Spark-4f6",
+          }),
+          toolEvent("subagent", {
+            id: "finish-readme",
+            lifecycle: "finished",
+            status: "done",
+            agentId: "Spark-4f6",
+            subAgentRole: "explorer",
+            subagentCodename: "Spark-4f6",
+          }),
+          toolEvent("subagent", {
+            id: "spawn-pyproject",
+            lifecycle: "spawned",
+            status: "running",
+            agentId: "reader_pyproject",
+            subAgentRole: "explorer",
+            subagentCodename: "Aurora-108",
+          }),
+          toolEvent("subagent", {
+            id: "finish-pyproject",
+            lifecycle: "finished",
+            status: "done",
+            agentId: "Aurora-108",
+            subAgentRole: "explorer",
+            subagentCodename: "Aurora-108",
+          }),
+        ]}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(screen.getByText("2 个子 Agent · 2 已完成")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /README 检查/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /配置检查/ }),
+    ).toBeInTheDocument();
+  });
+
+  test("shows iteration and file counts on the collapsed live card", () => {
+    renderWithProviders(
+      <InlineSubagentCards
+        settled
+        agents={[
+          {
+            id: "schema_reader",
+            name: "Rune-3f8",
+            role: "explorer",
+            status: "done",
+            task: "读取 agent-regression.json",
+            filesTouchedCount: 3,
+            iterationCount: 2,
+            index: 0,
+          },
+        ]}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    const stats = screen.getByTestId("agent-card-stats-0");
+    expect(stats).toHaveTextContent("2 次迭代");
+    expect(stats).toHaveTextContent("3 文件修改");
+  });
+
+  test("expands a completed agent card to reveal the full report", () => {
+    const fullReport = `这是一份很长的研究报告，${"深入分析了浙江自然(605080)的行业格局、估值与风险。".repeat(3)}`;
+    renderWithProviders(
+      <InlineSubagentCards
+        settled
+        agents={[
+          {
+            id: "analyst",
+            name: "行业分析师",
+            role: "analyst",
+            status: "done",
+            task: "分析浙江自然",
+            summary: fullReport,
+            filesTouchedCount: 0,
+            index: 0,
+          },
+        ]}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(screen.queryByTestId("agent-report-0")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /查看报告/ }));
+
+    const panel = screen.getByTestId("agent-report-0");
+    expect(panel).toHaveTextContent(fullReport);
+    expect(
+      screen.getByRole("button", { name: /收起报告/ }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /收起报告/ }));
+    expect(screen.queryByTestId("agent-report-0")).not.toBeInTheDocument();
+  });
+
+  test("expands a failed agent card to reveal the failure reason", () => {
+    renderWithProviders(
+      <InlineSubagentCards
+        settled
+        agents={[
+          {
+            id: "contrarian",
+            name: "逆向投资者",
+            role: "contrarian",
+            status: "error",
+            task: "给出反方观点",
+            error: "时间窗口不足，未能完成多空验证",
+            filesTouchedCount: 0,
+            index: 0,
+          },
+        ]}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(screen.queryByTestId("agent-report-0")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /查看失败原因/ }));
+
+    const panel = screen.getByTestId("agent-report-0");
+    expect(panel).toHaveTextContent("时间窗口不足，未能完成多空验证");
+  });
+
+  test("folds persisted spec, spawn and finish rows into two compact cards", () => {
+    const history: AIMessage = {
+      id: "ai-real-history",
+      type: "ai",
+      content: "done",
+      tool_calls: [
+        {
+          id: "parallel-real",
+          name: "call_agent_parallel",
+          args: {
+            specs: [
+              { agent_id: "ui_reader_a", prompt: "读取 README.md 第一行" },
+              {
+                agent_id: "ui_reader_b",
+                prompt: "读取 pyproject.toml 第一行",
+              },
+            ],
+            output: "2/2 sub-agents succeeded",
+          },
+        },
+        {
+          id: "spawn-a",
+          name: "runtime.__subagent_spawned__",
+          args: {
+            requested_agent_id: "ui_reader_a",
+            agent_id: "explorer",
+            role: "explorer",
+            codename: "Volt-f84",
+            status: "inProgress",
+            prompt_preview:
+              "# Role: ui_reader_a\n\nInternal role wrapper.\n\n---\n\n读取 README.md 第一行",
+          },
+        },
+        {
+          id: "finish-a",
+          name: "runtime.__subagent_finished__",
+          args: {
+            requested_agent_id: "ui_reader_a",
+            agent_id: "explorer",
+            role: "explorer",
+            codename: "Volt-f84",
+            ok: true,
+            output: "# Octopus-Agent",
+          },
+        },
+        {
+          id: "spawn-b",
+          name: "runtime.__subagent_spawned__",
+          args: {
+            requested_agent_id: "ui_reader_b",
+            agent_id: "explorer",
+            role: "explorer",
+            codename: "Zenith-6b7",
+            status: "inProgress",
+            prompt_preview:
+              "# Role: ui_reader_b\n\nInternal role wrapper.\n\n---\n\n读取 pyproject.toml 第一行",
+          },
+        },
+        {
+          id: "finish-b",
+          name: "runtime.__subagent_finished__",
+          args: {
+            requested_agent_id: "ui_reader_b",
+            agent_id: "explorer",
+            role: "explorer",
+            codename: "Zenith-6b7",
+            ok: true,
+            output: "[project]",
+          },
+        },
+        {
+          id: "auto-failure",
+          name: "subagent",
+          args: {
+            subagent_id: "task-auto-failed",
+            role: "general-purpose",
+            status: "failed",
+            error: "empty_result_contract_violation",
+          },
+        },
+      ],
+    };
+
+    const agents = deriveSubagentsFromMessages([history]);
+    expect(agents).toHaveLength(2);
+    expect(agents.map((agent) => agent.id)).toEqual([
+      "ui_reader_a",
+      "ui_reader_b",
+    ]);
+    expect(agents.map((agent) => agent.name)).toEqual([
+      "Volt-f84",
+      "Zenith-6b7",
+    ]);
+    expect(agents.map((agent) => agent.task)).toEqual([
+      "读取 README.md 第一行",
+      "读取 pyproject.toml 第一行",
+    ]);
+  });
+
+  test("groups delegated agents into one cluster instead of repeating delegation rows", () => {
+    const focusEvents: AgentWorkbenchFocusDetail[] = [];
+    const handleFocus = (event: Event) => {
+      focusEvents.push(
+        (event as CustomEvent<AgentWorkbenchFocusDetail>).detail,
+      );
+    };
+    window.addEventListener(AGENT_WORKBENCH_FOCUS_EVENT, handleFocus);
+
+    const user = message("user-cluster", "human", "并行审计项目");
+    const processing: AIMessage = {
+      id: "ai-cluster",
+      type: "ai",
+      content: "",
+      tool_calls: [
+        {
+          id: "delegate-reviewer",
+          name: "delegate_agent",
+          args: {
+            agent_id: "reviewer",
+            name: "Prism-fcc",
+            role: "reviewer",
+            prompt: "审查前端交互与视觉回归",
+          },
+        },
+        {
+          id: "read-project",
+          name: "read_file",
+          args: { path: "README.md" },
+        },
+      ],
+    };
+    const thread = mockThread({
+      messages: [user, processing],
+      isLoading: true,
+      streamingMessage: processing,
+    });
+
+    renderMessageList({
+      thread,
+      mode: "chat",
+      locale: "zh-CN",
+      liveToolEvents: [
+        toolEvent("subagent", {
+          id: "subagent-reviewer",
+          status: "running",
+          lifecycle: "spawned",
+          agentId: "reviewer-runtime",
+          subAgentRole: "reviewer",
+          subagentCodename: "Prism-fcc",
+          input: { prompt: "审查前端交互与视觉回归" },
+        }),
+      ],
+    });
+
+    expect(screen.getByText("Agent 集群")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Prism-fcc/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText("审查前端交互与视觉回归").length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText("委派任务")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Prism-fcc/ }));
+    expect(focusEvents).toEqual([
+      {
+        agentId: "reviewer",
+        agent: expect.objectContaining({
+          id: "reviewer",
+          name: "Prism-fcc",
+          role: "reviewer",
+          status: "running",
+          task: "审查前端交互与视觉回归",
+        }),
+        turnIndex: 0,
+        tab: "agent",
+        view: "screen",
+      },
+    ]);
+    expect(screen.queryByTestId("agent-hover-0")).not.toBeInTheDocument();
+
+    window.removeEventListener(AGENT_WORKBENCH_FOCUS_EVENT, handleFocus);
+  });
+
+  test("recovers a replayed cluster mission and settles stale running agents", () => {
+    const orchestration: AIMessage = {
+      id: "orchestration-history",
+      type: "ai",
+      content: "",
+      tool_calls: [
+        {
+          id: "run-history",
+          name: "run_orchestration",
+          args: {
+            goal: "对 octopus-agent 仓库做深度审计（只读，禁止写任何文件）。后续细节不应挤进卡片。",
+          },
+        },
+      ],
+    };
+    const mission = deriveSubagentMissionFromMessages([orchestration]);
+
+    expect(mission).toBe(
+      "对 octopus-agent 仓库做深度审计（只读，禁止写任何文件）。",
+    );
+    renderWithProviders(
+      <InlineSubagentCards
+        settled
+        mission={mission}
+        agents={[
+          {
+            id: "historic-agent",
+            name: "Prism-history",
+            role: "reviewer",
+            status: "running",
+            task: "",
+            summary: "ConnectError: upstream connection failed",
+            filesTouchedCount: 0,
+            index: 0,
+          },
+        ]}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(screen.getByText("1 个子 Agent · 1 异常")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: /Prism-history.*对 octopus-agent 仓库做深度审计.*异常/,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  test("collapses large agent clusters to six rows and restores the full list", () => {
+    const user = message("user-large-cluster", "human", "并行执行七项检查");
+    const processing: AIMessage = {
+      id: "ai-large-cluster",
+      type: "ai",
+      content: "",
+      tool_calls: Array.from({ length: 7 }, (_, index) => ({
+        id: `delegate-${index + 1}`,
+        name: "delegate_agent",
+        args: {
+          agent_id: `agent-${index + 1}`,
+          name: `Agent ${String(index + 1).padStart(2, "0")}`,
+          role: "researcher",
+          prompt: `执行检查 ${index + 1}`,
+        },
+      })),
+    };
+
+    renderMessageList({
+      thread: mockThread({
+        messages: [user, processing],
+        isLoading: true,
+        streamingMessage: processing,
+      }),
+      mode: "chat",
+      locale: "zh-CN",
+    });
+
+    expect(
+      screen.getByRole("button", { name: /Agent 06/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Agent 07/ }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "展开其余 1 个智能体" }),
+    );
+    expect(
+      screen.getByRole("button", { name: /Agent 07/ }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "收起智能体" }));
+    expect(
+      screen.queryByRole("button", { name: /Agent 07/ }),
+    ).not.toBeInTheDocument();
+  });
+
   test("keeps one coherent assistant lane across a long-task lifecycle", () => {
     const agent = {
       name: "general",
@@ -716,6 +1300,10 @@ describe("MessageList process trace lifecycle", () => {
 
     const thread = mockThread({ messages });
     renderMessageList({ thread, locale: "zh-CN" });
+
+    // Completed long traces are intentionally folded by default. Expand the
+    // replay before asserting its internal semantic sampling contract.
+    fireEvent.click(screen.getByTestId("process-replay-toggle"));
 
     const commentary = screen.getAllByTestId("public-progress-event");
     const execution = screen.getAllByTestId("process-timeline-event-execution");
@@ -1437,10 +2025,29 @@ describe("MessageList stalled-run warning", () => {
     renderMessageList({ thread });
 
     expect(
-      screen.getByText(/Code changes need verification before Octopus/i),
+      screen.getByText(/no verification result was produced/i),
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/This reply was interrupted/i),
+    ).not.toBeInTheDocument();
+  });
+
+  test("distinguishes a verifier failure from missing verification evidence", () => {
+    const thread = mockThread({
+      messages: [
+        message("user-1", "human", "Edit the code"),
+        message("assistant-1", "ai", "Updated the file."),
+      ],
+      error: new Error("Auto verification failed."),
+    });
+
+    renderMessageList({ thread });
+
+    expect(
+      screen.getByText(/Automatic verification ran and failed/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/no verification result was produced/i),
     ).not.toBeInTheDocument();
   });
 

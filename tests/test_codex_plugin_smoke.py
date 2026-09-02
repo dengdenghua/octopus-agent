@@ -39,6 +39,8 @@ def test_codex_plugin_discovery_includes_smoke_metadata(tmp_path: Path) -> None:
     assert smoke["permission_resolution"]["status"] == "review_required"
     assert smoke["permission_resolution"]["permissions"] == [
         "mcp:execute:review_required",
+        "capability:execute:review_required",
+        "skill:execute:review_required",
         "ui:metadata:local",
     ]
     assert plugin_dir.name == "research"
@@ -498,7 +500,19 @@ def test_plugins_router_requires_auth_when_enabled(tmp_path: Path) -> None:
 def test_plugin_assets_are_public_read_only_when_auth_enabled(tmp_path: Path) -> None:
     plugin_dir = _write_plugin(tmp_path)
     (plugin_dir / "assets").mkdir()
-    (plugin_dir / "assets" / "logo.txt").write_text("logo", encoding="utf-8")
+    (plugin_dir / "assets" / "logo.png").write_bytes(b"\x89PNG\r\n\x1a\nlogo")
+    (plugin_dir / "assets" / "icon.svg").write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+        encoding="utf-8",
+    )
+    (plugin_dir / "assets" / "private.png").write_bytes(b"\x89PNG\r\n\x1a\nprivate")
+    (plugin_dir / "assets" / "config.json").write_text('{"token":"secret"}', encoding="utf-8")
+    (plugin_dir / ".env").write_text("API_TOKEN=secret", encoding="utf-8")
+    (plugin_dir / "source.py").write_text("SECRET = 'source'", encoding="utf-8")
+    manifest_path = plugin_dir / ".codex-plugin" / "plugin.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["interface"].update({"logo": "assets/logo.png", "composerIcon": "assets/icon.svg"})
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     store = IdentityStore()
     store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
     app = FastAPI()
@@ -512,9 +526,60 @@ def test_plugin_assets_are_public_read_only_when_auth_enabled(tmp_path: Path) ->
     client = TestClient(app)
 
     assert client.get("/api/plugins").status_code == 401
-    asset = client.get("/api/plugins/research/assets/assets/logo.txt")
-    assert asset.status_code == 200
-    assert asset.text == "logo"
+    logo = client.get("/api/plugins/research/assets/assets/logo.png")
+    assert logo.status_code == 200
+    assert logo.headers["x-content-type-options"] == "nosniff"
+    icon = client.get("/api/plugins/research/assets/assets/icon.svg")
+    assert icon.status_code == 200
+    assert icon.headers["content-security-policy"] == "default-src 'none'; sandbox"
+    assert client.get("/api/plugins/research/assets/assets/private.png").status_code == 401
+    assert client.get("/api/plugins/research/assets/.env").status_code == 401
+    assert client.get("/api/plugins/research/assets/source.py").status_code == 401
+
+    # A malicious manifest cannot relabel configuration or source as public UI
+    # artwork, and removing a prior declaration revokes its anonymous access.
+    manifest["interface"].update({"logo": "source.py", "composerIcon": ".env"})
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    assert client.get("/api/plugins/research/assets/source.py").status_code == 401
+    assert client.get("/api/plugins/research/assets/.env").status_code == 401
+    assert client.get("/api/plugins/research/assets/assets/logo.png").status_code == 401
+
+    authenticated = {"Authorization": "Bearer sk-alice"}
+    assert (
+        client.get(
+            "/api/plugins/research/assets/assets/private.png",
+            headers=authenticated,
+        ).status_code
+        == 200
+    )
+    assert (
+        client.get(
+            "/api/plugins/research/assets/source.py",
+            headers=authenticated,
+        ).status_code
+        == 404
+    )
+    assert (
+        client.get(
+            "/api/plugins/research/assets/.env",
+            headers=authenticated,
+        ).status_code
+        == 404
+    )
+    assert (
+        client.get(
+            "/api/plugins/research/assets/assets/config.json",
+            headers=authenticated,
+        ).status_code
+        == 404
+    )
+    assert (
+        client.get(
+            "/api/plugins/research/assets/.codex-plugin/plugin.json",
+            headers=authenticated,
+        ).status_code
+        == 404
+    )
 
 
 def _write_plugin(

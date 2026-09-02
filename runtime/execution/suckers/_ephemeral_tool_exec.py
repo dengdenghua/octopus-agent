@@ -20,6 +20,7 @@ from runtime.execution.suckers.ephemeral_injection_gate import (
     ephemeral_injection_taint_block,
     scan_and_escalate_ephemeral_taint,
 )
+from runtime.execution.suckers.layers import EPHEMERAL_MEMORY_SKILLS
 
 __all__ = [
     "_ephemeral_write_confine_block",
@@ -56,9 +57,7 @@ def _ephemeral_write_confine_block(call: Any, skill: Any) -> str | None:
     # can cd anywhere and write straight into the main tree). Fail closed
     # inside an isolated spawn instead of letting the sub-agent escape.
     shell_affinity = any(a in ("shell", "exec") for a in affinity)
-    shell_name = any(
-        tok in name for tok in ("exec_shell", "background_exec", "run_command")
-    )
+    shell_name = any(tok in name for tok in ("exec_shell", "background_exec", "run_command"))
     if shell_affinity or shell_name:
         return (
             f"(blocked: '{getattr(call, 'name', '?')}' is a shell/exec tool and "
@@ -149,9 +148,55 @@ def _execute_tool_in_subagent(
     if _taint_block is not None:
         return (_taint_block, True)
 
+    # Memory / SOUL skills require a bound Session; ephemeral sub-agents run
+    # without one (current_session() is not propagated into the dispatch thread),
+    # so calling them raises RuntimeError and surfaces as a failed tool call the
+    # model keeps retrying. Block with a clean error instead — a sub-agent must
+    # not mutate the parent agent's durable memory anyway. This is the ultimate
+    # fallback: advertised-list stripping (ephemeral_agents) is the polite layer.
+    if str(call.name) in EPHEMERAL_MEMORY_SKILLS:
+        return (
+            "(unavailable: long-term memory / SOUL skills (remember, recall, "
+            "note_user, diary_write, and the self-evolution tools) are disabled "
+            "inside sub-agents — a sub-agent runs without a bound Session and "
+            "must not mutate the parent agent's durable memory. Report any "
+            "memory-worthy fact as a finding for the parent session instead.)",
+            True,
+        )
+
     _confine_block = _ephemeral_write_confine_block(call, skill)
     if _confine_block is not None:
         return (_confine_block, True)
+
+    # The mini-loop intentionally bypasses ``executor.execute_step`` so child
+    # memory/blackboard calls stay on the shared Session.  It must still reuse
+    # the executor's Session-derived path preparation: otherwise relative
+    # ``read_file`` / ``list_cwd`` calls fall back to the server process cwd.
+    # That made personal-workspace children search the entire repository even
+    # though the parent had a precise artifact root.  Keep the direct dispatch,
+    # but apply the same trusted cwd/sandbox injection before the safety gate.
+    try:
+        from runtime.platform.process.session import current_session
+
+        _scope_meta = getattr(current_session(), "metadata", None) or {}
+    except (ImportError, AttributeError, LookupError):
+        _scope_meta = {}
+    if isinstance(getattr(call, "input", None), dict) and not _scope_meta.get("_locked_write_root"):
+        from runtime.execution.tool_engine._executor_helpers import (
+            _prepare_scoped_args,
+        )
+        from runtime.platform.models import SkillId
+
+        try:
+            _scoped_input = _prepare_scoped_args(
+                skill,
+                SkillId(str(call.name)),
+                dict(call.input),
+            )
+        except PermissionError as exc:
+            return (f"(blocked: {exc})", True)
+        call.input.clear()
+        call.input.update(_scoped_input)
 
     # Direct-dispatch hardening — ephemeral runs bypass the executor
     # chokepoint, so apply the same pre-execution safety gates here (SEC-1/2).

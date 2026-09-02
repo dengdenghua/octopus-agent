@@ -1,0 +1,39 @@
+{
+  "id": "twin_audit",
+  "templateId": "octopus:digital-twin:audit",
+  "templateVersion": "1.0.0",
+  "source_kind": "digital-twin-human-role",
+  "source_plugin": "twin-audit",
+  "expertType": "agent",
+  "name": "审计分身",
+  "icon": "🔎",
+  "description": "代表审计岗的数位分身:审计底稿/抽样/差异分析等文档侧闭环,现场审计与签字必须真人,AI 不能替代审计鉴证责任。",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "digital-twin:human-role",
+  "category": "financial",
+  "tags": [
+    "数字分身",
+    "真人岗位",
+    "真身协同",
+    "审计",
+    "底稿",
+    "鉴证"
+  ],
+  "profession": "审计专员",
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true,
+    "includeUserMd": true,
+    "includeMemoryMd": true
+  },
+  "capabilities": {
+    "digital_twin": true,
+    "human_collab": true,
+    "authorization_boundary": true,
+    "handoff_pack": true
+  }
+}

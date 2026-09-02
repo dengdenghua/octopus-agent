@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import io
 import json
-import os
 import sys
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -73,7 +72,8 @@ def test_run_bb_set_get_keys_snapshot(monkeypatch, tmp_path: Path) -> None:
     assert data.get("answer") == "42"
 
     rc5, _ = _run(
-        cc.run_bb, argparse.Namespace(turn=None, bb_op="get", key="missing", value="", agent_id=None)
+        cc.run_bb,
+        argparse.Namespace(turn=None, bb_op="get", key="missing", value="", agent_id=None),
     )
     assert rc5 == 1
 
@@ -90,21 +90,32 @@ def test_run_skills_list_and_search_empty(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("OCTOPUS_SKILLS_DIR", str(tmp_path / "skills"))
     rc, out = _run(
         cc.run_skills,
-        argparse.Namespace(skills_op="list", query="", limit=10, name="", allow_dangerous=False, overwrite=False),
+        argparse.Namespace(
+            skills_op="list", query="", limit=10, name="", allow_dangerous=False, overwrite=False
+        ),
         color=False,
     )
     assert rc == 0
 
     rc2, out2 = _run(
         cc.run_skills,
-        argparse.Namespace(skills_op="search", query="xyz", limit=10, name="", allow_dangerous=False, overwrite=False),
+        argparse.Namespace(
+            skills_op="search",
+            query="xyz",
+            limit=10,
+            name="",
+            allow_dangerous=False,
+            overwrite=False,
+        ),
         color=False,
     )
     assert rc2 == 0
 
     rc3, _ = _run(
         cc.run_skills,
-        argparse.Namespace(skills_op="bogus", query="", limit=10, name="", allow_dangerous=False, overwrite=False),
+        argparse.Namespace(
+            skills_op="bogus", query="", limit=10, name="", allow_dangerous=False, overwrite=False
+        ),
         color=False,
     )
     assert rc3 == 2
@@ -113,7 +124,9 @@ def test_run_skills_list_and_search_empty(monkeypatch, tmp_path: Path) -> None:
 def test_run_skills_requires_market_op() -> None:
     rc, _ = _run(
         cc.run_skills,
-        argparse.Namespace(skills_op=None, query="", limit=10, name="", allow_dangerous=False, overwrite=False),
+        argparse.Namespace(
+            skills_op=None, query="", limit=10, name="", allow_dangerous=False, overwrite=False
+        ),
         color=False,
     )
     assert rc in (0, 2)
@@ -178,7 +191,6 @@ def test_run_setup_delegates_to_wizard(monkeypatch, tmp_path: Path) -> None:
 
 
 def test_run_ui_import_error(tmp_path: Path, monkeypatch) -> None:
-    import sys
 
     monkeypatch.setitem(sys.modules, "uvicorn", None)  # import uvicorn -> ImportError
     rc, out = _run(cc.run_ui, host="127.0.0.1", port=8000, journal_path=tmp_path / "j.jsonl")
@@ -186,7 +198,6 @@ def test_run_ui_import_error(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_run_ui_starts_server(tmp_path: Path, monkeypatch) -> None:
-    import sys
 
     ran: dict = {}
     fake_uvicorn = type("Uv", (), {"run": staticmethod(lambda _app, **kw: ran.update(kw))})
@@ -195,11 +206,12 @@ def test_run_ui_starts_server(tmp_path: Path, monkeypatch) -> None:
     rc, out = _run(cc.run_ui, host="127.0.0.1", port=8000, journal_path=tmp_path / "j.jsonl")
     assert rc == 0
     assert ran.get("port") == 8000
+    assert ran.get("ws") == "websockets-sansio"
 
 
 def test_run_quickstart_with_force(monkeypatch, tmp_path: Path) -> None:
     setup_calls: list[Path] = []
-    monkeypatch.setattr(cc, "run_setup", lambda **kw: (setup_calls.append(kw["output"]) or 0))
+    monkeypatch.setattr(cc, "run_setup", lambda **kw: setup_calls.append(kw["output"]) or 0)
     monkeypatch.setattr(cc, "run_doctor", lambda **kw: 0)
     monkeypatch.setattr(cc, "run_serve", lambda **kw: 0)
 

@@ -19,8 +19,9 @@ unit-testable) and are wired into the call path by
 ``browser_skills._dispatch_higher_track`` — extension → Electron first,
 headless Playwright as the always-available fallback. The stateless
 ``browser_*`` handlers route through that dispatch; the desktop-explicit
-``live_browser_*`` tools talk to the Electron bridge directly by design
-(their ``live_`` prefix promises a visible page).
+``live_browser_*`` tools prefer the Electron webview and, when no Electron
+webview is targetable, safely fall back to the signed-in extension relay
+(their ``live_`` prefix promises a visible page, not one specific shell).
 
 Action results share the existing wire shape every track already
 returns: ``{"ok": bool, ...}``. ``BrowserResult`` documents that shape

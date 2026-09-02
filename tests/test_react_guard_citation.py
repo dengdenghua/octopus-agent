@@ -103,3 +103,30 @@ def test_end_to_end_via_registry() -> None:
     assert hit is not None
     label, _msg = hit
     assert label == "citation-grounding guard"
+
+
+# ── Cross-turn grounding ────────────────────────────────────────────────
+# A source link fetched in an EARLIER turn of the same thread and cited here
+# is grounded, not fabricated — the guard must merge prior-turn observations.
+
+
+def test_no_fire_when_citation_grounded_in_prior_turn_observation() -> None:
+    steps = [_search_step("本轮只补了竞争格局。")]
+    prior = "Top hit: https://example.com/report-2026 — market grew 12%."
+    msg = _fabricated_citation_guard(steps, ANSWER_FAKE_CITE, prior_observations=prior)
+    assert msg is None
+
+
+def test_fires_when_citation_absent_from_both_current_and_prior() -> None:
+    steps = [_search_step("本轮只补了竞争格局。")]
+    prior = "Top hit: https://other.example/foo — unrelated."
+    msg = _fabricated_citation_guard(steps, ANSWER_FAKE_CITE, prior_observations=prior)
+    assert msg is not None
+    assert "https://example.com/report-2026" in msg
+
+
+def test_prior_observations_flow_through_invoke_wrapper() -> None:
+    steps = [_search_step("本轮只补了竞争格局。")]
+    ctx = _ctx(steps, ANSWER_FAKE_CITE)
+    ctx.prior_grounding_text = "Top hit: https://example.com/report-2026 — market grew 12%."
+    assert _invoke_fabricated_citation(ctx) is None

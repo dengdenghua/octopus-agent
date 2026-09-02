@@ -93,11 +93,7 @@ class OwnershipMixin:
         with self._lock:  # type: ignore[attr-defined]
             if owner_id is None:
                 return list(self._batches.keys())
-            return [
-                bid
-                for bid, batch in self._batches.items()
-                if batch.owner_id is None or batch.owner_id == owner_id
-            ]
+            return [bid for bid, batch in self._batches.items() if batch.owner_id == owner_id]
 
     def cancel_all_for_owner(self, owner_id: str | None) -> bool:
         """Cancel only the batches the caller owns.
@@ -109,11 +105,7 @@ class OwnershipMixin:
         """
         with self._lock:  # type: ignore[attr-defined]
             for batch in list(self._batches.values()):
-                if (
-                    owner_id is not None
-                    and batch.owner_id is not None
-                    and batch.owner_id != owner_id
-                ):
+                if owner_id is not None and batch.owner_id != owner_id:
                     continue
                 for entry in batch.tasks.values():
                     if entry.status in ("completed", "failed", "cancelled", "timed_out"):

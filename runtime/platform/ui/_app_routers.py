@@ -107,6 +107,21 @@ def mount_routers_a(
         )
     )
 
+    # ─── Project OS store · shared by the project-mode auto-bind below and the
+    # projects_router, so a project created by switching a thread to project
+    # mode is the same store the workbench 项目 tab reads from.
+    from runtime.projectos.store import ProjectStore
+    from runtime.sensing.gateway.projects_router import create_projects_router
+
+    project_store = ProjectStore()
+    app.state.project_store = project_store
+    bind_team_project_store = getattr(ctx.team_rooms_router, "bind_project_store", None)
+    if callable(bind_team_project_store):
+        bind_team_project_store(project_store)
+    project_model_router = (
+        getattr(getattr(stack, "planner", None), "router", None) if stack is not None else None
+    )
+
     # ─── Cowork thread-group · WeChat-style membership + mode + blackboard ──
     # GET /api/cowork/{thread} (public) + POST/DELETE members/mode/blackboard
     # (auth-gated). A thread IS the group; 1:1 is the N=2 case.
@@ -132,6 +147,7 @@ def mount_routers_a(
             team_rooms_router=ctx.team_rooms_router,
             team_tasks_router=ctx.team_tasks_router,
             runtime=ctx.cowork_runtime,
+            project_store=project_store,
             identity_store=ctx.identity_store,
             require_auth=ctx.require_auth,
             jwt_secret=ctx.jwt_secret,
@@ -144,14 +160,6 @@ def mount_routers_a(
     # GET /api/projects/* is authenticated and owner/tenant scoped in shared
     # mode; POST plan/tick/run and other mutations use the same Principal.
     # LLM hooks when a model router is available, else deterministic stubs.
-    from runtime.projectos.store import ProjectStore
-    from runtime.sensing.gateway.projects_router import create_projects_router
-
-    project_store = ProjectStore()
-    app.state.project_store = project_store
-    project_model_router = (
-        getattr(getattr(stack, "planner", None), "router", None) if stack is not None else None
-    )
     app.include_router(
         create_projects_router(
             store=project_store,
@@ -165,8 +173,11 @@ def mount_routers_a(
                 if ctx.cowork_runtime is not None
                 else None
             ),
+            team_rooms_router=ctx.team_rooms_router,
             thread_store=ctx.thread_store,
+            workspace_root=ctx.thread_workspace_root,
             model_router=project_model_router,
+            subagent_runner=ctx.subagent_runner,
             identity_store=ctx.identity_store,
             require_auth=ctx.require_auth,
             jwt_secret=ctx.jwt_secret,
@@ -193,12 +204,21 @@ def mount_routers_a(
             jwt_secret=ctx.jwt_secret,
             jwt_issuer=ctx.jwt_issuer,
             jwt_audience=ctx.jwt_audience,
+            workspace_root=ctx.thread_workspace_root,
         )
     )
 
     from runtime.sensing.gateway.agent_modes_router import create_agent_modes_router
 
-    app.include_router(create_agent_modes_router())
+    app.include_router(
+        create_agent_modes_router(
+            identity_store=ctx.identity_store,
+            require_auth=ctx.require_auth,
+            jwt_secret=ctx.jwt_secret,
+            jwt_issuer=ctx.jwt_issuer,
+            jwt_audience=ctx.jwt_audience,
+        )
+    )
 
     try:
         from runtime.sensing.gateway.workspaces_router import create_workspaces_router
@@ -237,7 +257,18 @@ def mount_routers_a(
 
     from runtime.sensing.gateway.lsp_router import create_lsp_router
 
-    app.include_router(create_lsp_router(state.registry))
+    app.include_router(
+        create_lsp_router(
+            state.registry,
+            thread_store=ctx.thread_store,
+            workspace_root=ctx.thread_workspace_root,
+            identity_store=ctx.identity_store,
+            require_auth=ctx.require_auth,
+            jwt_secret=ctx.jwt_secret,
+            jwt_issuer=ctx.jwt_issuer,
+            jwt_audience=ctx.jwt_audience,
+        )
+    )
 
     try:
         from runtime.execution.loops import (
@@ -278,9 +309,7 @@ def mount_routers_a(
                     _pruned,
                 )
         except Exception as _prune_exc:  # noqa: BLE001
-            logging.getLogger(__name__).warning(
-                "loop run retention prune failed: %s", _prune_exc
-            )
+            logging.getLogger(__name__).warning("loop run retention prune failed: %s", _prune_exc)
         _loop_review_queue = ReviewQueue(app_paths().review_queue_path)
         _loop_controller = (
             LoopController(
@@ -432,7 +461,18 @@ def mount_routers_a(
 
     from runtime.execution.misc.parallel_runner import create_parallel_task_router
 
-    app.include_router(create_parallel_task_router(stack=stack))
+    app.include_router(
+        create_parallel_task_router(
+            stack=stack,
+            thread_store=ctx.thread_store,
+            workspace_root=ctx.thread_workspace_root,
+            identity_store=ctx.identity_store,
+            require_auth=ctx.require_auth,
+            jwt_secret=ctx.jwt_secret,
+            jwt_issuer=ctx.jwt_issuer,
+            jwt_audience=ctx.jwt_audience,
+        )
+    )
 
     # ─── Uploads/artifacts router · extracted to uploads_router.py
     # The 4 endpoints + 2 helpers that used to live here inline now
@@ -512,6 +552,7 @@ def mount_routers_a(
             journal=state.journal,
             registry=state.registry,
             planner=getattr(stack, "planner", None) if stack is not None else None,
+            thread_store=ctx.thread_store,
             forged_skill_dir=Path("data/forged_skills"),
             identity_store=ctx.identity_store,
             require_auth=ctx.require_auth,
@@ -628,6 +669,62 @@ def mount_routers_a(
         logging.getLogger(__name__).warning(
             "registry_consumer_router failed to mount: %s", _reg_exc
         )
+
+    # ─── 统一资产仓库(插件/技能/角色 · WorkBuddy+Codex+本地 归一)────────
+    # 浏览 ~/.octopus/assets/ 统一 index + 显式重建(sync)。
+    try:
+        from runtime.sensing.gateway.asset_registry_router import (
+            create_asset_registry_router,
+        )
+
+        app.include_router(
+            create_asset_registry_router(
+                identity_store=ctx.identity_store,
+                require_auth=ctx.require_auth,
+                jwt_secret=ctx.jwt_secret,
+                jwt_issuer=ctx.jwt_issuer,
+                jwt_audience=ctx.jwt_audience,
+            )
+        )
+    except Exception as _asset_exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning("asset_registry_router failed to mount: %s", _asset_exc)
+
+    # ─── 连接器市场(WorkBuddy 连接器 fork · 认证编排层)──────────────
+    # 浏览/安装 108 个连接器 + 认证编排(connect/status/headers 注入)。
+    try:
+        from runtime.sensing.gateway.connector_router import create_connector_router
+
+        app.include_router(
+            create_connector_router(
+                identity_store=ctx.identity_store,
+                require_auth=ctx.require_auth,
+                jwt_secret=ctx.jwt_secret,
+                jwt_issuer=ctx.jwt_issuer,
+                jwt_audience=ctx.jwt_audience,
+            )
+        )
+    except Exception as _conn_exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning("connector_router failed to mount: %s", _conn_exc)
+
+    # ─── 统一能力市场(连接器 + Codex 插件归一)──────────────
+    # 一个市场统一管理连接器(WorkBuddy 108)与 Codex 插件(我们正在运行的),
+    # 统一 install/enable/connect 生命周期,详见 capability_registry.py。
+    try:
+        from runtime.sensing.gateway.capability_router import (
+            create_capability_router,
+        )
+
+        app.include_router(
+            create_capability_router(
+                identity_store=ctx.identity_store,
+                require_auth=ctx.require_auth,
+                jwt_secret=ctx.jwt_secret,
+                jwt_issuer=ctx.jwt_issuer,
+                jwt_audience=ctx.jwt_audience,
+            )
+        )
+    except Exception as _cap_exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning("capability_router failed to mount: %s", _cap_exc)
 
     # ─── 企业版角色资产消费(数字分身归并 C·只读)──────────────
     # 配 OCTOPUS_ENTERPRISE_URL 时,市场可列举企业版托管的角色资产;不配则

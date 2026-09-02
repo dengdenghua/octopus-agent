@@ -72,13 +72,9 @@ def _write(
         journal.write(
             event_factory(
                 task_id=task_id if task_id is not None else _ambient_task_id(),
-                agent_id=(
-                    agent_id if agent_id is not None else current_agent_id()
-                ),
+                agent_id=(agent_id if agent_id is not None else current_agent_id()),
                 conversation_id=(
-                    conversation_id
-                    if conversation_id is not None
-                    else current_conversation_id()
+                    conversation_id if conversation_id is not None else current_conversation_id()
                 ),
             )
         )
@@ -98,9 +94,7 @@ def write_workflow_start(
 ) -> bool:
     """Journal a workflow run start (dsh workflow ``on_start``)."""
     return _write(
-        lambda **kw: WorkflowStartEvent(
-            run_id=run_id, name=name, description=description, **kw
-        ),
+        lambda **kw: WorkflowStartEvent(run_id=run_id, name=name, description=description, **kw),
         task_id=task_id,
         agent_id=agent_id,
         conversation_id=conversation_id,
@@ -234,9 +228,7 @@ def sweep_interrupted_jobs(journal: Any) -> list[dict[str, str]]:
                     detail="interrupted: backend restarted while this job was running",
                 )
             )
-            closed.append(
-                {"job_id": jid, "kind": kind, "label": label, "last_status": status}
-            )
+            closed.append({"job_id": jid, "kind": kind, "label": label, "last_status": status})
         except Exception:  # noqa: BLE001 - startup sweep is best-effort
             continue
     return closed

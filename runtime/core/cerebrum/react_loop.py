@@ -7,6 +7,7 @@ from collections.abc import Callable, Generator
 from typing import TYPE_CHECKING, Any
 
 from runtime.core.cerebrum._react_loop_reexports import *  # noqa: F403
+from runtime.core.cerebrum.pause_control import turn_wall_time_cap_s
 from runtime.core.cerebrum.react_action_outcomes import (
     _action_batch_fingerprint,
     _deduplicate_actions,
@@ -31,6 +32,7 @@ from runtime.core.cerebrum.react_final_answer_guards import (
 )
 from runtime.core.cerebrum.react_in_flight_nudges import (
     _apply_in_flight_nudges,
+    _should_terminal_environment_convergence,
 )
 from runtime.core.cerebrum.react_loop_controls import (
     _cancel_pause_guard,
@@ -68,7 +70,6 @@ from runtime.core.cerebrum.react_quiet_evidence import (
     _result_checkpoint_is_meaningful,
     _should_accumulate_quiet_evidence,
 )
-from runtime.core.cerebrum.pause_control import turn_wall_time_cap_s
 from runtime.core.cerebrum.react_resume import (
     _resume_or_register_turn,
 )
@@ -153,26 +154,28 @@ def stream_react_loop(
     """
     _mark_subagent_owner_thread(thread_id, busy=True)
     try:
-        return (yield from _stream_react_loop_impl(
-            stack,
-            intent,
-            agent,
-            model=model,
-            max_iterations=max_iterations,
-            temperature=temperature,
-            enable_tools=enable_tools,
-            resume_task_id=resume_task_id,
-            thread_id=thread_id,
-            max_tokens_budget=max_tokens_budget,
-            max_usd_budget=max_usd_budget,
-            approval_provider=approval_provider,
-            output_chunk_sink=output_chunk_sink,
-            step_evaluator=step_evaluator,
-            planning_mode=planning_mode,
-            reasoning_effort=reasoning_effort,
-            steering_drain=steering_drain,
-            on_auto_parallel_batch=on_auto_parallel_batch,
-        ))
+        return (
+            yield from _stream_react_loop_impl(
+                stack,
+                intent,
+                agent,
+                model=model,
+                max_iterations=max_iterations,
+                temperature=temperature,
+                enable_tools=enable_tools,
+                resume_task_id=resume_task_id,
+                thread_id=thread_id,
+                max_tokens_budget=max_tokens_budget,
+                max_usd_budget=max_usd_budget,
+                approval_provider=approval_provider,
+                output_chunk_sink=output_chunk_sink,
+                step_evaluator=step_evaluator,
+                planning_mode=planning_mode,
+                reasoning_effort=reasoning_effort,
+                steering_drain=steering_drain,
+                on_auto_parallel_batch=on_auto_parallel_batch,
+            )
+        )
     finally:
         _mark_subagent_owner_thread(thread_id, busy=False)
 
@@ -263,7 +266,9 @@ def _stream_react_loop_impl(
 
         if active_trace() is None:
             _visibility_token = set_active_trace(new_trace())
-    except ImportError:  # pragma: no cover — module is always present  # noqa: BLE001 — visibility token is optional
+    except (
+        ImportError
+    ):  # pragma: no cover — module is always present  # noqa: BLE001 — visibility token is optional
         pass
     # PHASE 3→4.7 share a turn-scoped ContextVar trace. Wrap them in
     # try/finally so the token is reset even if a consumer closes the
@@ -305,6 +310,7 @@ def _stream_react_loop_impl(
         _budget_pause_threshold = _assembly.budget_pause_threshold
         _realtime_public_orientation_requested = _assembly.realtime_public_orientation_requested
         _grounding_sources = _assembly.grounding_sources
+        _prior_grounding_text = _assembly.prior_grounding_text
         _is_swarm_mode = _assembly.is_swarm_mode
         _is_research_mode = _assembly.is_research_mode
         _active_max_tokens_budget = _assembly.active_max_tokens_budget
@@ -342,7 +348,9 @@ def _stream_react_loop_impl(
             from runtime.core.cerebrum._visibility_trace import active_trace
 
             _visibility_trace = active_trace()
-        except ImportError:  # pragma: no cover — module is always present  # noqa: BLE001 — optional tooling hook
+        except (
+            ImportError
+        ):  # pragma: no cover — module is always present  # noqa: BLE001 — optional tooling hook
             pass
         if _visibility_trace is None:
             # ``activation`` is normally not bound in this scope; the
@@ -409,7 +417,6 @@ def _stream_react_loop_impl(
     final_answer_segments: list[str] = []
     final_answer_emitted = False
 
-
     # Throughput sampler — chars/sec across all delta yields. We emit a
     # ``throughput`` event every ~500ms so the UI can show a live
     # tokens-per-second indicator without flooding the WebSocket. Chars
@@ -433,6 +440,13 @@ def _stream_react_loop_impl(
     _realtime_public_orientation = _realtime_public_orientation_requested
     _quiet_evidence_steps: list[ReActStep] = []
     _force_convergence_next = False
+    # Resume must preserve the tools-disabled terminal lane. Recompute it
+    # from restored server-owned receipts before the first model request;
+    # legacy checkpoints without provenance fail closed and keep tools on.
+    _terminal_convergence_active = _should_terminal_environment_convergence(
+        steps,
+        is_code_mode=_is_code_mode,
+    )
     _green_verification_convergence_active = False
     _green_convergence_todo_used = False
     _evidence_convergence_active: EvidenceConvergence | None = None
@@ -615,6 +629,7 @@ def _stream_react_loop_impl(
         format_violation_bail_at=_format_violation_bail_at,
         final_guard_grounded_source_paths=_final_guard_grounded_source_paths,
         guard_impasse_state=_guard_impasse_state,
+        prior_grounding_text=_prior_grounding_text,
         intent=intent,
         agent=agent,
         thread_id=thread_id,
@@ -645,6 +660,7 @@ def _stream_react_loop_impl(
         current_phase=_current_phase,
         consecutive_same_failed_actions=_consecutive_same_failed_actions,
         last_failed_action_fingerprint=_last_failed_action_fingerprint,
+        terminal_convergence_active=_terminal_convergence_active,
         green_verification_convergence_active=_green_verification_convergence_active,
         green_convergence_todo_used=_green_convergence_todo_used,
         result_handoff_ready=_result_handoff_ready,
@@ -889,6 +905,7 @@ def _stream_react_loop_impl(
             _green_verification_convergence_active,
             _force_convergence_next,
             _env_degradation_signaled,
+            _terminal_convergence_active,
         ) = _apply_in_flight_nudges(
             steps=steps,
             step=step,
@@ -903,12 +920,14 @@ def _stream_react_loop_impl(
             green_verification_convergence_active=_green_verification_convergence_active,
             force_convergence_next=_force_convergence_next,
             env_degradation_signaled=_env_degradation_signaled,
+            terminal_convergence_active=_terminal_convergence_active,
         )
 
         # ── PHASE 6e · guards + step yield ────────────────────────────
         state.maybe_final = maybe_final
         state.final_stream_started = _final_stream_started
         state.force_convergence_next = _force_convergence_next
+        state.terminal_convergence_active = _terminal_convergence_active
         state.final_delta_emitted_this_iteration = _final_delta_emitted_this_iteration
         state.green_verification_convergence_active = _green_verification_convergence_active
         state.green_convergence_todo_used = _green_convergence_todo_used
@@ -1018,6 +1037,7 @@ def _stream_react_loop_impl(
             goal=intent.normalized_goal,
             browser_operation_mode=_browser_operation_mode,
             final_guard_grounded_source_paths=_final_guard_grounded_source_paths,
+            prior_grounding_text=_prior_grounding_text,
             final_answer_emitted=final_answer_emitted,
             model_iteration_timeout_s=_model_iteration_timeout_s,
             model_iteration_timeout_s_config=_model_iteration_timeout_s_config,

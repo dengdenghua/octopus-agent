@@ -337,9 +337,7 @@ def _background_exec(
     # the host via repeated background_exec calls.
     from ._write_skills_background import _BACKGROUND_MAX_CONCURRENT
 
-    running_ids = [
-        tid for tid, bg in _BACKGROUND_PROCESSES.items() if bg.proc.poll() is None
-    ]
+    running_ids = [tid for tid, bg in _BACKGROUND_PROCESSES.items() if bg.proc.poll() is None]
     if len(running_ids) >= _BACKGROUND_MAX_CONCURRENT:
         return {
             "error": (

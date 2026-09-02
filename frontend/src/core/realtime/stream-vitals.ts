@@ -97,6 +97,11 @@ export const DEFAULT_VITALS_THRESHOLDS: VitalsThresholds = {
   activityStaleMs: 10_000,
 };
 
+// A live connection can keep heartbeating while the provider has not emitted
+// any agent event. Past one minute this is no longer an ordinary TTFT window:
+// surface it as a delayed first response without calling the socket stalled.
+export const FIRST_RESPONSE_DELAY_NOTICE_MS = 60_000;
+
 export function emptyVitalsMarks(): VitalsMarks {
   return {
     activeTurnId: null,
@@ -122,6 +127,24 @@ export function emptyVitals(): StreamVitals {
     maxDeltaGapMs: 0,
     stalled: false,
   };
+}
+
+/** Compact, stable wall-time label shared by the header and the inline
+ * activity lane. Long waits should read as ``1m 44s`` instead of ``104s``;
+ * keeping the formatter here prevents the two surfaces drifting apart. */
+export function formatStreamElapsed(elapsedMs: number): string {
+  const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (totalMinutes < 60) {
+    return `${totalMinutes}m ${String(seconds).padStart(2, "0")}s`;
+  }
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${String(minutes).padStart(2, "0")}m`;
 }
 
 // Notification methods that count as "the server is doing work". Anything

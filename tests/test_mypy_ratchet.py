@@ -55,6 +55,17 @@ def test_fixed_error_is_baseline_minus_current():
     assert sum((baseline - current).values()) == 1  # one fixed (ratchet down)
 
 
+def test_empty_baseline_writer_has_no_trailing_blank_line(monkeypatch, tmp_path):
+    baseline_path = tmp_path / "mypy_baseline.txt"
+    monkeypatch.setattr(mypy_ratchet, "_BASELINE_PATH", baseline_path)
+
+    mypy_ratchet._write_baseline(Counter())
+
+    text = baseline_path.read_text(encoding="utf-8")
+    assert text.endswith("ratchet the count down.\n")
+    assert not text.endswith("\n\n")
+
+
 def test_main_fails_when_mypy_cannot_run(monkeypatch, capsys):
     monkeypatch.setattr(mypy_ratchet, "_run_mypy", lambda: (1, "python: No module named mypy"))
     monkeypatch.setattr("sys.argv", ["mypy_ratchet.py"])

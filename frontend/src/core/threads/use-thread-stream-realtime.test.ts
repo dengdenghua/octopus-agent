@@ -17,7 +17,9 @@ import {
   useThreadStreamRealtime,
   liveToolEventsFromConversation,
   liveToolEventsFromLastTurn,
+  uploadPromptInputFiles,
 } from "./use-thread-stream-realtime";
+import { RETRY_PENDING_MESSAGE_EVENT } from "./optimistic-messages";
 import { useRealtimeThread } from "@/core/realtime";
 
 vi.mock("@/core/realtime", () => ({
@@ -31,6 +33,12 @@ vi.mock("@/core/i18n/hooks", () => ({
         inputsUploadedFiles: (count: number) => `${count} file(s) uploaded`,
       },
       chatInputBox: { uploadFailed: "Upload failed" },
+      conversation: {
+        previousMessagePending:
+          "The previous message is still sending. Wait for confirmation, then retry.",
+        steeringTurnUnavailable:
+          "The original task is no longer running. Send this again as a new message.",
+      },
     },
   }),
 }));
@@ -220,6 +228,8 @@ describe("liveToolEventsFromConversation", () => {
     ]);
     expect(events[0]).toMatchObject({
       id: "cmd-1",
+      turnId: "turn-1",
+      turnIndex: 0,
       status: "done",
       input: {
         path: ".",
@@ -242,6 +252,22 @@ describe("liveToolEventsFromConversation", () => {
       items: [{ content: "Inspect", status: "completed" }],
       explanation: "plan",
     });
+  });
+
+  it("stamps events with their owning turn instead of overloading iteration", () => {
+    const conv = makeConversation([
+      makeTurn([commandItem({ id: "turn-one-tool" })], "turn-one"),
+      makeTurn([commandItem({ id: "turn-two-tool" })], "turn-two"),
+    ]);
+
+    const events = liveToolEventsFromConversation(conv);
+
+    expect(
+      events.map(({ id, turnId, turnIndex }) => ({ id, turnId, turnIndex })),
+    ).toEqual([
+      { id: "turn-one-tool", turnId: "turn-one", turnIndex: 0 },
+      { id: "turn-two-tool", turnId: "turn-two", turnIndex: 1 },
+    ]);
   });
 
   it("renders a user-redirected tool as a neutral finished event", () => {
@@ -563,6 +589,178 @@ describe("liveToolEventsFromConversation", () => {
     });
   });
 
+  it("recovers the requested lane id when custom siblings share one builtin role", () => {
+    const conv = makeConversation([
+      makeTurn([
+        mcpItem({
+          id: "spawn-custom-reader",
+          status: "inProgress",
+          tool: "__subagent_spawned__",
+          server: "runtime",
+          arguments: {
+            agent_id: "explorer",
+            role: "explorer",
+            codename: "Spark-4f6",
+            prompt_preview:
+              "# Role: reader_readme\n\nYou are acting as reader_readme",
+          },
+          result: null,
+          durationMs: null,
+        }),
+        mcpItem({
+          id: "finish-custom-reader",
+          tool: "__subagent_finished__",
+          server: "runtime",
+          arguments: {},
+          result: {
+            agent_id: "explorer",
+            role: "explorer",
+            codename: "Spark-4f6",
+            ok: true,
+          },
+          durationMs: null,
+        }),
+      ]),
+    ]);
+
+    const events = liveToolEventsFromConversation(conv);
+    expect(events.map((event) => event.agentId)).toEqual([
+      "reader_readme",
+      "reader_readme",
+    ]);
+  });
+
+  it("uses codename for legacy same-role child tools instead of collapsing siblings", () => {
+    const conv = makeConversation([
+      makeTurn([
+        mcpItem({
+          id: "legacy-child-tool",
+          server: "subagent",
+          tool: "read_file",
+          arguments: {
+            agent_id: "explorer",
+            sub_agent_role: "explorer",
+            subagent_codename: "Spark-4f6",
+            input: { path: "README.md" },
+          },
+          result: { output_preview: "ok" },
+        }),
+      ]),
+    ]);
+
+    expect(liveToolEventsFromConversation(conv)[0]?.agentId).toBe("Spark-4f6");
+  });
+
+  it("uses the same codename for a legacy same-role finish marker", () => {
+    const conv = makeConversation([
+      makeTurn([
+        mcpItem({
+          id: "legacy-child-progress",
+          status: "inProgress",
+          server: "subagent",
+          tool: "__subagent_progress__",
+          arguments: {
+            agent_id: "explorer",
+            sub_agent_role: "explorer",
+            subagent_codename: "Spark-4f6",
+          },
+          result: null,
+          durationMs: null,
+        }),
+        mcpItem({
+          id: "legacy-child-finish",
+          server: "runtime",
+          tool: "__subagent_finished__",
+          arguments: {},
+          result: {
+            requested_agent_id: "explorer",
+            agent_id: "explorer",
+            role: "explorer",
+            codename: "Spark-4f6",
+            ok: true,
+          },
+        }),
+      ]),
+    ]);
+
+    expect(
+      liveToolEventsFromConversation(conv).map((event) => event.agentId),
+    ).toEqual(["Spark-4f6", "Spark-4f6"]);
+  });
+
+  it("attributes durable child tool steps to the matching agent lane", () => {
+    const conv = makeConversation([
+      makeTurn([
+        mcpItem({
+          id: "subagent-tool-search",
+          server: "subagent",
+          tool: "web_search",
+          arguments: {
+            agent_id: "researcher-a",
+            sub_agent_role: "researcher",
+            subagent_codename: "Spark-a1",
+            subagent_avatar: "🔎",
+            parent_tool_use_id: "orchestration-1",
+            input: { query: "Octopus Agent" },
+          },
+          result: { output_preview: "3 results", status: "success" },
+          durationMs: 320,
+        }),
+      ]),
+    ]);
+
+    expect(liveToolEventsFromConversation(conv)[0]).toMatchObject({
+      id: "subagent-tool-search",
+      name: "web_search",
+      status: "done",
+      agentId: "researcher-a",
+      subAgentRole: "researcher",
+      subagentCodename: "Spark-a1",
+      subagentAvatar: "🔎",
+      parentToolUseId: "orchestration-1",
+      durationMs: 320,
+    });
+  });
+
+  it("maps streamed child prose to one public progress event", () => {
+    const conv = makeConversation([
+      makeTurn([
+        mcpItem({
+          id: "subagent-progress-a",
+          status: "inProgress",
+          server: "subagent",
+          tool: "__subagent_progress__",
+          arguments: {
+            agent_id: "researcher-a",
+            sub_agent_role: "researcher",
+            subagent_codename: "Spark-a1",
+            subagent_avatar: "🔎",
+            parent_tool_use_id: "orchestration-1",
+            round: 2,
+          },
+          progress: {
+            label: "子智能体输出",
+            status: "running",
+            preview: "已查看两个来源，正在核对第三个来源",
+            updatedAt: BASE_TS,
+          },
+          result: null,
+          durationMs: null,
+        }),
+      ]),
+    ]);
+
+    expect(liveToolEventsFromConversation(conv)[0]).toMatchObject({
+      id: "subagent-progress-a",
+      name: "subagent_progress",
+      status: "running",
+      agentId: "researcher-a",
+      subAgentRole: "researcher",
+      subagentCodename: "Spark-a1",
+      observation: "已查看两个来源，正在核对第三个来源",
+    });
+  });
+
   it("carries a failed sub-agent's reason onto the event", () => {
     // Regression: this mapper whitelists fields off `result` by name, and
     // `error` was not on the list. The backend had always sent a concrete
@@ -750,6 +948,451 @@ describe("useThreadStreamRealtime permissions", () => {
     );
 
     expect(result.current[0].isThreadLoading).toBe(false);
+  });
+
+  it("shows a new-turn human message immediately and reconciles it by stable item id", async () => {
+    const startTurn = vi.fn(() => new Promise<void>(() => undefined));
+    const steer = vi.fn().mockResolvedValue(undefined);
+    let state: Conversation = makeConversation([]);
+    vi.mocked(useRealtimeThread).mockImplementation(() => ({
+      state,
+      connected: true,
+      startTurn,
+      steer,
+      resolveApproval: vi.fn(),
+      resume: vi.fn().mockResolvedValue(undefined),
+      interrupt: vi.fn().mockResolvedValue(undefined),
+      compact: vi.fn().mockResolvedValue({ compacted: false }),
+      decideHunk: vi.fn().mockResolvedValue(undefined),
+    }));
+    const { result, rerender } = renderHook(() =>
+      useThreadStreamRealtime({ threadId: "th-test" }),
+    );
+
+    act(() => {
+      result.current[1]("th-test", {
+        text: "先显示，再发送",
+        files: [],
+      });
+    });
+
+    expect(result.current[0].messages).toEqual([
+      expect.objectContaining({
+        id: expect.stringMatching(/^itm_user_/),
+        type: "human",
+        content: "先显示，再发送",
+        additional_kwargs: expect.objectContaining({
+          delivery_state: "sending",
+        }),
+      }),
+    ]);
+    expect(result.current[0].isLoading).toBe(true);
+    await waitFor(() => expect(startTurn).toHaveBeenCalledTimes(1));
+    const clientItemId = startTurn.mock.calls[0]?.[0].clientItemId;
+    expect(clientItemId).toBe(result.current[0].messages[0]?.id);
+    expect(startTurn.mock.calls[0]?.[0].metadata).not.toHaveProperty(
+      "client_message_id",
+    );
+
+    state = makeConversation([
+      {
+        ...makeTurn(
+          [
+            {
+              id: clientItemId!,
+              type: "userMessage",
+              status: "completed",
+              createdAt: BASE_TS,
+              text: "先显示，再发送",
+            },
+          ],
+          "turn-live",
+        ),
+        status: "inProgress",
+        completedAt: null,
+      },
+    ]);
+    rerender();
+
+    await waitFor(() => {
+      const humanMessages = result.current[0].messages.filter(
+        (message) => message.type === "human",
+      );
+      expect(humanMessages).toHaveLength(1);
+      expect(humanMessages[0]).toMatchObject({
+        id: clientItemId,
+        content: "先显示，再发送",
+      });
+      expect(humanMessages[0]?.additional_kwargs).not.toHaveProperty(
+        "delivery_state",
+      );
+    });
+  });
+
+  it("marks optimistic delivery queued until websocket resume is authoritative", async () => {
+    const startTurn = vi.fn(() => new Promise<void>(() => undefined));
+    let connected = false;
+    let state: Conversation = {
+      ...makeConversation([]),
+      resumeState: "resuming",
+    };
+    vi.mocked(useRealtimeThread).mockImplementation(() => ({
+      state,
+      connected,
+      startTurn,
+      steer: vi.fn().mockResolvedValue(undefined),
+      resolveApproval: vi.fn(),
+      resume: vi.fn().mockResolvedValue(undefined),
+      interrupt: vi.fn().mockResolvedValue(undefined),
+      compact: vi.fn().mockResolvedValue({ compacted: false }),
+      decideHunk: vi.fn().mockResolvedValue(undefined),
+    }));
+    const { result, rerender } = renderHook(() =>
+      useThreadStreamRealtime({ threadId: "th-test" }),
+    );
+
+    act(() => {
+      result.current[1]("th-test", { text: "离线也要看得见", files: [] });
+    });
+    expect(
+      result.current[0].messages[0]?.additional_kwargs?.delivery_state,
+    ).toBe("queued");
+    // The new-thread page must be able to distinguish this local optimistic
+    // row from a durable server receipt. Otherwise it can navigate away and
+    // tear down the socket before the queue reaches turn/start.
+    expect(result.current[0].values.messages).toEqual([]);
+    expect(startTurn).not.toHaveBeenCalled();
+
+    connected = true;
+    state = makeConversation([]);
+    rerender();
+    await waitFor(() =>
+      expect(
+        result.current[0].messages[0]?.additional_kwargs?.delivery_state,
+      ).toBe("sending"),
+    );
+    expect(startTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps failed text retryable and reuses the same client item id", async () => {
+    const startTurn = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("socket dropped"))
+      .mockImplementation(() => new Promise<void>(() => undefined));
+    mockRealtime(startTurn);
+    const { result } = renderHook(() =>
+      useThreadStreamRealtime({ threadId: "th-test" }),
+    );
+
+    act(() => {
+      result.current[1]("th-test", { text: "不要吞掉这句话", files: [] });
+    });
+    await waitFor(() =>
+      expect(
+        result.current[0].messages[0]?.additional_kwargs?.delivery_state,
+      ).toBe("failed"),
+    );
+    const clientMessageId = result.current[0].messages[0]?.id;
+    expect(result.current[0].messages[0]?.content).toBe("不要吞掉这句话");
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(RETRY_PENDING_MESSAGE_EVENT, {
+          detail: { threadId: "th-test", clientMessageId },
+        }),
+      );
+    });
+    await waitFor(() => expect(startTurn).toHaveBeenCalledTimes(2));
+    expect(startTurn.mock.calls.map((call) => call[0].clientItemId)).toEqual([
+      clientMessageId,
+      clientMessageId,
+    ]);
+    expect(
+      result.current[0].messages[0]?.additional_kwargs?.delivery_state,
+    ).toBe("sending");
+  });
+
+  it("shows running-turn steering immediately and reconciles its server receipt", async () => {
+    const originalUser = {
+      id: "itm_user_original",
+      type: "userMessage" as const,
+      status: "completed" as const,
+      createdAt: BASE_TS,
+      text: "先检查核心流程",
+    };
+    let state: Conversation = makeConversation([
+      {
+        ...makeTurn([originalUser], "turn-live"),
+        status: "inProgress",
+        completedAt: null,
+      },
+    ]);
+    const steer = vi.fn(() => new Promise<void>(() => undefined));
+    vi.mocked(useRealtimeThread).mockImplementation(() => ({
+      state,
+      connected: true,
+      startTurn: vi.fn().mockResolvedValue(undefined),
+      steer,
+      resolveApproval: vi.fn(),
+      resume: vi.fn().mockResolvedValue(undefined),
+      interrupt: vi.fn().mockResolvedValue(undefined),
+      compact: vi.fn().mockResolvedValue({ compacted: false }),
+      decideHunk: vi.fn().mockResolvedValue(undefined),
+    }));
+    const { result, rerender } = renderHook(() =>
+      useThreadStreamRealtime({ threadId: "th-test" }),
+    );
+
+    act(() => {
+      result.current[1]("th-test", {
+        text: "顺便检查许可证",
+        files: [],
+      });
+    });
+    expect(
+      result.current[0].messages.map((message) => message.content),
+    ).toEqual(["先检查核心流程", "顺便检查许可证"]);
+    await waitFor(() => expect(steer).toHaveBeenCalledTimes(1));
+    const clientItemId = steer.mock.calls[0]?.[0].itemId;
+    expect(steer).toHaveBeenCalledWith({
+      input: "顺便检查许可证",
+      itemId: clientItemId,
+    });
+
+    state = makeConversation([
+      {
+        ...makeTurn(
+          [
+            originalUser,
+            {
+              id: clientItemId!,
+              type: "steeringUserMessage",
+              status: "completed",
+              createdAt: DONE_TS,
+              text: "顺便检查许可证",
+              targetTurnId: "turn-live",
+              source: "user",
+            },
+          ],
+          "turn-live",
+        ),
+        status: "inProgress",
+        completedAt: null,
+      },
+    ]);
+    rerender();
+
+    await waitFor(() => {
+      const corrections = result.current[0].messages.filter(
+        (message) => message.content === "顺便检查许可证",
+      );
+      expect(corrections).toHaveLength(1);
+      expect(corrections[0]?.id).toBe(clientItemId);
+      expect(corrections[0]?.additional_kwargs).not.toHaveProperty(
+        "delivery_state",
+      );
+    });
+  });
+
+  it("retries failed steering only against its original active turn", async () => {
+    const state = makeConversation([
+      {
+        ...makeTurn(
+          [
+            {
+              id: "itm_user_original",
+              type: "userMessage",
+              status: "completed",
+              createdAt: BASE_TS,
+              text: "继续原任务",
+            },
+          ],
+          "turn-original",
+        ),
+        status: "inProgress",
+        completedAt: null,
+      },
+    ]);
+    const steer = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("socket dropped"))
+      .mockImplementation(() => new Promise<void>(() => undefined));
+    vi.mocked(useRealtimeThread).mockReturnValue({
+      state,
+      connected: true,
+      startTurn: vi.fn().mockResolvedValue(undefined),
+      steer,
+      resolveApproval: vi.fn(),
+      resume: vi.fn().mockResolvedValue(undefined),
+      interrupt: vi.fn().mockResolvedValue(undefined),
+      compact: vi.fn().mockResolvedValue({ compacted: false }),
+      decideHunk: vi.fn().mockResolvedValue(undefined),
+    });
+    const { result } = renderHook(() =>
+      useThreadStreamRealtime({ threadId: "th-test" }),
+    );
+
+    act(() => {
+      result.current[1]("th-test", { text: "失败的纠偏", files: [] });
+    });
+    await waitFor(() =>
+      expect(
+        result.current[0].messages.find(
+          (message) => message.content === "失败的纠偏",
+        )?.additional_kwargs?.delivery_state,
+      ).toBe("failed"),
+    );
+    const clientMessageId = steer.mock.calls[0]?.[0].itemId;
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(RETRY_PENDING_MESSAGE_EVENT, {
+          detail: { threadId: "th-test", clientMessageId },
+        }),
+      );
+    });
+    await waitFor(() => expect(steer).toHaveBeenCalledTimes(2));
+
+    expect(steer.mock.calls.map((call) => call[0])).toEqual([
+      { input: "失败的纠偏", itemId: clientMessageId },
+      { input: "失败的纠偏", itemId: clientMessageId },
+    ]);
+    expect(
+      result.current[0].messages.find(
+        (message) => message.id === clientMessageId,
+      )?.additional_kwargs?.delivery_state,
+    ).toBe("sending");
+  });
+
+  it("does not open a second turn on rapid double-submit or early retry", async () => {
+    const startTurn = vi.fn(() => new Promise<void>(() => undefined));
+    mockRealtime(startTurn);
+    const { result } = renderHook(() =>
+      useThreadStreamRealtime({ threadId: "th-test" }),
+    );
+
+    act(() => {
+      result.current[1]("th-test", { text: "第一条", files: [] });
+      result.current[1]("th-test", { text: "第二条", files: [] });
+    });
+    await waitFor(() => expect(startTurn).toHaveBeenCalledTimes(1));
+    expect(
+      result.current[0].messages.map((message) => ({
+        content: message.content,
+        state: message.additional_kwargs?.delivery_state,
+      })),
+    ).toEqual([
+      { content: "第一条", state: "sending" },
+      { content: "第二条", state: "failed" },
+    ]);
+    expect(result.current[0].error?.message).toBe(
+      "The previous message is still sending. Wait for confirmation, then retry.",
+    );
+
+    const secondClientMessageId = result.current[0].messages[1]?.id;
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(RETRY_PENDING_MESSAGE_EVENT, {
+          detail: {
+            threadId: "th-test",
+            clientMessageId: secondClientMessageId,
+          },
+        }),
+      );
+    });
+    await Promise.resolve();
+    expect(startTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not turn a failed new-turn retry into steering for a newer active turn", async () => {
+    const startTurn = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("socket dropped"))
+      .mockImplementation(() => new Promise<void>(() => undefined));
+    const steer = vi.fn().mockResolvedValue(undefined);
+    let state: Conversation = makeConversation([]);
+    vi.mocked(useRealtimeThread).mockImplementation(() => ({
+      state,
+      connected: true,
+      startTurn,
+      steer,
+      resolveApproval: vi.fn(),
+      resume: vi.fn().mockResolvedValue(undefined),
+      interrupt: vi.fn().mockResolvedValue(undefined),
+      compact: vi.fn().mockResolvedValue({ compacted: false }),
+      decideHunk: vi.fn().mockResolvedValue(undefined),
+    }));
+    const { result, rerender } = renderHook(() =>
+      useThreadStreamRealtime({ threadId: "th-test" }),
+    );
+
+    act(() => {
+      result.current[1]("th-test", { text: "失败的 A", files: [] });
+    });
+    await waitFor(() =>
+      expect(
+        result.current[0].messages.find(
+          (message) => message.content === "失败的 A",
+        )?.additional_kwargs?.delivery_state,
+      ).toBe("failed"),
+    );
+    const failedAId = result.current[0].messages.find(
+      (message) => message.content === "失败的 A",
+    )?.id;
+
+    act(() => {
+      result.current[1]("th-test", { text: "已发送的 B", files: [] });
+    });
+    await waitFor(() => expect(startTurn).toHaveBeenCalledTimes(2));
+    const sentBId = startTurn.mock.calls[1]?.[0].clientItemId;
+    state = makeConversation([
+      {
+        ...makeTurn(
+          [
+            {
+              id: sentBId!,
+              type: "userMessage",
+              status: "completed",
+              createdAt: DONE_TS,
+              text: "已发送的 B",
+            },
+          ],
+          "turn-b",
+        ),
+        status: "inProgress",
+        completedAt: null,
+      },
+    ]);
+    rerender();
+    await waitFor(() =>
+      expect(
+        result.current[0].messages.filter(
+          (message) => message.content === "已发送的 B",
+        ),
+      ).toHaveLength(1),
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(RETRY_PENDING_MESSAGE_EVENT, {
+          detail: {
+            threadId: "th-test",
+            clientMessageId: failedAId,
+          },
+        }),
+      );
+    });
+    await Promise.resolve();
+
+    expect(startTurn).toHaveBeenCalledTimes(2);
+    expect(steer).not.toHaveBeenCalled();
+    expect(
+      result.current[0].messages.find((message) => message.id === failedAId)
+        ?.additional_kwargs?.delivery_state,
+    ).toBe("failed");
+    expect(result.current[0].error?.message).toBe(
+      "The previous message is still sending. Wait for confirmation, then retry.",
+    );
   });
 
   it("reports the server-created thread id when starting from the new-thread route", async () => {
@@ -1151,6 +1794,7 @@ describe("useThreadStreamRealtime permissions", () => {
     await waitFor(() => expect(startTurn).toHaveBeenCalled());
     expect(startTurn).toHaveBeenCalledWith(
       expect.objectContaining({
+        cwd: "/repo",
         metadata: {
           context: expect.objectContaining({
             mode: "code",
@@ -1260,6 +1904,30 @@ describe("useThreadStreamRealtime permissions", () => {
     );
   });
 
+  it("keeps reasoning off in provider metadata but omits invalid turn effort", async () => {
+    const startTurn = mockRealtime();
+    const { result } = renderHook(() =>
+      useThreadStreamRealtime({
+        threadId: "th-test",
+        context: {
+          permission_mode: "default",
+          reasoning_effort: "off",
+        },
+      }),
+    );
+
+    act(() => {
+      result.current[1]("th-test", { text: "answer directly", files: [] });
+    });
+
+    await waitFor(() => expect(startTurn).toHaveBeenCalled());
+    const payload = startTurn.mock.calls[0]?.[0];
+    expect(payload).not.toHaveProperty("effort");
+    expect(payload?.metadata).toEqual({
+      context: expect.objectContaining({ reasoning_effort: "off" }),
+    });
+  });
+
   it("maps legacy full access to bypassPermissions", async () => {
     const startTurn = mockRealtime();
     const { result } = renderHook(() =>
@@ -1316,6 +1984,97 @@ describe("useThreadStreamRealtime permissions", () => {
     expect(result.current[0].error?.message).toBe("websocket closed (1006)");
   });
 
+  it("clears a local send failure after reconnect and successful resume", async () => {
+    const startTurn = vi
+      .fn()
+      .mockRejectedValue(new Error("websocket closed (1006)"));
+    const realtime = {
+      state: makeConversation([]),
+      connected: true,
+      startTurn,
+      resolveApproval: vi.fn(),
+      resume: vi.fn().mockResolvedValue(undefined),
+      interrupt: vi.fn().mockResolvedValue(undefined),
+      compact: vi.fn().mockResolvedValue({ compacted: false }),
+      decideHunk: vi.fn().mockResolvedValue(undefined),
+    };
+    vi.mocked(useRealtimeThread).mockImplementation(() => realtime);
+    const { result, rerender } = renderHook(() =>
+      useThreadStreamRealtime({
+        threadId: "th-test",
+        context: { permission_mode: "default" },
+      }),
+    );
+
+    act(() => {
+      result.current[1]("th-test", { text: "hello", files: [] });
+    });
+    await waitFor(() =>
+      expect(result.current[0].error?.message).toBe("websocket closed (1006)"),
+    );
+
+    realtime.connected = false;
+    realtime.state = {
+      ...makeConversation([]),
+      resumeState: "needsResume",
+    };
+    rerender();
+    expect(result.current[0].error?.message).toBe("websocket closed (1006)");
+
+    realtime.connected = true;
+    realtime.state = {
+      ...makeConversation([]),
+      resumeState: "resuming",
+    };
+    rerender();
+    expect(result.current[0].error?.message).toBe("websocket closed (1006)");
+
+    realtime.state = makeConversation([]);
+    rerender();
+    await waitFor(() => expect(result.current[0].error).toBeUndefined());
+  });
+
+  it("keeps a local send failure when reconnect cannot resume the thread", async () => {
+    const startTurn = vi
+      .fn()
+      .mockRejectedValue(new Error("unknown thread th-test"));
+    const realtime = {
+      state: makeConversation([]),
+      connected: true,
+      startTurn,
+      resolveApproval: vi.fn(),
+      resume: vi.fn().mockResolvedValue(undefined),
+      interrupt: vi.fn().mockResolvedValue(undefined),
+      compact: vi.fn().mockResolvedValue({ compacted: false }),
+      decideHunk: vi.fn().mockResolvedValue(undefined),
+    };
+    vi.mocked(useRealtimeThread).mockImplementation(() => realtime);
+    const { result, rerender } = renderHook(() =>
+      useThreadStreamRealtime({
+        threadId: "th-test",
+        context: { permission_mode: "default" },
+      }),
+    );
+
+    act(() => {
+      result.current[1]("th-test", { text: "hello", files: [] });
+    });
+    await waitFor(() =>
+      expect(result.current[0].error?.message).toBe("unknown thread th-test"),
+    );
+
+    realtime.connected = false;
+    realtime.state = {
+      ...makeConversation([]),
+      resumeState: "needsResume",
+    };
+    rerender();
+    realtime.connected = true;
+    rerender();
+
+    expect(result.current[0].error?.message).toBe("unknown thread th-test");
+  });
+
   it("sends plan permission mode as planningMode without auto approval", async () => {
     const startTurn = mockRealtime();
     const { result } = renderHook(() =>
@@ -1348,5 +2107,62 @@ describe("useThreadStreamRealtime permissions", () => {
         },
       }),
     );
+  });
+});
+
+// ── attach-time uploads are not re-posted at send ─
+//
+// The composer now uploads the moment a file lands in it. Sending used to
+// upload unconditionally, which would push the same bytes twice and mint a
+// second artifact for one picture.
+describe("uploadPromptInputFiles", () => {
+  const file = new File(["img"], "shot.png", { type: "image/png" });
+  const uploaded = {
+    filename: "shot.png",
+    size: file.size,
+    path: "/artifacts/shot.png",
+    virtual_path: "uploads/shot.png",
+    artifact_url: "https://example.test/shot.png",
+    content_type: "image/png",
+  };
+
+  it("skips the network when every part carries server-side info", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const attachments = await uploadPromptInputFiles("thread-1", [
+      {
+        type: "file",
+        mediaType: "image/png",
+        filename: "shot.png",
+        url: "data:image/png;base64,aW1n",
+        file,
+        uploaded,
+      },
+    ]);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(attachments[0]).toMatchObject({
+      filename: "shot.png",
+      artifact_url: "https://example.test/shot.png",
+    });
+  });
+
+  it("still uploads when a part has no attach-time info", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, files: [uploaded] }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    await uploadPromptInputFiles("thread-1", [
+      {
+        type: "file",
+        mediaType: "image/png",
+        filename: "shot.png",
+        url: "data:image/png;base64,aW1n",
+        file,
+      },
+    ]);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 });

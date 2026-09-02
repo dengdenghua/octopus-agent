@@ -12,7 +12,8 @@ import { useLocalSettings } from "@/core/settings";
 import { SettingsSection } from "./settings-section";
 
 export default function NotificationSettingsPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const zh = locale.toLowerCase().startsWith("zh");
   const {
     permission,
     isSupported,
@@ -135,13 +136,25 @@ export default function NotificationSettingsPage() {
         )}
 
         {permission === "denied" && (
-          <div
-            id="notification-denied-hint"
-            role="alert"
-            className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-warning"
-          >
-            <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" />
-            <p>{t.settings.notification.deniedHint}</p>
+          <div className="space-y-2">
+            <div
+              id="notification-denied-hint"
+              role="alert"
+              className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-warning"
+            >
+              <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" />
+              <p>{t.settings.notification.deniedHint}</p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="self-start"
+              onClick={handleRequestPermission}
+            >
+              <BellIcon className="mr-2 size-4" />
+              {zh ? "重新检测通知权限" : "Check notification permission again"}
+            </Button>
           </div>
         )}
 

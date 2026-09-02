@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -110,3 +111,30 @@ def test_detect_rejects_relative_workspace_path() -> None:
     )
 
     assert res.status_code == 400
+
+
+@pytest.mark.parametrize(
+    "mode",
+    ["develop", "audit", "uxui", "builder", "coder", "architect"],
+)
+def test_set_current_mode_accepts_task_strategies_and_legacy_project_kinds(
+    mode: str,
+) -> None:
+    res = _client().put(
+        "/api/agent-modes/current",
+        json={"mode": mode, "session_id": "session-1"},
+    )
+
+    assert res.status_code == 200
+    assert res.json() == {"ok": True, "mode": mode, "session_id": "session-1"}
+
+
+def test_set_current_mode_rejects_unknown_mode_with_supported_names() -> None:
+    res = _client().put(
+        "/api/agent-modes/current",
+        json={"mode": "magic", "session_id": "session-1"},
+    )
+
+    assert res.status_code == 400
+    assert "develop/audit/uxui" in res.json()["detail"]
+    assert "builder/coder/architect" in res.json()["detail"]

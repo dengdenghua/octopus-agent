@@ -6,6 +6,15 @@ import type { ReactElement } from "react";
 import { renderWithProviders } from "@/test/harness";
 
 vi.mock("@/core/teach-repeat/api", () => ({
+  appendRecordingEvents: vi.fn(() =>
+    Promise.resolve({
+      recording: true,
+      thread_id: "t1",
+      accepted: 1,
+      event_count: 1,
+      step_count: 1,
+    }),
+  ),
   startRecording: vi.fn(() =>
     Promise.resolve({ recording: true, thread_id: "t1", name: "x" }),
   ),
@@ -40,18 +49,22 @@ describe("RecRecorderOverlay", () => {
   });
 
   it("shows the pre-record form when opened idle", () => {
+    const onOpenLibrary = vi.fn();
     renderRecorder(
       <RecRecorderOverlay
         open
         threadId="t1"
         defaultName="导出对账单"
         onClose={() => {}}
+        onOpenLibrary={onOpenLibrary}
       />,
     );
     expect(screen.getByText("录什么任务?")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /开始录制/ }),
     ).toBeInTheDocument();
+    screen.getByRole("button", { name: "查看已保存的自动化" }).click();
+    expect(onOpenLibrary).toHaveBeenCalledOnce();
   });
 
   it("enters the countdown after pressing start", async () => {

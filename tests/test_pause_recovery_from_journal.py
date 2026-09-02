@@ -66,9 +66,7 @@ def test_completed_task_with_trajectory_is_not_resurrected(tmp_path: Any) -> Non
         ]
     )
     assert ctrl.recover_from_journal(journal) == 0
-    assert not any(
-        str(p.task_id) == "t2" for p in ctrl.list_pending()
-    )
+    assert not any(str(p.task_id) == "t2" for p in ctrl.list_pending())
 
 
 def test_cancelled_trajectory_blocks_recovery(tmp_path: Any) -> None:

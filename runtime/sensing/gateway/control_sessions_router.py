@@ -110,18 +110,30 @@ def create_control_sessions_router(
     def _bad_request(exc: ValueError) -> HTTPException:
         return HTTPException(400, str(exc))
 
+    def _is_admin(actor: str | None) -> bool:
+        if actor is None or identity_store is None:
+            return False
+        identity = identity_store.get(actor)
+        roles = getattr(identity, "roles", ()) or ()
+        return "admin" in {str(role).strip().lower() for role in roles}
+
     def _owned_or_404(session: dict[str, Any] | None, actor: str | None) -> dict[str, Any]:
         # Object-level ownership gate. A control session drives a real
         # browser/desktop and stores replay screenshots, so it may only be
         # read or driven by the authenticated principal that created it. We
         # raise 404 (not 403) so a non-owner can't even confirm the id exists.
-        # Single-user/dev mode (require_auth off → actor is None) and legacy
-        # sessions with no recorded creator skip the gate.
+        # Single-user/dev mode (require_auth off → actor is None) keeps the
+        # legacy behavior. In shared mode, unowned upgrade rows are visible
+        # only to administrators for audit/migration; ordinary users cannot
+        # claim them by guessing an id.
         if session is None:
             raise HTTPException(404, "control session not found")
         creator = session.get("creator_actor")
-        if actor is not None and creator is not None and creator != actor:
-            raise HTTPException(404, "control session not found")
+        if actor is not None:
+            if creator is None and not _is_admin(actor):
+                raise HTTPException(404, "control session not found")
+            if creator is not None and creator != actor:
+                raise HTTPException(404, "control session not found")
         return session
 
     def _require_owned(session_id: str, actor: str | None) -> dict[str, Any]:
@@ -139,7 +151,10 @@ def create_control_sessions_router(
     ) -> dict[str, Any]:
         try:
             sessions = session_store.list_sessions(
-                surface=surface, limit=limit, creator_actor=actor
+                surface=surface,
+                limit=limit,
+                creator_actor=actor,
+                include_unowned=_is_admin(actor),
             )
         except ValueError as exc:
             raise _bad_request(exc) from exc

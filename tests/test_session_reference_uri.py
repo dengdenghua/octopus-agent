@@ -1,4 +1,4 @@
-"""Canonical ``dsh-session:`` URI + mention seam (dsh ``uri.ts`` port).
+"""Canonical ``octopus-session:`` URI plus legacy-reference compatibility.
 
 The host-neutral session reference lane: lossless canonical URIs, strict
 decode/canonicalization, Markdown mention rendering, and text parsing that
@@ -16,6 +16,7 @@ from runtime.execution.tool_engine.session_reference import (
     SessionReferenceResolver,
 )
 from runtime.execution.tool_engine.session_reference_uri import (
+    LEGACY_SESSION_REFERENCE_SCHEMES,
     SESSION_REFERENCE_SCHEME,
     decode_session_reference_uri,
     encode_session_reference_uri,
@@ -31,6 +32,15 @@ def test_roundtrip_canonical_uri() -> None:
         assert decode_session_reference_uri(uri) == sid
 
 
+def test_legacy_dsh_uri_remains_readable_but_new_encoding_is_octopus() -> None:
+    legacy = f"{LEGACY_SESSION_REFERENCE_SCHEMES[0]}ImFiYzEyMyI"
+    assert decode_session_reference_uri(legacy) == "abc123"
+    assert encode_session_reference_uri("abc123") == "octopus-session:ImFiYzEyMyI"
+    parsed = parse_session_reference_text(f"历史 @[研究员]({legacy})")
+    assert parsed.text == "历史 @研究员"
+    assert parsed.references == [{"session_id": "abc123", "label": "研究员"}]
+
+
 def test_decode_rejects_non_canonical() -> None:
     # Valid base64url but WITH padding — the canonical form is unpadded, so
     # re-encoding yields a different URI and the canonical check must fail.
@@ -42,10 +52,10 @@ def test_decode_rejects_non_canonical() -> None:
 def test_decode_rejects_bad_shapes() -> None:
     for uri in (
         "https://example.com/x",  # wrong scheme
-        "dsh-session:",  # empty payload
-        "dsh-session:!!!",  # invalid payload chars
-        "dsh-session:NQ",  # decodes to JSON number 5 → not a string
-        "dsh-session:IiI",  # decodes to "" → empty session id rejected
+        "octopus-session:",  # empty payload
+        "octopus-session:!!!",  # invalid payload chars
+        "octopus-session:NQ",  # decodes to JSON number 5 → not a string
+        "octopus-session:IiI",  # decodes to "" → empty session id rejected
     ):
         with pytest.raises(SessionReferenceError) as err:
             decode_session_reference_uri(uri)
@@ -54,9 +64,9 @@ def test_decode_rejects_bad_shapes() -> None:
 
 def test_format_mention_escapes_label() -> None:
     mention = format_session_reference_mention("abc123", label="a]b\\c")
-    assert mention == "@[a\\]b\\\\c](dsh-session:ImFiYzEyMyI)"
+    assert mention == "@[a\\]b\\\\c](octopus-session:ImFiYzEyMyI)"
     # Default label is the session id itself.
-    assert format_session_reference_mention("abc123") == "@[abc123](dsh-session:ImFiYzEyMyI)"
+    assert format_session_reference_mention("abc123") == ("@[abc123](octopus-session:ImFiYzEyMyI)")
 
 
 def test_parse_mentions_and_bare_uris_in_order() -> None:
@@ -80,7 +90,7 @@ def test_parse_escaped_label_unescaped() -> None:
 
 def test_parse_malformed_uri_fails_loud() -> None:
     with pytest.raises(SessionReferenceError) as err:
-        parse_session_reference_text("@[x](dsh-session:!!!)")
+        parse_session_reference_text("@[x](octopus-session:!!!)")
     assert err.value.code == "SESSION_REFERENCE_INVALID_REFERENCE"
 
 
@@ -149,7 +159,7 @@ def test_resolve_mentions_tolerates_malformed_canonical() -> None:
     resolver = SessionReferenceResolver()
     sid = "00112233445566778899aabbccddeeff"
     out = resolver.resolve_mentions(
-        f"@[坏](dsh-session:!!!) 继续 @session:{sid}",
+        f"@[坏](octopus-session:!!!) 继续 @session:{sid}",
         target_id="target",
         read_surface=_surface,
     )

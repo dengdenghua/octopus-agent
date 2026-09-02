@@ -110,27 +110,31 @@ def hardware_accel() -> dict[str, Any]:
 def _open(path: Path):
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path))
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS video_meta (video_path TEXT PRIMARY KEY, "
-        "duration REAL, width INTEGER, height INTEGER, fps REAL, format TEXT, mtime REAL)"
-    )
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS video_keyframes (id INTEGER PRIMARY KEY AUTOINCREMENT, "
-        "video_path TEXT, time_sec REAL, clip_embedding BLOB)"
-    )
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS video_faces (id INTEGER, video_path TEXT, "
-        "kf_time REAL, face_index INTEGER, face_embedding BLOB)"
-    )
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS video_transcript (id INTEGER PRIMARY KEY AUTOINCREMENT, "
-        "video_path TEXT, start_sec REAL, end_sec REAL, text TEXT, confidence REAL)"
-    )
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS video_tags (video_path TEXT, tag TEXT, score REAL, "
-        "PRIMARY KEY (video_path, tag))"
-    )
-    return conn
+    try:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS video_meta (video_path TEXT PRIMARY KEY, "
+            "duration REAL, width INTEGER, height INTEGER, fps REAL, format TEXT, mtime REAL)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS video_keyframes (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "video_path TEXT, time_sec REAL, clip_embedding BLOB)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS video_faces (id INTEGER, video_path TEXT, "
+            "kf_time REAL, face_index INTEGER, face_embedding BLOB)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS video_transcript (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "video_path TEXT, start_sec REAL, end_sec REAL, text TEXT, confidence REAL)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS video_tags (video_path TEXT, tag TEXT, score REAL, "
+            "PRIMARY KEY (video_path, tag))"
+        )
+        return conn
+    except BaseException:
+        conn.close()
+        raise
 
 
 def _iter_videos(root: Path, max_files: int = 100) -> list[Path]:

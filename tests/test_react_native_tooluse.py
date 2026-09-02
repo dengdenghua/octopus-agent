@@ -25,8 +25,12 @@ from runtime.core.cerebrum.react_native import (
 )
 from runtime.core.cerebrum.react_parsing import _latest_todo_items, _parse_action
 from runtime.execution.suckers import Skill, SkillRegistry
+from runtime.execution.suckers._write_skills_exec import _exec_shell
+from runtime.execution.tool_engine import ToolExecutor
 from runtime.platform.models import ParsedIntent
 from runtime.platform.models.llm import ToolCall, ToolSpec
+from runtime.safety.approval.cancellation import CancellationSource, scoped_cancellation
+from runtime.safety.auth import TrustEngine
 from runtime.sensing.model_router.models import (
     CostEntry,
     ModelResponse,
@@ -505,6 +509,365 @@ def test_native_mode_passes_tools_and_consumes_tool_calls() -> None:
     ), "turn-1 tool call should appear in the assistant history"
     assert result is not None
     assert "已读取配置" in (result.final_answer or "")
+
+
+def test_native_mixed_text_and_tool_call_is_atomic_and_not_replayed_as_answer() -> None:
+    from runtime.core.cerebrum.react_loop import stream_react_loop
+
+    unsupported = "Final Answer: 修复完成，13/13 tests passed。"
+    public_update = "我先读取配置文件，确认磁盘上的实际内容。"
+    router = _Router(
+        [
+            (
+                unsupported,
+                [
+                    ToolCall(
+                        id="t1",
+                        name="read_file",
+                        input={"path": "config.yaml", "public_update": public_update},
+                    )
+                ],
+            ),
+            ("Final Answer: 已依据读取结果完成核对。", []),
+        ]
+    )
+    fake_spec = ToolSpec(
+        name="read_file",
+        input_schema={
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"],
+        },
+    )
+    intent = _intent("读取 config.yaml 后给出结论")
+    intent.user_context.update(
+        {
+            "realtime_public_orientation": True,
+            "realtime_public_narrative": True,
+        }
+    )
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="read_file",
+            description="Read a fixture file.",
+            trusted_source="builtin://read_file",
+            handler=lambda **_kwargs: {"content": "fixture"},
+            affinity=["files"],
+        ),
+        verify_tests=False,
+    )
+    stack = _Stack(router)
+    stack.executor = _Exec(registry=registry)
+
+    with (
+        patch(
+            "runtime.core.cerebrum.react_native.native_tool_use_active",
+            return_value=True,
+        ),
+        patch(
+            "runtime.core.cerebrum.react_native.build_loop_tool_specs",
+            return_value=[fake_spec],
+        ),
+        patch(
+            "runtime.core.cerebrum._react_execution_phase6d._execute_action_via_beak",
+            return_value=("fixture", None),
+        ),
+    ):
+        stream = stream_react_loop(stack, intent, agent=None, max_iterations=3)
+        events: list[dict[str, Any]] = []
+        while True:
+            try:
+                events.append(next(stream))
+            except StopIteration as stop:
+                result = stop.value
+                break
+
+    visible_answer = "".join(
+        str(event.get("delta") or "") for event in events if event.get("type") == "text_delta"
+    )
+    assert unsupported not in visible_answer
+    assert "13/13 tests passed" not in visible_answer
+    assert "已依据读取结果完成核对" in visible_answer
+    assert any(
+        event.get("type") == "commentary_delta" and event.get("delta") == public_update
+        for event in events
+    )
+    assert any(event.get("type") == "tool_start" for event in events)
+    assert any(event.get("type") == "tool_end" for event in events)
+    second_request_assistant_text = "\n".join(
+        str(getattr(message, "content", "") or "")
+        for message in router.requests[1].messages
+        if getattr(message, "role", "") == "assistant"
+    )
+    assert "read_file" in second_request_assistant_text
+    assert "13/13 tests passed" not in second_request_assistant_text
+    assert result is not None and result.final_answer == "已依据读取结果完成核对。"
+
+
+def test_native_cancel_before_done_discards_pending_answer_lane() -> None:
+    from runtime.core.cerebrum.react_loop import stream_react_loop
+
+    source = CancellationSource()
+
+    class _CancelBeforeDoneRouter(_Router):
+        def __init__(self) -> None:
+            super().__init__([])
+
+        def call_stream(self, req: Any):
+            self.requests.append(req)
+            yield ModelStreamEvent(
+                type="text_delta",
+                delta="Final Answer: 13/13 tests passed.",
+            )
+            source.cancel(reason="user stopped")
+            return
+
+    router = _CancelBeforeDoneRouter()
+    fake_spec = ToolSpec(name="read_file", description="Read a file.")
+    with (
+        patch("runtime.core.cerebrum.react_native.native_tool_use_active", return_value=True),
+        patch(
+            "runtime.core.cerebrum.react_native.build_loop_tool_specs",
+            return_value=[fake_spec],
+        ),
+        scoped_cancellation(source.token),
+    ):
+        stream = stream_react_loop(_Stack(router), _intent(), agent=None, max_iterations=3)
+        events: list[dict[str, Any]] = []
+        while True:
+            try:
+                events.append(next(stream))
+            except StopIteration as stopped:
+                result = stopped.value
+                break
+
+    visible_answer = "".join(
+        str(event.get("delta") or "") for event in events if event.get("type") == "text_delta"
+    )
+    assert visible_answer == ""
+    assert any(event.get("type") == "react_cancelled" for event in events)
+    assert not any(event.get("type") == "tool_start" for event in events)
+    assert result is None
+
+
+def test_native_eof_without_done_discards_pending_answer_lane() -> None:
+    from runtime.core.cerebrum.react_loop import stream_react_loop
+
+    class _EofWithoutDoneRouter(_Router):
+        def __init__(self) -> None:
+            super().__init__([])
+
+        def call_stream(self, req: Any):
+            self.requests.append(req)
+            yield ModelStreamEvent(
+                type="text_delta",
+                delta="Final Answer: 修复完成，13/13 tests passed。",
+            )
+            return
+
+    router = _EofWithoutDoneRouter()
+    fake_spec = ToolSpec(name="read_file", description="Read a file.")
+    with (
+        patch("runtime.core.cerebrum.react_native.native_tool_use_active", return_value=True),
+        patch(
+            "runtime.core.cerebrum.react_native.build_loop_tool_specs",
+            return_value=[fake_spec],
+        ),
+        patch(
+            "runtime.core.cerebrum.react_loop.next_custom_model_fallback",
+            return_value=None,
+        ) as fallback,
+    ):
+        stream = stream_react_loop(_Stack(router), _intent(), agent=None, max_iterations=3)
+        events: list[dict[str, Any]] = []
+        while True:
+            try:
+                events.append(next(stream))
+            except StopIteration as stopped:
+                result = stopped.value
+                break
+
+    visible_answer = "".join(
+        str(event.get("delta") or "") for event in events if event.get("type") == "text_delta"
+    )
+    assert visible_answer == ""
+    assert not any(event.get("type") == "tool_start" for event in events)
+    assert any(
+        event.get("type") == "react_error"
+        and "terminal done event" in str(event.get("message") or "")
+        for event in events
+    )
+    fallback.assert_called_once()
+    assert result is None
+
+
+def test_native_done_without_final_discards_pending_answer_lane() -> None:
+    from runtime.core.cerebrum.react_loop import stream_react_loop
+
+    class _DoneWithoutFinalRouter(_Router):
+        def __init__(self) -> None:
+            super().__init__([])
+
+        def call_stream(self, req: Any):
+            self.requests.append(req)
+            yield ModelStreamEvent(
+                type="text_delta",
+                delta="Final Answer: 修复完成，13/13 tests passed。",
+            )
+            yield ModelStreamEvent(type="done")
+
+    router = _DoneWithoutFinalRouter()
+    fake_spec = ToolSpec(name="read_file", description="Read a file.")
+    with (
+        patch("runtime.core.cerebrum.react_native.native_tool_use_active", return_value=True),
+        patch(
+            "runtime.core.cerebrum.react_native.build_loop_tool_specs",
+            return_value=[fake_spec],
+        ),
+        patch(
+            "runtime.core.cerebrum.react_loop.next_custom_model_fallback",
+            return_value=None,
+        ) as fallback,
+    ):
+        stream = stream_react_loop(_Stack(router), _intent(), agent=None, max_iterations=3)
+        events: list[dict[str, Any]] = []
+        while True:
+            try:
+                events.append(next(stream))
+            except StopIteration as stopped:
+                result = stopped.value
+                break
+
+    visible_answer = "".join(
+        str(event.get("delta") or "") for event in events if event.get("type") == "text_delta"
+    )
+    assert visible_answer == ""
+    assert not any(event.get("type") == "tool_start" for event in events)
+    assert any(
+        event.get("type") == "react_error"
+        and "lacked its final response" in str(event.get("message") or "")
+        for event in events
+    )
+    fallback.assert_called_once()
+    assert result is None
+
+
+def test_native_environment_gap_convergence_disables_tools_on_terminal_round() -> None:
+    from runtime.core.cerebrum.react_loop import stream_react_loop
+
+    router = _Router(
+        [
+            (
+                "",
+                [
+                    ToolCall(
+                        id="write",
+                        name="write_text_file",
+                        input={"path": "runtime/foo.py", "content": "value = 1\n"},
+                    )
+                ],
+            ),
+            (
+                "",
+                [
+                    ToolCall(
+                        id="pytest",
+                        name="exec_shell",
+                        input={"command": "pytest-octopus-missing --version"},
+                    )
+                ],
+            ),
+            (
+                "",
+                [
+                    ToolCall(
+                        id="ruff",
+                        name="exec_shell",
+                        input={"command": "ruff-octopus-missing check runtime/foo.py"},
+                    )
+                ],
+            ),
+            ("Final Answer: All tests passed.", []),
+            ("Final Answer: 实现已写入；pytest 与 ruff 因环境缺少依赖未能运行。", []),
+        ]
+    )
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="write_text_file",
+            trusted_source="builtin://write_text_file",
+            handler=lambda **_kwargs: {"success": True, "bytes_written": 10},
+            affinity=["files"],
+        ),
+        verify_tests=False,
+    )
+
+    registry.register(
+        Skill(
+            name="exec_shell",
+            trusted_source="skill://public/exec_shell",
+            handler=_exec_shell,
+            affinity=["shell", "exec", "dangerous"],
+        ),
+        verify_tests=False,
+    )
+    stack = _Stack(router)
+    stack.executor = ToolExecutor(
+        registry=registry,
+        immunity=TrustEngine(trusted_sources=["builtin://*"], unknown_policy="allow"),
+    )
+    intent = _intent("修改 runtime/foo.py 并运行 pytest 与 ruff 验证")
+    intent.user_context.update({"mode": "code", "auto_approve": True})
+    specs = [
+        ToolSpec(name="write_text_file", description="Write a file."),
+        ToolSpec(name="exec_shell", description="Run a verifier."),
+    ]
+
+    with (
+        patch(
+            "runtime.core.cerebrum.react_native.native_tool_use_active",
+            return_value=True,
+        ),
+        patch(
+            "runtime.core.cerebrum.react_native.build_loop_tool_specs",
+            return_value=specs,
+        ),
+    ):
+        stream = stream_react_loop(stack, intent, agent=None, max_iterations=6)
+        events: list[dict[str, Any]] = []
+        while True:
+            try:
+                events.append(next(stream))
+            except StopIteration as stop:
+                result = stop.value
+                break
+
+    assert len(router.requests) == 5, [
+        (len(request.tools), request.require_tool_use) for request in router.requests
+    ]
+    assert all(request.tools for request in router.requests[:3])
+    assert all(request.tools == [] for request in router.requests[3:])
+    assert all(request.require_tool_use is False for request in router.requests[3:])
+    assert any("environment-verification-convergence" in step.observation for step in result.steps)
+    verifier_receipts = [
+        receipt
+        for step in result.steps
+        for receipt in step.action_results
+        if receipt.get("tool_name") == "exec_shell"
+    ]
+    assert len(verifier_receipts) == 2
+    assert all(receipt.get("trusted_execution") is True for receipt in verifier_receipts)
+    assert all(
+        receipt.get("execution_source") == "canonical_builtin" for receipt in verifier_receipts
+    )
+    assert all(receipt.get("ok") is False for receipt in verifier_receipts)
+    visible_answer = "".join(
+        str(event.get("delta") or "") for event in events if event.get("type") == "text_delta"
+    )
+    assert "pytest 与 ruff 因环境缺少依赖未能运行" in visible_answer
+    assert "All tests passed" not in visible_answer
+    assert "passed" not in (result.final_answer or "").lower()
 
 
 def test_every_native_tool_round_requires_a_fresh_public_update() -> None:

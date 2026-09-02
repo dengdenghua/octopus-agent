@@ -174,6 +174,23 @@ def _render_conversation_history(
         content = item.get("content")
         if role not in ("system", "user", "assistant"):
             continue
+        if isinstance(content, list):
+            # Multimodal turn (an image upload). The planner reads text only,
+            # but dropping the whole message would hide what was asked; note
+            # the image so the plan can account for it.
+            texts = [
+                str(part.get("text", ""))
+                for part in content
+                if isinstance(part, dict) and part.get("text")
+            ]
+            images = sum(
+                1
+                for part in content
+                if isinstance(part, dict) and part.get("type") in ("image_url", "image")
+            )
+            content = " ".join(t for t in texts if t.strip())
+            if images:
+                content = f"{content} [附带 {images} 张图片]".strip()
         if not isinstance(content, str) or not content.strip():
             continue
         line = f"[{role}] {content.replace(chr(10), ' ').strip()}"

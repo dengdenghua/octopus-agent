@@ -51,18 +51,12 @@ def test_subagent_start_and_stop_fire(tmp_path: Any, monkeypatch: pytest.MonkeyP
         seen.append(f"stop:{event.subagent_type}:{event.ok}")
         return HookDecision.pass_through()
 
-    dispatch_subagent_start(
-        thread_id="t1", agent_id="r", subagent_type="researcher"
-    )
-    dispatch_subagent_stop(
-        thread_id="t1", agent_id="r", subagent_type="researcher", ok=True
-    )
+    dispatch_subagent_start(thread_id="t1", agent_id="r", subagent_type="researcher")
+    dispatch_subagent_stop(thread_id="t1", agent_id="r", subagent_type="researcher", ok=True)
     assert seen == ["start:researcher", "stop:researcher:True"]
 
 
-def test_subagent_hooks_fire_through_bridge(
-    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_subagent_hooks_fire_through_bridge(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     from runtime.execution.subagents import bridge
 
     seen: list[str] = []
@@ -120,16 +114,12 @@ def test_permission_request_hook_can_deny() -> None:
             return HookDecision.cancel("hook refuses shell")
         return HookDecision.pass_through()
 
-    req = ApprovalRequest(
-        thread_id="t1", tool_name="exec_shell", tool_call_id="c1"
-    )
+    req = ApprovalRequest(thread_id="t1", tool_name="exec_shell", tool_call_id="c1")
     decision = provider.request(req)
     assert decision.approved is False
     assert "hook refuses shell" in (decision.reason or "")
     # Non-matching tool falls through to the fallback (AutoDeny).
-    req2 = ApprovalRequest(
-        thread_id="t1", tool_name="read_file", tool_call_id="c2"
-    )
+    req2 = ApprovalRequest(thread_id="t1", tool_name="read_file", tool_call_id="c2")
     decision2 = provider.request(req2)
     assert decision2.approved is False
 

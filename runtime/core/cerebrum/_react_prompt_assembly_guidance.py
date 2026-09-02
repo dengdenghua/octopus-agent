@@ -482,7 +482,9 @@ def _assemble_delegation_guidance(state: _AssemblyState) -> None:
                 "先逐项核对目标并给出证据与结论，最后汇总发现的问题和风险。\n"
                 "不要在没有明确说明的情况下静默修改代码或配置；"
                 "若审计中发现需要修复的问题，先在报告中指出，"
-                "说明你准备如何修改、为何修改，征得确认后再执行写操作。\n"
+                "说明你准备如何修改、为何修改，征得确认后再执行写操作。\n\n"
+                "完成审计后，直接输出报告并结束本轮对话。不要在完成后继续推理或等待。"
+                "报告应包含：发现的问题、证据、严重度评级、影响面分析和修复优先级建议。\n"
                 "</audit-mode>"
             )
     if state.is_plan_or_spec_composer:
@@ -534,6 +536,26 @@ def _assemble_delegation_guidance(state: _AssemblyState) -> None:
         "show raw tool names unless the user explicitly asks for technical "
         "debug details.\n"
         "</user-facing-process-language>"
+    )
+    # User-facing posture: (1) don't stall on clarifying questions when the
+    # request is actionable — proceed with a stated assumption; (2) never break
+    # the fourth wall by explaining internal member/role/mode architecture to
+    # the user in chat. Regression: thread t0Wn5Zhvh3VUFwoAR2uP4M asked "想调研
+    # 哪个方向" twice mid-flight and later answered "我是 member（团队成员），你的
+    # TL 是 general" — both are the assistant leaking its machinery instead of
+    # being useful.
+    state.system_parts.append(
+        "\n<user-facing-posture>\n"
+        "- 用户请求可直接执行时,先动手,不要停在追问/澄清上;需要做范围假设时,"
+        "明确写出你的假设并直接推进,不要反复问用户。只有在任务确实无法凭合理假设"
+        "继续时才提问,且只问一次。\n"
+        "- 不要在聊天里向用户解释内部机制:不要说'我是 member/TL''这是 cowork 协作"
+        "模式''我派出了 xx 位成员'这类架构性话语;不要用成员人设互相打趣或指责"
+        "（如'你们都在摸鱼'）。你始终是直接帮用户解决问题的助手。\n"
+        "- 提到团队成员时,只说你安排了哪些人手、他们各自负责什么、进展如何,"
+        "并且这些安排必须对应真实的派发动作;不要编造不存在的成员或声称派发了"
+        "实际没有发生的动作。\n"
+        "</user-facing-posture>"
     )
     if not state.is_swarm_mode and state.mode_value not in {"chat", "flash", "inspiration"}:
         state.system_parts.append(_build_auto_delegation_guidance(state))

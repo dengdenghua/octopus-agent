@@ -94,13 +94,20 @@ def test_agent_scorecard_endpoint(monkeypatch, tmp_path) -> None:
     assert data["verdict"] == "leading"
     assert data["evidence_adjusted_overall"]["octopus"] == 98
     assert data["evidence_adjusted_verdict"] == "leading"
+    assert data["baseline_context"]["as_of"] == "2026-08-04"
+    assert data["baseline_context"]["source_revision"] == (
+        "a41dc160a4056563891cc069fcbcf6b961cf56d9"
+    )
+    assert data["baseline_context"]["max_age_days"] == 90
     assert data["baseline_context"]["score_kind"] == "architecture_capability_estimate"
     assert data["baseline_context"]["excludes"] == "legacy CLI-only comparisons"
     assert data["evidence_layers"]["architecture"] == {
         "status": "estimated",
         "octopus_score": 98,
         "codex_score": 97,
-        "source": "current_combined_architecture_baseline",
+        "source": "version_controlled_architecture_calibration",
+        "source_revision": "a41dc160a4056563891cc069fcbcf6b961cf56d9",
+        "as_of": "2026-08-04",
     }
     assert data["evidence_layers"]["static_certification"]["status"] == "certified"
     assert data["evidence_layers"]["behavioral_head_to_head"]["status"] == ("not_certified")

@@ -64,6 +64,25 @@ describe("buildReplayHtml", () => {
     expect(html).toContain(img);
   });
 
+  it("renders a completion receipt and browser verification checklist", () => {
+    const html = buildReplayHtml(
+      sample({
+        receipt: {
+          summary: "2 changes completed · ready to verify",
+          items: [
+            { title: "Update layout", status: "done", detail: "Grid is now responsive" },
+          ],
+          verification: ["Open the preview and confirm the responsive grid"],
+        },
+      }),
+    );
+    expect(html).toContain("RESULT RECEIPT");
+    expect(html).toContain("What was delivered");
+    expect(html).toContain("Update layout");
+    expect(html).toContain("VERIFY IN YOUR BROWSER");
+    expect(html).toContain("id=\"dock-play\"");
+  });
+
   it("renders an empty-state (and no script) when there are no steps", () => {
     const html = buildReplayHtml(sample({ steps: [] }));
     expect(html).toContain("No steps");

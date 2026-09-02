@@ -1,8 +1,14 @@
 # pip-audit exception register
 
-| Advisory | Package | Review by | Reason and compensating control |
-| --- | --- | --- | --- |
-| `PYSEC-2026-2858` | Paramiko 4.0.0 | 2026-11-08 | The advisory has no fixed release and concerns RSA/SHA-1 (`ssh-rsa`). Both SSH and SFTP connection paths pass `disabled_algorithms={"keys": ["ssh-rsa"], "pubkeys": ["ssh-rsa"]}`. Strict host-key checking remains the default. Remove this exception as soon as Paramiko publishes a release containing upstream commit `a448945` or later. |
+## Active exceptions
+
+None.
 
 Exceptions must name one advisory, document a code-level mitigation, and have
 a review deadline. Broad package or scanner exclusions are not permitted.
+
+## Retired exceptions
+
+| Advisory | Package | Retired on | Resolution |
+| --- | --- | --- | --- |
+| `PYSEC-2026-2858` / `CVE-2026-44405` | Paramiko 4.0.0 | 2026-08-21 | Upgraded the `mantle-ssh` and `all` extras to Paramiko 5.0.0 or newer. The 5.0.0 release includes upstream commit `a448945` and removes RSA/SHA-1 signing and verification support. No scanner suppression remains. |

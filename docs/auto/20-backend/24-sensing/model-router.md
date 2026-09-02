@@ -1,13 +1,13 @@
 ---
 type: "SensingSubsystem"
 title: "Sensing · Model Router"
-description: "ModelRouter 抽象 · Anthropic / OpenAI / Molili / Mock / MultiModelRouter (multi-provider fallback)。"
+description: "ModelRouter 抽象 · Anthropic / OpenAI / Oct / Mock / MultiModelRouter (multi-provider fallback)。"
 tags: ["backend", "sensing"]
 tier: "standard"
 ---
 # Sensing · Model Router
 
-> ModelRouter 抽象 · Anthropic / OpenAI / Molili / Mock / MultiModelRouter (multi-provider fallback)。
+> ModelRouter 抽象 · Anthropic / OpenAI / Oct / Mock / MultiModelRouter (multi-provider fallback)。
 
 **Source**: `runtime/sensing/model_router/`
 
@@ -38,6 +38,7 @@ tier: "standard"
 - `OpenAIRouterError`
 - `PooledModelRouter`
 - `PoolReport`
+- `DefaultModelSelector`
 - `Provider`
 - `ProviderCapabilities`
 - `RouteAttempt`
@@ -60,6 +61,7 @@ tier: "standard"
 | `actor_context.py` | Actor context for model-router calls — a provider-neutral home. |
 | `anthropic_router.py` | — |
 | `capability_probe.py` | Provider Capability Auto-Detection. |
+| `chatgpt_subscription_router.py` | ChatGPT-subscription model transport for the native Octopus kernel. |
 | `credential_pool.py` | — |
 | `custom_model_flags.py` | Operator-declared capability flags from ``custom_models.json``. |
 | `dispatch_router.py` | — |
@@ -78,6 +80,7 @@ tier: "standard"
 | `prompt_cache.py` | Anthropic prompt-cache hint helpers. |
 | `provider.py` | — |
 | `rescue_policy.py` | Compatibility exports for the canonical platform model-rescue policy. |
+| `selector.py` | Default model-selection block for the composition layer. |
 | `vision_guard.py` | Runtime vision capability guard. |
 
 ## Key classes & functions
@@ -120,6 +123,14 @@ tier: "standard"
 | func | `def get_cached_capabilities(provider_key)` | Return in-memory cached capabilities for ``provider_key``, or None. |
 | func | `def clear_capability_cache()` | Flush the in-memory capability cache (useful in tests). |
 | func | `def probe_provider(router, model, timeout_s, force)` | Probe ``router`` and return its runtime capabilities. |
+
+### `chatgpt_subscription_router.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class ChatGPTSubscriptionRouterError(LLMResponseFormatError)` | A ChatGPT-login model could not be called safely. |
+| class | `class ChatGPTSubscriptionCredentialBroker` | Server-only view of the current principal's managed Codex login. |
+| class | `class ChatGPTSubscriptionModelRouter(Provider, ModelRouter)` | Run ChatGPT-login models while retaining the Octopus native kernel. |
 
 ### `credential_pool.py`
 
@@ -271,21 +282,27 @@ tier: "standard"
 | class | `class ProviderCapabilities` | Declarative flags describing what an LLM adapter can do. |
 | class | `class Provider` | Mixin: opt-in capability declaration for ``ModelRouter`` subclasses. |
 
+### `selector.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class DefaultModelSelector` | Reproduce the runtime's established model-selection precedence. |
+
 ### `vision_guard.py`
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def request_has_images(request)` | True when the request carries images on either channel. |
 | func | `def model_known_non_vision(model)` | Operator declared ``supports_vision: false`` for this model id. |
-| func | `def apply_vision_guard(request)` | Pre-guard: transcribe/strip images for models declared non-vision. |
+| func | `def apply_vision_guard(request)` | Pre-guard: transcribe/strip images for models that can't see them. |
 | func | `def build_without_images(request)` | Crash-recovery variant: always transcribe/strip images. |
 | func | `def classify_image_rejection(exc)` | True when the upstream likely rejected the image payload. |
-| func | `def transcribe_or_strip_images(request)` | Replace every image with a transcription (best effort) or a note. |
+| func | `def transcribe_or_strip_images(request, include_b64)` | Replace every image with a transcription (best effort) or a note. |
 
 
 ## Who imports this
 
-**39** file(s) reference this package:
+**40** file(s) reference this package:
 
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
@@ -296,13 +313,13 @@ tier: "standard"
 - **`runtime/execution/`** · 2 file(s)
   - `runtime/execution/suckers/computer_use_loop.py`
   - `runtime/execution/suckers/ephemeral_runner.py`
-- **`runtime/platform/`** · 7 file(s)
+- **`runtime/platform/`** · 8 file(s)
   - `runtime/platform/config/builder.py`
   - `runtime/platform/lifecycle/demo.py`
   - `runtime/platform/llm_infra/llm_caller.py`
+  - `runtime/platform/process/composition.py`
   - `runtime/platform/process/session.py`
-  - `runtime/platform/ui/_app_fallback_routers.py`
-  - _… and 2 more_
+  - _… and 3 more_
 - **`runtime/projectos/`** · 1 file(s)
   - `runtime/projectos/llm_hooks.py`
 - **`runtime/research/`** · 2 file(s)

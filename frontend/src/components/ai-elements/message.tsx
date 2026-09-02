@@ -59,9 +59,11 @@ export const MessageContent = ({
   <div
     className={cn(
       "flex max-w-full flex-col gap-2 overflow-visible select-text",
-      // Codex-flat: no bubble, no shadow. Users get a soft left accent bar
-      // + left padding so the speaker is still distinguishable from the
-      // assistant stream without visual weight.
+      // Chat-bubble style for the user side (messenger convention): a
+      // filled, right-aligned bubble so your own messages read as distinct
+      // from the assistant's flat streamed output. The assistant stays
+      // bubble-less because it streams long markdown, code and traces that
+      // a tinted container would fight with.
       //
       // Width behavior split by role to avoid the CJK vertical-stacking
       // bug: `w-fit min-w-0` together with `word-break:break-word` defaults
@@ -72,9 +74,16 @@ export const MessageContent = ({
       // never collapses below it. Assistant bubbles keep `w-full min-w-0`
       // because they need to span and wrap long streamed markdown.
       "group-[.is-user]:ml-auto group-[.is-user]:min-w-fit group-[.is-user]:max-w-[85%] group-[.is-user]:w-auto",
-      "group-[.is-user]:border-l-2 group-[.is-user]:border-[color:color-mix(in_oklch,var(--primary)_60%,transparent)]",
-      "group-[.is-user]:pl-3 group-[.is-user]:pr-1 group-[.is-user]:py-0.5",
-      "group-[.is-user]:text-foreground",
+      // A solid `--primary` fill read as a loud colored slab next to the
+      // neutral surfaces the rest of the timeline uses (tool groups,
+      // clarification cards and composer chrome are all `bg-muted/25..40`
+      // + `border-border`). Use that same neutral language: a plain muted
+      // grey bubble, which marks the speaker by shape and alignment rather
+      // than by colour. Text stays `--foreground`.
+      "group-[.is-user]:bg-muted group-[.is-user]:text-foreground",
+      "group-[.is-user]:border group-[.is-user]:border-border",
+      "group-[.is-user]:rounded-2xl group-[.is-user]:rounded-br-md",
+      "group-[.is-user]:px-3.5 group-[.is-user]:py-2",
       "group-[.is-assistant]:w-full group-[.is-assistant]:min-w-0",
       "group-[.is-assistant]:text-foreground",
       className,
@@ -345,16 +354,28 @@ export const MessageBranchPage = ({
 export type MessageResponseProps = StreamdownProps;
 
 export const MessageResponse = memo(
-  ({ className, ...props }: MessageResponseProps) => (
+  ({ className, children, ...props }: MessageResponseProps) => (
     <Suspense
       fallback={
         <div
           className={cn(
-            "size-full whitespace-pre-wrap break-words select-text",
+            "size-full select-text",
+            typeof children === "string" &&
+              "whitespace-pre-wrap break-words text-foreground",
             className,
           )}
+          aria-busy="true"
         >
-          {props.children}
+          {typeof children === "string" ? (
+            children
+          ) : (
+            <div className="space-y-2">
+              <div className="h-4 w-3/5 rounded-sm bg-muted-foreground/10" />
+              <div className="h-4 w-full rounded-sm bg-muted-foreground/10" />
+              <div className="h-4 w-4/5 rounded-sm bg-muted-foreground/10" />
+              <div className="h-4 w-2/3 rounded-sm bg-muted-foreground/10" />
+            </div>
+          )}
         </div>
       }
     >
@@ -364,7 +385,9 @@ export const MessageResponse = memo(
           className,
         )}
         {...props}
-      />
+      >
+        {children}
+      </LazyStreamdown>
     </Suspense>
   ),
 );

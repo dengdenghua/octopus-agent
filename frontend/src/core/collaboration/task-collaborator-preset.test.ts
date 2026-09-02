@@ -42,8 +42,23 @@ describe("task collaborator presets", () => {
     expect(taskCollaboratorRouteForLeader("general")).toBe(
       "/workspace/realtime/new",
     );
-    expect(taskCollaboratorRouteForLeader("local codex")).toBe(
-      "/workspace/realtime/new?agent=local+codex",
+    expect(taskCollaboratorRouteForLeader("installed expert")).toBe(
+      "/workspace/realtime/new",
     );
+  });
+
+  test("normalizes a non-squad leader back to the fixed default identity", () => {
+    writeTaskCollaboratorPreset({
+      leaderId: "installed_researcher",
+      collaboratorIds: ["research-advisor"],
+    });
+
+    expect(consumeTaskCollaboratorPreset()).toEqual({
+      leaderId: "general",
+      collaboratorIds: ["research-advisor"],
+      mode: "cluster",
+      label: undefined,
+      openPicker: false,
+    });
   });
 });

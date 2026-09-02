@@ -8,7 +8,35 @@ DSH feature parity: point P1 timeout-policy (2026-08-14).
 
 from __future__ import annotations
 
+import re
 from typing import Any
+
+
+def _tool_observation_text(observation: Any) -> str:
+    """Return tool-owned output without later loop-internal repair notes."""
+
+    text = str(observation)
+    for marker in (
+        "\n\n[red-verification-recovery]",
+        "\n\n[environment-degraded]",
+        "\n\n[environment-verification-convergence]",
+    ):
+        text = text.split(marker, 1)[0]
+    return text
+
+
+def _observation_did_timeout(observation: Any) -> bool:
+    text = _tool_observation_text(observation).lower()
+    # Structured execution receipts include timeout policy/config even when
+    # the action did not time out. Remove those negative/config fields before
+    # matching the human-readable failure signal.
+    text = re.sub(r'"(?:is_)?timed_out"\s*:\s*(?:false|0)\b', "", text)
+    text = re.sub(r'"?timeout_s"?\s*:\s*\d+(?:\.\d+)?', "", text)
+    return bool(
+        "timed out" in text
+        or re.search(r"\btimeout\b", text)
+        or ("exceeded" in text and "time" in text)
+    )
 
 
 def _extract_timeout_events(steps: list[Any]) -> list[tuple[str, bool]]:
@@ -23,17 +51,28 @@ def _extract_timeout_events(steps: list[Any]) -> list[tuple[str, bool]]:
         if isinstance(step, dict):
             action = str(step.get("action", "") or "")
             observation = step.get("observation")
-            action_blocks = [action] if action else []
+            stored_actions = step.get("actions")
+            action_blocks = (
+                [str(item) for item in stored_actions if isinstance(item, str)]
+                if isinstance(stored_actions, list) and stored_actions
+                else ([action] if action else [])
+            )
+            action_results = list(step.get("action_results") or [])
         else:
             action = getattr(step, "action", "") or ""
             observation = getattr(step, "observation", None)
             action_blocks = list(getattr(step, "actions", None) or ([action] if action else []))
+            action_results = list(getattr(step, "action_results", None) or [])
 
         if not action_blocks or observation is None:
             continue
 
-        obs_str = str(observation).lower()
-        for action_text in action_blocks:
+        # In-flight nudges are appended to the observation after execution.
+        # Their prose can mention a hypothetical "concurrency-test timeout";
+        # that is guidance, not an execution receipt, and must not become a
+        # fabricated timeout event on the next final-answer guard pass.
+        aligned_receipts = len(action_results) == len(action_blocks)
+        for action_index, action_text in enumerate(action_blocks):
             # Parse tool name
             action_text = action_text.strip()
             if action_text.startswith("Action:"):
@@ -46,12 +85,12 @@ def _extract_timeout_events(steps: list[Any]) -> list[tuple[str, bool]]:
             tool_name = action_text[:paren_idx].strip()
 
             # Check if the observation indicates a timeout
-            did_timeout = (
-                "timed out" in obs_str
-                or "timeout" in obs_str
-                or "exceeded" in obs_str
-                and "time" in obs_str
+            lane_observation = (
+                action_results[action_index].get("observation")
+                if aligned_receipts and isinstance(action_results[action_index], dict)
+                else observation
             )
+            did_timeout = _observation_did_timeout(lane_observation)
 
             events.append((tool_name, did_timeout))
 

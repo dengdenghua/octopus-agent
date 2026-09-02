@@ -196,9 +196,7 @@ class LocalJobRegistry:
             try:
                 spec.on_start(self.snapshot(job))
             except Exception:  # noqa: BLE001 - observer containment
-                _log.warning(
-                    "jobs: onStart observer threw for %s", job_id, exc_info=True
-                )
+                _log.warning("jobs: onStart observer threw for %s", job_id, exc_info=True)
 
         def _on_done(task: asyncio.Task[Any]) -> None:
             if task.cancelled():
@@ -457,9 +455,7 @@ class LocalJobRegistry:
                     try:
                         job.cancel("watchdog timeout")
                     except Exception as error:  # noqa: BLE001 - containment
-                        _log.warning(
-                            "jobs: watchdog cancel of %s threw: %s", job.id, error
-                        )
+                        _log.warning("jobs: watchdog cancel of %s threw: %s", job.id, error)
                     self.settle(
                         job,
                         JobOutcome(
@@ -554,9 +550,7 @@ class LocalJobRegistry:
             try:
                 job.on_settle(snapshot)
             except Exception:  # noqa: BLE001 — observer containment
-                _log.warning(
-                    "jobs: onSettle observer threw for %s", job.id, exc_info=True
-                )
+                _log.warning("jobs: onSettle observer threw for %s", job.id, exc_info=True)
         if not snapshot.reported and job.notify is not None:
             try:
                 job.notify(snapshot)

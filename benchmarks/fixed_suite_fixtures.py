@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 from benchmarks.behavioral_suite import load_behavioral_suite
@@ -12,46 +15,63 @@ from benchmarks.eval_harness import EvalCase, Trajectory
 from benchmarks.fixture_grading import (
     IsolatedFixture,
     LiveIsolatedFixture,
+    PythonTestFixture,
     SubprocessOutcomeGrader,
 )
+from benchmarks.trusted_verifier_controller import INFRASTRUCTURE_EXIT
+from benchmarks.verifier_sandbox import BROWSER_UNAVAILABLE_EXIT
 
-_FIXTURE_SPECS = {
-    "coding.concurrent-cache": ("coding.concurrent-cache", "verify_concurrent_cache.py"),
-    "coding.path-boundary": ("coding.path-boundary", "verify_path_boundary.py"),
-    "frontend.responsive-settings": ("frontend.responsive-settings", "verify_contract_case.py"),
-    "frontend.async-form-recovery": (
-        "frontend.async-form-recovery",
-        "verify_contract_case.py",
-    ),
-    "browser.dynamic-crud": ("browser.dynamic-crud", "verify_contract_case.py"),
-    "browser.rich-editor-upload": (
-        "browser.rich-editor-upload",
-        "verify_contract_case.py",
-    ),
-    "multiagent.parallel-evidence": (
-        "multiagent.parallel-evidence",
-        "verify_contract_case.py",
-    ),
-    "multiagent.interrupted-handoff": (
-        "multiagent.interrupted-handoff",
-        "verify_contract_case.py",
-    ),
-    "memory.crosscutting-change": ("memory.crosscutting-change", "verify_contract_case.py"),
-    "memory.context-reset-resume": (
-        "memory.context-reset-resume",
-        "verify_contract_case.py",
-    ),
-    "security.untrusted-instructions": (
-        "security.untrusted-instructions",
-        "verify_contract_case.py",
-    ),
-    "security.denied-destructive-action": (
-        "security.denied-destructive-action",
-        "verify_contract_case.py",
-    ),
-    "extensions.local-plugin": ("extensions.local-plugin", "verify_contract_case.py"),
-    "extensions.skill-roundtrip": ("extensions.skill-roundtrip", "verify_contract_case.py"),
-}
+
+@dataclass(frozen=True, slots=True)
+class FixtureSpec:
+    """Immutable evaluator-owned fixture/verifier binding for one case."""
+
+    fixture_name: str
+    verifier_name: str
+
+
+FIXTURE_SPECS: Mapping[str, FixtureSpec] = MappingProxyType(
+    {
+        "coding.concurrent-cache": FixtureSpec(
+            "coding.concurrent-cache", "verify_concurrent_cache.py"
+        ),
+        "coding.path-boundary": FixtureSpec("coding.path-boundary", "verify_path_boundary.py"),
+        "frontend.responsive-settings": FixtureSpec(
+            "frontend.responsive-settings", "verify_contract_case.py"
+        ),
+        "frontend.async-form-recovery": FixtureSpec(
+            "frontend.async-form-recovery", "verify_contract_case.py"
+        ),
+        "browser.dynamic-crud": FixtureSpec("browser.dynamic-crud", "verify_contract_case.py"),
+        "browser.rich-editor-upload": FixtureSpec(
+            "browser.rich-editor-upload", "verify_contract_case.py"
+        ),
+        "multiagent.parallel-evidence": FixtureSpec(
+            "multiagent.parallel-evidence", "verify_contract_case.py"
+        ),
+        "multiagent.interrupted-handoff": FixtureSpec(
+            "multiagent.interrupted-handoff", "verify_contract_case.py"
+        ),
+        "memory.crosscutting-change": FixtureSpec(
+            "memory.crosscutting-change", "verify_contract_case.py"
+        ),
+        "memory.context-reset-resume": FixtureSpec(
+            "memory.context-reset-resume", "verify_contract_case.py"
+        ),
+        "security.untrusted-instructions": FixtureSpec(
+            "security.untrusted-instructions", "verify_contract_case.py"
+        ),
+        "security.denied-destructive-action": FixtureSpec(
+            "security.denied-destructive-action", "verify_contract_case.py"
+        ),
+        "extensions.local-plugin": FixtureSpec(
+            "extensions.local-plugin", "verify_contract_case.py"
+        ),
+        "extensions.skill-roundtrip": FixtureSpec(
+            "extensions.skill-roundtrip", "verify_contract_case.py"
+        ),
+    }
+)
 
 
 @dataclass
@@ -73,16 +93,16 @@ def prepare_fixture_suite(
     root = Path(repo_root).resolve()
     fixture_root = root / "benchmarks" / "fixtures"
     verifier_root = root / "benchmarks" / "verifiers"
-    selected = set(_FIXTURE_SPECS) if case_ids is None else case_ids
-    unknown = selected - set(_FIXTURE_SPECS)
+    selected = set(FIXTURE_SPECS) if case_ids is None else case_ids
+    unknown = selected - set(FIXTURE_SPECS)
     if unknown:
         raise ValueError(f"fixture cases are not implemented: {sorted(unknown)}")
     fixtures: dict[str, IsolatedFixture] = {}
-    for case_id, (fixture_name, _verifier) in _FIXTURE_SPECS.items():
+    for case_id, spec in FIXTURE_SPECS.items():
         if case_id not in selected:
             continue
         common: dict[str, Any] = {
-            "template": fixture_root / fixture_name,
+            "template": fixture_root / spec.fixture_name,
             "runs_root": Path(runs_root) / case_id,
             "preserve_runs": preserve_runs,
         }
@@ -96,20 +116,40 @@ def prepare_fixture_suite(
                     "{workspace}",
                 ],
             )
+        elif case_id.startswith("coding."):
+            fixtures[case_id] = PythonTestFixture(**common)
         else:
             fixtures[case_id] = IsolatedFixture(**common)
 
+    rubrics: dict[str, dict[str, Any]] = {}
+
     def grader_factory(case_id: str, rubric: dict[str, Any]):
-        _fixture_name, verifier_name = _FIXTURE_SPECS[case_id]
-        command = [sys.executable, str(verifier_root / verifier_name)]
-        if verifier_name == "verify_contract_case.py":
+        spec = FIXTURE_SPECS[case_id]
+        rubrics[case_id] = dict(rubric)
+        verifier_path = verifier_root / spec.verifier_name
+        verifier_sha256 = sha256(verifier_path.read_bytes()).hexdigest()
+        command = [sys.executable, str(verifier_path)]
+        verifier_arguments: list[str] = []
+        if spec.verifier_name == "verify_contract_case.py":
             command.append(case_id)
+            verifier_arguments.append(case_id)
         command.append("{workspace}")
+        verifier_arguments.append("{workspace}")
         return SubprocessOutcomeGrader(
             fixture=fixtures[case_id],
             command=command,
             rubric=rubric,
             trajectory_validator=lambda trajectory: _trajectory_requirement(case_id, trajectory),
+            hidden_verifier_source=verifier_path,
+            hidden_verifier_arguments=verifier_arguments,
+            hidden_verifier_sha256=verifier_sha256,
+            hidden_verifier_infrastructure_exit_codes=(
+                frozenset({BROWSER_UNAVAILABLE_EXIT})
+                if case_id in {"frontend.responsive-settings", "frontend.async-form-recovery"}
+                else frozenset({INFRASTRUCTURE_EXIT})
+                if case_id.startswith("coding.")
+                else frozenset()
+            ),
         )
 
     cases = load_behavioral_suite(
@@ -129,6 +169,19 @@ def prepare_fixture_suite(
         teardown_hooks={case_id: fixture.teardown for case_id, fixture in fixtures.items()},
         case_ids=set(fixtures),
     )
+    for case in cases:
+        spec = FIXTURE_SPECS[case.id]
+        verifier_path = verifier_root / spec.verifier_name
+        verifier_bytes = verifier_path.read_bytes()
+        case.metadata.update(
+            {
+                "rubric": rubrics[case.id],
+                "fixture_name": spec.fixture_name,
+                "hidden_verifier_path": verifier_path.relative_to(root).as_posix(),
+                "hidden_verifier_size_bytes": len(verifier_bytes),
+                "hidden_verifier_sha256": sha256(verifier_bytes).hexdigest(),
+            }
+        )
     return PreparedFixtureSuite(cases=cases, fixtures=fixtures)
 
 
@@ -144,6 +197,15 @@ def prepare_coding_fixture_suite(
         preserve_runs=preserve_runs,
         case_ids={"coding.concurrent-cache", "coding.path-boundary"},
     )
+
+
+__all__ = [
+    "FIXTURE_SPECS",
+    "FixtureSpec",
+    "PreparedFixtureSuite",
+    "prepare_coding_fixture_suite",
+    "prepare_fixture_suite",
+]
 
 
 def _trajectory_requirement(case_id: str, trajectory: Trajectory) -> str | None:

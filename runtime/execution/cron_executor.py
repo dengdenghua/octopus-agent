@@ -35,6 +35,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import datetime
@@ -61,7 +62,10 @@ _CRON_FALLBACK_LOCK = threading.Lock()
 # ─── Default runners (subprocess) ────────────────────────────
 
 
-def _pid_recorder(job: dict[str, Any]) -> Callable[[subprocess.Popen[Any]], None]:
+def _pid_recorder(
+    job: dict[str, Any],
+    persist: Callable[[], None] | None = None,
+) -> Callable[[subprocess.Popen[Any]], None]:
     """Return an ``on_start`` hook that records the child pid on the job.
 
     Audit T-02: the child runs in its own session (pid == pgid), so the
@@ -70,21 +74,37 @@ def _pid_recorder(job: dict[str, Any]) -> Callable[[subprocess.Popen[Any]], None
 
     def _record(proc: subprocess.Popen[Any]) -> None:
         job["pid"] = proc.pid
+        if persist is not None:
+            # The pre-dispatch marker contains pid=null because the process does
+            # not exist yet. Persist the real process-group id immediately after
+            # Popen so crash recovery can actually reap an orphan.
+            persist()
 
     return _record
 
 
-def default_shell_runner(command: str, job: dict[str, Any]) -> RunResult:
+def default_shell_runner(
+    command: str,
+    job: dict[str, Any],
+    *,
+    persist_pid: Callable[[], None] | None = None,
+    stop_event: threading.Event | None = None,
+) -> RunResult:
     """Run a UI-created shell job.
 
     Creation of these jobs is auth-gated at the router layer, so the
     command is operator-intended; we inherit the server environment.
     """
-    proc, timed_out = _run_process(
+    if stop_event is not None and stop_event.is_set():
+        return "interrupted", "service shutdown before cron process start"
+    proc, timed_out, interrupted = _run_process(
         _shell_argv(command),
         timeout=SHELL_JOB_TIMEOUT_S,
-        on_start=_pid_recorder(job),
+        on_start=_pid_recorder(job, persist_pid),
+        stop_event=stop_event,
     )
+    if interrupted:
+        return "interrupted", "service shutdown interrupted cron process"
     if timed_out:
         return "timeout", f"exceeded {SHELL_JOB_TIMEOUT_S}s"
     output = ((proc.stdout or "") + (proc.stderr or "")).strip()
@@ -106,18 +126,29 @@ def _shell_argv(command: str) -> list[str]:
     return ["/bin/sh", "-c", command]
 
 
-def default_prompt_runner(prompt: str, job: dict[str, Any]) -> RunResult:
+def default_prompt_runner(
+    prompt: str,
+    job: dict[str, Any],
+    *,
+    persist_pid: Callable[[], None] | None = None,
+    stop_event: threading.Event | None = None,
+) -> RunResult:
     """Run an agent-created prompt job as a headless ``runtime run``.
 
     Subprocess isolation keeps a scheduled turn's state (and failures)
     out of the serving process, and reuses the existing CLI path so the
     job gets the same planner/tools/config as an interactive run.
     """
-    proc, timed_out = _run_process(
+    if stop_event is not None and stop_event.is_set():
+        return "interrupted", "service shutdown before cron process start"
+    proc, timed_out, interrupted = _run_process(
         [sys.executable, "-m", "runtime", "run", prompt],
         timeout=PROMPT_JOB_TIMEOUT_S,
-        on_start=_pid_recorder(job),
+        on_start=_pid_recorder(job, persist_pid),
+        stop_event=stop_event,
     )
+    if interrupted:
+        return "interrupted", "service shutdown interrupted cron process"
     if timed_out:
         return "timeout", f"exceeded {PROMPT_JOB_TIMEOUT_S}s"
     output = ((proc.stdout or "") + (proc.stderr or "")).strip()
@@ -132,7 +163,8 @@ def _run_process(
     *,
     timeout: float,
     on_start: Callable[[subprocess.Popen[Any]], None] | None = None,
-) -> tuple[subprocess.CompletedProcess[str], bool]:
+    stop_event: threading.Event | None = None,
+) -> tuple[subprocess.CompletedProcess[str], bool, bool]:
     """Run a scheduled command in its own session and kill its descendants.
 
     ``subprocess.run(timeout=...)`` only guarantees that the direct child is
@@ -155,27 +187,60 @@ def _run_process(
     if on_start is not None:
         try:
             on_start(proc)
-        except Exception:  # noqa: BLE001 — marker recording must not abort the run
-            _log.exception("cron_executor: on_start hook failed")
-    try:
-        stdout, stderr = proc.communicate(timeout=timeout)
-        return (
-            subprocess.CompletedProcess(argv, proc.returncode, stdout, stderr),
-            False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        terminate_process_tree(proc)
-        stdout, stderr = proc.communicate()
-        # Preserve any output captured before the timeout.  communicate may
-        # return bytes only for non-text callers, but these runners are text.
+        except Exception:  # noqa: BLE001 — never leave an untracked child alive
+            _log.exception("cron_executor: failed to persist child pid; terminating process")
+            terminate_process_tree(proc)
+            proc.communicate()
+            raise
+
+    deadline = time.monotonic() + max(0.0, timeout)
+    last_timeout: subprocess.TimeoutExpired | None = None
+    timed_out = False
+    interrupted = False
+    while True:
+        if stop_event is not None and stop_event.is_set():
+            interrupted = True
+            break
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            timed_out = True
+            break
+        try:
+            stdout, stderr = proc.communicate(timeout=min(0.2, remaining))
+            return (
+                subprocess.CompletedProcess(argv, proc.returncode, stdout, stderr),
+                False,
+                False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            # communicate() is safe to retry after TimeoutExpired and retains
+            # captured output; the short poll makes lifespan shutdown bounded.
+            last_timeout = exc
+
+    terminate_process_tree(proc)
+    stdout, stderr = proc.communicate()
+    # Preserve output captured before timeout/stop on platforms whose final
+    # communicate returns an empty value after the process has been reaped.
+    if last_timeout is not None:
         if not stdout:
-            stdout = exc.stdout or ""
+            captured_stdout = last_timeout.stdout or ""
+            stdout = (
+                captured_stdout.decode(errors="replace")
+                if isinstance(captured_stdout, bytes)
+                else captured_stdout
+            )
         if not stderr:
-            stderr = exc.stderr or ""
-        return (
-            subprocess.CompletedProcess(argv, proc.returncode, stdout, stderr),
-            True,
-        )
+            captured_stderr = last_timeout.stderr or ""
+            stderr = (
+                captured_stderr.decode(errors="replace")
+                if isinstance(captured_stderr, bytes)
+                else captured_stderr
+            )
+    return (
+        subprocess.CompletedProcess(argv, proc.returncode, stdout, stderr),
+        timed_out,
+        interrupted,
+    )
 
 
 @contextmanager
@@ -309,6 +374,7 @@ def run_due_cron_jobs(
     shell_runner: ShellRunner | None = None,
     prompt_runner: PromptRunner | None = None,
     deliver: Callable[[dict[str, Any]], None] | None = None,
+    stop_event: threading.Event | None = None,
 ) -> dict[str, Any]:
     """Run due jobs once, serialized across scheduler processes."""
     path = cron_path or app_paths().cron_jobs_path
@@ -322,6 +388,7 @@ def run_due_cron_jobs(
             shell_runner=shell_runner,
             prompt_runner=prompt_runner,
             deliver=deliver,
+            stop_event=stop_event,
         )
 
 
@@ -332,6 +399,7 @@ def _run_due_cron_jobs(
     shell_runner: ShellRunner | None = None,
     prompt_runner: PromptRunner | None = None,
     deliver: Callable[[dict[str, Any]], None] | None = None,
+    stop_event: threading.Event | None = None,
 ) -> dict[str, Any]:
     """Fire every due job once. Returns a per-tick summary; never raises.
 
@@ -342,17 +410,46 @@ def _run_due_cron_jobs(
     """
     path = cron_path or app_paths().cron_jobs_path
     tick_now = (now or datetime.now().astimezone()).astimezone()
-    shell_fn = shell_runner or default_shell_runner
-    prompt_fn = prompt_runner or default_prompt_runner
 
     jobs = _read_raw_jobs(path)
     if not jobs:
         return {"ok": True, "fired": 0, "results": []}
 
+    def _persist_pid() -> None:
+        atomic_write_json(path, jobs)
+
+    if shell_runner is None:
+
+        def shell_fn(command: str, job: dict[str, Any]) -> RunResult:
+            return default_shell_runner(
+                command,
+                job,
+                persist_pid=_persist_pid,
+                stop_event=stop_event,
+            )
+
+    else:
+        shell_fn = shell_runner
+
+    if prompt_runner is None:
+
+        def prompt_fn(prompt: str, job: dict[str, Any]) -> RunResult:
+            return default_prompt_runner(
+                prompt,
+                job,
+                persist_pid=_persist_pid,
+                stop_event=stop_event,
+            )
+
+    else:
+        prompt_fn = prompt_runner
+
     results: list[dict[str, Any]] = []
     changed = False
     run_records: list[dict[str, Any]] = []
     for job in jobs:
+        if stop_event is not None and stop_event.is_set():
+            break
         name = str(job.get("name") or "")
         try:
             due = _is_due(job, tick_now)
@@ -571,7 +668,12 @@ def recover_interrupted_cron_jobs(cron_path: Path | None = None) -> dict[str, An
             atomic_write_json(path, jobs)
         except OSError:
             _log.exception("cron recovery: failed to persist %s", path)
-            return {"ok": False, "interrupted": len(touched), "jobs": touched, "error": "persist failed"}
+            return {
+                "ok": False,
+                "interrupted": len(touched),
+                "jobs": touched,
+                "error": "persist failed",
+            }
     return {"ok": True, "interrupted": len(touched), "jobs": touched}
 
 

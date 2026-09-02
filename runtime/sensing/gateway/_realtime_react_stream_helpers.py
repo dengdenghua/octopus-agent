@@ -13,6 +13,8 @@ import contextlib
 import logging
 import os
 import time
+from concurrent.futures import Future
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from runtime.execution.tool_engine import (
@@ -43,6 +45,50 @@ _logger = logging.getLogger(__name__)
 # pays for it. Kept well under the frontend's ~10s stall threshold so a
 # live-but-quiet turn always gets a keepalive before it's flagged "slow".
 _SINGLE_AGENT_HEARTBEAT_INTERVAL_S = 5.0
+_CRITICAL_STRUCTURAL_EVENT_TYPES = frozenset(
+    {
+        "react_started",
+        "tool_start",
+        "tool_background",
+        "tool_end",
+        "react_completed",
+        "react_error",
+        "react_paused",
+        "react_cancelled",
+        "react_resumed",
+    }
+)
+_TERMINAL_REACT_EVENT_TYPES = frozenset(
+    {"react_completed", "react_error", "react_paused", "react_cancelled"}
+)
+_REACT_QUEUE_PUT_TIMEOUT_S = 10.0
+_COALESCABLE_DELTA_TYPES = frozenset({"throughput", "visibility"})
+
+
+@dataclass(slots=True)
+class _QueuedReactEvent:
+    """Internal event envelope with an optional reducer-apply receipt."""
+
+    event: dict[str, Any]
+    applied: Future[None] | None = None
+
+
+class _ReactStructuralDeliveryError(RuntimeError):
+    """A critical lifecycle event could not reach the durable reducer."""
+
+
+class _ToolStartAuditError(_ReactStructuralDeliveryError):
+    """The durable tool-start audit boundary could not be established."""
+
+
+def _is_coalescable_delta(event: dict[str, Any] | None) -> bool:
+    """True for decorative deltas that may be dropped under queue pressure."""
+    return isinstance(event, dict) and event.get("type") in _COALESCABLE_DELTA_TYPES
+
+
+def _lease_renewal_interval_s(lease_ttl_seconds: float) -> float:
+    """Return the bounded supervisor renewal cadence."""
+    return max(0.1, min(float(lease_ttl_seconds) / 3.0, 30.0))
 
 
 def _safe_stream_error_message(exc: BaseException, *, limit: int = 1200) -> str:
@@ -158,6 +204,15 @@ def _apply_orchestration_grant(session_metadata: dict[str, Any]) -> None:
     session_metadata["orchestration_token_budget"] = ultracode_token_budget()
 
 
+def _apply_react_session_metadata(
+    session_metadata: dict[str, Any], stack: Any, approval_provider: Any
+) -> None:
+    """Apply server-owned execution context to one ReAct turn session."""
+    _apply_orchestration_grant(session_metadata)
+    session_metadata["_execution_stack"] = stack
+    session_metadata["_approval_provider"] = approval_provider
+
+
 def _should_use_native_tool_loop(
     stack: Any,
     intent: ParsedIntent,
@@ -243,8 +298,25 @@ def _model_error_reply(exc: BaseException) -> str | None:
     lower = text.lower()
     if "http_402" in lower or "insufficient_balance" in lower or "模型账户余额不足" in text:
         return "当前模型账户余额不足，所以这次没有完成。请给当前模型供应商账户充值，或切换到其他可用模型后重试。"
-    if "http_401" in lower or "http_403" in lower or "api key" in lower:
+    if (
+        "http_401" in lower
+        or "http_403" in lower
+        or "api key" in lower
+        or "credential refresh" in lower
+        or "invalid credential" in lower
+        or "尚未登录 chatgpt" in lower
+        or "not logged in to chatgpt" in lower
+    ):
         return "当前模型 API Key 无效或没有权限，所以这次没有完成。请在模型设置里更新 Key，或切换到其他可用模型后重试。"
+    if (
+        "http_429" in lower
+        or "rate limit" in lower
+        or "rate_limit" in lower
+        or "too many requests" in lower
+        or "quota exceeded" in lower
+        or "usage limit" in lower
+    ):
+        return "当前模型请求过多或额度已达上限，所以这次没有完成。请稍后重试，或切换到其他可用模型继续。"
     return None
 
 

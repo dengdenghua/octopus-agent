@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Octopus 专家商城 · WorkBuddy 全量镜像</title>
+<meta name="description" content="腾讯 WorkBuddy 领域专家/专家团全量镜像商城 · 421 位专家 · 15 大分类 · 支持一键下载安装" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐙</text></svg>" />
+<link rel="stylesheet" href="style.css" />
+<link rel="preconnect" href="https://acc-1258344699.cos.accelerate.myqcloud.com" />
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#" onclick="Store.render();return false;">
+      <span class="brand-logo">🐙</span>
+      <span class="brand-text">
+        <strong>Octopus 专家商城</strong>
+        <small>WorkBuddy 领域专家 / 专家团 全量镜像</small>
+      </span>
+    </a>
+    <div class="topbar-actions">
+      <span class="pill" id="stat-count">—</span>
+      <span class="pill pill-agent" id="stat-agent">—</span>
+      <span class="pill pill-team" id="stat-team">—</span>
+      <a class="pill" href="plugins.html" style="text-decoration:none">插件/连接器 →</a>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- 左侧分类栏 -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-title">分类</div>
+    <ul class="cat-list" id="cat-list"></ul>
+  </aside>
+
+  <!-- 主区 -->
+  <main class="main">
+    <section class="hero">
+      <div>
+        <h1>领域专家商城 <span class="hero-sub">全量镜像 · 421 位专家</span></h1>
+        <p class="hero-desc">腾讯 WorkBuddy 专家中心的全部领域专家与专家团,镜像到 Octopus 生态,支持搜索、浏览、一键下载安装。</p>
+      </div>
+      <div class="hero-stats">
+        <div class="stat"><b id="h-count">0</b><span>专家总数</span></div>
+        <div class="stat"><b id="h-agent">0</b><span>单角色专家</span></div>
+        <div class="stat"><b id="h-team">0</b><span>专家团队</span></div>
+        <div class="stat"><b id="h-cat">0</b><span>行业分类</span></div>
+      </div>
+    </section>
+
+    <section class="toolbar">
+      <div class="search-box">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="search" type="search" placeholder="搜索专家名 / 领域 / 标签,如:开发、文案、投资…" autocomplete="off" />
+      </div>
+      <div class="filter-group">
+        <button class="chip active" data-type="all">全部</button>
+        <button class="chip" data-type="agent">专家</button>
+        <button class="chip" data-type="team">专家团</button>
+      </div>
+      <div class="sort-group">
+        <label for="sort">排序</label>
+        <select id="sort">
+          <option value="updated">最近更新</option>
+          <option value="name">名称 A→Z</option>
+          <option value="name-zh">中文名</option>
+        </select>
+      </div>
+    </section>
+
+    <div class="card-grid" id="grid"></div>
+    <div class="empty" id="empty" hidden>
+      <div class="empty-icon">🔍</div>
+      <p>没有找到匹配的专家</p>
+      <p class="empty-sub">试试更换关键词或分类</p>
+    </div>
+  </main>
+</div>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <span>🐙 Octopus 专家商城 — WorkBuddy(腾讯)领域专家/专家团全量镜像</span>
+    <span class="footer-meta" id="footer-meta"></span>
+    <span class="footer-note">镜像仅供学习研究 · 版权归原开发者所有</span>
+  </div>
+</footer>
+
+<!-- 详情弹窗 -->
+<div class="modal-backdrop" id="modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <button class="modal-close" id="modal-close" aria-label="关闭">×</button>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

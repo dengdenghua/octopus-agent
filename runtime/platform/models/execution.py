@@ -57,6 +57,11 @@ class ExecutionResult(BaseModel):
     cost: CostEntry = Field(default_factory=CostEntry)
     files_modified: list[str] = Field(default_factory=list)
     network_egress_bytes: int = 0
+    # Server-owned execution provenance. These fields are stamped by the
+    # ToolExecutor from the exact handler object it captured and invoked;
+    # callers must not infer trust from a registry name or skill metadata.
+    trusted_execution: bool = False
+    execution_source: str = ""
     ts: datetime = Field(default_factory=now_utc)
 
     @property

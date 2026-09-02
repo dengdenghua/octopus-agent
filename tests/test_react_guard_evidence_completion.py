@@ -91,13 +91,13 @@ def test_named_file_guard_accepts_successful_writes_for_named_file() -> None:
         ReActStep(
             iteration=1,
             action='write_text_file({"path":"hello.py","content":"print(42)\\n"})',
-            observation='(real tool execution succeeded) write_text_file',
+            observation="(real tool execution succeeded) write_text_file",
             action_results=[{"ok": True}],
         ),
         ReActStep(
             iteration=2,
             action='exec_shell({"command":"python3 hello.py"})',
-            observation='(real tool execution succeeded) exec_shell',
+            observation="(real tool execution succeeded) exec_shell",
             action_results=[{"ok": True}],
         ),
     ]
@@ -118,7 +118,7 @@ def test_named_file_guard_still_rejects_unwritten_read_target() -> None:
         ReActStep(
             iteration=1,
             action='write_text_file({"path":"other.py","content":"x"})',
-            observation='(real tool execution succeeded) write_text_file',
+            observation="(real tool execution succeeded) write_text_file",
             action_results=[{"ok": True}],
         ),
     ]
@@ -140,6 +140,45 @@ def test_incomplete_final_answer_rejects_future_action_not_result() -> None:
 
     assert message is not None
     assert "not a completed answer" in message
+
+
+def test_incomplete_final_answer_rejects_continuation_promise() -> None:
+    # Regression (thread tj1qarRWyf8H5zzT6dR_-u, trn_d1cd69902f864d67 /
+    # trn_23c29c3f25ef4e68): after "我接下来会核对…" was rejected, the model
+    # rephrased to "我继续核对…确认它们是否也跟随大涨" — 继/接 continuation
+    # prefixes were missing from preparatory_start/future_action, so the
+    # rephrased announce was delivered as a completed turn with zero tool calls.
+    message = _incomplete_final_answer_guard(
+        "我继续核对广义健康板块（健康保险、数字健康、远程医疗、健身）"
+        "在2026年8月20日的行情，确认它们是否也跟随医药大涨。"
+    )
+
+    assert message is not None
+    assert "not a completed answer" in message
+
+
+def test_incomplete_final_answer_rejects_bare_continuation_verb_start() -> None:
+    # A turn-final answer that opens with a bare 继续推进/接着核实 plan is a
+    # placeholder, not a delivery — same shape as the 我继续 regression above.
+    message = _incomplete_final_answer_guard(
+        "继续推进当前任务，先核对已完成内容，确保下一步操作有明确依据。"
+    )
+
+    assert message is not None
+    assert "not a completed answer" in message
+
+
+def test_incomplete_final_answer_accepts_delivered_answer_that_mentions_continuation() -> None:
+    # A concrete conclusion that merely mentions continuing later must pass:
+    # the guard targets plan-only candidates, not finished reports that
+    # honestly state what remains.
+    assert (
+        _incomplete_final_answer_guard(
+            "结论：A方案成本更低。综合三轮报价数据，A方案总价 12.4 万，B 方案 15.1 万，"
+            "差异 2.7 万主要来自许可费；后续扩容仍可继续评估。"
+        )
+        is None
+    )
 
 
 def test_incomplete_final_answer_rejects_negated_conclusion_signal() -> None:
@@ -277,8 +316,7 @@ def test_incomplete_final_answer_accepts_past_tense_look_report() -> None:
         is None
     )
     assert (
-        _incomplete_final_answer_guard("我看过代码后，发现整体结构清晰，因此评价为良好。")
-        is None
+        _incomplete_final_answer_guard("我看过代码后，发现整体结构清晰，因此评价为良好。") is None
     )
 
 
@@ -450,6 +488,79 @@ def test_incomplete_final_answer_still_accepts_delivered_failure_analysis() -> N
         _incomplete_final_answer_guard(
             "3 个方向成功，2 个失败。失败原因是 SSL 断连（competitive）"
             "和超出 25 轮上限（tech），与研究方向本身无关。"
+        )
+        is None
+    )
+
+
+def test_incomplete_final_answer_rejects_bare_intention_verbs() -> None:
+    """Future-intent bare verbs (查/找/读/搜/分析) are plan statements, not
+    delivered answers. Regression: the realtime thread txhjBkLKtmrjdfdJp0FQhN
+    opened with "我来帮你查这三组数据…" which slipped through because bare 查
+    was not an evidence-action verb, so the generic opener streamed to the user
+    as the answer before any real work."""
+    assert (
+        _incomplete_final_answer_guard(
+            "我来帮你查这三组数据：智能床垫全球体量、传统床/床品全球体量、"
+            "温度影响睡眠的科学依据，最后汇总成带来源的清单。"
+        )
+        is not None
+    )
+    assert _incomplete_final_answer_guard("我来找一下相关文档再回答。") is not None
+    assert _incomplete_final_answer_guard("我来读一下配置文件，然后再给结论。") is not None
+    assert _incomplete_final_answer_guard("我先搜一下官方资料。") is not None
+    assert _incomplete_final_answer_guard("我需要找一下资料再回答。") is not None
+
+
+def test_incomplete_final_answer_accepts_past_tense_bare_intention_verbs() -> None:
+    """Completed, past-tense statements with the same characters must keep
+    passing — only the future-intent prefix triggers the guard."""
+    assert (
+        _incomplete_final_answer_guard("我查了资料，结论是智能床垫市场规模 17.6 亿美元。") is None
+    )
+    assert _incomplete_final_answer_guard("我找到了答案：两者的定义完全一致。") is None
+    assert _incomplete_final_answer_guard("我分析了数据，得出三点结论。") is None
+
+
+def test_incomplete_final_answer_rejects_promised_synthesis() -> None:
+    """Regression (thread t0Wn5Zhvh3VUFwoAR2uP4M): "四个方向都收齐了，马上
+    综合。" and "抱歉刚才掉线了，马上把4位成员的成果综合出来。" were each
+    delivered as a *completed* turn — a promise to synthesize with zero actual
+    output. A short, body-less promise-to-produce must be rejected like the
+    read/search announce prefixes."""
+    assert _incomplete_final_answer_guard("四个方向都收齐了，马上综合。") is not None
+    assert (
+        _incomplete_final_answer_guard("抱歉刚才掉线了，马上把4位成员的成果综合出来。") is not None
+    )
+    assert (
+        _incomplete_final_answer_guard(
+            "证据已足够成稿：市场、政策、成果、玩家、融资、风险六个维度都有可引用来源。"
+            "更新任务状态后输出完整报告。"
+        )
+        is not None
+    )
+    assert _incomplete_final_answer_guard("马上综合给出：") is not None
+
+
+def test_incomplete_final_answer_accepts_delivered_synthesis_tail() -> None:
+    """A promise that actually carries a delivered body/numbers must keep
+    passing — the guard targets body-less promises, not finished outputs."""
+    assert (
+        _incomplete_final_answer_guard(
+            "马上把结论给你：A 方案 12.4 万，B 方案 15.1 万，差异 2.7 万。"
+        )
+        is None
+    )
+    assert (
+        _incomplete_final_answer_guard(
+            "综合如下：市场 1578 亿美元，政策中美加码，产业英伟达-礼来已布局。"
+        )
+        is None
+    )
+    assert (
+        _incomplete_final_answer_guard(
+            "结论：A方案成本更低。综合三轮报价数据，A方案总价 12.4 万，B 方案 15.1 万，"
+            "差异 2.7 万主要来自许可费；后续扩容仍可继续评估。"
         )
         is None
     )

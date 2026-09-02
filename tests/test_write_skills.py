@@ -71,6 +71,46 @@ class TestWriteTextFile:
         assert p.read_text(encoding="utf-8") == "hello"
         assert r["bytes_written"] == 5
 
+    def test_write_marks_verified_on_disk(self, tmp_path: Path):
+        """Write-after verification (Hermes parity): success returns verified=True."""
+        p = tmp_path / "verify.txt"
+        r = _write_text_file(path=str(p), content="hello")
+        assert "error" not in r
+        assert r["verified"] is True
+        assert "verify_error" not in r
+
+    def test_write_reports_read_back_failure(self, tmp_path: Path, monkeypatch):
+        """A read-back failure surfaces as verify_error, not silent success."""
+        from pathlib import Path as PathCls
+
+        p = tmp_path / "verify-fail.txt"
+
+        def broken_read_bytes(self, *args, **kwargs):
+            raise OSError("simulated read-back failure")
+
+        monkeypatch.setattr(PathCls, "read_bytes", broken_read_bytes)
+        r = _write_text_file(path=str(p), content="hello")
+        assert "error" not in r  # write itself succeeded
+        assert "verify_error" in r
+        assert "read_back_failed" in r["verify_error"]
+
+    def test_write_reports_content_mismatch(self, tmp_path: Path, monkeypatch):
+        """Disk content differing from what we wrote is not silently accepted."""
+        from pathlib import Path as PathCls
+
+        p = tmp_path / "verify-mismatch.txt"
+
+        real_write_bytes = PathCls.write_bytes
+
+        def corrupt_write_bytes(self, data, *args, **kwargs):
+            # Simulate a partial write: only half the bytes land.
+            real_write_bytes(self, data[: len(data) // 2])
+
+        monkeypatch.setattr(PathCls, "write_bytes", corrupt_write_bytes)
+        r = _write_text_file(path=str(p), content="hello world")
+        assert "verify_error" in r
+        assert "read_back_mismatch" in r["verify_error"]
+
     def test_refuse_overwrite_by_default(self, tmp_path: Path):
         p = tmp_path / "exists.txt"
         p.write_text("old", encoding="utf-8")
@@ -473,9 +513,11 @@ def test_python_quality_defaults_disable_tool_caches(
 ):
     (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
     commands: list[list[str]] = []
+    timeouts: list[float | None] = []
 
-    def fake_stream_run(command, **_kwargs):
+    def fake_stream_run(command, **kwargs):
         commands.append(command)
+        timeouts.append(kwargs.get("timeout"))
         return {
             "exit_code": 0,
             "stdout": "",
@@ -495,10 +537,35 @@ def test_python_quality_defaults_disable_tool_caches(
     assert "--no-cache" in commands[1]
     assert "--diff" in commands[1]
     assert "--no-cache" in commands[2]
+    assert timeouts == [None, 60.0, 60.0]
 
     assert _lint_check(cwd=str(tmp_path), fix=True)["success"] is True
     assert "--fix" in commands[3]
     assert "--diff" not in commands[3]
+
+
+def test_run_tests_forwards_explicit_timeout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n", encoding="utf-8")
+    observed: dict[str, float | None] = {}
+
+    def fake_stream_run(_command, **kwargs):
+        observed["timeout"] = kwargs.get("timeout")
+        return {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "timed_out": False,
+            "sandbox_backend": "direct",
+            "sandbox_hard": False,
+        }
+
+    monkeypatch.setattr("runtime.platform.process.streaming.stream_run", fake_stream_run)
+
+    assert _run_tests(cwd=str(tmp_path), timeout_s=12.5)["success"] is True
+    assert observed["timeout"] == 12.5
 
 
 def test_quality_paths_accept_one_string_without_splitting(

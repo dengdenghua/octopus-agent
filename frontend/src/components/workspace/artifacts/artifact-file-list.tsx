@@ -15,7 +15,10 @@ import {
 import { cn } from "@/lib/utils";
 
 import { ArtifactLink } from "../citations/artifact-link";
+import { useThread } from "../messages/context";
+import { OfficePreview } from "./artifact-file-detail";
 import { useArtifacts } from "./context";
+import { officeArtifactKind } from "./office-edit";
 import { useInstallSkill } from "./use-install-skill";
 
 export function ArtifactFileList({
@@ -124,7 +127,7 @@ export function ArtifactFileList({
 
 /* ------------------------------------------------------------------ */
 /*  Inline preview grid for the "preview" tab of the drawer panel.   */
-/*  Renders HTML / MD artifacts directly as cards (flat list).       */
+/*  Renders HTML / MD / Office artifacts directly as cards.         */
 /* ------------------------------------------------------------------ */
 
 const LazyStreamdown = lazy(
@@ -185,13 +188,18 @@ function ArtifactInlinePreviewCard({
   threadId: string;
 }) {
   const { t } = useI18n();
+  const { isMock } = useThread();
   const displayPath = artifactDisplayPath(filepath);
   const { language } = checkCodeFile(displayPath);
+  const officeKind = officeArtifactKind(displayPath);
   const isWriteFile = filepath.startsWith("write-file:");
   const { content, url, isLoading } = useArtifactContent({
     filepath,
     threadId,
-    enabled: !isWriteFile,
+    // OfficePreview performs its own authenticated, format-aware fetch.
+    // Reading xlsx/pptx/pdf through the text-content hook is both wasteful and
+    // can corrupt the preview by treating a binary file as UTF-8.
+    enabled: !isWriteFile && !officeKind,
   });
   const effectiveContent = isWriteFile ? "" : (content ?? "");
 
@@ -205,7 +213,7 @@ function ArtifactInlinePreviewCard({
           {getFileName(displayPath)}
         </span>
         <span className="shrink-0 text-[10px] text-muted-foreground uppercase">
-          {language}
+          {officeKind ?? language}
         </span>
         <Button
           variant="ghost"
@@ -230,7 +238,15 @@ function ArtifactInlinePreviewCard({
             {t.common.loading}…
           </div>
         )}
-        {language === "markdown" ? (
+        {officeKind ? (
+          <OfficePreview
+            displayPath={displayPath}
+            filepath={filepath}
+            isMock={Boolean(isMock)}
+            kind={officeKind}
+            threadId={threadId}
+          />
+        ) : language === "markdown" ? (
           <InlineMarkdownPreview content={effectiveContent} />
         ) : language === "html" ? (
           <InlineHtmlPreview
@@ -245,7 +261,7 @@ function ArtifactInlinePreviewCard({
 }
 
 /**
- * Flat grid of inline preview cards (HTML / Markdown). Used by the
+ * Flat grid of inline preview cards (HTML / Markdown / Office / PDF). Used by the
  * drawer's "预览" tab — renders every previewable file as a card stacked
  * vertically. For the workbench's embedded artifacts panel use the
  * master-detail ``ArtifactInlinePreviewEmbedded`` instead.
@@ -265,7 +281,11 @@ export function ArtifactInlinePreview({
     () =>
       (files ?? []).filter((f) => {
         const lang = checkCodeFile(artifactDisplayPath(f)).language;
-        return lang === "html" || lang === "markdown";
+        return (
+          lang === "html" ||
+          lang === "markdown" ||
+          Boolean(officeArtifactKind(artifactDisplayPath(f)))
+        );
       }),
     [files],
   );

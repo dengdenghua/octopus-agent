@@ -4,6 +4,7 @@ import {
   controlInterruptionDetail,
   getControlSessionEvidenceDetail,
   getControlSessionTimeline,
+  setControlSessionState,
   getControlStopReason,
   mergeControlSessionTimeline,
   mergeControlSessionTimelineItems,
@@ -200,6 +201,35 @@ describe("control-session", () => {
         has_more: false,
       });
       expect(timeline.items[0]?.detail_href).toContain("/detail");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("sends explicit pause / takeover state commands", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        session: {
+          session_id: "ctrl-1",
+          status: "paused",
+          paused: true,
+        },
+      }),
+      text: async () => "",
+    }));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    try {
+      await setControlSessionState("ctrl-1", "takeover", "user takeover");
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/control-sessions/ctrl-1/takeover"),
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ reason: "user takeover" }),
+        }),
+      );
     } finally {
       globalThis.fetch = originalFetch;
     }

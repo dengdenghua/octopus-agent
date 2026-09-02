@@ -45,6 +45,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Protocol
 
+from runtime.safety.sandboxing._landlock_wrapper import LANDLOCK_WRAPPER
+
 _logger = logging.getLogger(__name__)
 
 
@@ -256,6 +258,68 @@ class SandboxPolicy:
     * ``danger-full-access`` — no file-effect confinement (soft constraints
       still apply).
     """
+
+    additional_write_roots: tuple[Path, ...] = ()
+    """Exact non-workspace directories a persistent sandboxed service may write.
+
+    Most command executions need only ``workspace`` and must leave this empty.
+    Long-lived sidecars can require private state outside the checked-out tree;
+    each such directory is validated and mounted/rule-scoped independently so
+    callers never widen authority to a common parent merely for convenience.
+    """
+
+    def __post_init__(self) -> None:
+        workspace = self.workspace.expanduser().resolve(strict=False)
+        protected_roots = tuple(
+            path.resolve(strict=False)
+            for path in (
+                Path("/usr"),
+                Path("/bin"),
+                Path("/sbin"),
+                Path("/lib"),
+                Path("/lib64"),
+                Path("/etc"),
+                Path("/dev"),
+                Path("/proc"),
+                Path("/sys"),
+            )
+            if path.exists()
+        )
+        normalized: list[Path] = []
+        for raw_root in self.additional_write_roots:
+            candidate = Path(raw_root).expanduser()
+            if not candidate.is_absolute():
+                raise SandboxViolation("additional write roots must be absolute")
+            if candidate.is_symlink():
+                raise SandboxViolation(f"additional write root cannot be a symlink: {candidate}")
+            try:
+                root = candidate.resolve(strict=True)
+            except OSError as exc:
+                raise SandboxViolation(
+                    f"additional write root does not exist: {candidate}"
+                ) from exc
+            if not root.is_dir():
+                raise SandboxViolation(f"additional write root is not a directory: {root}")
+            if root.parent == root:
+                raise SandboxViolation("filesystem root cannot be an additional write root")
+            if root == workspace or root in workspace.parents or workspace in root.parents:
+                raise SandboxViolation(
+                    f"additional write roots must not overlap the workspace: {root}"
+                )
+            if any(
+                root == protected or root in protected.parents or protected in root.parents
+                for protected in protected_roots
+            ):
+                raise SandboxViolation(
+                    f"additional write root must not overlap a system directory: {root}"
+                )
+            if any(root in existing.parents or existing in root.parents for existing in normalized):
+                raise SandboxViolation(
+                    f"additional write roots must be exact non-overlapping directories: {root}"
+                )
+            if root not in normalized:
+                normalized.append(root)
+        object.__setattr__(self, "additional_write_roots", tuple(normalized))
 
     def env_for(self) -> dict[str, str]:
         env = {k: os.environ[k] for k in self.allowed_env if k in os.environ}
@@ -481,22 +545,43 @@ class BubblewrapBackend:
         if not policy.allow_network:
             wrapped.append("--unshare-net")
 
+        system_mounts: list[Path] = []
         for path in ("/usr", "/bin", "/sbin", "/lib", "/lib64", "/etc"):
             if Path(path).exists():
                 wrapped.extend(["--ro-bind", path, path])
+                system_mounts.append(Path(path).resolve(strict=False))
         if Path("/dev").exists():
             wrapped.extend(["--dev", "/dev"])
         if Path("/proc").exists():
             wrapped.extend(["--proc", "/proc"])
-        wrapped.extend(["--tmpfs", "/tmp"])  # nosec B108 — bwrap tmpfs mount arg, not a temp file
+        wrapped.extend(["--tmpfs", "/tmp"])  # bwrap mount arg, not a temp file  # nosec B108
 
-        parents = list(workspace.parents)
-        parents.reverse()
-        for parent in parents:
-            if str(parent) != "/":
+        mount_roots = _unique_paths([workspace, *policy.additional_write_roots])
+        namespace_parents: list[Path] = []
+        for mount_root in mount_roots:
+            for parent in reversed(mount_root.parents):
+                if parent.parent == parent:
+                    continue
+                if any(parent == system or system in parent.parents for system in system_mounts):
+                    continue
+                if parent not in namespace_parents:
+                    namespace_parents.append(parent)
+        for parent in namespace_parents:
+            # /tmp already exists as the private tmpfs mounted above; its
+            # descendants still need explicit namespace directories.
+            if parent != Path("/tmp"):  # nosec B108
                 wrapped.extend(["--dir", str(parent)])
+
         workspace_flag = "--ro-bind" if policy.mode == "read-only" else "--bind"
-        wrapped.extend([workspace_flag, str(workspace), str(workspace)])
+        mount_specs = [
+            (workspace, workspace_flag),
+            *[(root, "--bind") for root in policy.additional_write_roots],
+        ]
+        # A deeper exact root must be mounted after its parent so it cannot be
+        # hidden by a later broad bind.  This is especially relevant to a
+        # thread state root plus its task-scoped child.
+        for source, flag in sorted(mount_specs, key=lambda item: len(item[0].parts)):
+            wrapped.extend([flag, str(source), str(source)])
         wrapped.extend(["--chdir", str(run_cwd), "--"])
         wrapped.extend(argv)
         return wrapped, env, run_cwd
@@ -544,7 +629,7 @@ class SeatbeltBackend:
             raise SandboxViolation("seatbelt sandbox requested but sandbox-exec is not installed")
 
         if policy.mode == "read-only":
-            write_subpaths = [Path("/dev/null")]
+            write_subpaths = [Path("/dev/null"), *policy.additional_write_roots]
         else:
             write_subpaths = [
                 workspace,
@@ -553,6 +638,7 @@ class SeatbeltBackend:
                 Path("/private/tmp"),  # nosec B108 — sandbox write-allow rule target, not a temp file
                 Path("/var/tmp"),  # nosec B108 — sandbox write-allow rule target, not a temp file
                 Path(os.environ.get("TMPDIR", "/tmp")).expanduser().resolve(strict=False),  # nosec B108 — sandbox write-allow rule target
+                *policy.additional_write_roots,
             ]
         write_rules = "\n".join(
             f'  (subpath "{_sbpl_escape(str(path))}")' for path in _unique_paths(write_subpaths)
@@ -570,114 +656,6 @@ class SeatbeltBackend:
             f"{network_rule}\n"
         )
         return [sandbox_exec, "-p", profile, *argv], env, run_cwd
-
-
-_LANDLOCK_WRAPPER = r"""
-# Landlock confinement wrapper (generated by LandlockBackend).
-#
-# Applies a deny-by-default filesystem ruleset through the Landlock LSM
-# syscalls (kernel >= 5.13), then execs the real command. Reads and
-# execution of the whole tree stay allowed (language runtimes need them);
-# writes are allowed only under the paths in OCTOPUS_LANDLOCK_SPEC, plus
-# the /dev/null sink the shells require.
-
-import ctypes
-import json
-import os
-import sys
-
-libc = ctypes.CDLL(None, use_errno=True)
-SYS_LANDLOCK_CREATE_RULESET = 444
-SYS_LANDLOCK_ADD_RULE = 445
-SYS_LANDLOCK_RESTRICT_SELF = 446
-LANDLOCK_RULE_PATH_BENEATH = 1
-
-# linux/landlock.h access rights (ABI v1 bits; ABI v2 adds REFER,
-# ABI v3 adds TRUNCATE - both handled below).
-EXECUTE = 1 << 0
-WRITE_FILE = 1 << 1
-READ_FILE = 1 << 2
-READ_DIR = 1 << 3
-REMOVE_DIR = 1 << 4
-REMOVE_FILE = 1 << 5
-MAKE_CHAR = 1 << 6
-MAKE_DIR = 1 << 7
-MAKE_REG = 1 << 8
-MAKE_SOCK = 1 << 9
-MAKE_FIFO = 1 << 10
-MAKE_BLOCK = 1 << 11
-MAKE_SYM = 1 << 12
-REFER = 1 << 13
-TRUNCATE = 1 << 14
-
-_READ = EXECUTE | READ_FILE | READ_DIR
-_WRITE = (
-    WRITE_FILE
-    | REMOVE_DIR
-    | REMOVE_FILE
-    | MAKE_CHAR
-    | MAKE_DIR
-    | MAKE_REG
-    | MAKE_SOCK
-    | MAKE_FIFO
-    | MAKE_BLOCK
-    | MAKE_SYM
-    | REFER
-    | TRUNCATE
-)
-
-
-class _Attr(ctypes.Structure):
-    _fields_ = [("handled_access_fs", ctypes.c_uint64)]
-
-
-class _RuleBeneath(ctypes.Structure):
-    _fields_ = [("allowed_access", ctypes.c_uint64), ("parent_fd", ctypes.c_int)]
-
-
-attr = _Attr(_READ | _WRITE)
-ruleset_fd = libc.syscall(
-    SYS_LANDLOCK_CREATE_RULESET, ctypes.byref(attr), ctypes.sizeof(attr), 0
-)
-if ruleset_fd < 0:
-    raise OSError(ctypes.get_errno(), "landlock_create_ruleset")
-
-
-def add_path_beneath(path, allowed):
-    try:
-        parent_fd = os.open(path, os.O_PATH)
-    except OSError:
-        return  # path absent at confine time; not a failure
-    try:
-        rule = _RuleBeneath(allowed, parent_fd)
-        rc = libc.syscall(
-            SYS_LANDLOCK_ADD_RULE,
-            ruleset_fd,
-            LANDLOCK_RULE_PATH_BENEATH,
-            ctypes.byref(rule),
-            0,
-        )
-        if rc != 0:
-            raise OSError(ctypes.get_errno(), "landlock_add_rule(" + path + ")")
-    finally:
-        os.close(parent_fd)
-
-
-add_path_beneath("/", _READ)
-add_path_beneath("/dev/null", WRITE_FILE | TRUNCATE)
-for path in json.loads(os.environ["OCTOPUS_LANDLOCK_SPEC"])["write_paths"]:
-    add_path_beneath(path, _READ | _WRITE)
-
-rc = libc.syscall(SYS_LANDLOCK_RESTRICT_SELF, ruleset_fd, 0)
-if rc != 0:
-    raise OSError(ctypes.get_errno(), "landlock_restrict_self")
-
-if "--" in sys.argv:
-    argv = sys.argv[sys.argv.index("--") + 1 :]
-else:
-    argv = sys.argv[1:]
-os.execvpe(argv[0], argv, os.environ)
-"""
 
 
 def _landlock_kernel_available() -> bool:
@@ -741,7 +719,7 @@ class LandlockBackend:
                 "landlock sandbox requested but the kernel does not expose Landlock (>= 5.13)"
             )
 
-        write_paths: list[str] = []
+        write_paths: list[str] = [str(path) for path in policy.additional_write_roots]
         if policy.mode != "read-only":
             write_paths.append(str(workspace))
             for key in (
@@ -759,7 +737,7 @@ class LandlockBackend:
 
         wrapped_env = dict(env)
         wrapped_env["OCTOPUS_LANDLOCK_SPEC"] = json.dumps({"write_paths": write_paths})
-        wrapped: list[str] = [self.executable, "-c", _LANDLOCK_WRAPPER, "--", *argv]
+        wrapped: list[str] = [self.executable, "-c", LANDLOCK_WRAPPER, "--", *argv]
         return wrapped, wrapped_env, run_cwd
 
 
@@ -1056,7 +1034,9 @@ def resolve_process_backend(mode: str | None = None) -> BackendChoice:
 
     for backend, name in _hard_backend_candidates(raw):
         if backend.available() and probe_backend_runs(backend):
-            return _set_resolved(raw, BackendChoice(backend, name, hard=True, strict=raw == "strict"))
+            return _set_resolved(
+                raw, BackendChoice(backend, name, hard=True, strict=raw == "strict")
+            )
 
     if raw == "auto":
         # Never a silent downgrade: a hard backend is present-but-broken or

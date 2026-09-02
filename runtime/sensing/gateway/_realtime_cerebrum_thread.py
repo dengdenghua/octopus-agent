@@ -32,11 +32,19 @@ from runtime.protocol import (
 )
 from runtime.safety.approval.approval_gate import ApprovalProvider
 from runtime.safety.approval.approval_policy_store import load_policy
+from runtime.sensing.gateway._realtime_thread_delete_probe import (
+    assert_thread_accepts_runtime_writes,
+)
 from runtime.sensing.gateway.realtime_event_bridge import _ReactBridgeState, _safe_list_remove
 from runtime.sensing.gateway.realtime_gateway import EventEmitter, _RpcError
 from runtime.sensing.gateway.realtime_thread_history import (
     _flatten_turns_to_messages,
     _title_from_messages,
+)
+from runtime.sensing.gateway.thread_workspace import (
+    MANAGED_WORKSPACE_MARKER,
+    MANAGED_WORKSPACE_METADATA_KEY,
+    strip_client_workspace_metadata,
 )
 
 if TYPE_CHECKING:
@@ -217,8 +225,32 @@ def _require_thread_owner(
     actor_id: str | None,
     *,
     turns: list[Turn] | None = None,
+    access: str = "owner",
 ) -> None:
     from runtime.memory.threads.event_log import owner_actor_id_from_turns
+
+    resolver = getattr(runtime, "_thread_access_resolver", None)
+    if callable(resolver):
+        try:
+            decision = resolver(log.path.stem, actor_id)
+        except Exception:  # noqa: BLE001 - authorization fails closed
+            decision = None
+        if decision is not None:
+            allowed = {
+                "read": bool(getattr(decision, "can_read", False)),
+                "write": bool(getattr(decision, "can_write", False)),
+                "owner": bool(getattr(decision, "can_manage", False)),
+            }.get(access, False)
+            if allowed:
+                return
+            # A canonical ThreadState row is authoritative. Do not let stale
+            # event-log ownership override a current room removal or tenant
+            # denial. Log-only legacy threads keep the compatibility fallback.
+            if getattr(decision, "thread", None) is not None:
+                raise _RpcError(
+                    JsonRpcErrorCode.THREAD_NOT_FOUND,
+                    f"unknown thread {log.path.stem}",
+                )
 
     owner = owner_actor_id_from_turns(turns if turns is not None else log.replay())
     if owner is not None and actor_id != owner:
@@ -231,65 +263,103 @@ def _resume_turns(
     *,
     turns: list[Turn] | None = None,
 ) -> list[Turn]:
-    """Replay and close in-progress turns left by an older process."""
+    """Replay and close in-progress turns only under the OS claim.
+
+    The active-turn lease is a routing/diagnostic hint, never liveness
+    authority.  A long GC pause can miss its heartbeat while the original
+    worker still owns the descriptor; taking terminal action from that TTL
+    would split the thread timeline.  Recovery therefore proceeds only after
+    acquiring the same no-wait claim used by ``turn/start`` and holds it
+    through every terminal append.
+    """
     turns = turns if turns is not None else log.replay()
     if not turns:
         return turns
-    stale = [
+    candidates = [
         turn
         for turn in turns
-        if turn.status == TurnStatus.IN_PROGRESS
-        and turn.id not in runtime._active_turn_ids
-        and not runtime._has_fresh_active_turn_lease(turn.thread_id, turn.id)
+        if turn.status == TurnStatus.IN_PROGRESS and turn.id not in runtime._active_turn_ids
     ]
-    for turn in stale:
-        from runtime.core.cerebrum.pause_control import get_pause_controller
+    if not candidates:
+        return turns
 
-        pause_candidates = [
-            request
-            for request in get_pause_controller().list_paused()
-            if request.thread_id == turn.thread_id
-            and (not turn.task_id or request.task_id == turn.task_id)
+    from runtime.platform.process.thread_turn_claim import (
+        ThreadTurnClaimConflict,
+        ThreadTurnClaimUnavailable,
+        acquire_thread_turn_claim,
+    )
+
+    thread_id = candidates[0].thread_id
+    try:
+        recovery_claim = acquire_thread_turn_claim(runtime._logs_root, thread_id)
+    except ThreadTurnClaimConflict:
+        # A live descriptor is conclusive even when its advisory lease is old.
+        return turns
+    except ThreadTurnClaimUnavailable:
+        # Fail closed: a read/reconnect may fail, but it must never manufacture
+        # a terminal result while serialization authority is unavailable.
+        raise
+
+    try:
+        # The owner may have completed between the caller's preflight snapshot
+        # and our claim acquisition. Re-read while holding the descriptor so
+        # only genuinely orphaned in-progress rows are recovered.
+        turns = log.replay()
+        stale = [
+            turn
+            for turn in turns
+            if turn.status == TurnStatus.IN_PROGRESS and turn.id not in runtime._active_turn_ids
         ]
-        if pause_candidates:
-            selected = max(pause_candidates, key=lambda request: request.requested_at)
-            turn.status = TurnStatus.PAUSED
-            turn.task_id = selected.task_id if len(pause_candidates) == 1 else turn.task_id
-            turn.objective_id = turn.task_id or turn.objective_id
-            turn.outcome_reason = (
-                selected.reason if len(pause_candidates) == 1 else "ambiguous_pause_recovery"
-            )
-            turn.interrupt_reason = (
-                selected.note
-                if len(pause_candidates) == 1 and selected.note
-                else "检测到已保存的暂停检查点，可选择对应任务继续"
-            )
+        for turn in stale:
+            from runtime.core.cerebrum.pause_control import get_pause_controller
+
+            pause_candidates = [
+                request
+                for request in get_pause_controller().list_paused()
+                if request.thread_id == turn.thread_id
+                and (not turn.task_id or request.task_id == turn.task_id)
+            ]
+            if pause_candidates:
+                selected = max(pause_candidates, key=lambda request: request.requested_at)
+                turn.status = TurnStatus.PAUSED
+                turn.task_id = selected.task_id if len(pause_candidates) == 1 else turn.task_id
+                turn.objective_id = turn.task_id or turn.objective_id
+                turn.outcome_reason = (
+                    selected.reason if len(pause_candidates) == 1 else "ambiguous_pause_recovery"
+                )
+                turn.interrupt_reason = (
+                    selected.note
+                    if len(pause_candidates) == 1 and selected.note
+                    else "检测到已保存的暂停检查点，可选择对应任务继续"
+                )
+                turn.completed_at = now_utc()
+                for item in turn.items:
+                    if item.status == ItemStatus.IN_PROGRESS:
+                        item.status = ItemStatus.INTERRUPTED
+                log.turn_updated(
+                    turn.thread_id,
+                    turn.id,
+                    objective_id=turn.objective_id,
+                    task_id=turn.task_id,
+                    outcome_reason=turn.outcome_reason,
+                )
+                log.turn_completed(turn.thread_id, turn.id, turn.status)
+                runtime._record_task_run_finished(turn, recover_stale_lease=True)
+                continue
+            turn.status = TurnStatus.FAILED
+            turn.error = {
+                "message": "上次执行在后端重启或连接中断时未完成，已自动结束。请重新发送或点击重试。",
+                "code": "stale_in_progress_turn",
+            }
             turn.completed_at = now_utc()
             for item in turn.items:
                 if item.status == ItemStatus.IN_PROGRESS:
-                    item.status = ItemStatus.INTERRUPTED
-            log.turn_updated(
-                turn.thread_id,
-                turn.id,
-                objective_id=turn.objective_id,
-                task_id=turn.task_id,
-                outcome_reason=turn.outcome_reason,
-            )
-            log.turn_completed(turn.thread_id, turn.id, turn.status)
+                    item.status = ItemStatus.FAILED
+            log.turn_completed(turn.thread_id, turn.id, turn.status, error=turn.error)
             runtime._record_task_run_finished(turn, recover_stale_lease=True)
-            continue
-        turn.status = TurnStatus.FAILED
-        turn.error = {
-            "message": "上次执行在后端重启或连接中断时未完成，已自动结束。请重新发送或点击重试。",
-            "code": "stale_in_progress_turn",
-        }
-        turn.completed_at = now_utc()
-        for item in turn.items:
-            if item.status == ItemStatus.IN_PROGRESS:
-                item.status = ItemStatus.FAILED
-        log.turn_completed(turn.thread_id, turn.id, turn.status, error=turn.error)
-        runtime._record_task_run_finished(turn, recover_stale_lease=True)
-    return turns
+        return turns
+    finally:
+        recovery_claim.release()
 
 
 def _snapshot_to_thread_store(
@@ -379,6 +449,22 @@ def _snapshot_to_thread_store(
                     if key == "actor_id"
                     else key
                 ] = v
+        # A realtime turn carries client context, so it must not be able to
+        # replace the filesystem allocation or owner previously established
+        # by the authenticated thread HTTP boundary. Local/user-selected
+        # workspaces have no server marker and retain their legacy behavior.
+        existing = store.get(thread_id) if hasattr(store, "get") else None
+        existing_metadata: dict[str, Any] = {}
+        if isinstance(existing, dict):
+            raw_existing_metadata = existing.get("metadata")
+            if isinstance(raw_existing_metadata, dict):
+                existing_metadata = raw_existing_metadata
+        if existing_metadata.get(MANAGED_WORKSPACE_METADATA_KEY) == MANAGED_WORKSPACE_MARKER:
+            metadata = strip_client_workspace_metadata(metadata)
+            for protected_key in ("owner_actor_id", "tenant_id"):
+                protected_value = existing_metadata.get(protected_key)
+                if protected_value is not None:
+                    metadata[protected_key] = protected_value
         store.ensure_thread(
             thread_id,
             metadata=metadata,
@@ -410,8 +496,9 @@ def _snapshot_to_thread_store(
 async def _ensure_thread(
     runtime: CerebrumRuntime, thread_id: str, emitter: EventEmitter
 ) -> EventLog:
-    log = runtime._log_for(thread_id)
     async with runtime._lock:
+        assert_thread_accepts_runtime_writes(runtime, thread_id)
+        log = runtime._log_for(thread_id)
         if thread_id in runtime._known_threads:
             return log
         existed = log.path.exists() and log.path.stat().st_size > 0

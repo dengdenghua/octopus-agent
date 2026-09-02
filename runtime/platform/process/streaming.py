@@ -207,7 +207,7 @@ def stream_run(
     argv: list[str],
     *,
     input_data: str | None = None,
-    timeout: float,
+    timeout: float | None,
     cwd: str | None = None,
     env: Mapping[str, str] | None = None,
     output_cap_bytes: int = 200_000,
@@ -226,10 +226,14 @@ def stream_run(
     are expected to merge in backend-specific keys (``container``,
     ``pod``, ``host``, etc.) on the returned dict.
 
-    ``on_timeout`` is called after the process is killed, letting the
-    caller run any backend-specific cleanup (e.g. ``docker kill``).
+    ``timeout`` values greater than zero are wall-clock limits. ``None`` or
+    a non-positive value disables the wall-clock limit while preserving
+    cancellation polling and process-tree cleanup. ``on_timeout`` is called
+    after a timed-out process is killed, letting the caller run any
+    backend-specific cleanup (e.g. ``docker kill``).
     """
     output_cap_bytes = _coerce_nonnegative_int(output_cap_bytes, 200_000)
+    timeout_value = None if timeout is None or float(timeout) <= 0 else float(timeout)
     run_cwd = cwd
     run_env = dict(env) if env is not None else None
     sandbox_backend = "direct"
@@ -251,7 +255,7 @@ def stream_run(
             allow_network=allow_network,
             env_mode=env_mode,
             process_group=process_group,
-            timeout_s=timeout,
+            timeout_s=timeout_value,
             result=result,
         )
 
@@ -321,7 +325,7 @@ def stream_run(
         policy = SandboxPolicy(
             workspace=sandbox_root,
             allow_network=allow_network,
-            timeout_s=timeout,
+            timeout_s=timeout_value or 0.0,
             extra_env=_sandbox_extra_env(env),
             # Model inference endpoints stay reachable even when the sandbox
             # is network-denied (Claude Desktop parity). Resolved lazily from
@@ -378,18 +382,18 @@ def stream_run(
                     # the direct backend then runs with explicit human consent.
                 else:
                     return {
-                    "error": "sandbox_fallback_needs_approval: no hard sandbox "
-                    "backend is available and no approval provider is "
-                    "configured; refuse unconfined execution",
-                    "sandbox_backend": "direct",
-                    "sandbox_hard": False,
-                    "execution_policy": _policy_snapshot(
-                        result={
-                            "status": "needs_approval",
-                            "error_type": "sandbox_fallback_needs_approval",
-                        }
-                    ),
-                }
+                        "error": "sandbox_fallback_needs_approval: no hard sandbox "
+                        "backend is available and no approval provider is "
+                        "configured; refuse unconfined execution",
+                        "sandbox_backend": "direct",
+                        "sandbox_hard": False,
+                        "execution_policy": _policy_snapshot(
+                            result={
+                                "status": "needs_approval",
+                                "error_type": "sandbox_fallback_needs_approval",
+                            }
+                        ),
+                    }
             run_argv, run_env, transformed_cwd = choice.backend.transform(
                 list(argv),
                 run_env,
@@ -497,15 +501,15 @@ def stream_run(
     timed_out = False
     cancelled = False
     killed = False
-    deadline = time.monotonic() + timeout
+    deadline = None if timeout_value is None else time.monotonic() + timeout_value
     try:
         while True:
             if cancel_token.is_cancelled:
                 cancelled = True
                 killed = terminate_process_tree(proc)
                 break
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
+            remaining = None if deadline is None else deadline - time.monotonic()
+            if remaining is not None and remaining <= 0:
                 timed_out = True
                 killed = terminate_process_tree(proc)
                 if on_timeout is not None:
@@ -516,7 +520,7 @@ def stream_run(
                 # Short wait slice so we can poll the cancel token
                 # roughly every 100ms. Choosing too small wastes CPU;
                 # too large delays responding to a stop click.
-                proc.wait(timeout=min(remaining, 0.1))
+                proc.wait(timeout=0.1 if remaining is None else min(remaining, 0.1))
                 break
             except subprocess.TimeoutExpired:
                 continue

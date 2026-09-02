@@ -49,6 +49,19 @@ def create_skill_market_router(
             jwt_audience=jwt_audience,
         )
 
+    def _admin_dep(request: Request) -> None:
+        from runtime.safety.auth.principal import require_roles
+
+        require_roles(
+            request,
+            identity_store,
+            require_auth,
+            ("admin",),
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     router = APIRouter(tags=["skill-market"], dependencies=[Depends(_auth_dep)])
 
     @router.get("/api/skills/market/search")
@@ -87,7 +100,10 @@ def create_skill_market_router(
             raise HTTPException(404, f"skill '{name}' not found")
         return info
 
-    @router.post("/api/skills/market/install/{name}")
+    @router.post(
+        "/api/skills/market/install/{name}",
+        dependencies=[Depends(_admin_dep)],
+    )
     def install_skill(name: str, version: str | None = None) -> dict[str, Any]:
         result = skill_market.install(name, version=version)
         if result.status == "failed":
@@ -100,7 +116,10 @@ def create_skill_market_router(
             "message": result.message,
         }
 
-    @router.delete("/api/skills/market/install/{name}")
+    @router.delete(
+        "/api/skills/market/install/{name}",
+        dependencies=[Depends(_admin_dep)],
+    )
     def uninstall_skill(name: str) -> dict[str, Any]:
         ok = skill_market.uninstall(name)
         if not ok:
@@ -126,7 +145,10 @@ def create_skill_market_router(
             ],
         }
 
-    @router.post("/api/skills/market/publish")
+    @router.post(
+        "/api/skills/market/publish",
+        dependencies=[Depends(_admin_dep)],
+    )
     def prepare_publish(body: dict[str, Any]) -> dict[str, Any]:
         skill_path = body.get("path", "")
         if not skill_path:

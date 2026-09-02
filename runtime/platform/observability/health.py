@@ -484,7 +484,7 @@ def create_probe_router(registry: HealthRegistry) -> Any:
         from fastapi.responses import JSONResponse, Response
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError(
-            "fastapi not installed; install `octopus-agent[serve]`",
+            "fastapi not installed; install `octopus-agent-runtime[serve]`",
         ) from exc
 
     import json

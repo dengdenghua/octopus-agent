@@ -779,8 +779,8 @@ class TestSwarmRuntimeExplainability:
 def test_layer_budget_timeout_fails_hung_arm() -> None:
     """An arm hung past the budget's latency limit must be failed by the
     layer, not pin the swarm forever."""
-    from runtime.execution.swarm._runtime_helpers import _make_context_ref, _make_deadline
     from runtime.execution.swarm import SwarmRuntime
+    from runtime.execution.swarm._runtime_helpers import _make_context_ref, _make_deadline
     from runtime.platform.models import (
         ArmAssignment,
         Budget,

@@ -1,5 +1,5 @@
 /**
- * Follow-up Suggestions · Trae-style contextual question bubbles.
+ * Follow-up Suggestions · contextual question bubbles.
  *
  * Shows 2-3 smart follow-up question chips after the assistant's reply.
  * Click to send instantly, no typing needed. Auto-generated from
@@ -73,7 +73,7 @@ export function FollowUpSuggestions({
         (s) =>
           s.locale === locale && s.status === "pending" && !dismissed.has(s.id),
       )
-      .slice(0, 3); // Max 3 chips, Trae-style
+      .slice(0, 3); // Keep the choice set compact.
   }, [bucket?.suggestions, dismissed, locale]);
 
   // Auto-generate once per project/agent/locale. The parent only renders this component

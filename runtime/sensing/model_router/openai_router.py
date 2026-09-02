@@ -133,6 +133,7 @@ class OpenAIModelRouter(Provider, ModelRouter):
         timeout_seconds: float = 60.0,
         pricing_per_1k: dict[str, tuple[float, float]] | None = None,
         extra_headers: dict[str, str] | None = None,
+        custom_model_entry: dict[str, Any] | None = None,
         client: Any = None,
     ) -> None:
         if not HTTPX_AVAILABLE:
@@ -145,6 +146,12 @@ class OpenAIModelRouter(Provider, ModelRouter):
         self.timeout_seconds = timeout_seconds
         self.pricing_per_1k = pricing_per_1k or {}
         self.extra_headers = dict(extra_headers or {})
+        # A routed selection_id already resolved one exact endpoint entry.
+        # Bind that metadata so entries sharing the same upstream model cannot
+        # borrow each other's capability or compatibility flags after rewrite.
+        self._custom_model_entry = (
+            dict(custom_model_entry) if isinstance(custom_model_entry, dict) else None
+        )
         self._client = client  # Implementation note.
         self._owns_client = client is None
         self._provider_profile = resolve_openai_compat_profile(
@@ -397,7 +404,12 @@ class OpenAIModelRouter(Provider, ModelRouter):
         # hosting dozens of models nobody hand-configures each one. The
         # operator's own ``omit_sampling_parameters`` still takes precedence by
         # being checked first.
-        if not model_omits_sampling_parameters(model) and not model_rejects_temperature(model):
+        omits_sampling = (
+            bool(self._custom_model_entry.get("omit_sampling_parameters"))
+            if self._custom_model_entry is not None
+            else model_omits_sampling_parameters(model)
+        )
+        if not omits_sampling and not model_rejects_temperature(model):
             payload["temperature"] = request.temperature
         max_tokens = request.max_tokens
         # A reasoning model spends max_tokens on reasoning FIRST, so a budget
@@ -408,7 +420,14 @@ class OpenAIModelRouter(Provider, ModelRouter):
         # thinking`` returns False for those, so the floor never applied where
         # it was needed most.
         if (
-            (request.enable_thinking or _model_might_think(model))
+            (
+                request.enable_thinking
+                or (
+                    bool(self._custom_model_entry.get("supports_thinking"))
+                    if self._custom_model_entry is not None
+                    else _model_might_think(model)
+                )
+            )
             and max_tokens is not None
             and max_tokens < _MIN_THINKING_OUTPUT_TOKENS
         ):
@@ -428,7 +447,12 @@ class OpenAIModelRouter(Provider, ModelRouter):
         # model id, so the LLM doesn't get a tools spec it can't act
         # on. The caller (ReAct loop / ephemeral runner) will see
         # the lack of tool_calls and fall back to text-only synthesis.
-        if request.tools and model_supports_tool_use(model):
+        supports_tool_use = (
+            self._custom_model_entry.get("supports_tool_use") is not False
+            if self._custom_model_entry is not None
+            else model_supports_tool_use(model)
+        )
+        if request.tools and supports_tool_use:
             payload["tools"] = [
                 {
                     "type": "function",
@@ -473,7 +497,7 @@ class OpenAIModelRouter(Provider, ModelRouter):
         if profile.id == "openai_compat" and self._can_fall_back_to_entry_profile(model):
             profile = self._provider_profile
         return apply_custom_openai_compat_profile(
-            custom_model_entry_for(model),
+            self._custom_model_entry or custom_model_entry_for(model),
             base_profile=profile,
         )
 
@@ -953,7 +977,15 @@ def _messages_to_openai(messages: list[Message]) -> list[dict[str, Any]]:
             # Separate tool_result blocks from text content.
             # Tool results become standalone ``{"role":"tool"}``
             # messages; any stray text goes into a user message.
+            #
+            # Image blocks must survive as blocks: a user upload arrives as
+            # an ``image_url`` block (built by ``_react_context_attachments``)
+            # and OpenAI's only way to carry it is multimodal list content.
+            # Collapsing the message to a joined string here silently dropped
+            # every uploaded image — the model was told about the text and
+            # never saw the picture.
             text_parts = []
+            image_blocks: list[dict[str, Any]] = []
             for b in blocks:
                 if not isinstance(b, dict):
                     continue
@@ -975,7 +1007,20 @@ def _messages_to_openai(messages: list[Message]) -> list[dict[str, Any]]:
                     )
                 elif btype == "text":
                     text_parts.append(str(b.get("text", "")))
-            if text_parts:
+                elif btype in ("image_url", "image"):
+                    normalized = _image_block_to_openai(b)
+                    if normalized is not None:
+                        image_blocks.append(normalized)
+            if image_blocks:
+                # Text first mirrors ``_build_user_message_content``'s order
+                # and how vision providers expect the prompt to read.
+                content_blocks: list[dict[str, Any]] = []
+                joined = "".join(text_parts)
+                if joined:
+                    content_blocks.append({"type": "text", "text": joined})
+                content_blocks.extend(image_blocks)
+                out.append({"role": "user", "content": content_blocks})
+            elif text_parts:
                 out.append(
                     {
                         "role": "user",
@@ -994,22 +1039,64 @@ def _messages_to_openai(messages: list[Message]) -> list[dict[str, Any]]:
     return out
 
 
+def _image_block_to_openai(block: dict[str, Any]) -> dict[str, Any] | None:
+    """Normalize one image block to OpenAI's ``image_url`` shape.
+
+    Accepts both the OpenAI shape we build internally and the Anthropic
+    ``{"type": "image", "source": {...}}`` variant, so a message that took
+    a detour through an Anthropic-shaped path still delivers its picture.
+    Returns ``None`` when the block carries no usable reference — dropping
+    an empty block beats sending one the upstream will 400 on.
+    """
+    if block.get("type") == "image_url":
+        raw = block.get("image_url")
+        url = raw.get("url") if isinstance(raw, dict) else raw
+        if not isinstance(url, str) or not url:
+            return None
+        return {"type": "image_url", "image_url": {"url": url}}
+    source = block.get("source")
+    if not isinstance(source, dict):
+        return None
+    if source.get("type") == "url":
+        url = source.get("url")
+        return (
+            {"type": "image_url", "image_url": {"url": url}}
+            if isinstance(url, str) and url
+            else None
+        )
+    data = source.get("data")
+    if not isinstance(data, str) or not data:
+        return None
+    media_type = str(source.get("media_type") or "image/png")
+    return {
+        "type": "image_url",
+        "image_url": {"url": f"data:{media_type};base64,{data}"},
+    }
+
+
 def _attach_images_to_last_user_openai(
     msgs: list[dict[str, Any]],
     images_b64: list[str],
 ) -> None:
     for i in range(len(msgs) - 1, -1, -1):
         if msgs[i].get("role") == "user":
-            text = msgs[i].get("content", "")
-            blocks: list[dict[str, Any]] = []
-            for b64 in images_b64:
-                blocks.append(
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/png;base64,{b64}"},
-                    }
-                )
-            if text:
-                blocks.append({"type": "text", "text": text})
+            existing = msgs[i].get("content", "")
+            screenshots: list[dict[str, Any]] = [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{b64}"},
+                }
+                for b64 in images_b64
+            ]
+            if isinstance(existing, list):
+                # The message already carries multimodal blocks (a user
+                # upload). Append the screenshots instead of wrapping the
+                # whole list into a text block, which would both stringify
+                # the upload away and 400 on strict providers.
+                msgs[i]["content"] = list(existing) + screenshots
+                return
+            blocks: list[dict[str, Any]] = list(screenshots)
+            if existing:
+                blocks.append({"type": "text", "text": existing})
             msgs[i]["content"] = blocks
             return

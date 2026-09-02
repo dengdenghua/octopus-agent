@@ -8,7 +8,7 @@ from typing import Any
 from .browser_skills import register_browser_skills
 from .crawler_skills import register_crawler_skills
 from .fs_search_skills import register_fs_search_skills
-from .market_skills import register_market_skills
+from .market_skills import register_prompt_market_skills
 from .notebook_skills import register_notebook_skills
 from .registry import Skill, SkillRegistry
 from .testing import SkillExpect, SkillTestCase
@@ -303,6 +303,22 @@ def _read_file_text(
     limit: int | None = None,
 ) -> dict[str, Any]:
     """Original UTF-8 text reader — preserved verbatim, just under a new name."""
+    # Normalize numeric arguments: subagents sometimes serialize ints as strings
+    # (e.g. limit="100"), which would otherwise crash the comparisons below
+    # with "TypeError: '<' not supported between str and int".
+    try:
+        max_bytes = int(max_bytes)
+    except (TypeError, ValueError):
+        return {"error": "max_bytes must be an integer"}
+    try:
+        offset = int(offset)
+    except (TypeError, ValueError):
+        return {"error": "offset must be an integer"}
+    if limit is not None:
+        try:
+            limit = int(limit)
+        except (TypeError, ValueError):
+            return {"error": "limit must be an integer"}
     if offset < 0:
         return {"error": "offset must be >= 0"}
     if limit is not None and limit < 0:
@@ -663,28 +679,10 @@ def register_all(registry: SkillRegistry) -> int:
     # existing skill set: Glob / Grep (non-code) / tree / read range / ipynb.
     fs_search_count = register_fs_search_skills(registry)
     notebook_count = register_notebook_skills(registry)
-    # Prompt-as-skill catalog · `skills/public/<name>/SKILL.md`
-    # (preferred external location) with fallback to the legacy
-    # in-package `all_skills/` directory for bare wheel installs.
-    from runtime.platform.process.paths import resources_root
-
-    _external_skills_dir = resources_root() / "skills" / "public"
-    _legacy_skills_dir = Path(__file__).resolve().parent.parent / "all_skills"
-    _market_skills_dir = (
-        _external_skills_dir if _external_skills_dir.is_dir() else _legacy_skills_dir
-    )
-    # 停止打包(registry 为单一事实源):仓库根有 skills.lock.json 时,启动先从 registry 同步缺失
-    # 的 prompt-skill 到 skills/public,再扫描注册。**additive + 容错**:registry 不可达只跳过、
-    # 用磁盘已有的,绝不阻断启动(octopus_runtime 读/解析层不 import 本 runtime)。
-    _skills_lockfile = resources_root() / "skills.lock.json"
-    if _skills_lockfile.is_file():
-        try:
-            from octopus_runtime import bootstrap_skills
-
-            bootstrap_skills(_skills_lockfile, _market_skills_dir)
-        except Exception:  # noqa: BLE001 - registry 同步失败不阻断启动
-            pass
-    market_count = register_market_skills(registry, all_skills_dir=_market_skills_dir)
+    # Prompt-as-skill catalog. Registry-managed ``skills/public`` wins when it
+    # is usable; an empty/failed external catalog falls back to package data so
+    # clean wheels and containers never silently start with zero market skills.
+    market_count = register_prompt_market_skills(registry)
     # AST-aware code editing · tree-sitter powered · 2026-04-26
     from .code_edit_skills import register_code_edit_skills
 

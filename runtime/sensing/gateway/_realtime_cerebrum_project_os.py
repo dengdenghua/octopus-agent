@@ -1,9 +1,10 @@
-"""Project OS bridge for the realtime runtime.
+"""Explicit Project OS command bridge for the realtime runtime.
 
 Split out of ``realtime_cerebrum.py``: the Project OS control-command
 parser, the milestone/todo mapping helpers and the ``_drive_project_os``
-driver that runs Project OS directly from a cowork thread in project
-mode.
+driver that runs Project OS directly from a cowork thread after an explicit
+``/project`` command. Project binding is independent from the group's response
+mode; ordinary chat messages never enter this driver.
 
 Every function takes the owning ``CerebrumRuntime`` as its first
 argument; cross-method calls go through the runtime so subclass
@@ -25,6 +26,30 @@ if TYPE_CHECKING:
     from runtime.protocol import Turn
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
     from runtime.sensing.gateway.realtime_gateway import EventEmitter
+
+
+_PROJECT_OS_HELP = """Project OS 控制命令（在工作群中显式调用）：
+
+- /project run <目标>（或 /project start <目标>）—— 显式创建或继续推进项目
+- /project report（或 /project pm）—— PM 驾驶舱：里程碑健康度 / 风险 / 下一步动作 / 指派
+- /project retro —— 项目复盘：交付、失败、重试、耗时、建议
+- /project recover [tasks=T1,T2] [run] —— 恢复被阻塞的项目（可指定重跑任务）
+- /project task <task_id> <reassign|reset|complete|skip> [agent=agent-id] [reason=...] [run]
+    - reassign agent=xxx —— 换人重派
+    - reset —— 重置重跑
+    - complete output="<结果>" —— 人工验收通过
+    - skip reason="<原因>" —— 跳过该节点
+
+只有显式输入 /project run <目标> 才会进入里程碑驱动的 Project OS 执行。"""
+
+
+def _is_project_os_command(text: str) -> bool:
+    """Return whether ``text`` explicitly addresses the Project OS command."""
+
+    raw = str(text or "").strip()
+    return raw == "/project" or (
+        raw.startswith("/project") and raw[len("/project") : len("/project") + 1].isspace()
+    )
 
 
 def _format_project_os_result(state: dict[str, Any]) -> str:
@@ -87,12 +112,73 @@ def _format_project_os_result(state: dict[str, Any]) -> str:
             lines.append(f"  派发：{', '.join(assignments)}")
     if len(milestones) > 6:
         lines.append(f"- 其余 {len(milestones) - 6} 个里程碑已省略，可在 Project OS 视图继续查看。")
+    # 现实 PM 摘要：健康度、风险、下一步、复盘。
+    pm = state.get("pm") if isinstance(state.get("pm"), dict) else None
+    if pm:
+        lines.append("")
+        lines.append("PM 驾驶舱：")
+        health_label = {
+            "on_track": "正常",
+            "at_risk": "有风险",
+            "overdue": "已逾期",
+            "blocked": "阻塞",
+            "completed": "完成",
+        }
+        for m in (pm.get("milestones") or [])[:8]:
+            if not isinstance(m, dict):
+                continue
+            h = health_label.get(str(m.get("health")), str(m.get("health") or ""))
+            tag = f" · {h}"
+            if m.get("overdue_tasks"):
+                tag += f" · 逾期{len(m['overdue_tasks'])}"
+            lines.append(
+                f"- {m.get('name')}：{m.get('done')}/{m.get('total')} · {int((m.get('progress') or 0) * 100)}%{tag}"
+            )
+        risks = pm.get("risks") or []
+        if risks:
+            lines.append(f"风险/阻塞（{len(risks)}）：")
+            for r in risks[:5]:
+                if isinstance(r, dict):
+                    lines.append(
+                        f"  - [{r.get('health')}] {r.get('milestone') or r.get('task')}：{r.get('detail')}"
+                    )
+        actions = pm.get("next_actions") or []
+        if actions:
+            lines.append("下一步：")
+            for a in actions[:5]:
+                if isinstance(a, dict):
+                    lines.append(f"  - {a.get('priority')} {a.get('task')} · {a.get('milestone')}")
+        retro = state.get("retro") if isinstance(state.get("retro"), dict) else None
+        if retro:
+            lines.append("复盘：")
+            lines.append(
+                f"  - {retro.get('done_tasks')}/{retro.get('task_count')} 任务完成"
+                + (f" · 失败 {retro.get('failed_tasks')}" if retro.get("failed_tasks") else "")
+                + (
+                    f" · 重试 {retro.get('attempts_total')} 次"
+                    if (retro.get("attempts_total") or 0) > (retro.get("task_count") or 0)
+                    else ""
+                )
+                + (f" · 耗时 {retro.get('duration_days')} 天" if retro.get("duration_days") else "")
+            )
+            for rec in (retro.get("recommendations") or [])[:3]:
+                lines.append(f"  - 💡 {rec}")
     if status == "blocked":
         lines.append("")
         lines.append("项目已阻塞；请处理失败任务、验收条件或依赖后再继续推进。")
     elif status not in {"done", "failed"}:
         lines.append("")
         lines.append("项目还未结束；后续回合会继续从当前 Project OS 状态推进。")
+    # 对话框交互引导：告诉用户接下来可以用什么命令继续推进 / 查看管理视图。
+    lines.append("")
+    lines.append(
+        "下一步可输入：/project report（PM 驾驶舱）· /project retro（复盘）"
+        + (
+            " · /project recover（恢复项目）"
+            if status == "blocked"
+            else " · /project help（全部命令）"
+        )
+    )
     return "\n".join(lines)
 
 
@@ -139,9 +225,9 @@ def _project_os_todo_item(state: dict[str, Any]) -> TodoListItem | None:
 
 
 def _parse_project_os_control(text: str) -> dict[str, Any] | None:
-    """Parse explicit Project OS control commands in project-mode chat."""
+    """Parse an explicit Project OS command independently of response mode."""
     raw = str(text or "").strip()
-    if not raw.startswith("/project"):
+    if not _is_project_os_command(raw):
         return None
     try:
         parts = shlex.split(raw)
@@ -151,6 +237,9 @@ def _parse_project_os_control(text: str) -> dict[str, Any] | None:
         return {"type": "help"}
     command = parts[1].lower()
     rest = parts[2:]
+
+    if command in {"run", "start"}:
+        return {"type": "run", "goal": " ".join(rest).strip()}
 
     def _kv(tokens: list[str]) -> dict[str, str]:
         out: dict[str, str] = {}
@@ -191,6 +280,10 @@ def _parse_project_os_control(text: str) -> dict[str, Any] | None:
             "run": "run" in tail or opts.get("run", "").lower() in {"1", "true", "yes"},
             "cascade": opts.get("cascade", "true").lower() not in {"0", "false", "no"},
         }
+    if command in {"report", "pm"}:
+        return {"type": "report"}
+    if command in {"retro", "retrospective"}:
+        return {"type": "retro"}
     return {"type": "help"}
 
 
@@ -204,7 +297,7 @@ async def _drive_project_os(
     thread_id: str,
     text: str,
 ) -> None:
-    """Run Project OS directly from a cowork thread in project mode."""
+    """Handle an explicit Project OS command from a cowork thread."""
     if runtime._cowork_group_store is None:
         await runtime._emit_agent_message(
             turn,
@@ -213,12 +306,91 @@ async def _drive_project_os(
             "Project OS 需要先绑定协作组；当前线程还没有可用的 cowork group。",
         )
         return
+
+    context = intent.user_context if isinstance(intent.user_context, dict) else {}
+    emitter_actor = str(getattr(emitter, "actor_id", None) or "").strip()
+    emitter_tenant = str(getattr(emitter, "tenant_id", None) or "").strip()
+    context_actor = str(context.get("owner_actor_id") or "").strip()
+    context_tenant = str(context.get("tenant_id") or "").strip()
+    if emitter_actor and context_actor and emitter_actor != context_actor:
+        raise PermissionError("realtime project principal does not match turn context")
+    if emitter_tenant and context_tenant and emitter_tenant != context_tenant:
+        raise PermissionError("realtime project tenant does not match turn context")
+    owner_id = emitter_actor or context_actor
+    tenant_id = emitter_tenant or context_tenant
+    if owner_id and not tenant_id:
+        tenant_id = f"legacy:{owner_id}"
+    authenticated_project = bool(owner_id and tenant_id)
+
+    if authenticated_project:
+        from runtime.sensing.gateway.thread_access import ThreadAccessResolver
+
+        if runtime._thread_store is None:
+            raise PermissionError("authenticated project thread state is unavailable")
+        access = ThreadAccessResolver(
+            thread_store=runtime._thread_store,
+            group_store=runtime._cowork_group_store,
+            collaboration_store=runtime._collaboration_store,
+        ).resolve(thread_id, owner_id, tenant_id)
+        if access.thread is None or not access.can_manage:
+            raise PermissionError("only the thread owner can control Project OS")
+        owner_id = access.owner_actor_id or owner_id
+        tenant_id = access.tenant_id or tenant_id
+
     if runtime._project_store is None:
         from runtime.projectos.store import ProjectStore
 
         runtime._project_store = ProjectStore()
 
-    context = intent.user_context if isinstance(intent.user_context, dict) else {}
+    project_store = runtime._project_store
+    project_hooks = dict(runtime._project_os_hooks)
+    if authenticated_project:
+        from runtime.safety.auth.scope import TenantScope
+        from runtime.sensing.gateway.thread_workspace import verified_managed_workspace
+
+        project_store = project_store.with_scope(
+            TenantScope(tenant_id=tenant_id, actor_id=owner_id)
+        )
+
+        def _resolve_thread_context(resolved_thread_id: str) -> dict[str, Any]:
+            if (
+                resolved_thread_id != thread_id
+                or runtime._thread_store is None
+                or runtime._workspaces is None
+                or not hasattr(runtime._thread_store, "get")
+            ):
+                raise RuntimeError("project must be bound to its authenticated thread")
+            thread = runtime._thread_store.get(resolved_thread_id)
+            raw_metadata = thread.get("metadata") if isinstance(thread, dict) else None
+            thread_metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+            if thread_metadata.get("owner_actor_id") != owner_id:
+                raise PermissionError("project thread belongs to another actor")
+            if thread_metadata.get("tenant_id") != tenant_id:
+                raise PermissionError("project thread belongs to another tenant")
+            workspace = verified_managed_workspace(
+                runtime._workspaces.root,
+                thread_id=resolved_thread_id,
+                metadata=thread_metadata,
+            )
+            if workspace is None:
+                raise RuntimeError("project thread has no verified managed workspace")
+            layout = runtime._workspaces.bind_managed(resolved_thread_id, workspace)
+            return {
+                "workspace_path": str(layout.root),
+                "runtime_session_metadata": {
+                    "thread_id": resolved_thread_id,
+                    "workspace_path": str(layout.root),
+                    "_artifact_output_root": str(layout.final),
+                    "tenant_id": tenant_id,
+                    "owner_actor_id": owner_id,
+                },
+            }
+
+        # ProjectEngine resolves this immediately before every single, swarm
+        # or cluster task. It therefore re-verifies ownership even when a
+        # long-running project resumes in a later control-command turn.
+        project_hooks["resolve_thread_context"] = _resolve_thread_context
+
     goal = str(getattr(intent, "normalized_goal", "") or text or "").strip() or "当前目标"
     raw_name = str(context.get("team_name") or context.get("project") or "").strip()
     name = raw_name[:80] if raw_name else "当前项目"
@@ -229,11 +401,16 @@ async def _drive_project_os(
     max_ticks = max(1, min(max_ticks, 200))
 
     control = _parse_project_os_control(text)
+    if control is not None and control.get("type") == "run":
+        explicit_goal = str(control.get("goal") or "").strip()
+        if explicit_goal:
+            goal = explicit_goal
+        control = None
     from runtime.projectos.cowork_bridge import full_project_state, run_project_from_group
 
     def _run() -> dict[str, Any]:
         if control is not None:
-            project = runtime._project_store.project_for_thread(thread_id)
+            project = project_store.project_for_thread(thread_id)
             if project is None:
                 return {
                     "ok": False,
@@ -245,10 +422,14 @@ async def _drive_project_os(
                 from runtime.projectos.cowork_bridge import engine_for_group
 
                 engine = engine_for_group(
-                    runtime._project_store,
+                    project_store,
                     runtime._cowork_group_store,
                     thread_id,
-                    hooks=dict(runtime._project_os_hooks),
+                    hooks=project_hooks,
+                    owner_id=owner_id,
+                    tenant_id=tenant_id,
+                    subagent_runner=getattr(runtime, "_subagent_runner", None),
+                    require_execution_binding=True,
                 )
             if control.get("type") == "recover" and engine is not None:
                 intervention = engine.recover(
@@ -260,7 +441,7 @@ async def _drive_project_os(
                     if control.get("run")
                     else {"final_status": intervention.get("project_status")}
                 )
-                state = full_project_state(runtime._project_store, project.id) or {}
+                state = full_project_state(project_store, project.id) or {}
                 return {
                     "ok": True,
                     "roster": [],
@@ -268,6 +449,16 @@ async def _drive_project_os(
                     "control": control,
                     "intervention": intervention,
                     "result": result,
+                    **state,
+                }
+            if control.get("type") in {"report", "retro"}:
+                state = full_project_state(project_store, project.id) or {}
+                return {
+                    "ok": True,
+                    "roster": [],
+                    "reused": True,
+                    "control": control,
+                    "result": {"final_status": project.status},
                     **state,
                 }
             if control.get("type") == "task" and engine is not None:
@@ -292,7 +483,7 @@ async def _drive_project_os(
                     )
                     for event in intervention_events
                 ):
-                    state = full_project_state(runtime._project_store, project.id) or {}
+                    state = full_project_state(project_store, project.id) or {}
                     return {
                         "ok": False,
                         "error": "project_task_intervention_failed",
@@ -307,7 +498,7 @@ async def _drive_project_os(
                     if control.get("run")
                     else {"final_status": intervention.get("project_status")}
                 )
-                state = full_project_state(runtime._project_store, project.id) or {}
+                state = full_project_state(project_store, project.id) or {}
                 return {
                     "ok": True,
                     "roster": [],
@@ -320,22 +511,22 @@ async def _drive_project_os(
             return {
                 "ok": False,
                 "error": "unknown_project_command",
-                "message": (
-                    "可用命令：/project recover [tasks=T1,T2] [run]；"
-                    "/project task <task_id> <reassign|reset|complete|skip> "
-                    "[agent=agent-id] [reason=...] [run]"
-                ),
+                "message": _PROJECT_OS_HELP,
             }
         return run_project_from_group(
-            runtime._project_store,
+            project_store,
             runtime._cowork_group_store,
             thread_id,
             name=name,
             goal=goal,
-            hooks=dict(runtime._project_os_hooks),
+            hooks=project_hooks,
             run=True,
             max_ticks=max_ticks,
             reuse_active=True,
+            actor=owner_id or "project-os",
+            owner_id=owner_id,
+            tenant_id=tenant_id,
+            subagent_runner=getattr(runtime, "_subagent_runner", None),
         )
 
     loop = asyncio.get_running_loop()
@@ -346,7 +537,7 @@ async def _drive_project_os(
             turn,
             log,
             emitter,
-            "Project OS 已进入项目模式，但当前协作组没有可执行的 agent 成员。"
+            "Project OS 已收到显式运行请求，但当前协作组没有可执行的 agent 成员。"
             "请先添加至少一个参与者后再运行项目。",
         )
         return
@@ -362,7 +553,7 @@ async def _drive_project_os(
     project: dict[str, Any] = raw_project if isinstance(raw_project, dict) else {}
     project_id = project.get("id")
     if project_id and isinstance(state.get("trace"), dict):
-        state["trace"]["audit_events"] = runtime._project_store.events_for_project(
+        state["trace"]["audit_events"] = project_store.events_for_project(
             str(project_id),
             limit=20,
         )
@@ -381,7 +572,7 @@ async def _drive_project_os(
             "action_specs": state.get("action_specs") or [],
             "control": state.get("control"),
             "intervention": state.get("intervention"),
-            "audit_events": runtime._project_store.events_for_project(
+            "audit_events": project_store.events_for_project(
                 str(project_id),
                 limit=20,
             ),

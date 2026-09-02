@@ -12,7 +12,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { swallow } from "@/core/utils/log";
-import { getBackendBaseURL } from "@/core/config";
+import { getToken } from "@/core/auth/api";
+import { getBackendWebSocketBaseURL } from "@/core/config";
 import { readOrCreateTeamParticipantId } from "@/core/teams";
 import type { SpeakerPolicy } from "@/core/teams";
 import { eventBus } from "@/core/events";
@@ -198,14 +199,17 @@ export function CollabProvider({
 
     const connect = () => {
       if (disposed || !shouldReconnectRef.current) return;
-      const base = getBackendBaseURL() || window.location.origin;
-      const wsBase = base.replace(/^http/, "ws");
+      const wsBase = getBackendWebSocketBaseURL();
       const params = new URLSearchParams({
         participant_id: resolvedParticipantId,
         display_name: resolvedDisplayName,
       });
       if (normalizedThreadId) {
         params.set("thread_id", normalizedThreadId);
+      }
+      const token = getToken();
+      if (token) {
+        params.set("token", token);
       }
       const socket = new WebSocket(
         `${wsBase}/api/teams/${encodeURIComponent(teamId)}/ws?${params.toString()}`,

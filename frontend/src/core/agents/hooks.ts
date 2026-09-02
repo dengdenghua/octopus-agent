@@ -16,11 +16,17 @@ import {
 } from "./types";
 
 export function useAgents() {
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ["agents"],
     queryFn: ({ signal }) => listAgents({ signal }),
     refetchOnWindowFocus: false,
     staleTime: 30_000,
+    // A stalled roster used to keep the entire new-chat shell in loading for
+    // four long attempts. One bounded retry is enough; cached data remains
+    // visible through placeholderData while the backend recovers.
+    retry: 1,
+    retryDelay: 750,
+    placeholderData: (previous) => previous,
   });
   // Backend is the ONLY source of truth. No frontend preset merge: the
   // previous stub list (DID-xxx placeholders) caused footer → backend
@@ -30,7 +36,7 @@ export function useAgents() {
   // `isLoading` / `error` and should render a loading state rather than
   // fake stubs that look clickable but break.
   const agents = useMemo<Agent[]>(() => data ?? [], [data]);
-  return { agents, isLoading, error };
+  return { agents, isLoading, isFetching, error, refetch };
 }
 
 export function useAgent(name: string | null | undefined) {

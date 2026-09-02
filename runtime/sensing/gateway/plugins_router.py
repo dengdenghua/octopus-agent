@@ -10,6 +10,8 @@ from fastapi.responses import FileResponse
 from runtime.platform.plugins.codex_discovery import (  # re-exported
     _string,
     discover_codex_plugins,
+    is_sensitive_plugin_asset_path,
+    public_plugin_asset_paths,
 )
 from runtime.platform.plugins.plugin_lifecycle import (
     install_local_plugin,
@@ -40,19 +42,36 @@ from runtime.safety.evolution.policy_review_rules import (
 )
 
 
-def is_public_plugin_asset_request(method: str, path: str) -> bool:
+def is_public_plugin_asset_request(
+    method: str,
+    path: str,
+    *,
+    plugins: list[dict[str, Any]],
+) -> bool:
     if method.upper() not in {"GET", "HEAD"}:
         return False
-    parts = path.split("/")
-    return (
-        len(parts) >= 6
+    parts = path.split("/", 5)
+    if not (
+        len(parts) == 6
         and parts[0] == ""
         and parts[1] == "api"
         and parts[2] == "plugins"
         and bool(parts[3])
         and parts[4] == "assets"
         and bool(parts[5])
-    )
+    ):
+        return False
+    plugin_id, asset_path = parts[3], parts[5]
+    requested = Path(asset_path)
+    if requested.is_absolute() or ".." in requested.parts:
+        return False
+    for plugin in plugins:
+        if str(plugin.get("id") or "") != plugin_id:
+            continue
+        plugin_dir = Path(_string(plugin.get("path"))).resolve()
+        manifest = _read_json(plugin_dir / ".codex-plugin" / "plugin.json") or {}
+        return requested.as_posix() in public_plugin_asset_paths(plugin_dir, manifest)
+    return False
 
 
 def create_plugins_router(
@@ -83,14 +102,16 @@ def create_plugins_router(
     def _writable_plugin_root() -> Path:
         if plugin_roots:
             return Path(plugin_roots[0])
-        return Path(__file__).resolve().parents[3] / ".octopus" / "plugins" / "codex"
+        from runtime.platform.process.paths import app_paths
+
+        return app_paths().codex_plugins_path
 
     def _registry_path() -> Path:
         return plugin_registry_path or (_writable_plugin_root().parent / "registry.json")
 
     def _auth_dep(request: Request) -> None:
         path = str(getattr(getattr(request, "url", None), "path", "") or "")
-        if is_public_plugin_asset_request(request.method, path):
+        if is_public_plugin_asset_request(request.method, path, plugins=_discover()):
             return
 
         from runtime.adapters.web_auth import _resolve_actor
@@ -99,6 +120,19 @@ def create_plugins_router(
             request,
             identity_store,
             require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    def _admin_dep(request: Request) -> None:
+        from runtime.safety.auth.principal import require_roles
+
+        require_roles(
+            request,
+            identity_store,
+            require_auth,
+            ("admin",),
             jwt_secret=jwt_secret,
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
@@ -285,7 +319,10 @@ def create_plugins_router(
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from None
 
-    @router.post("/api/plugins/registry/install")
+    @router.post(
+        "/api/plugins/registry/install",
+        dependencies=[Depends(_admin_dep)],
+    )
     def _plugin_registry_install(
         request: Request,
         payload: dict[str, Any] | None = None,
@@ -315,7 +352,10 @@ def create_plugins_router(
         )
         return result
 
-    @router.post("/api/plugins/lifecycle/install")
+    @router.post(
+        "/api/plugins/lifecycle/install",
+        dependencies=[Depends(_admin_dep)],
+    )
     def _plugin_lifecycle_install(
         request: Request,
         payload: dict[str, Any] | None = None,
@@ -345,7 +385,10 @@ def create_plugins_router(
         )
         return result
 
-    @router.post("/api/plugins/lifecycle/rollback")
+    @router.post(
+        "/api/plugins/lifecycle/rollback",
+        dependencies=[Depends(_admin_dep)],
+    )
     def _plugin_lifecycle_rollback(
         request: Request,
         payload: dict[str, Any] | None = None,
@@ -380,7 +423,10 @@ def create_plugins_router(
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from None
 
-    @router.post("/api/plugins/publisher-trust/rotate")
+    @router.post(
+        "/api/plugins/publisher-trust/rotate",
+        dependencies=[Depends(_admin_dep)],
+    )
     def _plugin_publisher_key_rotate(
         request: Request,
         payload: dict[str, Any] | None = None,
@@ -413,7 +459,10 @@ def create_plugins_router(
         )
         return result
 
-    @router.post("/api/plugins/publisher-trust/revoke")
+    @router.post(
+        "/api/plugins/publisher-trust/revoke",
+        dependencies=[Depends(_admin_dep)],
+    )
     def _plugin_publisher_key_revoke(
         request: Request,
         payload: dict[str, Any] | None = None,
@@ -457,7 +506,10 @@ def create_plugins_router(
         )
         return report
 
-    @router.post("/api/plugins/permission-rule-drafts/install")
+    @router.post(
+        "/api/plugins/permission-rule-drafts/install",
+        dependencies=[Depends(_admin_dep)],
+    )
     def _plugin_permission_rule_draft_install(
         request: Request,
         payload: dict[str, Any] | None = None,
@@ -535,6 +587,16 @@ def create_plugins_router(
             requested = Path(asset_path)
             if requested.is_absolute() or ".." in requested.parts:
                 raise HTTPException(status_code=404, detail="asset not found")
+            if is_sensitive_plugin_asset_path(requested):
+                raise HTTPException(status_code=404, detail="asset not found")
+            manifest = _read_json(plugin_dir / ".codex-plugin" / "plugin.json") or {}
+            public_paths = public_plugin_asset_paths(plugin_dir, manifest)
+            is_public = requested.as_posix() in public_paths
+            is_private_static_asset = bool(requested.parts) and (
+                requested.parts[0].casefold() == "assets"
+            )
+            if not is_public and not is_private_static_asset:
+                raise HTTPException(status_code=404, detail="asset not found")
             candidate = (plugin_dir / requested).resolve()
             try:
                 candidate.relative_to(plugin_dir)
@@ -542,7 +604,14 @@ def create_plugins_router(
                 raise HTTPException(status_code=404, detail="asset not found") from None
             if not candidate.is_file():
                 raise HTTPException(status_code=404, detail="asset not found")
-            return FileResponse(candidate)
+            return FileResponse(
+                candidate,
+                headers={
+                    "Content-Security-Policy": "default-src 'none'; sandbox",
+                    "Cross-Origin-Resource-Policy": "same-origin",
+                    "X-Content-Type-Options": "nosniff",
+                },
+            )
         raise HTTPException(status_code=404, detail="plugin not found")
 
     @router.get("/api/plugins/{plugin_id}")

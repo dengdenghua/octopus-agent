@@ -6,6 +6,10 @@
  */
 
 import { swallow } from "@/core/utils/log";
+import {
+  DEFAULT_PRIMARY_AGENT_ID,
+  isPrimaryPersonaAgentId,
+} from "@/core/agents/persona-policy";
 import { useEffect, useCallback, useRef } from "react";
 
 // 事件类型定义
@@ -197,9 +201,18 @@ export function emitAgentChanged(
   source: "user" | "thread" | "system" = "user",
 ): void {
   eventBus.emit("agent:changed", { name, source });
-  // 同时更新 localStorage 保持兼容性
+  // Only fixed White Ghost identities own personal conversation lanes.
+  // Historical expert-owned threads may still announce their owner, but that
+  // must not replace the persisted lead for the next task.
   try {
-    window.localStorage.setItem("octopus.active-agent", name);
+    if (isPrimaryPersonaAgentId(name)) {
+      window.localStorage.setItem("octopus.active-agent", name);
+    } else if (source !== "thread") {
+      window.localStorage.setItem(
+        "octopus.active-agent",
+        DEFAULT_PRIMARY_AGENT_ID,
+      );
+    }
   } catch (e) {
     swallow(e, "storage");
   }

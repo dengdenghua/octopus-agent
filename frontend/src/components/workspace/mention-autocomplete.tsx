@@ -107,7 +107,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   session: "text-chart-2",
 };
 
-// dsh ``uri.ts`` mention encoding — canonical ``dsh-session:`` URI of the
+// Octopus Native mention encoding — canonical ``octopus-session:`` URI of the
 // session id (base64url of ASCII-escaped JSON), mirrored from
 // ``session_reference_uri.py`` so the backend's strict canonical re-encode
 // check accepts what the UI inserts.
@@ -132,7 +132,7 @@ export function encodeSessionReferenceUri(sessionId: string): string {
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
-  return `dsh-session:${payload}`;
+  return `octopus-session:${payload}`;
 }
 
 function escapeMentionLabel(label: string): string {
@@ -244,6 +244,8 @@ export interface MentionMemberInput {
   icon?: string | null;
   description?: string | null;
   avatar_url?: string | null;
+  /** Optional stable token inserted after `@` (for example `agent:planner`). */
+  mention_value?: string | null;
 }
 
 /** Resolve an agent avatar_url to an absolute, cache-busted src. */
@@ -282,15 +284,11 @@ function withMemberMentions(
     })
     .map((m) => {
       const label = m.display_name ?? m.name;
-      // Local CLI partners may lack an avatar_url here — fall back to their
-      // registered brand avatar endpoint so they match the chat + roster.
-      const rawAvatar =
-        m.avatar_url ??
-        (m.name.startsWith("local_") ? `/api/agents/${m.name}/avatar` : null);
+      const rawAvatar = m.avatar_url ?? null;
       return {
         type: "agent",
         label,
-        value: label,
+        value: m.mention_value?.trim() || label,
         description: m.description || "群成员",
         icon: m.icon?.trim() || "bot",
         avatarUrl: resolveMentionAvatar(
@@ -591,7 +589,7 @@ export function useMentionAutocomplete({
       if (atPos < 0) return;
 
       // Build the mention text to insert. Session candidates insert the
-      // host-neutral canonical mention ``@[label](dsh-session:...)`` so the
+      // host-neutral canonical mention ``@[label](octopus-session:...)`` so the
       // backend resolver's canonical lane picks them up.
       const mentionText =
         item.type === "session" && !item.value.endsWith(":")

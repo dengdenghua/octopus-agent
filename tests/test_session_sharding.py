@@ -107,16 +107,8 @@ def test_existing_thread_cannot_move_to_another_agent_shard(tmp_path: Path) -> N
     thread = store.get("owned-thread")
     assert thread is not None
     assert thread["metadata"]["agent"] == "local_opencode_cli"
-    assert (
-        tmp_path
-        / "agents"
-        / "local_opencode_cli"
-        / "sessions"
-        / "owned-thread.jsonl"
-    ).exists()
-    assert not (
-        tmp_path / "agents" / "general" / "sessions" / "owned-thread.jsonl"
-    ).exists()
+    assert (tmp_path / "agents" / "local_opencode_cli" / "sessions" / "owned-thread.jsonl").exists()
+    assert not (tmp_path / "agents" / "general" / "sessions" / "owned-thread.jsonl").exists()
 
 
 def test_reload_repairs_conflicting_role_copies_to_original_owner(tmp_path: Path) -> None:

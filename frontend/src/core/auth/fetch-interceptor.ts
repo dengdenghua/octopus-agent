@@ -19,6 +19,7 @@ import { getBackendBaseURL } from "@/core/config";
 
 const TOKEN_KEY = "octopus_auth_token";
 const GUEST_SENTINEL = "__guest__";
+export const AUTH_EXPIRED_EVENT = "octopus:auth-expired";
 
 let installed = false;
 
@@ -51,6 +52,42 @@ function urlOf(input: RequestInfo | URL): string {
   return input.url; // Request
 }
 
+function isInteractiveLoginRequest(rawUrl: string): boolean {
+  try {
+    const origin =
+      typeof window !== "undefined" ? window.location.origin : undefined;
+    const pathname = new URL(rawUrl, origin).pathname;
+    return (
+      pathname === "/api/auth/oct/email/login" ||
+      pathname === "/api/auth/oct/email/send" ||
+      pathname === "/api/auth/local/login" ||
+      pathname === "/api/auth/status" ||
+      pathname === "/api/auth/providers" ||
+      pathname === "/api/auth/me" ||
+      pathname === "/api/auth/logout"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function observeAuthResponse(
+  response: Promise<Response>,
+  rawUrl: string,
+): Promise<Response> {
+  return response.then((res) => {
+    if (
+      res.status === 401 &&
+      res.headers.get("X-Octopus-Auth-Expired") === "1" &&
+      !isInteractiveLoginRequest(rawUrl) &&
+      typeof window !== "undefined"
+    ) {
+      window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT));
+    }
+    return res;
+  });
+}
+
 /**
  * Patch `window.fetch` to attach the bearer token to backend `/api` requests.
  * Idempotent: safe to call more than once. No-op outside the browser.
@@ -64,6 +101,17 @@ export function installAuthFetchInterceptor(): void {
   const originalFetch = window.fetch.bind(window);
 
   window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+    const rawUrl = urlOf(input);
+    if (!isBackendApiRequest(rawUrl)) {
+      return originalFetch(input, init);
+    }
+    // Browser restarts recover through an HttpOnly session cookie.  Same-origin
+    // requests include it by default; Electron and configured cross-origin
+    // backends need an explicit credentials policy.
+    const backendInit: RequestInit = {
+      ...init,
+      credentials: init?.credentials ?? "include",
+    };
     try {
       // Audit S-07: the token lives in sessionStorage. The localStorage
       // fallback only covers a legacy session before the one-time migration
@@ -71,7 +119,7 @@ export function installAuthFetchInterceptor(): void {
       const token =
         window.sessionStorage.getItem(TOKEN_KEY) ||
         window.localStorage.getItem(TOKEN_KEY);
-      if (token && token !== GUEST_SENTINEL && isBackendApiRequest(urlOf(input))) {
+      if (token && token !== GUEST_SENTINEL) {
         // Merge the Request's own headers (if any) with init's, so passing a
         // fresh `headers` to fetch doesn't drop headers the caller set.
         const headers = new Headers(
@@ -84,12 +132,15 @@ export function installAuthFetchInterceptor(): void {
         }
         if (!headers.has("Authorization")) {
           headers.set("Authorization", `Bearer ${token}`);
-          return originalFetch(input, { ...init, headers });
+          return observeAuthResponse(
+            originalFetch(input, { ...backendInit, headers }),
+            rawUrl,
+          );
         }
       }
     } catch {
       // Any unexpected error ⇒ fall through to the untouched fetch.
     }
-    return originalFetch(input, init);
+    return observeAuthResponse(originalFetch(input, backendInit), rawUrl);
   };
 }

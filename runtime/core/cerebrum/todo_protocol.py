@@ -55,9 +55,11 @@ def _is_narrow_read_only_command(text: str) -> bool:
 
 _ANALYSIS_ONLY_RE = re.compile(
     r"(?:分析|解释|说明|总结|概述|评估|审查|检查|看看|不足|缺点|问题|风险|建议|"
-    r"看法|评一下|讲一下|说一下|聊聊|讨论)"
+    r"看法|评一下|讲一下|说一下|聊聊|讨论|原因|为什么|为何|怎么回事|诊断|排查|"
+    r"中断|失败)"
     r"|\b(?:analy[sz]e|explain|summari[sz]e|review|assess|evaluat|"
-    r"discuss|opinion|thoughts?|insights?)\b",
+    r"discuss|opinion|thoughts?|insights?|why|diagnos(?:e|is|tic)|"
+    r"investigate|root\s+cause)\b",
     re.IGNORECASE,
 )
 # Broad-scope targets signal a project-level audit, not a short follow-up.

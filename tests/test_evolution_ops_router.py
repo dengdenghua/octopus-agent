@@ -23,6 +23,7 @@ from runtime.memory.journal import (  # noqa: E402
     ProtocolDriftDecisionEvent,
     SkillProposalDecisionEvent,
 )
+from runtime.memory.threads.store import ThreadStateStore  # noqa: E402
 from runtime.platform.models import (  # noqa: E402
     ArmId,
     CostEntry,
@@ -653,8 +654,45 @@ def test_evolution_dashboard_endpoints_are_derived_from_runtime() -> None:
 
     assert client.get("/api/evolution/memory/growth").status_code == 200
     assert client.get("/api/evolution/recommendations").status_code == 200
+    story = client.get("/api/evolution/story").json()
+    assert story["observed_task_count"] == 1
+    assert story["durable_change_count"] == 1
+    assert story["changes"][0]["kind"] == "skill"
+    assert story["observations"][0]["tools"] == ["list_cwd"]
     sync = client.post("/api/evolution/learn-from-intel").json()
     assert sync["skills_created"] == []
+
+
+def test_evolution_story_uses_threads_only_as_observation_evidence() -> None:
+    store = ThreadStateStore()
+    thread = store.create(
+        values={
+            "title": "帮我检查登录页",
+            "messages": [
+                {"type": "human", "content": "帮我检查登录页"},
+                {
+                    "type": "ai",
+                    "content": "## 核心结论\n- 登录页在小屏幕上按钮会被遮挡\n- 表单缺少错误提示",
+                    "additional_kwargs": {"message_kind": "answer"},
+                    "tool_calls": [{"name": "read_file"}],
+                },
+            ],
+        }
+    )
+    app = FastAPI()
+    app.include_router(create_evolution_ops_router(thread_store=store))
+
+    story = TestClient(app).get("/api/evolution/story").json()
+
+    assert story["has_real_change"] is False
+    assert story["durable_change_count"] == 0
+    assert story["observed_task_count"] == 1
+    assert story["observations"][0]["thread_id"] == thread["thread_id"]
+    assert story["observations"][0]["title"] == "帮我检查登录页"
+    assert story["observations"][0]["learning_points"] == [
+        "登录页在小屏幕上按钮会被遮挡",
+        "表单缺少错误提示",
+    ]
 
 
 def test_evolution_overview_reflects_intelligence_reports(

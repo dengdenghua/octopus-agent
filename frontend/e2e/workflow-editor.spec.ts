@@ -12,9 +12,13 @@ test.describe("Legacy workflow route", () => {
   }) => {
     await page.goto("/#/workspace/workflows");
     await page.waitForLoadState("domcontentloaded");
-    await expect(page).toHaveURL(/#\/workspace\/agents\?surface=chat&tab=skills/);
-    await expect(
-      page.getByPlaceholder(/搜索技能名称|Search skill name/i),
-    ).toBeVisible();
+    await expect(page).toHaveURL(
+      /#\/workspace\/agents\?surface=chat&tab=skills/,
+    );
+    await expect(page.getByRole("tab", { name: "Skills" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(page.getByRole("textbox").first()).toBeVisible();
   });
 });

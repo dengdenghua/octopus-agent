@@ -1,6 +1,8 @@
 import type { Message } from "@/core/api/types";
-import "katex/dist/katex.min.css";
+import type { CoworkRoomMessage } from "@/core/cowork";
 import {
+  CheckCircle2Icon,
+  DnaIcon,
   FileIcon,
   GitForkIcon,
   Loader2Icon,
@@ -8,12 +10,16 @@ import {
   RefreshCwIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
+  XCircleIcon,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   memo,
   useCallback,
+  useEffect,
   useMemo,
+  useRef,
+  useState,
   type ComponentProps,
   type ImgHTMLAttributes,
   type ReactNode,
@@ -28,11 +34,30 @@ import {
 } from "@/components/ai-elements/message";
 import { Task, TaskTrigger } from "@/components/ai-elements/task";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { RoutedWebLink } from "@/components/ui/routed-web-link";
+import {
+  artifactRefFromMarkdownHref,
+  dispatchOpenArtifact,
+} from "@/core/artifacts/open-artifact";
 import { resolveArtifactURL } from "@/core/artifacts/utils";
 import { jsonAuthHeaders } from "@/core/auth/api";
+import { canAccessOperatorControlPlane } from "@/core/auth/control-plane-access";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
+import {
+  getDualHelixShadowStatus,
+  queueDualHelixShadowRun,
+  type DualHelixShadowStatus,
+} from "@/core/evolution/api";
 import { useForkThread } from "@/core/threads/hooks";
+import type { ExecutionPlan } from "@/core/threads/types";
 import {
   extractContentFromMessage,
   extractTextFromMessage,
@@ -45,8 +70,13 @@ import {
 import { useRehypeSplitWordsIntoSpans } from "@/core/rehype";
 import { useHumanMessagePlugins } from "@/core/streamdown";
 import { cn } from "@/lib/utils";
+import { useOptionalAuth } from "@/providers/AuthProvider";
 
 import { CopyButton } from "../copy-button";
+import {
+  CoworkRoomMessageActions,
+  type CoworkRoomMessageActionsProps,
+} from "../collab";
 import { emitOpenAgentWorkbench } from "../agent-workbench-events";
 import {
   ExecutionPlanReview,
@@ -61,55 +91,293 @@ import {
 import { normalizeExecutionPlan } from "../execution-plan-utils";
 
 import { MarkdownContent } from "./markdown-content";
-import { useThreadStreaming, useThreadValues } from "./context";
-import { useStreamingTextBuffer } from "@/hooks/use-streaming-text-buffer";
+import { useThreadValues } from "./context";
+import {
+  STREAMING_TYPE_PRESETS,
+  useStreamingTextBuffer,
+} from "@/hooks/use-streaming-text-buffer";
+import {
+  RETRY_PENDING_MESSAGE_EVENT,
+  type OutboundDeliveryState,
+} from "@/core/threads/optimistic-messages";
 import { ClarificationChoiceCard } from "./clarification-choice-card";
 import { GroundingChip } from "./grounding-chip";
-import { useConversationDetailLevel } from "./use-conversation-detail-level";
 import { extractClarificationQuestionnaire } from "../clarification-questionnaire";
+
+export interface MessageListProjectActions extends Omit<
+  CoworkRoomMessageActionsProps,
+  "message"
+> {
+  /** Metadata from the hidden room mirror, keyed by source_message_id. */
+  messageMetadataBySourceId?: Record<string, CoworkRoomMessage["metadata"]>;
+}
+
+export interface ShadowReviewContext {
+  goal: string;
+  primaryEngine: "octopus" | "codex";
+  primaryOutput: string;
+  threadId: string;
+  messageId: string;
+  workspacePath?: string | null;
+}
+
+type ShadowRun = DualHelixShadowStatus["runs"][number];
+
+function isShadowRunActive(run: ShadowRun | null): boolean {
+  return Boolean(
+    run && ["queued", "snapshotting", "running"].includes(run.status),
+  );
+}
+
+export function ShadowReviewAction({
+  context,
+}: {
+  context: ShadowReviewContext;
+}) {
+  const auth = useOptionalAuth();
+  const canReview = canAccessOperatorControlPlane(
+    auth?.authStatus ?? null,
+    auth?.user ?? null,
+  );
+  const [run, setRun] = useState<ShadowRun | null>(null);
+  const [queueing, setQueueing] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const terminalNotified = useRef(false);
+
+  useEffect(() => {
+    if (!canReview) return undefined;
+    let active = true;
+    void getDualHelixShadowStatus()
+      .then((status) => {
+        if (!active) return;
+        const previous = status.runs.find(
+          (item) =>
+            item.source_thread_id === context.threadId &&
+            item.source_message_id === context.messageId,
+        );
+        if (previous) {
+          terminalNotified.current = ["completed", "failed"].includes(
+            previous.status,
+          );
+          setRun(previous);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [canReview, context.messageId, context.threadId]);
+
+  useEffect(() => {
+    if (!isShadowRunActive(run)) return;
+    const timer = window.setInterval(() => {
+      void getDualHelixShadowStatus()
+        .then((status) => {
+          const current = status.runs.find(
+            (item) => item.run_id === run?.run_id,
+          );
+          if (!current) return;
+          setRun(current);
+          if (
+            !terminalNotified.current &&
+            ["completed", "failed"].includes(current.status)
+          ) {
+            terminalNotified.current = true;
+            if (current.status === "completed") {
+              toast.success("另一引擎已完成影子复核");
+            } else {
+              toast.error("影子复核未完成，可点击查看原因");
+            }
+          }
+        })
+        .catch(() => undefined);
+    }, 2_000);
+    return () => window.clearInterval(timer);
+  }, [run]);
+
+  const queueReview = async () => {
+    if (!canReview) return;
+    if (run && ["completed", "failed"].includes(run.status)) {
+      setDialogOpen(true);
+      return;
+    }
+    if (queueing || isShadowRunActive(run)) return;
+    setQueueing(true);
+    try {
+      const status = await getDualHelixShadowStatus();
+      if (!status.enabled) {
+        toast.error("请先到“自进化”页面开启影子模式");
+        return;
+      }
+      terminalNotified.current = false;
+      const queued = await queueDualHelixShadowRun({
+        goal: context.goal.slice(0, 20_000),
+        primary_engine: context.primaryEngine,
+        primary_output: context.primaryOutput.slice(0, 50_000),
+        workspace_path: context.workspacePath || undefined,
+        source_thread_id: context.threadId,
+        source_message_id: context.messageId,
+      });
+      setRun(queued);
+      toast.success(
+        `已交给${queued.shadow_engine === "codex" ? " Codex" : " Octopus"} 影子复核`,
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "影子复核提交失败");
+    } finally {
+      setQueueing(false);
+    }
+  };
+
+  const active = queueing || isShadowRunActive(run);
+  const completed = run?.status === "completed";
+  const failed = run?.status === "failed";
+  const label = completed
+    ? "影子复核已完成，点击查看"
+    : failed
+      ? "影子复核失败，点击查看"
+      : active
+        ? "另一引擎正在影子复核"
+        : "让另一引擎复核本次任务";
+
+  if (!canReview) return null;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => void queueReview()}
+        disabled={active}
+        className="inline-flex size-7 items-center justify-center rounded-lg text-foreground/60 transition-all duration-base hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 disabled:cursor-wait disabled:opacity-60"
+        title={label}
+        aria-label={label}
+      >
+        {active ? (
+          <Loader2Icon className="size-4 animate-spin" />
+        ) : completed ? (
+          <CheckCircle2Icon className="size-4 text-success" />
+        ) : failed ? (
+          <XCircleIcon className="size-4 text-destructive" />
+        ) : (
+          <DnaIcon className="size-4" />
+        )}
+      </button>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-h-[80dvh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>双引擎影子复核</DialogTitle>
+            <DialogDescription>
+              {run?.shadow_engine === "codex" ? "Codex" : "Octopus"}
+              在隔离的只读副本中给出的复核结果。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-xl border border-border bg-muted/25 p-4 text-sm leading-6 whitespace-pre-wrap">
+            {run?.result || run?.error || "暂时没有可显示的结果。"}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+/** Build the hidden Team Room copy that gives a canonical thread message a
+ * stable Project OS action anchor without rendering the text twice. */
+export function threadMessageToCoworkRoomMessage(
+  message: Message,
+  threadId: string | null,
+  messageIndex: number | undefined,
+  metadataBySourceId: MessageListProjectActions["messageMetadataBySourceId"],
+): CoworkRoomMessage {
+  const stableMessageId = message.id
+    ? String(message.id)
+    : `${threadId ?? "thread"}:${messageIndex ?? "message"}`;
+  const sourceMessageId = `thread:${stableMessageId}`;
+  return {
+    seq: -1,
+    participant_id: "human",
+    display_name: "我",
+    text: extractTextFromMessage(message),
+    metadata: metadataBySourceId?.[sourceMessageId] ?? {
+      source_message_id: sourceMessageId,
+    },
+  };
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Format an ISO timestamp as local HH:mm, returning "" when unparseable. */
-function formatMessageTime(createdAt: string): string {
-  const date = new Date(createdAt);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function outboundDeliveryState(message: Message): OutboundDeliveryState | null {
+  if (message.type !== "human") return null;
+  const state = message.additional_kwargs?.delivery_state;
+  return state === "queued" || state === "sending" || state === "failed"
+    ? state
+    : null;
 }
 
-/**
- * Small muted HH:mm label shown under a message bubble. Visible on hover of
- * the message, or always when the conversation detail level is "high".
- */
-export function MessageTimestamp({
-  createdAt,
-  alwaysVisible,
-  align = "start",
+export function HumanMessageDeliveryStatus({
+  message,
+  threadId,
 }: {
-  createdAt?: string;
-  alwaysVisible?: boolean;
-  align?: "start" | "end";
+  message: Message;
+  threadId?: string | null;
 }) {
-  if (!createdAt) return null;
-  const formatted = formatMessageTime(createdAt);
-  if (!formatted) return null;
+  const { t } = useI18n();
+  const state = outboundDeliveryState(message);
+  if (!state) return null;
+  const clientMessageId = message.id;
+  const canRetry =
+    state === "failed" &&
+    typeof clientMessageId === "string" &&
+    clientMessageId.length > 0;
+  const label =
+    state === "queued"
+      ? t.conversation.messageQueued
+      : state === "sending"
+        ? t.conversation.messageSending
+        : t.conversation.messageSendFailed;
+  const error = message.additional_kwargs?.delivery_error;
   return (
-    <span
+    <div
       className={cn(
-        "text-micro text-muted-foreground/60 select-none",
-        align === "end" ? "self-end" : "self-start",
-        alwaysVisible
-          ? "opacity-100"
-          : "opacity-0 transition-opacity group-hover/conversation-message:opacity-100",
+        "mt-1 flex items-center justify-end gap-1.5 text-[11px] leading-4",
+        state === "failed" ? "text-destructive/80" : "text-muted-foreground/70",
       )}
+      data-testid="human-message-delivery-status"
+      data-delivery-state={state}
+      role="status"
+      title={typeof error === "string" ? error : undefined}
     >
-      {formatted}
-    </span>
+      {state === "sending" ? (
+        <Loader2Icon className="size-3 animate-spin" aria-hidden="true" />
+      ) : (
+        <span
+          className={cn(
+            "size-1.5 rounded-full",
+            state === "failed" ? "bg-destructive/70" : "bg-current/45",
+          )}
+          aria-hidden="true"
+        />
+      )}
+      <span>{label}</span>
+      {canRetry ? (
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 rounded px-1 py-0.5 font-medium text-destructive transition-colors hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45"
+          data-testid="retry-pending-message"
+          onClick={() => {
+            window.dispatchEvent(
+              new CustomEvent(RETRY_PENDING_MESSAGE_EVENT, {
+                detail: { threadId, clientMessageId },
+              }),
+            );
+          }}
+        >
+          <RefreshCwIcon className="size-3" aria-hidden="true" />
+          {t.conversation.retry}
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -288,6 +556,9 @@ export const MessageListItem = memo(function MessageListItem({
   isLastMessage = true,
   messageIndex,
   afterContent,
+  projectMessageActions,
+  shadowReview,
+  allowThreadFork = true,
 }: {
   className?: string;
   message: Message;
@@ -298,11 +569,18 @@ export const MessageListItem = memo(function MessageListItem({
   isLastMessage?: boolean;
   messageIndex?: number;
   afterContent?: ReactNode;
+  /** Project actions exposed on human bubbles in a bound project group. */
+  projectMessageActions?: MessageListProjectActions;
+  /** Explicit, opt-in review by the engine opposite to this answer's engine. */
+  shadowReview?: ShadowReviewContext;
+  /** Legacy on-demand-owned threads are readable but cannot clone that owner. */
+  allowThreadFork?: boolean;
 }) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const forkThread = useForkThread();
   const isHuman = message.type === "human";
+  const deliveryState = outboundDeliveryState(message);
   const messageMetadata =
     message.type === "ai"
       ? (message.additional_kwargs as Record<string, unknown> | undefined)
@@ -317,14 +595,29 @@ export const MessageListItem = memo(function MessageListItem({
   const clipboardText = useMemo(() => messageClipboardText(message), [message]);
   const showMessageActions =
     !isLoading &&
+    deliveryState === null &&
     (isHuman ||
       (assistantIsSettledAnswer && clipboardText.length > 0 && isLastMessage));
   const params = useParams();
   const threadIdForFeedback = params.threadId ?? params.thread_id ?? null;
-  const { level } = useConversationDetailLevel();
-  const createdAt = (
-    message.additional_kwargs as { created_at?: string } | undefined
-  )?.created_at;
+  const { messageMetadataBySourceId, ...coworkProjectMessageActions } =
+    projectMessageActions ?? {};
+  const roomMessageForProjectActions = useMemo<CoworkRoomMessage | null>(() => {
+    if (!isHuman || !projectMessageActions) return null;
+    return threadMessageToCoworkRoomMessage(
+      message,
+      threadIdForFeedback,
+      messageIndex,
+      messageMetadataBySourceId,
+    );
+  }, [
+    isHuman,
+    message,
+    messageIndex,
+    messageMetadataBySourceId,
+    projectMessageActions,
+    threadIdForFeedback,
+  ]);
   const submitFeedback = useCallback(
     async (sentiment: "liked" | "disliked") => {
       const content =
@@ -376,11 +669,12 @@ export const MessageListItem = memo(function MessageListItem({
         suppressReasoningPanel={suppressReasoningPanel}
         enableClarificationActions={enableClarificationActions}
       />
-      <MessageTimestamp
-        createdAt={createdAt}
-        alwaysVisible={level === "high"}
-        align={isHuman ? "end" : "start"}
-      />
+      {isHuman ? (
+        <HumanMessageDeliveryStatus
+          message={message}
+          threadId={threadIdForFeedback}
+        />
+      ) : null}
       {afterContent}
       {showMessageActions && (
         <div
@@ -420,11 +714,23 @@ export const MessageListItem = memo(function MessageListItem({
             size="icon-sm"
             className="size-7 rounded-lg border-0 bg-transparent p-0 text-foreground/60 shadow-none transition-colors duration-base hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/45"
           />
-          {threadIdForFeedback != null && messageIndex != null ? (
+          {roomMessageForProjectActions && projectMessageActions ? (
+            <CoworkRoomMessageActions
+              {...coworkProjectMessageActions}
+              message={roomMessageForProjectActions}
+              className={cn("min-h-0", projectMessageActions.className)}
+            />
+          ) : null}
+          {allowThreadFork &&
+          threadIdForFeedback != null &&
+          messageIndex != null ? (
             <button
               onClick={() => {
                 forkThread.mutate(
-                  { threadId: threadIdForFeedback, atMessageIndex: messageIndex },
+                  {
+                    threadId: threadIdForFeedback,
+                    atMessageIndex: messageIndex,
+                  },
                   {
                     onSuccess: (result) => {
                       toast.success(t.conversation.forkedThread);
@@ -442,6 +748,9 @@ export const MessageListItem = memo(function MessageListItem({
             >
               <GitForkIcon className="size-4" />
             </button>
+          ) : null}
+          {message.type === "ai" && shadowReview ? (
+            <ShadowReviewAction context={shadowReview} />
           ) : null}
           {message.type === "ai" ? (
             <button
@@ -505,9 +814,82 @@ function MessageImage({
   const url = src.startsWith("/mnt/") ? resolveArtifactURL(src, threadId) : src;
 
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer">
+    <RoutedMessageLink href={url}>
       <img className={imgClassName} src={url} alt={alt} {...props} />
-    </a>
+    </RoutedMessageLink>
+  );
+}
+
+export function RoutedMessageLink({
+  href,
+  onClick,
+  children,
+  ...props
+}: ComponentProps<"a">) {
+  return (
+    <RoutedWebLink
+      {...props}
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(event) => {
+        onClick?.(event);
+        if (event.defaultPrevented || !href) return;
+        const artifactRef = artifactRefFromMarkdownHref(href);
+        if (artifactRef && dispatchOpenArtifact(artifactRef)) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
+      openTargetSource="conversation"
+    >
+      {children}
+    </RoutedWebLink>
+  );
+}
+
+function useLiveExecutionPlan(planFromMessage: ExecutionPlan): ExecutionPlan {
+  const { values } = useThreadValues();
+  const livePlan = normalizeExecutionPlan(values?.execution_plan);
+  return livePlan?.plan_id === planFromMessage.plan_id
+    ? livePlan
+    : planFromMessage;
+}
+
+/**
+ * Keep the frequently-changing thread values subscription inside the two
+ * message variants that actually need live plan updates. Regular transcript
+ * rows must not re-render when an unrelated execution-plan value changes.
+ */
+function LiveTaskChecklistContent({
+  className,
+  planFromMessage,
+}: {
+  className?: string;
+  planFromMessage: ExecutionPlan;
+}) {
+  const plan = useLiveExecutionPlan(planFromMessage);
+  return (
+    <AIElementMessageContent className={className}>
+      <TaskProgressChecklist plan={plan} />
+    </AIElementMessageContent>
+  );
+}
+
+function LiveExecutionPlanContent({
+  className,
+  planFromMessage,
+  threadId,
+}: {
+  className?: string;
+  planFromMessage: ExecutionPlan;
+  threadId: string;
+}) {
+  const plan = useLiveExecutionPlan(planFromMessage);
+  return (
+    <AIElementMessageContent className={className}>
+      <ExecutionPlanReview plan={plan} threadId={threadId} />
+    </AIElementMessageContent>
   );
 }
 
@@ -532,19 +914,18 @@ function MessageContent_({
   const isHuman = message.type === "human";
   const params = useParams();
   const thread_id = params.threadId ?? params.thread_id;
-  const { streamingMessage } = useThreadStreaming();
-  const { values } = useThreadValues();
 
   // useRehypeSplitWordsIntoSpans now returns the full plugin stack including
   // rehypeRaw and rehypeKatex, so we don't need to add them again.
   const allRehypePlugins = rehypePlugins;
 
-  // The typing cursor belongs only to the message actively receiving text,
-  // never to older messages that share the thread-level loading state.
-  const isCurrentlyStreaming = isLoading && message.id === streamingMessage?.id;
+  // MessageList already narrows this prop to the active streaming row. Using
+  // it directly avoids subscribing every historical message to delta updates.
+  const isCurrentlyStreaming = isLoading;
 
   const components = useMemo(
     () => ({
+      a: RoutedMessageLink,
       img: (props: ImgHTMLAttributes<HTMLImageElement>) => (
         <MessageImage {...props} threadId={thread_id ?? ""} maxWidth="90%" />
       ),
@@ -602,9 +983,7 @@ function MessageContent_({
     }
     return splitInlineThinkingDetails(
       stripInternalToolProtocol(
-        stripLegacySubagentBudgetPlaceholder(
-          stripInternalTraceDetails(source),
-        ),
+        stripLegacySubagentBudgetPlaceholder(stripInternalTraceDetails(source)),
       ),
     );
   }, [rawContent, isHuman]);
@@ -628,6 +1007,7 @@ function MessageContent_({
     targetText: visibleContentToDisplay,
     enabled: isCurrentlyStreaming,
     resetKey: message.id,
+    ...STREAMING_TYPE_PRESETS.finalAnswer,
   });
   const renderedBody =
     bufferedBody.length <= visibleContentToDisplay.length
@@ -680,11 +1060,9 @@ function MessageContent_({
           const src = att.data_url || att.url || att.artifact_url || "";
           if (!src) return null;
           return (
-            <a
+            <RoutedMessageLink
               key={`att-${idx}-${att.filename ?? idx}`}
               href={src}
-              target="_blank"
-              rel="noopener noreferrer"
               className="block overflow-hidden rounded-lg border border-border-subtle"
             >
               <img
@@ -692,7 +1070,7 @@ function MessageContent_({
                 alt={att.filename ?? t.message.attachmentFallback}
                 className="h-32 w-auto max-w-60 object-cover"
               />
-            </a>
+            </RoutedMessageLink>
           );
         })}
       </div>
@@ -718,19 +1096,12 @@ function MessageContent_({
   // Lightweight task checklist "" auto-mode plan (no approval needed)
   if (isTaskChecklistMessage(message)) {
     const planFromMessage = getChecklistPlanFromMessage(message);
-    const livePlan = normalizeExecutionPlan(values?.execution_plan);
-    const plan =
-      livePlan &&
-      planFromMessage &&
-      livePlan.plan_id === planFromMessage.plan_id
-        ? livePlan
-        : planFromMessage;
-
-    if (plan) {
+    if (planFromMessage) {
       return (
-        <AIElementMessageContent className={className}>
-          <TaskProgressChecklist plan={plan} />
-        </AIElementMessageContent>
+        <LiveTaskChecklistContent
+          className={className}
+          planFromMessage={planFromMessage}
+        />
       );
     }
   }
@@ -738,21 +1109,13 @@ function MessageContent_({
   // Execution plan review card "" shown inline when the middleware generates a plan
   if (isExecutionPlanMessage(message) && thread_id) {
     const planFromMessage = getExecutionPlanFromMessage(message);
-    // Prefer the live plan from thread state (updated in real-time) over the
-    // static plan snapshot embedded in the message.
-    const livePlan = normalizeExecutionPlan(values?.execution_plan);
-    const plan =
-      livePlan &&
-      planFromMessage &&
-      livePlan.plan_id === planFromMessage.plan_id
-        ? livePlan
-        : planFromMessage;
-
-    if (plan) {
+    if (planFromMessage) {
       return (
-        <AIElementMessageContent className={className}>
-          <ExecutionPlanReview plan={plan} threadId={thread_id} />
-        </AIElementMessageContent>
+        <LiveExecutionPlanContent
+          className={className}
+          planFromMessage={planFromMessage}
+          threadId={thread_id}
+        />
       );
     }
   }
@@ -1005,10 +1368,8 @@ function RichFileCard({
 
   if (isImage) {
     return (
-      <a
+      <RoutedMessageLink
         href={fileUrl}
-        target="_blank"
-        rel="noopener noreferrer"
         className="border-border-subtle relative block overflow-hidden rounded-lg border"
       >
         <img
@@ -1016,7 +1377,7 @@ function RichFileCard({
           alt={file.filename}
           className="h-32 w-auto max-w-60 object-cover"
         />
-      </a>
+      </RoutedMessageLink>
     );
   }
 

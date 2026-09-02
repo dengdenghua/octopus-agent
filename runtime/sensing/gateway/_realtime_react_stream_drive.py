@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
+import threading
 import time
 from collections.abc import Callable, Iterator
+from concurrent.futures import CancelledError as FutureCancelledError
+from concurrent.futures import Future, InvalidStateError
 from typing import TYPE_CHECKING, Any
 
 from runtime.execution.subagents._ambient import react_stack_scope
@@ -23,7 +25,6 @@ from runtime.protocol import (
     ItemMarker,
     ItemStatus,
     McpToolCallItem,
-    ServerMethod,
     TurnStatus,
 )
 from runtime.safety.approval.approval_gate import ApprovalProvider
@@ -32,13 +33,30 @@ from runtime.sensing.gateway._realtime_react_stream_apply import (
     _start_orchestrator_bridge,
 )
 from runtime.sensing.gateway._realtime_react_stream_helpers import (
+    _CRITICAL_STRUCTURAL_EVENT_TYPES,
+    _REACT_QUEUE_PUT_TIMEOUT_S,
     _SINGLE_AGENT_HEARTBEAT_INTERVAL_S,
+    _TERMINAL_REACT_EVENT_TYPES,
     _agentic_stream_event_to_react_event,
-    _apply_orchestration_grant,
+    _apply_react_session_metadata,
     _emit_turn_heartbeat,
+    _is_coalescable_delta,
+    _lease_renewal_interval_s,
     _logger,
+    _QueuedReactEvent,
+    _ReactStructuralDeliveryError,
     _safe_stream_error_message,
     _should_use_native_tool_loop,
+    _ToolStartAuditError,
+)
+from runtime.sensing.gateway._realtime_subagent_journal_items import (
+    _emit_subagent_lifecycle_item,
+    _emit_subagent_progress_item,
+    _parse_lifecycle_preview,  # noqa: F401 - compatibility re-export
+    _subagent_lifecycle_item_from_journal,
+    _subagent_lifecycle_matches,
+    _subagent_progress_item_from_journal,
+    _subagent_tool_item_from_journal,
 )
 from runtime.sensing.gateway.realtime_gateway import EventEmitter
 from runtime.sensing.gateway.realtime_turn_input import (
@@ -50,26 +68,21 @@ if TYPE_CHECKING:
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
 
 
-# High-frequency, individually disposable stream deltas. These decorate the
-# turn (reasoning / commentary / throughput) and are safe to drop when the
-# bridge queue is full: keeping the producer from blocking 10s per event is
-# what prevents cascading stalls that lose *structural* events (tool results,
-# final answer). Structural events keep backpressure-bounded enqueue.
-_COALESCABLE_DELTA_TYPES = frozenset({"throughput", "visibility"})
+# Give cooperative providers a brief chance to unwind their stream after an
+# explicit Stop.  The user-visible turn must not remain hostage to an upstream
+# iterator that ignores cancellation; after this grace period the asyncio
+# wrapper is detached while the daemon/provider read finishes in the
+# background.  ``consumer_closed`` below prevents that abandoned producer from
+# applying events or crossing a tool side-effect boundary.
+_INTERRUPT_PRODUCER_DRAIN_TIMEOUT_S = 0.75
 
-
-def _is_coalescable_delta(event: dict[str, Any] | None) -> bool:
-    """True for decorative deltas that may be dropped under queue pressure."""
-    return isinstance(event, dict) and event.get("type") in _COALESCABLE_DELTA_TYPES
-
-
-def _lease_renewal_interval_s(lease_ttl_seconds: float) -> float:
-    """Renewal cadence for the supervisor lease (lease_ttl/3, capped at 30s).
-
-    Matches the execution/loops heartbeat cadence so long realtime turns
-    keep their TaskSupervisor lease alive without hammering the store.
-    """
-    return max(0.1, min(float(lease_ttl_seconds) / 3.0, 30.0))
+# Public sub-agent prose is a live tail, not a second full transcript.  The
+# finish marker retains the bounded answer; keeping progress small and
+# throttled prevents token-by-token item_delta rows from multiplying a short
+# run into tens of megabytes of thread history.
+_SUBAGENT_PROGRESS_PREVIEW_CHARS = 2_400
+_SUBAGENT_PROGRESS_EMIT_CHARS = 160
+_SUBAGENT_PROGRESS_EMIT_INTERVAL_S = 0.25
 
 
 # ── Sub-agent lifecycle journal → workbench bridge ────────────────────
@@ -80,122 +93,12 @@ def _lease_renewal_interval_s(lease_ttl_seconds: float) -> float:
 # journal mirror (``bridge._safe_journal_emit``) carries them, and only
 # when the bound ``Session.metadata`` injects a journal. The realtime WS —
 # the only stream the workbench reads — has no journal→WS consumer, so
-# the audit's parallel sub-agents render as one opaque
-# ``run_orchestration`` row instead of live agent tiles.
+# the audit's parallel sub-agents render as one opaque ``run_orchestration`` row.
 #
 # These helpers are that missing consumer: a per-turn journal subscription
 # that lifts the marker events onto the turn as the same ``McpToolCallItem``
 # the wired paths emit, which the frontend's ``mcpItemToLiveEvent`` already
 # translates into lifecycle tiles (zero frontend changes).
-
-_AGENT_LIFECYCLE_MARKERS: frozenset[str] = frozenset(
-    {
-        ItemMarker.SUBAGENT_SPAWNED.value,
-        ItemMarker.SUBAGENT_FINISHED.value,
-    }
-)
-
-
-def _parse_lifecycle_preview(preview: Any) -> dict[str, Any]:
-    """Parse the bridge's JSON preview blob back into a dict.
-
-    ``bridge.py`` serialises the spawn/finish payloads into
-    ``args_preview`` / ``output_preview`` JSON strings before writing the
-    journal event; the WS item needs them as a dict again.
-    """
-    if not isinstance(preview, str) or not preview.strip():
-        return {}
-    try:
-        parsed = json.loads(preview)
-    except (ValueError, TypeError):
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
-
-
-def _subagent_lifecycle_item_from_journal(event: Any) -> McpToolCallItem | None:
-    """Synthesise a marker ``McpToolCallItem`` from a journal SubTool event.
-
-    Fires only for the sub-agent lifecycle markers the bridge mirrors onto
-    the journal (``__subagent_spawned__`` / ``__subagent_finished__``);
-    every other journal event returns ``None``.
-    """
-    kind = getattr(event, "event_type", None)
-    if kind not in ("sub_tool_start", "sub_tool_end"):
-        return None
-    tool_name = getattr(event, "tool_name", "") or ""
-    if tool_name not in _AGENT_LIFECYCLE_MARKERS:
-        return None
-    spawned = kind == "sub_tool_start"
-    preview = (
-        getattr(event, "args_preview", None) if spawned else getattr(event, "output_preview", None)
-    )
-    payload = _parse_lifecycle_preview(preview)
-    parent_id = getattr(event, "parent_tool_use_id", None)
-    if parent_id:
-        payload["parent_tool_use_id"] = str(parent_id)
-    event_id = str(getattr(event, "event_id", "") or "")
-    if len(event_id) > 16:
-        event_id = event_id.replace("-", "")[:16]
-    created = getattr(event, "ts", None)
-    if spawned:
-        return McpToolCallItem(
-            id=f"subagent_spawn_{event_id}" if event_id else "subagent_spawn",
-            server="runtime",
-            tool=ItemMarker.SUBAGENT_SPAWNED.value,
-            arguments=payload,
-            status=ItemStatus.IN_PROGRESS,
-            created_at=created,
-        )
-    ok = bool(payload.get("ok", True))
-    return McpToolCallItem(
-        id=f"subagent_finish_{event_id}" if event_id else "subagent_finish",
-        server="runtime",
-        tool=ItemMarker.SUBAGENT_FINISHED.value,
-        arguments={"parent_tool_use_id": str(parent_id)} if parent_id else {},
-        result=payload,
-        status=ItemStatus.COMPLETED if ok else ItemStatus.FAILED,
-        created_at=created,
-    )
-
-
-def _subagent_lifecycle_matches(event: Any, task_id: str) -> bool:
-    """True when ``event`` is this turn's sub-agent lifecycle marker."""
-    if not task_id:
-        return False
-    return str(getattr(event, "task_id", None) or "") == str(task_id)
-
-
-async def _emit_subagent_lifecycle_item(
-    turn: Any,
-    log: EventLog,
-    emitter: EventEmitter,
-    item: McpToolCallItem,
-    *,
-    terminal: bool,
-) -> None:
-    """Append + notify a synthesised lifecycle item on the driver's loop.
-
-    Runs on the same asyncio loop as the react driver's consumer so
-    ``turn.items`` is only mutated there — the same no-race rule
-    ``_start_orchestrator_bridge`` documents.
-    """
-    turn.items.append(item)
-    method = ServerMethod.ITEM_COMPLETED if terminal else ServerMethod.ITEM_STARTED
-    logged = (
-        log.item_completed(turn.thread_id, turn.id, item)
-        if terminal
-        else log.item_started(turn.thread_id, turn.id, item)
-    )
-    with contextlib.suppress(Exception):
-        await emitter.notify(
-            method,
-            {
-                "threadId": turn.thread_id,
-                "turnId": turn.id,
-                "item": item.model_dump(by_alias=True, mode="json"),
-                "eventId": logged.event_id,
-            },
-        )
 
 
 def _start_subagent_lifecycle_bridge(
@@ -222,26 +125,206 @@ def _start_subagent_lifecycle_bridge(
     if subscribe is None or subscribe is _JournalBase.subscribe:
         return None
     task_id = str(task_id or "").strip()
+    lane_identity: dict[str, dict[str, Any]] = {}
+    started_tools: dict[str, McpToolCallItem] = {}
+    progress_items: dict[str, McpToolCallItem] = {}
+    progress_text: dict[str, str] = {}
+    progress_pending_chars: dict[str, int] = {}
+    progress_last_emit_at: dict[str, float] = {}
+    progress_emitted_ids: set[str] = set()
+
+    def _identity_for_event(event: Any) -> dict[str, Any]:
+        """Resolve one child without using a shared role as its primary key."""
+        role = str(getattr(event, "role_id", "") or "")
+        event_agent_id = str(getattr(event, "agent_id", "") or "")
+        event_codename = str(getattr(event, "codename", "") or "")
+        base: dict[str, Any] = {}
+        for alias in (event_codename, event_agent_id, role):
+            if alias and alias in lane_identity:
+                base = lane_identity[alias]
+                break
+        return {
+            **base,
+            "agent_id": event_agent_id or base.get("agent_id"),
+            "codename": event_codename or base.get("codename"),
+            "avatar": getattr(event, "avatar", "") or base.get("avatar"),
+            "role": role or base.get("role"),
+        }
+
+    def _remember_identity(identity: dict[str, Any], role: str = "") -> None:
+        # Codename and requested id are unique lane aliases. A resolved role
+        # such as ``explorer`` is shared by siblings, so only use it as a
+        # fallback for legacy events that carry no stronger identity.
+        aliases = [
+            str(identity.get("requested_agent_id") or ""),
+            str(identity.get("agent_id") or ""),
+            str(identity.get("codename") or ""),
+        ]
+        if not any(aliases) and role:
+            aliases.append(role)
+        for alias in aliases:
+            if alias:
+                lane_identity[alias] = identity
 
     def _on_journal_event(event: Any) -> None:
         if not _subagent_lifecycle_matches(event, task_id):
             return
+        if getattr(event, "event_type", None) == "sub_text_delta":
+            role = str(getattr(event, "role_id", "") or "")
+            identity = _identity_for_event(event)
+            delta = str(getattr(event, "delta", "") or "")
+            if not delta:
+                return
+            lane_key = str(
+                getattr(event, "session_id", "")
+                or (identity or {}).get("codename")
+                or (identity or {}).get("agent_id")
+                or role
+            )
+            previous = progress_text.get(lane_key, "")
+            combined = previous + delta
+            # The finish marker carries the complete answer. Keep the live
+            # progress item bounded so token streaming cannot grow one turn
+            # without limit while preserving the newest visible context.
+            if len(combined) > _SUBAGENT_PROGRESS_PREVIEW_CHARS:
+                prefix = "…（较早输出已省略）\n"
+                combined = prefix + combined[-(_SUBAGENT_PROGRESS_PREVIEW_CHARS - len(prefix)) :]
+            progress_text[lane_key] = combined
+            progress_item = _subagent_progress_item_from_journal(
+                event,
+                identity=identity,
+                accumulated=combined,
+            )
+            if progress_item is None:
+                return
+            existing = progress_items.get(progress_item.id)
+            if existing is not None:
+                progress_item = progress_item.model_copy(update={"created_at": existing.created_at})
+            progress_items[progress_item.id] = progress_item
+            pending_chars = progress_pending_chars.get(lane_key, 0) + len(delta)
+            now = time.monotonic()
+            last_emit = progress_last_emit_at.get(lane_key, 0.0)
+            should_emit = (
+                progress_item.id not in progress_emitted_ids
+                or pending_chars >= _SUBAGENT_PROGRESS_EMIT_CHARS
+                or delta.endswith("\n")
+                or (last_emit > 0 and now - last_emit >= _SUBAGENT_PROGRESS_EMIT_INTERVAL_S)
+            )
+            if not should_emit:
+                progress_pending_chars[lane_key] = pending_chars
+                return
+            progress_pending_chars[lane_key] = 0
+            progress_last_emit_at[lane_key] = now
+            started = progress_item.id not in progress_emitted_ids
+            progress_emitted_ids.add(progress_item.id)
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    _emit_subagent_progress_item(
+                        turn,
+                        log,
+                        emitter,
+                        progress_item,
+                        started=started,
+                    ),
+                    loop,
+                )
+            except (RuntimeError, ValueError):
+                return
+            return
         item = _subagent_lifecycle_item_from_journal(event)
+        if item is not None and item.tool == ItemMarker.SUBAGENT_SPAWNED.value:
+            identity = dict(item.arguments)
+            role = str(identity.get("role") or getattr(event, "role_id", "") or "")
+            _remember_identity(identity, role)
+        if item is None:
+            role = str(getattr(event, "role_id", "") or "")
+            identity = _identity_for_event(event)
+            probe = _subagent_tool_item_from_journal(
+                event,
+                identity=identity,
+            )
+            started_item = started_tools.get(probe.id) if probe is not None else None
+            item = _subagent_tool_item_from_journal(
+                event,
+                identity=identity,
+                started_item=started_item,
+            )
         if item is None:
             return
         terminal = item.status in {
             ItemStatus.COMPLETED,
             ItemStatus.FAILED,
         }
-        try:
-            asyncio.run_coroutine_threadsafe(
-                _emit_subagent_lifecycle_item(
+        if not terminal:
+            started_tools[item.id] = item
+        else:
+            started_tools.pop(item.id, None)
+
+        terminal_progress: list[McpToolCallItem] = []
+        if item.tool == ItemMarker.SUBAGENT_FINISHED.value:
+            result = item.result if isinstance(item.result, dict) else {}
+            target_agent_id = str(result.get("agent_id") or "")
+            target_codename = str(result.get("codename") or "")
+            target_role = str(result.get("role") or "")
+            # McpToolProgress has its own compact wire vocabulary.  Passing
+            # ItemStatus values ("completed"/"failed") here serialized an
+            # invalid progress object and left some clients showing a stale
+            # spinner after the child had finished.
+            progress_status = "done" if item.status == ItemStatus.COMPLETED else "error"
+            for progress_id, progress_item in list(progress_items.items()):
+                args = progress_item.arguments
+                progress_agent_id = str(args.get("agent_id") or "")
+                progress_codename = str(args.get("subagent_codename") or "")
+                progress_role = str(args.get("sub_agent_role") or "")
+                same_agent = bool(
+                    (target_agent_id and progress_agent_id == target_agent_id)
+                    or (target_codename and progress_codename == target_codename)
+                    or (
+                        not target_agent_id
+                        and not target_codename
+                        and target_role
+                        and progress_role == target_role
+                    )
+                )
+                if not same_agent:
+                    continue
+                progress = progress_item.progress
+                completed_progress = progress_item.model_copy(
+                    update={
+                        "status": item.status,
+                        "progress": (
+                            progress.model_copy(update={"status": progress_status})
+                            if progress is not None
+                            else None
+                        ),
+                    }
+                )
+                progress_items[progress_id] = completed_progress
+                terminal_progress.append(completed_progress)
+
+        async def _emit_item_sequence() -> None:
+            # Finish a child's public text lane before its lifecycle marker so
+            # a completed card never keeps a stale spinner while sibling
+            # agents are still running.
+            for progress_item in terminal_progress:
+                await _emit_subagent_lifecycle_item(
                     turn,
                     log,
                     emitter,
-                    item,
-                    terminal=terminal,
-                ),
+                    progress_item,
+                    terminal=True,
+                )
+            await _emit_subagent_lifecycle_item(
+                turn,
+                log,
+                emitter,
+                item,
+                terminal=terminal,
+            )
+
+        try:
+            asyncio.run_coroutine_threadsafe(
+                _emit_item_sequence(),
                 loop,
             )
         except (RuntimeError, ValueError):
@@ -279,16 +362,33 @@ async def _drive_react(
         scoped_cancellation,
     )
 
-    queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue(maxsize=64)
+    queue: asyncio.Queue[_QueuedReactEvent | dict[str, Any]] = asyncio.Queue(maxsize=64)
     loop = asyncio.get_running_loop()
+    producer_done = asyncio.Event()
 
     # Per-turn cancellation source. Tripped when the gateway records a
     # ``turn/interrupt`` for this turn id; every tool call inside
     # ``stream_react_loop`` sees the same token via the
     # ``scoped_cancellation`` contextvar and bails out fast.
     cancel_source = CancellationSource()
+    pending_apply_receipts: set[Future[None]] = set()
+    pending_apply_receipts_lock = threading.Lock()
+    producer_failure: BaseException | None = None
 
-    def _safe_put(event: dict[str, Any] | None, *, timeout: float = 10.0) -> None:
+    def _settle_apply_receipt(
+        receipt: Future[None] | None,
+        *,
+        error: BaseException | None = None,
+    ) -> None:
+        if receipt is None:
+            return
+        with contextlib.suppress(InvalidStateError):
+            if error is None:
+                receipt.set_result(None)
+            else:
+                receipt.set_exception(error)
+
+    def _safe_put(event: dict[str, Any], *, timeout: float | None = None) -> None:
         """Bounded blocking ``queue.put`` from the worker thread.
 
         ``run_coroutine_threadsafe(...).result()`` without a timeout
@@ -302,7 +402,9 @@ async def _drive_react(
         drop the newest delta instead of stalling the producer 10s (which
         used to cascade and lose *structural* events downstream).
         """
+        timeout_s = _REACT_QUEUE_PUT_TIMEOUT_S if timeout is None else max(0.01, timeout)
         if _is_coalescable_delta(event):
+            coalesce_future: Future[None] | None = None
             try:
                 # put_nowait is a plain method, so wrap it in a coroutine that
                 # swallows QueueFull: on a full queue the decorative delta is
@@ -311,23 +413,53 @@ async def _drive_react(
                     with contextlib.suppress(asyncio.QueueFull):
                         queue.put_nowait(event)
 
-                asyncio.run_coroutine_threadsafe(
+                coalesce_future = asyncio.run_coroutine_threadsafe(
                     _coalesce(),
                     loop,
-                ).result(timeout=0.05)
+                )
+                coalesce_future.result(timeout=0.05)
             except (RuntimeError, TimeoutError):
+                if coalesce_future is not None:
+                    coalesce_future.cancel()
                 # Loop closed or consumer wedged — drop the decorative delta.
                 _logger.debug(
                     "react bridge coalesced-delta drop (consumer slow) event=%s",
                     event.get("type") if isinstance(event, dict) else None,
                 )
             return
+
+        apply_receipt: Future[None] | None = None
+        queued_event: _QueuedReactEvent | dict[str, Any] = event
+        if isinstance(event, dict) and event.get("type") == "tool_start":
+            apply_receipt = Future()
+            queued_event = _QueuedReactEvent(event=event, applied=apply_receipt)
+            with pending_apply_receipts_lock:
+                pending_apply_receipts.add(apply_receipt)
+
+        put_future = asyncio.run_coroutine_threadsafe(
+            queue.put(queued_event),
+            loop,
+        )
         try:
-            asyncio.run_coroutine_threadsafe(
-                queue.put(event),
-                loop,
-            ).result(timeout=timeout)
-        except (RuntimeError, TimeoutError):
+            put_future.result(timeout=timeout_s)
+        except (FutureCancelledError, RuntimeError, TimeoutError) as exc:
+            put_future.cancel()
+            event_kind = str(event.get("type") or "")
+            if event_kind in _CRITICAL_STRUCTURAL_EVENT_TYPES:
+                if apply_receipt is not None:
+                    apply_receipt.cancel()
+                cancel_source.cancel(reason=f"critical {event_kind} enqueue failed")
+                with pending_apply_receipts_lock:
+                    if apply_receipt is not None:
+                        pending_apply_receipts.discard(apply_receipt)
+                error_type = (
+                    _ToolStartAuditError
+                    if event_kind == "tool_start"
+                    else _ReactStructuralDeliveryError
+                )
+                raise error_type(
+                    f"critical react event {event_kind!r} could not be enqueued"
+                ) from exc
             # RuntimeError: loop closed.
             # TimeoutError: consumer stuck — drop this event rather
             # than block the worker indefinitely.
@@ -336,6 +468,25 @@ async def _drive_react(
                 "text/tool events may be lost, frontend may show incomplete output",
                 event.get("type") if isinstance(event, dict) else event,
             )
+            return
+
+        if apply_receipt is None:
+            return
+        try:
+            # Advancing the generator after ``yield tool_start`` executes the
+            # real handler. Wait until the async reducer has durably journaled
+            # the CommandExecution item (and completed its live notification)
+            # before allowing that next() call.
+            apply_receipt.result(timeout=timeout_s)
+        except Exception as exc:
+            apply_receipt.cancel()
+            cancel_source.cancel(reason="tool_start durable audit failed")
+            raise _ToolStartAuditError(
+                "tool execution blocked because its start event was not durably applied"
+            ) from exc
+        finally:
+            with pending_apply_receipts_lock:
+                pending_apply_receipts.discard(apply_receipt)
 
     def _push_chunk(call_id: str, stream: str, chunk: str) -> None:
         # Called from a reader sub-thread inside the tool's subprocess
@@ -352,17 +503,22 @@ async def _drive_react(
             "stream": stream,
             "delta": chunk,
         }
+
+        async def _enqueue_chunk() -> None:
+            with contextlib.suppress(asyncio.QueueFull):
+                queue.put_nowait(evt)
+
+        put_future = asyncio.run_coroutine_threadsafe(_enqueue_chunk(), loop)
         try:
-            asyncio.run_coroutine_threadsafe(
-                queue.put(evt),
-                loop,
-            ).result(timeout=2.0)
-        except (RuntimeError, TimeoutError):
+            put_future.result(timeout=0.05)
+        except (FutureCancelledError, RuntimeError, TimeoutError):
+            put_future.cancel()
             _logger.warning(
                 "tool_output_delta drop (consumer slow) — command output may be truncated in the UI"
             )
 
     def producer() -> None:
+        nonlocal producer_failure
         # ``asyncio.to_thread`` copies ContextVars from the calling
         # task, so installing the cancellation scope here makes the
         # token visible to every subprocess call downstream.
@@ -370,7 +526,17 @@ async def _drive_react(
         from runtime.platform.process.session import Session, session_scope
 
         session_metadata = dict(intent.user_context or {})
-        _apply_orchestration_grant(session_metadata)
+        _apply_react_session_metadata(session_metadata, runtime._stack, provider)
+        # Prompt guidance is not a sufficient mutation boundary. Derive a
+        # private, server-owned read-only marker from the actual turn goal so
+        # the executor and delegated children fail closed even when a model
+        # emits a write call during a diagnostic/read-only request.
+        from runtime.core.cerebrum.react_explicit_reads import _explicit_read_only_goal
+        from runtime.core.cerebrum.todo_protocol import _is_read_only_analysis_goal
+
+        _turn_goal = str(intent.normalized_goal or intent.raw or "")
+        if _explicit_read_only_goal(_turn_goal) or _is_read_only_analysis_goal(_turn_goal):
+            session_metadata["_read_only_turn_enforced"] = True
         # Sub-agents spawned inside the turn (run_orchestration fan-out,
         # call_agent_parallel, ...) mirror their lifecycle/tool events onto
         # the journal ONLY when the bound Session carries one
@@ -388,6 +554,7 @@ async def _drive_react(
             session_metadata["_trace_store"] = runtime._trace_store
         session_agent = agent if hasattr(agent, "agent_id") else None
         turn_session = Session(
+            actor=getattr(intent, "actor", None),
             agent=session_agent,
             thread_id=turn.thread_id,
             conversation_id=turn.thread_id,
@@ -537,18 +704,28 @@ async def _drive_react(
                                 )
                         _safe_put(evt)
             except Exception as exc:
-                _safe_put(
-                    {
-                        "type": "react_error",
-                        "kind": exc.__class__.__name__,
-                        "message": _safe_stream_error_message(exc),
-                    }
-                )
+                producer_failure = exc
+                # The queue may be the very resource that failed. Keep the
+                # exception in shared control-plane state above, then make a
+                # best effort to publish the ordinary react_error event. The
+                # consumer converts the shared failure to an explicit failed
+                # turn after it drains all events that did make it through.
+                with contextlib.suppress(Exception):
+                    _safe_put(
+                        {
+                            "type": "react_error",
+                            "kind": exc.__class__.__name__,
+                            "message": _safe_stream_error_message(exc),
+                        }
+                    )
             finally:
                 if unsubscribe_lifecycle is not None:
                     with contextlib.suppress(Exception):
                         unsubscribe_lifecycle()
-                _safe_put(None, timeout=5.0)
+                # Completion cannot be a capacity-bound queue sentinel: signal
+                # it independently, then let the consumer drain the queue.
+                with contextlib.suppress(RuntimeError):
+                    loop.call_soon_threadsafe(producer_done.set)
 
     worker = asyncio.create_task(asyncio.to_thread(producer))
     state = runtime._make_bridge_state(turn.thread_id, turn.id, agent=agent)
@@ -615,15 +792,36 @@ async def _drive_react(
                 cancel_source.cancel(reason="task supervisor lease lost")
 
     saw_terminal_event = False
+    structural_apply_failure: dict[str, Any] | None = None
+    producer_done_waiter = asyncio.create_task(producer_done.wait())
+    queue_getter: asyncio.Task[_QueuedReactEvent | dict[str, Any]] | None = None
     try:
         loop_started = time.monotonic()
         while True:
             _supervisor_heartbeat_if_due(time.monotonic())
-            try:
-                evt = await asyncio.wait_for(
-                    queue.get(), timeout=_SINGLE_AGENT_HEARTBEAT_INTERVAL_S
-                )
-            except TimeoutError:
+            if producer_done.is_set() and queue.empty():
+                break
+            queue_getter = asyncio.create_task(queue.get())
+            ready, _pending = await asyncio.wait(
+                {queue_getter, producer_done_waiter},
+                timeout=_SINGLE_AGENT_HEARTBEAT_INTERVAL_S,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if queue_getter in ready:
+                queued = queue_getter.result()
+            elif producer_done_waiter in ready:
+                # Done is set after all producer puts settle. Drain anything
+                # already queued; an empty queue is now terminal.
+                if queue.empty():
+                    queue_getter.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await queue_getter
+                    break
+                queued = await queue_getter
+            else:
+                queue_getter.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await queue_getter
                 # No event for a while: the model is thinking or a tool is
                 # running silently. Emit a keepalive (unless the turn is
                 # already winding down) so the frontend reads "working",
@@ -632,17 +830,21 @@ async def _drive_react(
                     await runtime._publish_discovered_steering(turn, emitter)
                     await _emit_turn_heartbeat(emitter, turn, loop_started)
                 continue
-            if evt is None:
-                break
+            if isinstance(queued, _QueuedReactEvent):
+                evt = queued.event
+                apply_receipt = queued.applied
+            else:
+                evt = queued
+                apply_receipt = None
             await runtime._publish_discovered_steering(turn, emitter)
-            if evt.get("type") in {
-                "react_completed",
-                "react_cancelled",
-                "react_paused",
-                "react_error",
-            }:
-                saw_terminal_event = True
+            event_kind = str(evt.get("type") or "")
             if emitter.is_turn_interrupted(turn.id):
+                _settle_apply_receipt(
+                    apply_receipt,
+                    error=_ToolStartAuditError(
+                        "tool_start was skipped because the turn was interrupted"
+                    ),
+                )
                 if not cancel_source.is_cancelled:
                     cancel_source.cancel(reason="user interrupted turn")
                 turn.status = TurnStatus.CANCELLED
@@ -661,17 +863,52 @@ async def _drive_react(
                 continue
             try:
                 await _apply_react_event(runtime, turn, log, emitter, state, evt)
+            except asyncio.CancelledError:
+                _settle_apply_receipt(
+                    apply_receipt,
+                    error=_ToolStartAuditError(
+                        "tool_start apply was cancelled before the audit boundary"
+                    ),
+                )
+                raise
             except Exception as exc:  # noqa: BLE001
+                _settle_apply_receipt(apply_receipt, error=exc)
+                if event_kind in _CRITICAL_STRUCTURAL_EVENT_TYPES:
+                    cancel_source.cancel(reason=f"critical {event_kind} reducer apply failed")
+                    if structural_apply_failure is None:
+                        structural_apply_failure = {
+                            "code": "react_structural_event_apply_failed",
+                            "message": _safe_stream_error_message(exc),
+                            "event_type": event_kind,
+                            "exception_type": exc.__class__.__name__,
+                        }
+                    turn.status = TurnStatus.FAILED
+                    turn.outcome_reason = "react_structural_event_apply_failed"
+                    turn.error = dict(structural_apply_failure)
                 # A single bad event shouldn't kill the dispatch
-                # loop — swallow and keep draining so the producer
-                # can finish (and so we still emit the trailing
-                # ``state.flush`` for whatever made it through).
+                # loop. Critical lifecycle failures still mark the turn
+                # failed and cancel production above; draining lets queued
+                # receipts close without converting that failure to success.
                 _logger.warning(
                     "react event apply failed (kind=%s): %s",
                     evt.get("type") if isinstance(evt, dict) else "?",
                     exc,
                     exc_info=True,
                 )
+            else:
+                if event_kind in _TERMINAL_REACT_EVENT_TYPES:
+                    saw_terminal_event = True
+                if apply_receipt is not None and (
+                    cancel_source.is_cancelled or emitter.is_turn_interrupted(turn.id)
+                ):
+                    _settle_apply_receipt(
+                        apply_receipt,
+                        error=_ToolStartAuditError(
+                            "tool_start was durably recorded but execution was cancelled"
+                        ),
+                    )
+                else:
+                    _settle_apply_receipt(apply_receipt)
     finally:
         # Trip cancellation so the producer THREAD (asyncio.to_thread)
         # observes it and bails — task cancellation alone can't stop a
@@ -680,6 +917,33 @@ async def _drive_react(
         # interrupt, or supervisor lease loss) — a dropped WebSocket no
         # longer reaches this path; the turn runs on server-side.
         cancel_source.cancel(reason="consumer teardown")
+        if queue_getter is not None and not queue_getter.done():
+            queue_getter.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await queue_getter
+        if not producer_done_waiter.done():
+            producer_done_waiter.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await producer_done_waiter
+        # Reject receipts before awaiting the worker so teardown cannot
+        # advance a stranded tool_start into its side effect.
+        with pending_apply_receipts_lock:
+            teardown_receipts = tuple(pending_apply_receipts)
+        for receipt in teardown_receipts:
+            _settle_apply_receipt(
+                receipt,
+                error=_ToolStartAuditError("tool_start skipped during consumer teardown"),
+            )
+        while True:
+            try:
+                abandoned = queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            if isinstance(abandoned, _QueuedReactEvent):
+                _settle_apply_receipt(
+                    abandoned.applied,
+                    error=_ToolStartAuditError("tool_start skipped during consumer teardown"),
+                )
         watcher.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await watcher
@@ -697,6 +961,28 @@ async def _drive_react(
 
     # Finalize anything still open. Wrapped in suppress so a torn-
     # down ws doesn't take the whole turn-completion path with it.
+    if structural_apply_failure is not None:
+        # A later drained pause/cancel cannot mask the audit failure.
+        turn.status = TurnStatus.FAILED
+        turn.outcome_reason = "react_structural_event_apply_failed"
+        turn.error = dict(structural_apply_failure)
+    if producer_failure is not None and turn.status == TurnStatus.IN_PROGRESS:
+        structural_delivery_failure = isinstance(
+            producer_failure,
+            _ReactStructuralDeliveryError,
+        )
+        failure_code = (
+            "react_structural_event_delivery_failed"
+            if structural_delivery_failure
+            else "react_producer_failed"
+        )
+        turn.status = TurnStatus.FAILED
+        turn.outcome_reason = failure_code
+        turn.error = {
+            "code": failure_code,
+            "message": _safe_stream_error_message(producer_failure),
+            "exception_type": producer_failure.__class__.__name__,
+        }
     if not saw_terminal_event and turn.status == TurnStatus.IN_PROGRESS:
         answer_text = (
             str(state.agent_message.text or "").strip() if state.agent_message is not None else ""
@@ -743,14 +1029,18 @@ async def _drive_react(
             emitter,
             status=state.prose_status_for_turn(turn.status),
         )
-    if turn.status == TurnStatus.IN_PROGRESS:
-        with contextlib.suppress(Exception):
-            await state.finalize_workbench(
-                turn,
-                log,
-                emitter,
-                terminal_status=TurnStatus.COMPLETED,
-            )
+    # Every terminal path must settle the workbench. Previously only the
+    # implicit-success path reached this call; producer/audit failures left the
+    # sidebar at "0/4 running" even though the turn had already failed.
+    with contextlib.suppress(Exception):
+        await state.finalize_workbench(
+            turn,
+            log,
+            emitter,
+            terminal_status=(
+                TurnStatus.COMPLETED if turn.status == TurnStatus.IN_PROGRESS else turn.status
+            ),
+        )
     # Note: background tool watchers (started by ``track_background_tool``)
     # are intentionally NOT cancelled here. They're designed to outlive
     # the current turn — the user starts a long-running shell command,

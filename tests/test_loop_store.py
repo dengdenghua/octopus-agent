@@ -402,7 +402,7 @@ def test_dispatcher_queue_cap_refuses_when_full(tmp_path) -> None:
         def execute(self, run_id: str, cancellation_token=None):
             started.append(run_id)
             release.wait(10)
-            return None
+            return
 
     store = LoopRunStore(tmp_path / "loop_runs.json")
     d = LoopRunDispatcher(
@@ -420,3 +420,14 @@ def test_dispatcher_queue_cap_refuses_when_full(tmp_path) -> None:
     finally:
         release.set()
         time.sleep(0.1)
+
+
+def test_prune_with_default_policy_no_args(tmp_path) -> None:
+    """prune() without explicit limits uses the class defaults (regression:
+    bare class-attribute references in the method used to NameError)."""
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    run = LoopRun(owner_id="owner", goal="prune default policy", thread_id="th-prune")
+    created = store.create(run)
+    assert store.prune() >= 0
+    # default TTL is 90 days — a fresh run stays
+    assert store.get(created.run_id) is not None

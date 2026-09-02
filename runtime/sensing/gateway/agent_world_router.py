@@ -3,13 +3,12 @@
 
 Exposes the built-in agents under `agents/` as a browsable store and
 persists install/uninstall state to a lightweight JSON file under the
-user's home directory. This makes the frontend Agent Market usable even
+runtime data directory. This makes the frontend Agent Market usable even
 before a remote marketplace exists.
 """
 
 from __future__ import annotations
 
-import os
 import shutil
 from pathlib import Path
 from typing import Any
@@ -29,7 +28,7 @@ except ImportError:  # pragma: no cover
 from runtime.execution.agents.loader import default_agents_root
 from runtime.execution.misc.agent_avatar import pixel_agent_avatar_svg
 from runtime.platform.io import atomic_write_json, atomic_write_text, read_json_with_backup
-from runtime.platform.process.paths import resources_root
+from runtime.platform.process.paths import app_paths, resources_root
 from runtime.sensing._fastapi_guard import require_fastapi
 
 # ── Re-exports from helper submodule ──────────────────────────────
@@ -54,7 +53,7 @@ from ._agent_world_helpers import (
     _template_source_root,
 )
 
-_INSTALL_STATE = Path(os.path.expanduser("~/.octopus/agents-installed.json"))
+_INSTALL_STATE = app_paths().data_dir / "agents-installed.json"
 _MARKET_INSTALL_SOURCE = "agent-market-template"
 
 
@@ -334,6 +333,20 @@ def create_agent_world_router(
             jwt_audience=jwt_audience,
         )
 
+    def _admin_dep(request: Request) -> None:
+        """Protect shared executable-content mutations in auth-on mode."""
+        from runtime.safety.auth.principal import require_roles
+
+        require_roles(
+            request,
+            identity_store,
+            require_auth,
+            ("admin",),
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     router = APIRouter(tags=["agent-market"], dependencies=[Depends(_auth_dep)])
 
     @router.get("/api/agent-market/store")
@@ -393,7 +406,10 @@ def create_agent_world_router(
             return _template_to_agent_dict(template, installed=_read_install_state())
         raise HTTPException(404, f"agent not found: {agent_id}")
 
-    @router.post("/api/agent-market/store/{agent_id}/install")
+    @router.post(
+        "/api/agent-market/store/{agent_id}/install",
+        dependencies=[Depends(_admin_dep)],
+    )
     def api_agent_market_install(agent_id: str) -> dict[str, Any]:
         try:
             agent_id = _require_safe_agent_id(agent_id)
@@ -452,7 +468,10 @@ def create_agent_world_router(
             "tool_registry": str(tool_registry_path),
         }
 
-    @router.delete("/api/agent-market/store/{agent_id}/install")
+    @router.delete(
+        "/api/agent-market/store/{agent_id}/install",
+        dependencies=[Depends(_admin_dep)],
+    )
     def api_agent_market_uninstall(agent_id: str) -> dict[str, Any]:
         try:
             agent_id = _require_safe_agent_id(agent_id)
@@ -524,7 +543,10 @@ def create_agent_world_router(
     def api_agent_market_ratings(agent_id: str) -> dict[str, Any]:
         return {"ratings": []}
 
-    @router.get("/api/agent-market/packs/preview")
+    @router.get(
+        "/api/agent-market/packs/preview",
+        dependencies=[Depends(_admin_dep)],
+    )
     def api_agent_pack_preview(path: str) -> dict[str, Any]:
         from runtime.execution.misc.agent_packs import scan_agent_pack
 
@@ -535,7 +557,10 @@ def create_agent_world_router(
         except NotADirectoryError as exc:
             raise HTTPException(400, str(exc)) from exc
 
-    @router.post("/api/agent-market/packs/import-agent")
+    @router.post(
+        "/api/agent-market/packs/import-agent",
+        dependencies=[Depends(_admin_dep)],
+    )
     def api_agent_pack_import_agent(body: dict[str, Any]) -> dict[str, Any]:
         from runtime.execution.misc.agent_packs import (
             AgentPackAgentNotFound,
@@ -572,6 +597,264 @@ def create_agent_world_router(
     @router.get("/api/agent-market/social/{agent_name}/relationships")
     def api_agent_market_social(agent_name: str) -> dict[str, Any]:
         return {"relationships": []}
+
+    # ── WorkBuddy 专家商城 · 云端源 ──────────────────────────────
+    # 数据来自发布到 GitHub Pages 的 expert-store.json(421 位专家/专家团,
+    # 见 extensions/workbuddy-experts + scripts/publish-cloud.py)。
+    def _cloud_store() -> Any:
+        from runtime.platform.plugins.cloud_expert_store import CloudExpertStore
+
+        return CloudExpertStore()
+
+    @router.get("/api/agent-market/cloud/store")
+    def api_agent_market_cloud_store(
+        category: str | None = None,
+        search: str | None = None,
+        sort: str = "updated",
+        refresh: int = 0,
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=20, ge=1, le=500),
+    ) -> dict[str, Any]:
+        store = _cloud_store()
+        if refresh:
+            store.refresh()
+        return store.list_experts(
+            category=category, search=search, sort=sort, offset=offset, limit=limit
+        )
+
+    @router.get("/api/agent-market/cloud/store/categories")
+    def api_agent_market_cloud_categories() -> dict[str, Any]:
+        store = _cloud_store()
+        return {"categories": store.categories(), "meta": store.meta()}
+
+    @router.get("/api/agent-market/cloud/store/{expert_id}")
+    def api_agent_market_cloud_detail(expert_id: str) -> dict[str, Any]:
+        store = _cloud_store()
+        e = store.get(expert_id)
+        if not e:
+            raise HTTPException(404, f"cloud expert not found: {expert_id}")
+        installed = store._installed_set()
+        agent = store.to_agent_dict(e, installed=installed)
+        agent["bundle_url"] = e.get("bundleUrl") or ""
+        agent["quick_prompts"] = [
+            p.get("zh") or p.get("en") or "" for p in (e.get("quickPrompts") or [])
+        ]
+        agent["prompt_file"] = e.get("promptFile") or ""
+        return agent
+
+    @router.post(
+        "/api/agent-market/cloud/store/{expert_id}/install",
+        dependencies=[Depends(_admin_dep)],
+    )
+    def api_agent_market_cloud_install(expert_id: str) -> dict[str, Any]:
+        from runtime.execution.misc.agent_packs import AgentPackAgentNotFound
+        from runtime.execution.suckers.market_skills import immutable_prompt_catalog_required
+
+        if immutable_prompt_catalog_required():
+            raise HTTPException(
+                403,
+                "remote expert installation is disabled in shared/commercial deployments; "
+                "ship expert prompts in a reviewed release artifact",
+            )
+
+        store = _cloud_store()
+        try:
+            return store.install_expert(
+                expert_id,
+                agents_root=default_agents_root(),
+                skills_root=resources_root() / "skills" / "public",
+            )
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except AgentPackAgentNotFound as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    # ── 云商城插件 / 技能目录(发布到 Pages 的 plugin-store.json / skill-registry.json) ──
+    def _cloud_catalog(kind: str) -> Any:
+        from runtime.platform.plugins.cloud_catalog import CloudCatalog
+
+        return CloudCatalog(kind)
+
+    @router.get("/api/agent-market/cloud/plugins")
+    def api_agent_market_cloud_plugins(
+        search: str | None = None,
+        kind: str | None = None,
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=200, ge=1, le=500),
+        refresh: int = Query(default=0, ge=0, le=1),
+    ) -> dict[str, Any]:
+        cat = _cloud_catalog("plugins")
+        if refresh:
+            cat.refresh()
+        out = cat.list(search=search, kind=kind, offset=offset, limit=limit)
+        out["meta"] = cat.meta()
+        return out
+
+    @router.get("/api/agent-market/cloud/skills")
+    def api_agent_market_cloud_skills(
+        search: str | None = None,
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=300, ge=1, le=500),
+        refresh: int = Query(default=0, ge=0, le=1),
+    ) -> dict[str, Any]:
+        cat = _cloud_catalog("skills")
+        if refresh:
+            cat.refresh()
+        out = cat.list(search=search, offset=offset, limit=limit)
+        out["meta"] = cat.meta()
+        return out
+
+    # ── 云商城已安装状态(本地已落地哪些技能/插件) ─────────────
+    @router.get("/api/agent-market/cloud/installed")
+    def api_agent_market_cloud_installed() -> dict[str, Any]:
+        cat = _cloud_catalog("skills")
+        plugins = _cloud_catalog("plugins")
+        return {
+            "skills": cat.installed_skills(),
+            "plugins": plugins.installed_plugins(),
+        }
+
+    # ── 云商城安装(下载内容包 → 解包落地) ─────────────────────
+    @router.post(
+        "/api/agent-market/cloud/skills/{name}/install",
+        dependencies=[Depends(_admin_dep)],
+    )
+    def api_agent_market_cloud_skill_install(name: str) -> dict[str, Any]:
+        from runtime.execution.suckers.market_skills import immutable_prompt_catalog_required
+
+        if immutable_prompt_catalog_required():
+            raise HTTPException(
+                403,
+                "remote skill installation is disabled in shared/commercial deployments; "
+                "ship skill prompts in a reviewed release artifact",
+            )
+        cat = _cloud_catalog("skills")
+        try:
+            return cat.install_skill(name)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @router.post(
+        "/api/agent-market/cloud/plugins/{plugin_id}/install",
+        dependencies=[Depends(_admin_dep)],
+    )
+    def api_agent_market_cloud_plugin_install(
+        plugin_id: str,
+        request: Request,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        from runtime.execution.suckers.market_skills import immutable_prompt_catalog_required
+
+        cat = _cloud_catalog("plugins")
+        item = next((i for i in cat.items() if i.get("id") == plugin_id), None)
+        if item is None:
+            raise HTTPException(404, f"cloud plugin not found: {plugin_id}")
+        # 内容包目录:codex 插件 plugins/codex/<name>,连接器 plugins/connector/<id>;
+        # 条目 id 带前缀(codex_/wb_),成员名取 item["plugin"]。
+        item_kind = str(item.get("kind") or "connector")
+        archive_kind = (
+            "codex"
+            if item_kind == "plugin"
+            else "workbench"
+            if item_kind == "workbench"
+            else "connector"
+        )
+        member = str(item.get("plugin") or plugin_id)
+        is_factory_workbench = archive_kind == "workbench" and bool(item.get("factory_seed"))
+        if immutable_prompt_catalog_required() and not is_factory_workbench:
+            raise HTTPException(
+                403,
+                "unsigned cloud plugin installation is disabled in shared/commercial "
+                "deployments; ship a reviewed signed plugin release",
+            )
+        payload = body or {}
+        enabled_value = payload.get("enabled", True)
+        restore_value = payload.get("restore_data", False)
+        recovery_value = payload.get("recovery_id")
+        if not isinstance(enabled_value, bool):
+            raise HTTPException(400, "enabled must be a boolean")
+        if not isinstance(restore_value, bool):
+            raise HTTPException(400, "restore_data must be a boolean")
+        if recovery_value is not None and not isinstance(recovery_value, str):
+            raise HTTPException(400, "recovery_id must be a string")
+        try:
+            hub = getattr(request.app.state, "plugin_hub", None)
+            if is_factory_workbench and hub is not None:
+                return hub.install_plugin(
+                    member,
+                    enabled=enabled_value,
+                    restore_data=restore_value,
+                    recovery_id=recovery_value,
+                )
+            if is_factory_workbench:
+                return cat.install_plugin(
+                    member,
+                    plugin_kind=archive_kind,
+                    enabled=enabled_value,
+                    restore_data=restore_value,
+                    recovery_id=recovery_value,
+                )
+            return cat.install_plugin(member, plugin_kind=archive_kind)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @router.delete(
+        "/api/agent-market/cloud/plugins/{plugin_id}/install",
+        dependencies=[Depends(_admin_dep)],
+    )
+    def api_agent_market_cloud_plugin_uninstall(
+        plugin_id: str,
+        request: Request,
+        data_policy: str = Query(default="keep", pattern="^(keep|trash)$"),
+        confirm_data_move: bool = Query(default=False),
+    ) -> dict[str, Any]:
+        cat = _cloud_catalog("plugins")
+        item = next((i for i in cat.items() if i.get("id") == plugin_id), None)
+        if item is None:
+            raise HTTPException(404, f"cloud plugin not found: {plugin_id}")
+        item_kind = str(item.get("kind") or "connector")
+        archive_kind = (
+            "codex"
+            if item_kind == "plugin"
+            else "workbench"
+            if item_kind == "workbench"
+            else "connector"
+        )
+        member = str(item.get("plugin") or plugin_id)
+        is_factory_workbench = archive_kind == "workbench" and bool(item.get("factory_seed"))
+        try:
+            hub = getattr(request.app.state, "plugin_hub", None)
+            if is_factory_workbench and hub is not None:
+                return hub.uninstall_plugin(
+                    member,
+                    data_policy=data_policy,
+                    confirm_data_move=confirm_data_move,
+                )
+            if is_factory_workbench:
+                return cat.uninstall_plugin(
+                    member,
+                    plugin_kind=archive_kind,
+                    data_policy=data_policy,
+                    confirm_data_move=confirm_data_move,
+                )
+            return cat.uninstall_plugin(member, plugin_kind=archive_kind)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            status = 409 if "not installed" in str(exc) else 400
+            raise HTTPException(status, str(exc)) from exc
 
     return router
 

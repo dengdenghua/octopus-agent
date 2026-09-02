@@ -20,7 +20,7 @@ from runtime.memory.threads.compaction import (
     estimate_turns_tokens,
     should_compact,
 )
-from runtime.memory.threads.event_log import EventLog
+from runtime.memory.threads.event_log import EventLog, LoggedEvent
 from runtime.platform.models.primitives import new_id
 from runtime.protocol.items import (
     AgentMessageItem,
@@ -85,10 +85,7 @@ class TestTokenVolumeTrigger:
     def test_fires_below_turn_threshold_on_volume(self) -> None:
         # 6 turns × ~30k chars ≈ 60k estimated tokens — far under the
         # turn threshold but over the token one.
-        turns = [
-            _make_turn(i, user_text=f"ask-{i} ", agent_text="x" * 30_000)
-            for i in range(6)
-        ]
+        turns = [_make_turn(i, user_text=f"ask-{i} ", agent_text="x" * 30_000) for i in range(6)]
         policy = CompactionPolicy(
             trigger_at=24,
             keep_recent=2,
@@ -98,10 +95,7 @@ class TestTokenVolumeTrigger:
         assert should_compact(turns, policy) is True
 
     def test_volume_path_disabled_by_default(self) -> None:
-        turns = [
-            _make_turn(i, user_text="ask", agent_text="x" * 30_000)
-            for i in range(6)
-        ]
+        turns = [_make_turn(i, user_text="ask", agent_text="x" * 30_000) for i in range(6)]
         # trigger_tokens unset → historical count-only behaviour.
         assert should_compact(turns, CompactionPolicy(trigger_at=24, keep_recent=2)) is False
 
@@ -326,3 +320,175 @@ class TestEventLogIntegration:
         all_events = list(log.iter_events())
         turn_started_ids = [e.turn_id for e in all_events if e.event == "turn_started"]
         assert turn_started_ids == [t.id for t in turns]
+
+    def test_replay_ignores_identical_stale_compaction(self, tmp_path: Path) -> None:
+        """Two workers may compact the same snapshot concurrently.
+
+        The first event wins. Replaying the second must not append a duplicate
+        summary after the kept recent turns merely because its source turns
+        have already been replaced.
+        """
+        log = EventLog(tmp_path / "th.jsonl")
+        log.thread_started("th")
+        turns = [_make_turn(i, user_text=f"u-{i}") for i in range(5)]
+        for turn in turns:
+            log.turn_started("th", turn)
+            log.turn_completed("th", turn.id, TurnStatus.COMPLETED)
+
+        policy = CompactionPolicy(trigger_at=5, keep_recent=2)
+        first = compact("th", turns, policy)
+        second = compact("th", turns, policy)
+        assert first is not None and second is not None
+        log.turn_compacted("th", first.summary_turn, first.superseded_ids)
+        log.turn_compacted("th", second.summary_turn, second.superseded_ids)
+
+        assert [turn.id for turn in log.replay()] == [
+            first.summary_turn.id,
+            turns[3].id,
+            turns[4].id,
+        ]
+
+    def test_replay_ignores_partially_overlapping_stale_compaction(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A wider stale snapshot cannot replace only its still-live suffix."""
+        log = EventLog(tmp_path / "th.jsonl")
+        log.thread_started("th")
+        turns = [_make_turn(i, user_text=f"u-{i}") for i in range(5)]
+        for turn in turns:
+            log.turn_started("th", turn)
+            log.turn_completed("th", turn.id, TurnStatus.COMPLETED)
+
+        first = compact(
+            "th",
+            turns,
+            CompactionPolicy(trigger_at=5, keep_recent=2),
+        )
+        stale_wider = compact(
+            "th",
+            turns,
+            CompactionPolicy(trigger_at=5, keep_recent=1),
+        )
+        assert first is not None and stale_wider is not None
+        log.turn_compacted("th", first.summary_turn, first.superseded_ids)
+        log.turn_compacted(
+            "th",
+            stale_wider.summary_turn,
+            stale_wider.superseded_ids,
+        )
+
+        assert [turn.id for turn in log.replay()] == [
+            first.summary_turn.id,
+            turns[3].id,
+            turns[4].id,
+        ]
+
+    def test_replay_ignores_reordered_or_non_prefix_compaction(self, tmp_path: Path) -> None:
+        """Only the exact, ordered visible prefix is a valid replacement base."""
+        log = EventLog(tmp_path / "th.jsonl")
+        log.thread_started("th")
+        turns = [_make_turn(i, user_text=f"u-{i}") for i in range(5)]
+        for turn in turns:
+            log.turn_started("th", turn)
+            log.turn_completed("th", turn.id, TurnStatus.COMPLETED)
+
+        reordered = compact(
+            "th",
+            turns,
+            CompactionPolicy(trigger_at=5, keep_recent=2),
+        )
+        non_prefix = compact(
+            "th",
+            turns,
+            CompactionPolicy(trigger_at=5, keep_recent=3),
+        )
+        assert reordered is not None and non_prefix is not None
+        log.turn_compacted(
+            "th",
+            reordered.summary_turn,
+            list(reversed(reordered.superseded_ids)),
+        )
+        log.turn_compacted(
+            "th",
+            non_prefix.summary_turn,
+            [turns[1].id, turns[2].id],
+        )
+
+        assert [turn.id for turn in log.replay()] == [turn.id for turn in turns]
+
+    def test_replay_ignores_malformed_compaction_lineage(self, tmp_path: Path) -> None:
+        """Empty, duplicate, or non-string source ids cannot form a CAS key."""
+        log = EventLog(tmp_path / "th.jsonl")
+        log.thread_started("th")
+        turns = [_make_turn(i, user_text=f"u-{i}") for i in range(3)]
+        for turn in turns:
+            log.turn_started("th", turn)
+            log.turn_completed("th", turn.id, TurnStatus.COMPLETED)
+
+        invalid_lineages: list[list[object]] = [
+            [],
+            [turns[0].id, turns[0].id],
+            [turns[0].id, 7],
+        ]
+        for index, lineage in enumerate(invalid_lineages):
+            summary = _make_turn(100 + index, agent_text="invalid summary")
+            log.append(
+                LoggedEvent(
+                    event="turn_compacted",
+                    threadId="th",
+                    turnId=summary.id,
+                    payload={
+                        "summaryTurn": summary.model_dump(by_alias=True, mode="json"),
+                        "supersededTurnIds": lineage,
+                    },
+                )
+            )
+
+        assert [turn.id for turn in log.replay()] == [turn.id for turn in turns]
+
+    def test_replay_applies_valid_second_generation_compaction(self, tmp_path: Path) -> None:
+        """A later compaction may legitimately fold the prior summary prefix."""
+        log = EventLog(tmp_path / "th.jsonl")
+        log.thread_started("th")
+        turns = [_make_turn(i, user_text=f"u-{i}") for i in range(5)]
+        for turn in turns:
+            log.turn_started("th", turn)
+            log.turn_completed("th", turn.id, TurnStatus.COMPLETED)
+
+        first = compact(
+            "th",
+            turns,
+            CompactionPolicy(trigger_at=5, keep_recent=2),
+        )
+        assert first is not None
+        log.turn_compacted("th", first.summary_turn, first.superseded_ids)
+
+        turn_5 = _make_turn(5, user_text="u-5")
+        log.turn_started("th", turn_5)
+        log.turn_completed("th", turn_5.id, TurnStatus.COMPLETED)
+        visible = log.replay()
+        assert [turn.id for turn in visible] == [
+            first.summary_turn.id,
+            turns[3].id,
+            turns[4].id,
+            turn_5.id,
+        ]
+
+        second = compact(
+            "th",
+            visible,
+            CompactionPolicy(trigger_at=4, keep_recent=1),
+        )
+        assert second is not None
+        assert second.superseded_ids == [
+            first.summary_turn.id,
+            turns[3].id,
+            turns[4].id,
+        ]
+        log.turn_compacted("th", second.summary_turn, second.superseded_ids)
+
+        assert [turn.id for turn in log.replay()] == [
+            second.summary_turn.id,
+            turn_5.id,
+        ]

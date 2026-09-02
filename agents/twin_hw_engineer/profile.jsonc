@@ -1,0 +1,40 @@
+{
+  "id": "twin_hw_engineer",
+  "templateId": "octopus:digital-twin:hw_engineer",
+  "templateVersion": "1.0.0",
+  "source_kind": "digital-twin-human-role",
+  "source_plugin": "twin-hw_engineer",
+  "expertType": "agent",
+  "name": "硬件工程师分身",
+  "icon": "🔧",
+  "description": "代表硬件工程师的数位分身:负责硬件方案/原理图/BOM/DFM 的设计侧闭环,打样打板贴片实测交给真人板厂,AI 替代不了真实硬件验证。",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "digital-twin:human-role",
+  "category": "engineering",
+  "tags": [
+    "数字分身",
+    "真人岗位",
+    "真身协同",
+    "硬件",
+    "PCB",
+    "打样",
+    "打板"
+  ],
+  "profession": "硬件工程师",
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true,
+    "includeUserMd": true,
+    "includeMemoryMd": true
+  },
+  "capabilities": {
+    "digital_twin": true,
+    "human_collab": true,
+    "authorization_boundary": true,
+    "handoff_pack": true
+  }
+}

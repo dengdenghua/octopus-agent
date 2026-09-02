@@ -1,0 +1,17 @@
+{
+  "arms": [
+    "web_read",
+    "fs_writer",
+    "shell"
+  ],
+  "extra_affinity": [
+    "数字分身",
+    "真人岗位",
+    "质量",
+    "FAI",
+    "8D",
+    "签样"
+  ],
+  "private_skills": [],
+  "digital_twin": true
+}

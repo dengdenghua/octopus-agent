@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { memo } from "react";
 import { DotProgress } from "@/components/workspace/swarm/dot-progress";
 import { emitAgentWorkbenchFocus } from "@/components/workspace/agent-workbench-events";
 import { useI18n } from "@/core/i18n/hooks";
@@ -16,6 +17,7 @@ import {
 } from "../agent-run-status";
 import { subtaskProgress, subtaskProgressPercent, subtaskRunState } from "./subtask-status-ui";
 import { friendlyRoleName } from "../agent-workbench-pages";
+import { SubagentDetailsPanel } from "./subagent-details-panel";
 import {
   CheckCircleIcon,
   Loader2Icon,
@@ -26,7 +28,26 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   ArrowRightIcon,
+  FileIcon,
+  RefreshCwIcon,
 } from "lucide-react";
+
+/**
+ * Format duration in milliseconds to human-readable string
+ */
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) {
+    return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+}
 
 function getStatusIcon(status: SubtaskStatus) {
   if (status === "completed")
@@ -46,14 +67,18 @@ function getStatusIcon(status: SubtaskStatus) {
   return null;
 }
 
-function MiniSubtaskRow({
+const MiniSubtaskRow = memo(function MiniSubtaskRow({
   taskId,
   isLoading: _isLoading,
   onClick,
+  onDetailsClick,
+  compact,
 }: {
   taskId: string;
   isLoading: boolean;
   onClick?: () => void;
+  onDetailsClick?: () => void;
+  compact?: boolean;
 }) {
   const task = useSubtask(taskId);
   const { t } = useI18n();
@@ -110,7 +135,8 @@ function MiniSubtaskRow({
           invalid HTML and breaks keyboard/screen-reader semantics. */}
       <div
         className={cn(
-          "relative flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs transition-all",
+          "relative flex w-full items-center gap-2 rounded-lg border text-left text-xs transition-all",
+          compact ? "px-2 py-1.5" : "px-3 py-2",
           runState === "running"
             ? agentRunPanelClass("running")
             : "border-border bg-muted/30",
@@ -129,7 +155,10 @@ function MiniSubtaskRow({
         />
         {task.avatarEmoji && (
           <span
-            className="flex size-6 shrink-0 items-center justify-center rounded-lg text-xs"
+            className={cn(
+              "flex shrink-0 items-center justify-center rounded-lg",
+              compact ? "size-5 text-xs" : "size-6 text-xs"
+            )}
             style={
               task.hue != null
                 ? { background: `hsl(${task.hue} 70% 92%)` }
@@ -145,15 +174,19 @@ function MiniSubtaskRow({
             <span className="truncate font-medium">
               {task.name ?? task.description}
             </span>
-            <span className="shrink-0 rounded bg-muted/50 px-1 py-0.5 text-xs font-medium text-muted-foreground">
-              {roleName}
-            </span>
+            {!compact && (
+              <span className="shrink-0 rounded bg-muted/50 px-1 py-0.5 text-xs font-medium text-muted-foreground">
+                {roleName}
+              </span>
+            )}
           </div>
-          <div className="text-muted-foreground mt-0.5 truncate">
-            {task.description}
-          </div>
+          {!compact && (
+            <div className="text-muted-foreground mt-0.5 truncate">
+              {task.description}
+            </div>
+          )}
           {/* 实时进度条 */}
-          <div className="mt-1.5 flex items-center gap-1.5">
+          <div className={cn("flex items-center gap-1.5", compact ? "mt-1" : "mt-1.5")}>
             <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted/60">
               <div
                 className={cn(
@@ -188,6 +221,18 @@ function MiniSubtaskRow({
                 {statusLabel}
               </span>
             ) : null}
+            {/* 迭代次数 */}
+            {task.iterationCount && task.iterationCount > 0 && (
+              <span className="shrink-0 text-xs text-muted-foreground">
+                · {task.iterationCount}x
+              </span>
+            )}
+            {/* 文件修改数 */}
+            {task.filesTouched && task.filesTouched.length > 0 && (
+              <span className="shrink-0 flex items-center gap-0.5 text-xs text-muted-foreground">
+                · <FileIcon className="size-3" /> {task.filesTouched.length}
+              </span>
+            )}
             {/* 角色说明 toggle — stacked above the stretched button */}
             <button
               type="button"
@@ -220,19 +265,26 @@ function MiniSubtaskRow({
           <AgentIdentityCard task={task} onClose={() => setShowIdentity(false)} />
         </div>
       )}
-      <SubtaskHoverPreview task={task} statusLabel={statusLabel} id={previewId} />
+      <SubtaskHoverPreview
+        task={task}
+        statusLabel={statusLabel}
+        id={previewId}
+        onDetailsClick={onDetailsClick}
+      />
     </div>
   );
-}
+});
 
-export function SubtaskHoverPreview({
+export const SubtaskHoverPreview = memo(function SubtaskHoverPreview({
   task,
   statusLabel,
   id,
+  onDetailsClick,
 }: {
   task: Subtask;
   statusLabel: string;
   id?: string;
+  onDetailsClick?: () => void;
 }) {
   const { t } = useI18n();
   const body =
@@ -327,6 +379,35 @@ export function SubtaskHoverPreview({
                 </span>
               )}
             </div>
+            {/* 额外的统计信息 */}
+            {(task.iterationCount || task.filesTouched?.length || task.duration) && (
+              <div className="mt-3 flex items-center gap-4 text-xs">
+                {task.iterationCount && task.iterationCount > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <RefreshCwIcon className="size-3 text-muted-foreground" />
+                    <span className="text-muted-foreground">
+                      {task.iterationCount} {t.subagents.iterations}
+                    </span>
+                  </div>
+                )}
+                {task.filesTouched && task.filesTouched.length > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <FileIcon className="size-3 text-muted-foreground" />
+                    <span className="text-muted-foreground">
+                      {task.filesTouched.length} {t.subagents.filesModified}
+                    </span>
+                  </div>
+                )}
+                {task.duration && (
+                  <div className="flex items-center gap-1.5">
+                    <ClockIcon className="size-3 text-muted-foreground" />
+                    <span className="text-muted-foreground">
+                      {formatDuration(task.duration)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
         <div className="mt-4 max-h-64 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-muted/35 p-3 text-sm leading-6 text-foreground">
@@ -341,6 +422,18 @@ export function SubtaskHoverPreview({
             <ArrowRightIcon className="size-3" />
             {t.message.viewProcess}
           </button>
+          {onDetailsClick && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDetailsClick();
+              }}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-muted"
+            >
+              {t.subagents.viewDetails}
+            </button>
+          )}
           {isCompleted && task.result && (
             <span className="ml-auto text-xs text-muted-foreground">
               {t.message.completedChanges}
@@ -350,7 +443,7 @@ export function SubtaskHoverPreview({
       </div>
     </div>
   );
-}
+});
 
 /**
  * 紧凑版角色身份卡 — 复用 HUD AgentCreationCard 的视觉语言。
@@ -450,21 +543,28 @@ const MAX_VISIBLE_TASKS = 4;
 // turn into a wall of cards.
 const AUTO_COLLAPSE_THRESHOLD = 8;
 const AUTO_VISIBLE_TASKS = 6;
+// In compact mode, allow more visible tasks since they take less space
+const COMPACT_VISIBLE_TASKS = 12;
 
 export function ParallelSubtasksGrid({
   taskIds,
   isLoading,
   onTaskClick,
   compact = false,
+  forceCollapsed,
 }: {
   taskIds: string[];
   isLoading: boolean;
   onTaskClick?: (taskId: string) => void;
   compact?: boolean;
+  forceCollapsed?: boolean;
 }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const { tasks } = useSubtaskContext();
+
+  const selectedTask = selectedTaskId ? tasks[selectedTaskId] : null;
 
   if (taskIds.length === 0) return null;
 
@@ -472,9 +572,12 @@ export function ParallelSubtasksGrid({
   const shouldCollapse = compact
     ? taskIds.length > MAX_VISIBLE_TASKS
     : taskIds.length > AUTO_COLLAPSE_THRESHOLD;
-  const visibleLimit = compact ? MAX_VISIBLE_TASKS : AUTO_VISIBLE_TASKS;
+
+  // Use forceCollapsed if provided, otherwise use local expanded state
+  const effectivelyExpanded = forceCollapsed === true ? false : forceCollapsed === false ? true : expanded;
+  const visibleLimit = compact ? COMPACT_VISIBLE_TASKS : (compact === false ? MAX_VISIBLE_TASKS : AUTO_VISIBLE_TASKS);
   const visibleIds =
-    shouldCollapse && !expanded ? taskIds.slice(0, visibleLimit) : taskIds;
+    shouldCollapse && !effectivelyExpanded ? taskIds.slice(0, visibleLimit) : taskIds;
   const hiddenCount = taskIds.length - visibleIds.length;
 
   // 整体进度统计
@@ -510,11 +613,14 @@ export function ParallelSubtasksGrid({
       taskId={taskId}
       isLoading={isLoading}
       onClick={onTaskClick ? () => onTaskClick(taskId) : undefined}
+      onDetailsClick={() => setSelectedTaskId(taskId)}
+      compact={compact}
     />
   );
 
   return (
-    <div className="space-y-2">
+    <>
+      <div className="space-y-2">
       {showSummary && (
         <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
           <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted/60">
@@ -538,7 +644,7 @@ export function ParallelSubtasksGrid({
           )}
         </div>
       )}
-      {isGrid ? (
+      {isGrid && !compact ? (
         <div
           className={cn(
             "grid gap-2",
@@ -552,15 +658,17 @@ export function ParallelSubtasksGrid({
           {visibleIds.map(renderTask)}
         </div>
       ) : (
-        visibleIds.map(renderTask)
+        <div className="space-y-1.5">
+          {visibleIds.map(renderTask)}
+        </div>
       )}
-      {shouldCollapse && (
+      {shouldCollapse && forceCollapsed === undefined && (
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
           className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-border-default py-1.5 text-xs text-muted-foreground transition-colors hover:border-border hover:bg-muted/35 hover:text-foreground"
         >
-          {expanded ? (
+          {effectivelyExpanded ? (
             <>
               <ChevronUpIcon className="size-3" />
               <span>{t.message.collapseAgents}</span>
@@ -574,5 +682,15 @@ export function ParallelSubtasksGrid({
         </button>
       )}
     </div>
+
+    {/* 详情侧边栏 */}
+    <SubagentDetailsPanel
+      task={selectedTask ?? null}
+      open={selectedTaskId !== null}
+      onOpenChange={(open) => {
+        if (!open) setSelectedTaskId(null);
+      }}
+    />
+  </>
   );
 }

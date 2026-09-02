@@ -16,10 +16,14 @@ def test_check_url_safe(monkeypatch) -> None:
     assert bs._check_url_safe("", False) == "missing url"
 
     # Wrapper logic with a stubbed guard (real DNS is env-dependent).
-    monkeypatch.setattr(ug, "check_url", lambda url, allow_private: SimpleNamespace(allow=True, reason=""))
+    monkeypatch.setattr(
+        ug, "check_url", lambda url, allow_private: SimpleNamespace(allow=True, reason="")
+    )
     assert bs._check_url_safe("https://example.com/", False) is None
     monkeypatch.setattr(
-        ug, "check_url", lambda url, allow_private: SimpleNamespace(allow=False, reason="private_ip")
+        ug,
+        "check_url",
+        lambda url, allow_private: SimpleNamespace(allow=False, reason="private_ip"),
     )
     denied = bs._check_url_safe("http://127.0.0.1/", allow_private=True)
     assert denied is not None and "private_ip" in denied

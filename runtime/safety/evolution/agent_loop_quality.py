@@ -27,7 +27,7 @@ CHECKS: tuple[AgentLoopCheck, ...] = (
         ),
         required_terms=(
             "estimate_turn_complexity",
-            "_drive_local_partner",
+            "_drive_codex_app_server",
             "_drive_group_fanout",
             "_drive_swarm_mesh",
             "planningMode",

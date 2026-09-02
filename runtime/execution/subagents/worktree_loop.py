@@ -211,10 +211,7 @@ _MAX_DIFF_CHARS = 200_000
 def _cap_diff(diff: str) -> str:
     if len(diff) <= _MAX_DIFF_CHARS:
         return diff
-    return (
-        diff[:_MAX_DIFF_CHARS]
-        + f"\n...(diff truncated at {_MAX_DIFF_CHARS} chars)\n"
-    )
+    return diff[:_MAX_DIFF_CHARS] + f"\n...(diff truncated at {_MAX_DIFF_CHARS} chars)\n"
 
 
 def _symlink_warnings(worktree: str, files: list[str]) -> str:
@@ -236,7 +233,9 @@ def _capture_diff(worktree: str, repo_root: str) -> tuple[str, list[str]]:
     # raises and the task is marked failed rather than running git against a
     # forged gitdir (audit F-03).
     _git_in_worktree(worktree, repo_root, "add", "-A", check=False)
-    diff = _git_in_worktree(worktree, repo_root, "diff", "--cached", "--no-textconv", check=False).stdout
+    diff = _git_in_worktree(
+        worktree, repo_root, "diff", "--cached", "--no-textconv", check=False
+    ).stdout
     names = _git_in_worktree(
         worktree, repo_root, "diff", "--cached", "--name-only", "--no-textconv", check=False
     ).stdout

@@ -364,6 +364,9 @@ class SubToolStartEvent(JournalEvent):
     """
 
     event_type: Literal["sub_tool_start"] = "sub_tool_start"
+    agent_id: str = ""
+    codename: str = ""
+    avatar: str = ""
     role_id: str = ""
     tool_call_id: str = ""
     tool_name: str = ""
@@ -376,6 +379,9 @@ class SubToolEndEvent(JournalEvent):
     """Emitted when a sub-agent finishes a tool call."""
 
     event_type: Literal["sub_tool_end"] = "sub_tool_end"
+    agent_id: str = ""
+    codename: str = ""
+    avatar: str = ""
     role_id: str = ""
     tool_call_id: str = ""
     tool_name: str = ""
@@ -472,6 +478,9 @@ class SubTextDeltaEvent(JournalEvent):
 
     event_type: Literal["sub_text_delta"] = "sub_text_delta"
     session_id: str = ""
+    agent_id: str = ""
+    codename: str = ""
+    avatar: str = ""
     role_id: str = ""
     round: int = 0
     delta: str = ""

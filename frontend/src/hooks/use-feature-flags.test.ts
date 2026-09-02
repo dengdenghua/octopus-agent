@@ -138,4 +138,28 @@ describe("useFeatureFlags", () => {
       expect.any(Object),
     );
   });
+
+  it("shares one in-flight catalog request across simultaneous consumers", async () => {
+    let resolveResponse!: (value: unknown) => void;
+    fetchMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveResponse = resolve;
+      }),
+    );
+
+    const first = renderHook(() => useFeatureFlags());
+    const second = renderHook(() => useFeatureFlags());
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    resolveResponse({
+      ok: true,
+      status: 200,
+      json: async () => _SAMPLE,
+    });
+
+    await waitFor(() => expect(first.result.current.loading).toBe(false));
+    await waitFor(() => expect(second.result.current.loading).toBe(false));
+    expect(first.result.current.flags).toHaveLength(2);
+    expect(second.result.current.flags).toHaveLength(2);
+  });
 });

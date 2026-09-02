@@ -11,6 +11,7 @@ import type {
   McpToolCallItem,
   PlanItem,
   ReasoningItem,
+  SteeringUserMessageItem,
   TodoListItem,
   Turn,
   UserMessageItem,
@@ -213,9 +214,86 @@ describe("conversationToAgentThreadState · userMessage", () => {
       created_at: "2026-05-09T00:00:00Z",
     });
   });
+
+  it("keeps child reports inside the owning assistant turn", () => {
+    const childReport: SteeringUserMessageItem = {
+      id: "child-report-1",
+      type: "steeringUserMessage",
+      status: "completed",
+      createdAt: "2026-05-09T00:00:00Z",
+      text: "[子代理报告] README 已完成",
+      targetTurnId: "t1",
+      source: "subagent_report",
+    };
+    const state = conversationToAgentThreadState(
+      makeConv([
+        makeTurn([
+          userMsg("检查两个文件"),
+          agentMsg("正在并行检查", "a-progress"),
+          childReport,
+          agentMsg("检查完成", "a-final"),
+        ]),
+      ]),
+    );
+
+    expect(
+      state.messages.filter((message) => message.type === "human"),
+    ).toHaveLength(1);
+    expect(
+      state.messages.some((message) =>
+        String(message.content).includes("[子代理报告]"),
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps ordinary human steering visible", () => {
+    const steering: SteeringUserMessageItem = {
+      id: "human-steering-1",
+      type: "steeringUserMessage",
+      status: "completed",
+      createdAt: "2026-05-09T00:00:00Z",
+      text: "顺便检查许可证",
+      targetTurnId: "t1",
+      source: "user",
+    };
+    const state = conversationToAgentThreadState(
+      makeConv([makeTurn([userMsg("检查项目"), steering])]),
+    );
+
+    expect(
+      state.messages.filter((message) => message.type === "human"),
+    ).toHaveLength(2);
+  });
 });
 
 describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
+  it("tolerates legacy turns with a missing items array", () => {
+    const legacyTurn = {
+      ...makeTurn([]),
+      items: undefined,
+    } as unknown as Turn;
+
+    expect(() =>
+      conversationToAgentThreadState(makeConv([legacyTurn])),
+    ).not.toThrow();
+    expect(
+      conversationToAgentThreadState(makeConv([legacyTurn])).messages,
+    ).toEqual([]);
+  });
+
+  it("tolerates legacy reasoning records without a summary array", () => {
+    const legacyReasoning = {
+      ...reasoning(""),
+      summary: undefined,
+    } as unknown as ReasoningItem;
+
+    expect(() =>
+      conversationToAgentThreadState(
+        makeConv([makeTurn([legacyReasoning, agentMsg("answer")])]),
+      ),
+    ).not.toThrow();
+  });
+
   it("keeps the terminal narrative stable across reversed turn lifecycle events", () => {
     const completed = makeTurn(
       [
@@ -255,6 +333,9 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     expect(state.messages.map((message) => message.content)).toEqual([
       "inspect",
       "checking",
+      // Tool items are emitted as their own empty-content AI messages so
+      // they render as independent inline cards at their timeline position.
+      "",
       "The inspection is complete.",
     ]);
     expect((state.messages[1] as AIMessage).additional_kwargs).toMatchObject({
@@ -354,11 +435,15 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     expect(state.messages.map((message) => message.content)).toEqual([
       "analyze",
       "首轮扫描确认事件桥负责三类流。",
+      "",
       "本地分析进一步确认工具结果会先完成再进入下一轮。",
+      "",
       "最终汇总",
     ]);
-    const first = state.messages[1] as AIMessage;
-    const second = state.messages[2] as AIMessage;
+    const byId = (id: string) =>
+      state.messages.find((message) => message.id === id) as AIMessage;
+    const first = byId("p1");
+    const second = byId("p2");
     expect(first.additional_kwargs?.public_progress).toBe(true);
     expect(second.additional_kwargs?.public_progress).toBe(true);
     expect(first.additional_kwargs?.phase_id).toBe("turn-1:progress:1");
@@ -368,13 +453,15 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     expect(second.additional_kwargs?.parent_item_id).toBe("c1");
     expect(second.additional_kwargs?.progress_sequence).toBe(2);
     expect(second.additional_kwargs?.timeline_sequence).toBe(3);
-    expect(second.tool_calls?.[0]).toMatchObject({
+    // Each tool item is its own message with a single tool_call carrying
+    // the timeline coordinates it was declared with.
+    expect(byId("c1").tool_calls?.[0]).toMatchObject({
+      id: "c1",
       timelineSequence: 2,
       parentItemId: "p1",
       phaseId: "turn-1:progress:1",
     });
-    expect(second.tool_calls?.[0]?.id).toBe("c1");
-    expect((state.messages[3] as AIMessage).tool_calls?.[0]?.id).toBe("c2");
+    expect(byId("c2").tool_calls?.[0]?.id).toBe("c2");
   });
 
   it("does not dedupe a final answer against an identical public checkpoint", () => {
@@ -424,13 +511,20 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
 
     expect(state.messages.map((message) => message.content)).toEqual([
       "读取 issue 后给一句结论",
+      // The fetch command renders as its own inline card BEFORE the
+      // commentary that follows it — its real timeline position.
+      "",
       "已读取官方来源，接下来提取与问题直接相关的结论。",
       finalAnswer,
     ]);
-    expect(state.messages[1]?.additional_kwargs?.public_progress).toBe(true);
-    expect(state.messages[2]?.additional_kwargs?.public_progress).not.toBe(
-      true,
-    );
+    const checkpointMessage = state.messages.find(
+      (m) => m.id === "progress",
+    ) as AIMessage | undefined;
+    const finalMessage = state.messages.find((m) => m.id === "final") as
+      | AIMessage
+      | undefined;
+    expect(checkpointMessage?.additional_kwargs?.public_progress).toBe(true);
+    expect(finalMessage?.additional_kwargs?.public_progress).not.toBe(true);
   });
 
   it("collapses reasoning before agentMessage into reasoning_content", () => {
@@ -741,9 +835,53 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
       ]),
     );
 
-    expect(state.messages).toHaveLength(2);
-    expect(state.messages.map((message) => message.id)).toEqual(["u1", "a1"]);
+    // The status-only narrative ("All tasks are completed.") is still
+    // suppressed, but the todo_write itself now survives as an
+    // independent tool card — tool evidence is no longer hidden as a
+    // side effect of dropping the boilerplate message.
+    expect(state.messages).toHaveLength(3);
+    expect(state.messages.map((message) => message.id)).toEqual([
+      "u1",
+      "a1",
+      "todo-done",
+    ]);
     expect(state.messages[1]?.content).toContain("# Report");
+    expect(
+      state.messages.some((message) =>
+        String(message.content).includes("All tasks are completed"),
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps a long final report that says the analysis is complete", () => {
+    const report = [
+      "项目分析完成。以下是完整分析报告：",
+      "## 项目定位",
+      "Echo OS 是面向家庭服务器盒子的设备操作系统层。".repeat(12),
+      "## 技术栈",
+      "后端使用 Python 与 FastAPI，前端使用 React、Vite 和 TypeScript。".repeat(
+        8,
+      ),
+    ].join("\n\n");
+    const state = conversationToAgentThreadState(
+      makeConv([
+        makeTurn([
+          userMsg("分析该项目"),
+          agentMsg(
+            "核心信息已基本齐备，再补充模块清单后给出最终分析报告。",
+            "checkpoint",
+          ),
+          reasoning("所有 todo 已完成，现在可以输出最终答案。", "r-final"),
+          agentMsg(report, "final-report"),
+        ]),
+      ]),
+    );
+
+    expect(state.messages.at(-1)).toMatchObject({
+      id: "final-report",
+      content: report,
+      additional_kwargs: { message_kind: "answer" },
+    });
   });
 
   it("merges post-final trace items back into the delivered answer", () => {
@@ -765,10 +903,14 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
       ]),
     );
 
-    expect(state.messages).toHaveLength(2);
-    const ai = state.messages[1] as {
+    expect(state.messages).toHaveLength(3);
+    const ai = state.messages.find((message) => message.id === "a1") as {
       content: string;
       additional_kwargs?: Record<string, unknown>;
+    };
+    const todoTool = state.messages.find(
+      (message) => message.id === "todo-done",
+    ) as {
       tool_calls?: unknown[];
     };
     expect(ai.content).toContain("# Report");
@@ -778,7 +920,9 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     expect(ai.additional_kwargs?.reasoning_content).toContain(
       "todo-protocol guard",
     );
-    expect(ai.tool_calls).toHaveLength(1);
+    // The trailing todo_write is no longer merged into the answer's
+    // tool_calls — it renders as its own independent inline card.
+    expect(todoTool.tool_calls).toHaveLength(1);
   });
 });
 
@@ -847,7 +991,7 @@ describe("conversationToAgentThreadState · tool calls", () => {
     expect(ai.tool_calls?.[0]?.name).toBe("git.status");
   });
 
-  it("appends tool_calls in declared order", () => {
+  it("emits each tool_call as its own message in declared order", () => {
     const state = conversationToAgentThreadState(
       makeConv([
         makeTurn([
@@ -859,10 +1003,20 @@ describe("conversationToAgentThreadState · tool calls", () => {
         ]),
       ]),
     );
-    const ai = state.messages[1] as {
-      tool_calls?: Array<{ id?: string; name: string }>;
-    };
-    expect(ai.tool_calls?.map((tc) => tc.id)).toEqual(["c1", "m1", "c2"]);
+    // Tools are no longer buffered into one trailing AIMessage; each is
+    // an independent message, so collect tool_call ids across messages
+    // and assert they keep the declared (timeline) order.
+    const toolCallIds = state.messages.flatMap((message) =>
+      ((message as AIMessage).tool_calls ?? []).map((tc) => tc.id),
+    );
+    expect(toolCallIds).toEqual(["c1", "m1", "c2"]);
+    expect(state.messages.map((message) => message.id)).toEqual([
+      "u1",
+      "c1",
+      "m1",
+      "c2",
+      "a1",
+    ]);
   });
 });
 
@@ -905,9 +1059,17 @@ describe("conversationToAgentThreadState · first-class control items", () => {
     );
 
     expect(state.artifacts).toContain("reports/out.pdf");
-    const ai = state.messages.find((message) => message.type === "ai");
-    expect(ai?.tool_calls?.map((tool) => tool.name)).toContain("verification");
-    const verifyCall = ai?.tool_calls?.find(
+    // Verification is now its own tool message (not folded into the
+    // trailing agentMessage), so locate it by tool name across messages.
+    const verificationMessage = state.messages.find(
+      (message) =>
+        message.type === "ai" &&
+        ((message as AIMessage).tool_calls ?? []).some(
+          (tool) => tool.name === "verification",
+        ),
+    ) as AIMessage;
+    expect(verificationMessage).toBeDefined();
+    const verifyCall = verificationMessage.tool_calls?.find(
       (tool) => tool.name === "verification",
     );
     expect(verifyCall?.args).toMatchObject({
@@ -1002,7 +1164,7 @@ describe("conversationToAgentThreadState · interrupted turn", () => {
     });
   });
 
-  it("flushes leftover reasoning/tool_calls as a synthetic AIMessage", () => {
+  it("flushes leftover reasoning as a synthetic AI and keeps the running tool as its own card", () => {
     const state = conversationToAgentThreadState(
       makeConv([
         makeTurn(
@@ -1011,18 +1173,24 @@ describe("conversationToAgentThreadState · interrupted turn", () => {
         ),
       ]),
     );
-    expect(state.messages).toHaveLength(2);
-    const ai = state.messages[1] as {
+    expect(state.messages).toHaveLength(3);
+    const ai = state.messages.find(
+      (message) => message.additional_kwargs?.response_state === "interrupted",
+    ) as {
       type: string;
       content: string;
       additional_kwargs?: Record<string, unknown>;
-      tool_calls?: unknown[];
     };
+    const runningTool = state.messages.find(
+      (message) => message.id === "c1",
+    ) as { tool_calls?: unknown[] };
     expect(ai.type).toBe("ai");
     expect(ai.content).toBe("");
     expect(ai.additional_kwargs?.reasoning_content).toBe("thinking…");
     expect(ai.additional_kwargs?.response_state).toBe("interrupted");
-    expect(ai.tool_calls).toHaveLength(1);
+    // The in-flight command is emitted as an independent tool message
+    // instead of being folded into the synthetic receipt.
+    expect(runningTool.tool_calls).toHaveLength(1);
   });
 
   it("keeps interrupted answer drafts out of chat while preserving tool evidence", () => {

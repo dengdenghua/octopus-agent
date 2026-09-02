@@ -107,12 +107,15 @@ def test_activity_writers_without_session_do_not_raise() -> None:
         write_workflow_start,
     )
 
-    assert write_job_change(
-        job_id="j9",
-        kind="subagent",
-        label="x",
-        status="failed",
-    ) is False
+    assert (
+        write_job_change(
+            job_id="j9",
+            kind="subagent",
+            label="x",
+            status="failed",
+        )
+        is False
+    )
     assert write_workflow_start(run_id="r9", name="x") is False
 
 
@@ -210,9 +213,11 @@ async def test_registry_on_settle_observer_invoked() -> None:
 
     def _resolve() -> None:
         done.get_loop().call_soon_threadsafe(
-            lambda: done.set_result(JobOutcome(status="completed", detail="ok"))
-            if not done.done()
-            else None
+            lambda: (
+                done.set_result(JobOutcome(status="completed", detail="ok"))
+                if not done.done()
+                else None
+            )
         )
 
     threading.Thread(target=_resolve, daemon=True).start()

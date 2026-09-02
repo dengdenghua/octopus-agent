@@ -18,10 +18,25 @@ from runtime.protocol import (
     SteeringUserMessageItem,
     TurnStatus,
 )
+from runtime.sensing.gateway._realtime_thread_delete_probe import (
+    claimed_runtime_thread_write,
+)
 from runtime.sensing.gateway.realtime_gateway import EventEmitter, _RpcError
 
 if TYPE_CHECKING:
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+
+
+def _subscribe_live_thread(emitter: EventEmitter, thread_id: str) -> None:
+    """Establish the same-process live watch before cutting a replay snapshot.
+
+    ``EventEmitter`` also has lightweight test/runtime implementations, so the
+    transport-specific hook is capability-detected instead of being required
+    by the general event-emitter protocol.
+    """
+    watch_thread = getattr(emitter, "watch_thread", None)
+    if callable(watch_thread):
+        watch_thread(thread_id)
 
 
 async def _handle_request(
@@ -48,6 +63,7 @@ async def _handle_request(
             log,
             getattr(emitter, "actor_id", None),
             turns=turns,
+            access="write",
         )
         active = runtime._active_turns.get(turn_id)
         local_active = active is not None and turn_id in runtime._active_turn_ids
@@ -125,10 +141,17 @@ async def _handle_request(
             log,
             getattr(emitter, "actor_id", None),
             turns=preflight_turns,
+            access="read",
         )
         summary = log.summary(preflight_snapshot)
         if summary is not None and summary.archived:
             raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
+        if method == "thread/resume" and preflight_snapshot.cursor > 0:
+            # Authorization and archive checks happen first. Subscribe before
+            # the immutable response prefix so a same-process append is either
+            # in this snapshot or delivered live after it (duplicates are
+            # reconciled by eventId on the client).
+            _subscribe_live_thread(emitter, thread_id)
         # Close stale turns before capturing one immutable file prefix.
         # Cursor and replay then come from the exact same snapshot, so a
         # concurrent append is either wholly included or wholly deferred.
@@ -180,10 +203,17 @@ async def _handle_request(
             ),
             before_turn_id=before_turn_id,
         )
+        last_turn = turns[-1] if turns else None
         return {
             "thread": {"id": thread_id, "path": str(log.path)},
             "turns": [t.model_dump(by_alias=True, mode="json") for t in window],
             "totalTurns": len(turns),
+            # Keep the authoritative tail status beside the paginated
+            # window.  A reconnect can otherwise mistake a locally cached
+            # in-progress turn for live work after the server has already
+            # reaped it as stale.
+            "lastTurnId": last_turn.id if last_turn is not None else None,
+            "lastTurnStatus": (last_turn.status.value if last_turn is not None else None),
             "hasMore": has_more,
             "incremental": False,
             "nextEventSequence": next_sequence,
@@ -202,10 +232,13 @@ async def _handle_request(
             log,
             getattr(emitter, "actor_id", None),
             turns=preflight_turns,
+            access="read",
         )
         summary = log.summary(preflight_snapshot)
         if summary is not None and summary.archived:
             raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
+        if preflight_snapshot.cursor > 0:
+            _subscribe_live_thread(emitter, thread_id)
         # Close stale turns BEFORE capturing the immutable prefix, same
         # discipline as thread/resume: events and cursor below describe
         # the exact same file prefix, so a concurrent append is either
@@ -278,10 +311,11 @@ async def _handle_request(
         }
     if method == "thread/compact":
         thread_id = runtime._require_thread_id(params.get("threadId"))
-        runtime._require_thread_owner(
-            runtime._log_for(thread_id), getattr(emitter, "actor_id", None)
-        )
-        return await runtime.compact_thread(thread_id, emitter)
+        async with claimed_runtime_thread_write(runtime, thread_id):
+            runtime._require_thread_owner(
+                runtime._log_for(thread_id), getattr(emitter, "actor_id", None)
+            )
+            return await runtime.compact_thread(thread_id, emitter)
     if method == "thread/list":
         from runtime.memory.threads.event_log import list_threads
 
@@ -294,7 +328,7 @@ async def _handle_request(
                 continue
             log = runtime._log_for(summary.thread_id)
             try:
-                runtime._require_thread_owner(log, actor_id)
+                runtime._require_thread_owner(log, actor_id, access="read")
             except _RpcError:
                 continue
             items.append(summary.model_dump(by_alias=True, mode="json"))
@@ -303,11 +337,12 @@ async def _handle_request(
         from runtime.memory.threads.event_log import archive_thread
 
         thread_id = runtime._require_thread_id(params.get("threadId"))
-        runtime._require_thread_owner(
-            runtime._log_for(thread_id), getattr(emitter, "actor_id", None)
-        )
-        if not archive_thread(runtime._logs_root, thread_id):
-            raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
+        async with claimed_runtime_thread_write(runtime, thread_id):
+            runtime._require_thread_owner(
+                runtime._log_for(thread_id), getattr(emitter, "actor_id", None)
+            )
+            if not archive_thread(runtime._logs_root, thread_id):
+                raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
         return {"threadId": thread_id, "archived": True}
     if method == "item/fileChange/hunkDecide":
         return await runtime._handle_hunk_decide(params, emitter)

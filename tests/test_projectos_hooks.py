@@ -8,6 +8,7 @@ from runtime.projectos.llm_hooks import (
     parse_milestones,
     parse_tasks,
     spec_qa,
+    subagent_execute_task,
 )
 from runtime.projectos.model import Milestone, Task
 
@@ -64,3 +65,49 @@ def test_spec_qa_deterministic_without_router() -> None:
     assert qa(t_ok, ms)["approved"] is True
     assert qa(t_bad, ms)["approved"] is False
     assert qa(t_empty, ms)["approved"] is False
+
+
+def test_subagent_execute_task_propagates_project_scope(monkeypatch) -> None:
+    captured: dict = {}
+
+    def fake_call_subagent(agent_id, prompt, **kwargs):
+        captured.update({"agent_id": agent_id, "prompt": prompt, **kwargs})
+        return {"success": True, "output": "shipped"}
+
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", fake_call_subagent)
+    task = Task(
+        id="T1",
+        milestone_id="MS1",
+        type="code",
+        goal="implement",
+        assigned_agent="engineer",
+    )
+
+    output = subagent_execute_task(
+        task,
+        {
+            "project_id": "P1",
+            "owner_id": "alice",
+            "tenant_id": "acme",
+            "thread_id": "thread-1",
+            "milestone_goal": "deliver",
+            "workspace_path": "/managed/thread-1",
+            "runtime_session_metadata": {
+                "workspace_path": "/managed/thread-1",
+                "_artifact_output_root": "/managed/thread-1/output/final",
+            },
+        },
+    )
+
+    assert output == "shipped"
+    assert captured["agent_id"] == "engineer"
+    assert captured["context"]["thread_id"] == "thread-1"
+    assert captured["context"]["actor"] == "alice"
+    assert captured["context"]["workspace_path"] == "/managed/thread-1"
+    assert captured["context"]["runtime_session_metadata"] == {
+        "source": "projectos_task",
+        "project_id": "P1",
+        "tenant_id": "acme",
+        "workspace_path": "/managed/thread-1",
+        "_artifact_output_root": "/managed/thread-1/output/final",
+    }

@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import { emitOpenSettings } from "@/core/events";
 import { useI18n } from "@/core/i18n/hooks";
+import { BROWSER_WORKSPACE_ROUTE } from "@/core/workspace/sidebar-routing";
 import { useGlobalShortcuts } from "@/hooks/use-global-shortcuts";
 
 export function CommandPalette() {
@@ -216,7 +217,7 @@ export function CommandPalette() {
       },
       {
         id: "browser",
-        to: "/browser",
+        to: BROWSER_WORKSPACE_ROUTE,
         label: t.sidebar.navBrowserSurface,
         icon: GlobeIcon,
         keywords: "browser ai tabs history bookmarks copilot",
@@ -236,61 +237,63 @@ export function CommandPalette() {
 
   return (
     <>
-      {open && <CommandDialog
-        open={open}
-        onOpenChange={setOpen}
-        title={t.shortcuts.openCommandPalette}
-        description={t.shortcuts.commandPaletteDescription}
-      >
-        <CommandInput placeholder={t.shortcuts.searchActions} />
-        <CommandList>
-          <CommandEmpty>{t.shortcuts.noResults}</CommandEmpty>
-          <CommandGroup heading={t.shortcuts.actions}>
-            <CommandItem onSelect={handleNewChat}>
-              <MessageSquarePlusIcon className="mr-2 h-4 w-4" />
-              {t.sidebar.newChat}
-              <CommandShortcut>
-                {metaKey}
-                {shiftKey}N
-              </CommandShortcut>
-            </CommandItem>
-            <CommandItem onSelect={handleOpenSettings}>
-              <SettingsIcon className="mr-2 h-4 w-4" />
-              {t.common.settings}
-              <CommandShortcut>{metaKey},</CommandShortcut>
-            </CommandItem>
-            <CommandItem onSelect={handleShowShortcuts}>
-              <KeyboardIcon className="mr-2 h-4 w-4" />
-              {t.shortcuts.keyboardShortcuts}
-              <CommandShortcut>{metaKey}/</CommandShortcut>
-            </CommandItem>
-            <CommandItem
-              onSelect={() => {
-                navigate("/workspace/evolution");
-                setOpen(false);
-              }}
-            >
-              <DnaIcon className="mr-2 h-4 w-4" />
-              {t.evolutionDashboard.title}
-            </CommandItem>
-          </CommandGroup>
-          <CommandGroup heading={t.shortcuts.pages}>
-            {PAGE_ITEMS.map((item) => {
-              const Icon = item.icon;
-              return (
-                <CommandItem
-                  key={item.id}
-                  value={`${item.label} ${item.to} ${item.keywords}`}
-                  onSelect={() => handleNavigate(item.to)}
-                >
-                  <Icon className="mr-2 h-4 w-4" />
-                  {item.label}
-                </CommandItem>
-              );
-            })}
-          </CommandGroup>
-        </CommandList>
-      </CommandDialog>}
+      {open && (
+        <CommandDialog
+          open={open}
+          onOpenChange={setOpen}
+          title={t.shortcuts.openCommandPalette}
+          description={t.shortcuts.commandPaletteDescription}
+        >
+          <CommandInput placeholder={t.shortcuts.searchActions} />
+          <CommandList>
+            <CommandEmpty>{t.shortcuts.noResults}</CommandEmpty>
+            <CommandGroup heading={t.shortcuts.actions}>
+              <CommandItem onSelect={handleNewChat}>
+                <MessageSquarePlusIcon className="mr-2 h-4 w-4" />
+                {t.sidebar.newChat}
+                <CommandShortcut>
+                  {metaKey}
+                  {shiftKey}N
+                </CommandShortcut>
+              </CommandItem>
+              <CommandItem onSelect={handleOpenSettings}>
+                <SettingsIcon className="mr-2 h-4 w-4" />
+                {t.common.settings}
+                <CommandShortcut>{metaKey},</CommandShortcut>
+              </CommandItem>
+              <CommandItem onSelect={handleShowShortcuts}>
+                <KeyboardIcon className="mr-2 h-4 w-4" />
+                {t.shortcuts.keyboardShortcuts}
+                <CommandShortcut>{metaKey}/</CommandShortcut>
+              </CommandItem>
+              <CommandItem
+                onSelect={() => {
+                  navigate("/workspace/evolution");
+                  setOpen(false);
+                }}
+              >
+                <DnaIcon className="mr-2 h-4 w-4" />
+                {t.evolutionDashboard.title}
+              </CommandItem>
+            </CommandGroup>
+            <CommandGroup heading={t.shortcuts.pages}>
+              {PAGE_ITEMS.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <CommandItem
+                    key={item.id}
+                    value={`${item.label} ${item.to} ${item.keywords}`}
+                    onSelect={() => handleNavigate(item.to)}
+                  >
+                    <Icon className="mr-2 h-4 w-4" />
+                    {item.label}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </CommandDialog>
+      )}
 
       <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
         <DialogContent className="sm:max-w-md">

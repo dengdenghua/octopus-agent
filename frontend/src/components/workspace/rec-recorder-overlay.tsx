@@ -22,11 +22,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
+  appendRecordingEvents,
   getRecordingStatus,
   startRecording,
   stopRecording,
 } from "@/core/teach-repeat/api";
 import type { StopRecordingResponse } from "@/core/teach-repeat/types";
+import type { RecordingEvent } from "@/core/teach-repeat/types";
+import {
+  buildSemanticRecordingEvent,
+  recordingEventKey,
+} from "@/core/teach-repeat/semantic-events";
 import { useI18n } from "@/core/i18n/hooks";
 import { swallow } from "@/core/utils/log";
 import { cn } from "@/lib/utils";
@@ -46,6 +52,8 @@ export interface RecRecorderOverlayProps {
   /** Fires when recording starts (true) / stops (false) so the REC chip can
    * reflect state. */
   onRecordingChange?: (recording: boolean) => void;
+  /** Opens the durable workflow library after recording or from the idle state. */
+  onOpenLibrary?: () => void;
 }
 
 function formatElapsed(ms: number): string {
@@ -62,6 +70,7 @@ export function RecRecorderOverlay({
   initiallyRecording = false,
   onClose,
   onRecordingChange,
+  onOpenLibrary,
 }: RecRecorderOverlayProps) {
   const { t } = useI18n();
   const [phase, setPhase] = useState<Phase>("idle");
@@ -72,6 +81,7 @@ export function RecRecorderOverlay({
   const [result, setResult] = useState<StopRecordingResponse | null>(null);
   const recStartRef = useRef<number | null>(null);
   const startingRef = useRef(false);
+  const eventQueueRef = useRef<RecordingEvent[]>([]);
   const canRecord = !!threadId && threadId !== "new";
 
   // Sync phase to open/initiallyRecording when the overlay is (re)opened.
@@ -93,6 +103,7 @@ export function RecRecorderOverlay({
         thread_id: threadId,
         name: name.trim() || "对话回放学习",
         description: "用户通过悬浮录制器开启的 REC 录制。",
+        provider: "hybrid",
       });
       recStartRef.current = Date.now();
       setElapsed(0);
@@ -106,6 +117,18 @@ export function RecRecorderOverlay({
       startingRef.current = false;
     }
   }, [threadId, name, onRecordingChange]);
+
+  const flushEvents = useCallback(async () => {
+    if (!canRecord || eventQueueRef.current.length === 0) return;
+    const batch = eventQueueRef.current.splice(0, 100);
+    try {
+      const response = await appendRecordingEvents(threadId, batch);
+      setStepCount(response.step_count);
+    } catch (error) {
+      eventQueueRef.current.unshift(...batch);
+      swallow(error, "rec-overlay-events");
+    }
+  }, [canRecord, threadId]);
 
   // Countdown driver.
   useEffect(() => {
@@ -146,18 +169,61 @@ export function RecRecorderOverlay({
     return () => window.clearInterval(t);
   }, [phase, threadId, canRecord]);
 
+  // Capture semantic first-party interactions while REC is active. Text typed
+  // into password/OTP/payment fields is redacted before it enters the queue.
+  useEffect(() => {
+    if (phase !== "recording" || !canRecord) return;
+    const capture = (event: Event) => {
+      const recorded = buildSemanticRecordingEvent(event);
+      if (!recorded) return;
+      if (recorded.kind === "input") {
+        const key = recordingEventKey(recorded);
+        const existing = eventQueueRef.current.findIndex(
+          (item) => recordingEventKey(item) === key,
+        );
+        if (existing >= 0) {
+          eventQueueRef.current[existing] = recorded;
+          return;
+        }
+      }
+      eventQueueRef.current.push(recorded);
+      if (eventQueueRef.current.length >= 20) void flushEvents();
+    };
+    const eventTypes = [
+      "click",
+      "focusin",
+      "input",
+      "change",
+      "keydown",
+    ] as const;
+    eventTypes.forEach((type) =>
+      document.addEventListener(type, capture, true),
+    );
+    const timer = window.setInterval(() => void flushEvents(), 1500);
+    return () => {
+      eventTypes.forEach((type) =>
+        document.removeEventListener(type, capture, true),
+      );
+      window.clearInterval(timer);
+      void flushEvents();
+    };
+  }, [canRecord, flushEvents, phase]);
+
   const handleStop = useCallback(async () => {
     setPhase("stopping");
     try {
+      await flushEvents();
       const res = await stopRecording({ thread_id: threadId, use_llm: true });
       setResult(res);
       setPhase("done");
       onRecordingChange?.(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t.recorder.stopFailed);
+      toast.error(
+        error instanceof Error ? error.message : t.recorder.stopFailed,
+      );
       setPhase("recording");
     }
-  }, [threadId, onRecordingChange, t]);
+  }, [flushEvents, threadId, onRecordingChange, t]);
 
   if (!open) return null;
 
@@ -165,6 +231,7 @@ export function RecRecorderOverlay({
     <div
       role="dialog"
       aria-label={t.recorder.title}
+      data-recorder-private="true"
       className="fixed bottom-5 right-5 z-[120] w-[260px] rounded-lg border border-border-default bg-background/95 p-4 shadow-2xl ring-1 ring-border-subtle backdrop-blur"
     >
       <div className="mb-2 flex items-center justify-between">
@@ -218,6 +285,15 @@ export function RecRecorderOverlay({
             <CircleDotIcon className="size-3.5" />
             开始录制
           </button>
+          {onOpenLibrary ? (
+            <button
+              type="button"
+              onClick={onOpenLibrary}
+              className="w-full rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+            >
+              查看已保存的自动化
+            </button>
+          ) : null}
           <p className="text-xs leading-tight text-muted-foreground">
             录制本轮操作轨迹,停止后自动提炼成可复用、可回放的技能;敏感操作会被隔离待审。
           </p>
@@ -267,13 +343,24 @@ export function RecRecorderOverlay({
       {phase === "done" && (
         <div className="space-y-3">
           <DoneSummary result={result} />
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full rounded-lg border border-border-strong bg-transparent px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
-          >
-            完成
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            {onOpenLibrary ? (
+              <button
+                type="button"
+                onClick={onOpenLibrary}
+                className="rounded-lg border border-border-strong bg-transparent px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                打开自动化库
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-border-strong bg-transparent px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+            >
+              完成
+            </button>
+          </div>
         </div>
       )}
     </div>

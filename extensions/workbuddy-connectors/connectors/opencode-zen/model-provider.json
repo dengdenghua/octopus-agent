@@ -1,0 +1,39 @@
+{
+  "schema": "octopus.model-provider.v1",
+  "entry_id": "opencode-zen",
+  "display_name": "OpenCode Zen",
+  "display_name_zh": "OpenCode Zen 免费模型",
+  "protocol": "openai-compatible",
+  "base_url": "https://opencode.ai/zen/v1",
+  "models_endpoint": "https://opencode.ai/zen/v1/models",
+  "dashboard_url": "https://opencode.ai/zen",
+  "docs_url": "https://opencode.ai/docs/zen/",
+  "api_key_label_zh": "OpenCode Zen API Key",
+  "login_cta_zh": "登录 OpenCode Zen 并获取 API Key",
+  "connection_note_zh": "直连模型 API，不安装或检测 OpenCode CLI",
+  "model_list_label_zh": "当前免费模型",
+  "free_models": [
+    "big-pickle",
+    "muse-spark-1.2-contributor-free",
+    "mimo-v2.5-free",
+    "hy3-free",
+    "nemotron-3-ultra-free",
+    "nemotron-3.5-lightning-free"
+  ],
+  "excluded_models": [],
+  "responses_models": [
+    "muse-spark-1.2-contributor-free"
+  ],
+  "context_window": 128000,
+  "supports_thinking": false,
+  "supports_vision": false,
+  "supports_tool_use": true,
+  "models_are_free": true,
+  "compat_profile": "opencode_zen",
+  "probe_timeout_seconds": 15,
+  "privacy_notices_zh": [
+    "部分免费模型会记录请求，或将数据用于模型改进；不要发送机密代码和敏感数据。",
+    "Muse Spark Contributor Free 通过 Zen Responses 协议调用，不依赖 ChatGPT 登录。",
+    "Kimi 系列当前属于付费模型，不会被本适配器自动加入免费列表。"
+  ]
+}

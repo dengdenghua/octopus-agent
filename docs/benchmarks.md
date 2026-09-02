@@ -76,6 +76,7 @@ write_behavioral_bundle(
 验证发布证据：
 
 ```bash
+OCTOPUS_BEHAVIORAL_EXPECTED_REVISION="$(git rev-parse HEAD)" \
 python -m scripts.production_readiness_gate \
   --behavioral-bundle-path benchmarks/results/behavioral-surpass-latest.json \
   --json
@@ -87,8 +88,10 @@ python -m scripts.production_readiness_gate \
 python -m benchmarks.bench_runner --k 3
 ```
 
-完整固定题集已经可以分别运行；两边必须使用相同 `k`、模型等级、`--timeout`
-和同一 source revision。正式默认单 turn 上限为 900 秒，若覆盖该值必须同时用于两边：
+完整固定题集已经可以分别运行；下面命令适合本地探索。正式证据还必须由受保护 workflow
+传入 `--model`、`--provenance-file`，Octopus 一侧另传 `--octopus-config-path`，否则 verifier
+会因缺少固定身份而拒绝。两边必须使用相同 `k`、固定模型、`--timeout` 和同一 source
+revision。正式默认单 turn 上限为 900 秒，若覆盖该值必须同时用于两边：
 
 ```bash
 python -m benchmarks.run_behavioral_suite \
@@ -97,10 +100,13 @@ python -m benchmarks.run_behavioral_suite \
 python -m benchmarks.run_behavioral_suite \
   --system codex --codex-surface desktop --k 3 --timeout 900 \
   --output benchmarks/results/codex-full.json
+```
 
 `codex` 默认使用 Codex Desktop 的 App Server（富客户端插件、Apps、浏览器/Computer Use
 和多 Agent 运行时）。只有显式传入 `--codex-surface cli` 才会使用非交互式 `codex exec`；
 后者不作为桌面端能力对比的正式结果。
+
+```bash
 python -m benchmarks.assemble_behavioral_bundle \
   --octopus-run benchmarks/results/octopus-full.json \
   --codex-run benchmarks/results/codex-full.json
@@ -148,6 +154,75 @@ python -m benchmarks.run_coding_suite \
 
 证据包和轨迹位于 `benchmarks/results/`，默认不入 Git；CI 应通过受控 artifact
 存储传入，并设置 `OCTOPUS_BEHAVIORAL_EXPECTED_REVISION` 绑定待发布 revision。
+
+## CI 与 tag 发布契约
+
+普通 push/PR CI 只运行：
+
+```bash
+make production-readiness-static
+```
+
+这是确定性的 scorecard、覆盖域、自动化和质量回归检查。JSON 报告会明确写入
+`mode: static_only`、`release_proof: false` 和 `NON-RELEASE PROOF` 提示；即使这些
+静态检查通过，报告的 `ready` 仍为 `false`，只有 `gate_passed` 表示本模式通过。
+行为证据状态仍保留在报告里供观察，但不会让普通 CI 因缺少真实外部模型环境而失败。
+
+正式发布证据不能由普通 CI 或静态分数替代。维护者应先配置带 required reviewers 的
+GitHub Environment `behavioral-evidence`；它保存 `OCTOPUS_API_TOKEN`、可选的
+`OCTOPUS_EVAL_LOCAL_PASSWORD`，以及以下 environment vars：
+
+- `OCTOPUS_BEHAVIORAL_CONFIG_PATH` / `OCTOPUS_BEHAVIORAL_CONFIG_SHA256`
+- `OCTOPUS_BEHAVIORAL_OCTOPUS_MODEL` / `OCTOPUS_BEHAVIORAL_CODEX_MODEL`
+- `OCTOPUS_BEHAVIORAL_CODEX_SHA256`
+- `OCTOPUS_BEHAVIORAL_CODEX_TEAM_ID` / `OCTOPUS_BEHAVIORAL_CODEX_IDENTIFIER`
+
+随后在 GitHub Actions 手动运行 `Behavioral surpass evidence`，并选择待发布的**准确 ref**。
+该 workflow 不接受可替换 binary/config 的 dispatch input，只在带 `self-hosted`、`macOS`、
+`behavioral-evidence` 标签的专用 runner 上执行。它固定 Codex Desktop 路径，校验配置哈希、
+Codex binary 哈希及 Apple TeamIdentifier/Identifier；模型、预期值缺失或不符都会 fail
+closed。Octopus 密钥只进入 Octopus step；Codex 子进程会移除 `OCTOPUS_*` 及所有常见
+token/secret/password/API-key 环境变量。两边 system evidence 和每条 trajectory 都绑定同一
+canonical provenance SHA-256。workflow 会在同一 checkout 上运行完整固定题集（`k=3`），
+显式以 `source_revision=$GITHUB_SHA` 组装 bundle，再用相同 expected revision 跑完整门禁。
+只有全部校验成功时才上传
+`behavioral-surpass-evidence-<full commit SHA>`，保留期为 30 天。
+
+Windows 正式构建必须先配置受保护的 GitHub Environment
+`windows-code-signing`，并在其中提供
+`WINDOWS_CODE_SIGNING_CERTIFICATE_BASE64`（带 Code Signing EKU 的 PKCS#12）与
+`WINDOWS_CODE_SIGNING_CERTIFICATE_PASSWORD`。`build-win.yml` 不允许无证书构建；它用
+SHA-256 和 DigiCert 公布的 `http://timestamp.digicert.com` RFC3161 TSA 签署安装器、
+解包后的
+`Octopus.exe` 与随包后端，逐个要求 `Get-AuthenticodeSignature` 返回 `Valid` 且存在
+时间戳证书，再生成 `SHA256SUMS` 和绑定完整 commit SHA 的 artifact。该 HTTP 地址只承载
+请求/响应；信任来自 RFC3161 响应的密码学签名及 Windows 证书链复验。仓库和文档中不得
+保存真实证书或密码。
+
+推送 tag 前，tag 必须精确为 `v<version>`，其中 version 同时等于
+`pyproject.toml` 与 `frontend/package.json` 的版本。推送 `v*.*.*` tag 后，release
+workflow 会先通过 GitHub Actions API 查找 `head_sha == GITHUB_SHA` 的成功行为证据、
+普通 CI 和 Windows 签名构建运行，按完整 SHA 下载对应 behavioral artifact、双端
+full-stack smoke bundle 与 Windows artifact，并设置：
+
+```bash
+OCTOPUS_BEHAVIORAL_EXPECTED_REVISION="$GITHUB_SHA"
+OCTOPUS_BEHAVIORAL_EVAL_BUNDLE=benchmarks/results/behavioral-surpass-latest.json
+make production-readiness
+```
+
+门禁随后用浏览器报告的文件哈希、测试计数、跳过清单和可搬运 state root 构建
+`octopus.e2e_release_proof.v1` release certificate。独立的 `windows-2025` job 会再次
+下载同 SHA 安装器与解包目录，复核 `SHA256SUMS`、三份 Authenticode 签名、时间戳身份、
+签名证明中的 revision 与文件哈希；只有复核后才生成供 release 使用的精简 artifact。
+镜像构建/登录/推送和 draft release 显式依赖完整行为/CI 门禁及 Windows 复验证明；draft
+只附加已验签安装器与 `SHA256SUMS`，不会附加庞大的 portable 目录。
+
+找不到同 SHA CI/behavioral/Windows artifact、artifact 已过期、tag 与两个包版本不一致、
+bundle revision 不匹配、trajectory digest 无效、浏览器报告被改写、签名或时间戳无效、
+证据过期或任一完整门禁检查失败，发布都会 fail closed，不会推送容器或创建 draft。若 tag
+已先触发而证据尚未生成，应为该 tag 所指的同一 commit 生成证据后重跑失败的 release
+workflow；不得改用其他 revision 的结果。
 
 ## 2026-04-24 历史基线
 

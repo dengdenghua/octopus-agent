@@ -21,7 +21,7 @@ const agent: AgentWorldAgent = {
   description: "整理资料并核对来源。",
   author: "Octopus",
   category: "researcher",
-  tags: ["research"],
+  tags: ["research", "sources", "analysis", "extra"],
   icon: "🔬",
   version: "1.0.0",
   downloads: 1250,
@@ -39,19 +39,25 @@ describe("AgentWorldCard", () => {
     installAgentMock.mockResolvedValue({ registered_skills: 0 });
   });
 
-  it("keeps profile and install actions independently accessible", async () => {
+  it("shows a concise verified talent profile and keeps actions accessible", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
     renderWithProviders(<AgentWorldCard agent={agent} onSelect={onSelect} />, {
       locale: "zh-CN",
     });
 
-    expect(
-      screen.getByRole("img", { name: "评分 4.6，18 条评价" }),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("下载量 1.3K")).toBeInTheDocument();
+    expect(screen.getByLabelText("作者: Octopus")).toBeInTheDocument();
+    expect(screen.getByText("研究")).toBeInTheDocument();
+    expect(screen.getByText("research")).toBeInTheDocument();
+    expect(screen.getByText("sources")).toBeInTheDocument();
+    expect(screen.queryByText("analysis")).not.toBeInTheDocument();
+    expect(screen.queryByText("extra")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "研究角色 角色档案" }));
+    const profileAction = screen.getByRole("button", {
+      name: "研究角色 角色档案",
+    });
+    profileAction.focus();
+    await user.keyboard("{Enter}");
     expect(onSelect).toHaveBeenCalledWith(agent);
 
     await user.click(screen.getByRole("button", { name: "添加角色 研究角色" }));

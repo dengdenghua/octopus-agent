@@ -273,6 +273,8 @@ def test_resume_or_register_turn_forwards_wall_time_cap(monkeypatch):
         messages=[],
     )
     assert recorded["kwargs"]["max_wall_time_seconds"] == float(
-        __import__("runtime.core.cerebrum.pause_control", fromlist=["DEFAULT_TURN_WALL_TIME_CAP_S"]).DEFAULT_TURN_WALL_TIME_CAP_S
+        __import__(
+            "runtime.core.cerebrum.pause_control", fromlist=["DEFAULT_TURN_WALL_TIME_CAP_S"]
+        ).DEFAULT_TURN_WALL_TIME_CAP_S
     )
     assert turn is not None

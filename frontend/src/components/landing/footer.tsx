@@ -53,7 +53,7 @@ export function Footer() {
                 />
               </svg>
             </div>
-            <span className="text-lg font-bold text-white/80">Octopus</span>
+            <span className="text-lg font-bold text-white/80">EchoAI</span>
           </div>
           <p className="text-xs leading-relaxed text-white/40">
             {t.landingFooter.tagline}
@@ -94,7 +94,7 @@ export function Footer() {
         </div>
         <div className="flex items-center gap-1.5 text-xs text-white/30">
           <span>&copy; {year}</span>
-          <span className="font-semibold text-white/45">Octopus</span>
+          <span className="font-semibold text-white/45">EchoAI · EchoOS</span>
           <span>· MIT License</span>
         </div>
       </div>

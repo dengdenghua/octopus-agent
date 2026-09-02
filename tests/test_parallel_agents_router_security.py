@@ -46,6 +46,11 @@ def _build_app(
         api_key = f"sk-test-{actor}"
         store.add(Identity(actor_id=actor), api_key_plaintext=api_key)
         keys[actor] = api_key
+    store.add(
+        Identity(actor_id="admin", roles=("admin",)),
+        api_key_plaintext="sk-test-admin",
+    )
+    keys["admin"] = "sk-test-admin"
 
     orchestrator = ParallelAgentOrchestrator(task_runner=task_runner)
     app = FastAPI()
@@ -392,13 +397,11 @@ def test_dev_mode_bypasses_ownership_checks() -> None:
     assert resp.status_code == 200
 
 
-# ── legacy unowned batches are visible to everyone ─────────────────
+# ── legacy unowned batches fail closed in shared mode ──────────────
 
 
-def test_legacy_unowned_batches_visible_to_all() -> None:
-    """Batches with owner_id=None (created before ownership tracking
-    was added, or manually set) are visible to everyone. This ensures
-    backward compat with existing state."""
+def test_legacy_unowned_batches_hidden_from_users_but_visible_to_admin() -> None:
+    """An auth-on upgrade must not expose legacy unowned state laterally."""
     client, keys = _build_app()
     orch: ParallelAgentOrchestrator = client.orchestrator  # type: ignore[attr-defined]
 
@@ -409,16 +412,22 @@ def test_legacy_unowned_batches_visible_to_all() -> None:
     )
     batch_id = result.batch_id
 
-    # alice can read it
+    # Ordinary users cannot claim or inspect an unmigrated batch.
     resp = client.get(
         f"/api/agents/parallel/batch/{batch_id}",
         headers=_bearer(keys["alice"]),
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 404
 
-    # bob can also read it
     resp = client.get(
         f"/api/agents/parallel/batch/{batch_id}",
         headers=_bearer(keys["bob"]),
+    )
+    assert resp.status_code == 404
+
+    # Administrators retain an audit/migration path.
+    resp = client.get(
+        f"/api/agents/parallel/batch/{batch_id}",
+        headers=_bearer(keys["admin"]),
     )
     assert resp.status_code == 200

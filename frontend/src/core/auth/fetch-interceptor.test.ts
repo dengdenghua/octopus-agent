@@ -5,7 +5,13 @@ vi.mock("@/core/config", () => ({ getBackendBaseURL: () => "" }));
 
 import { installAuthFetchInterceptor } from "./fetch-interceptor";
 
-const calls: Array<{ url: string; headers: Headers }> = [];
+const calls: Array<{
+  url: string;
+  headers: Headers;
+  credentials?: RequestCredentials;
+}> = [];
+let nextStatus = 200;
+let nextAuthExpired = false;
 const mockFetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
   const url =
     typeof input === "string"
@@ -13,8 +19,21 @@ const mockFetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       : input instanceof URL
         ? input.href
         : input.url;
-  calls.push({ url, headers: new Headers(init?.headers) });
-  return Promise.resolve({ ok: true, status: 200 } as Response);
+  calls.push({
+    url,
+    headers: new Headers(init?.headers),
+    credentials: init?.credentials,
+  });
+  const status = nextStatus;
+  const authExpired = nextAuthExpired;
+  nextStatus = 200;
+  nextAuthExpired = false;
+  return Promise.resolve(
+    new Response(null, {
+      status,
+      headers: authExpired ? { "X-Octopus-Auth-Expired": "1" } : {},
+    }),
+  );
 });
 
 beforeAll(() => {
@@ -29,6 +48,8 @@ afterEach(() => {
   mockFetch.mockClear();
   localStorage.clear();
   sessionStorage.clear();
+  nextStatus = 200;
+  nextAuthExpired = false;
 });
 
 const authOf = (i = 0): string | null =>
@@ -37,7 +58,7 @@ const authOf = (i = 0): string | null =>
 describe("installAuthFetchInterceptor", () => {
   it("attaches the bearer token to backend /api requests", async () => {
     sessionStorage.setItem("octopus_auth_token", "tok123");
-    await window.fetch("/api/cli-team/status");
+    await window.fetch("/api/apps");
     expect(authOf()).toBe("Bearer tok123");
   });
 
@@ -58,6 +79,7 @@ describe("installAuthFetchInterceptor", () => {
   it("leaves requests untouched when there is no token", async () => {
     await window.fetch("/api/x");
     expect(authOf()).toBeNull();
+    expect(calls[0]?.credentials).toBe("include");
   });
 
   it("ignores the legacy guest sentinel", async () => {
@@ -70,5 +92,39 @@ describe("installAuthFetchInterceptor", () => {
     localStorage.setItem("octopus_auth_token", "legacy");
     await window.fetch("/api/x");
     expect(authOf()).toBe("Bearer legacy");
+  });
+
+  it("announces an expired authenticated backend session without reloading", async () => {
+    const expired = vi.fn();
+    window.addEventListener("octopus:auth-expired", expired);
+    nextStatus = 401;
+    nextAuthExpired = true;
+
+    await window.fetch("/api/capabilities");
+
+    expect(expired).toHaveBeenCalledTimes(1);
+    window.removeEventListener("octopus:auth-expired", expired);
+  });
+
+  it("does not clear the host session for a downstream service 401", async () => {
+    const expired = vi.fn();
+    window.addEventListener("octopus:auth-expired", expired);
+    nextStatus = 401;
+
+    await window.fetch("/api/account/oct/refresh", { method: "POST" });
+
+    expect(expired).not.toHaveBeenCalled();
+    window.removeEventListener("octopus:auth-expired", expired);
+  });
+
+  it("does not treat an invalid login code as an expired workspace session", async () => {
+    const expired = vi.fn();
+    window.addEventListener("octopus:auth-expired", expired);
+    nextStatus = 401;
+
+    await window.fetch("/api/auth/oct/email/login", { method: "POST" });
+
+    expect(expired).not.toHaveBeenCalled();
+    window.removeEventListener("octopus:auth-expired", expired);
   });
 });

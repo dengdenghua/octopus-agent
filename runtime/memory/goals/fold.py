@@ -375,11 +375,7 @@ def apply_goal_event(state: GoalFoldState, event: Any) -> None:
     if event_type == "user/message":
         source = None
         if data is not None:
-            source = (
-                data.get("source")
-                if isinstance(data, dict)
-                else getattr(data, "source", None)
-            )
+            source = data.get("source") if isinstance(data, dict) else getattr(data, "source", None)
         if source is None:
             # Typed journal event (``UserMessageEvent.goal_source``).
             source = getattr(event, "goal_source", None)

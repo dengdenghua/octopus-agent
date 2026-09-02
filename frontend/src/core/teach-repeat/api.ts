@@ -5,6 +5,8 @@ import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
 
 import type {
   AdaptiveReplayRequest,
+  AppendRecordingEventsResponse,
+  RecordingEvent,
   RecordingStatus,
   ReplayRequest,
   ReplayResult,
@@ -55,6 +57,24 @@ export async function stopRecording(
     );
   }
   return (await res.json()) as StopRecordingResponse;
+}
+
+export async function appendRecordingEvents(
+  threadId: string,
+  events: RecordingEvent[],
+): Promise<AppendRecordingEventsResponse> {
+  const res = await fetch(`${BASE()}/record/events`, {
+    method: "POST",
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify({ thread_id: threadId, events }),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(
+      err.detail ?? `Failed to append recording events: ${res.statusText}`,
+    );
+  }
+  return (await res.json()) as AppendRecordingEventsResponse;
 }
 
 export async function getRecordingStatus(

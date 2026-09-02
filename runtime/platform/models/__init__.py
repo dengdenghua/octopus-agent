@@ -61,6 +61,10 @@ from .primitives import (
     new_id,
     now_utc,
 )
+from .selector import (
+    ModelSelection,
+    ModelSelector,
+)
 
 __all__ = [
     # primitives
@@ -121,4 +125,7 @@ __all__ = [
     "InsufficientBudget",
     "Origin",
     "RiskScore",
+    # selector
+    "ModelSelection",
+    "ModelSelector",
 ]

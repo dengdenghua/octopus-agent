@@ -87,23 +87,47 @@ export function OctopusMascot({
 
       {/* Mood indicators */}
       {mood === "thinking" && (
-        <div className="absolute z-10 flex gap-1" style={{ top: "12%", left: "20%" }}>
-          <div className="om-dot h-2 w-2 rounded-full" style={{ background: "var(--primary)" }} />
-          <div className="om-dot h-2 w-2 rounded-full" style={{ background: "var(--primary)" }} />
-          <div className="om-dot h-2 w-2 rounded-full" style={{ background: "var(--primary)" }} />
+        <div
+          className="absolute z-10 flex gap-1"
+          style={{ top: "12%", left: "20%" }}
+        >
+          <div
+            className="om-dot h-2 w-2 rounded-full"
+            style={{ background: "var(--primary)" }}
+          />
+          <div
+            className="om-dot h-2 w-2 rounded-full"
+            style={{ background: "var(--primary)" }}
+          />
+          <div
+            className="om-dot h-2 w-2 rounded-full"
+            style={{ background: "var(--primary)" }}
+          />
         </div>
       )}
       {mood === "working" && (
         <>
           <div
             className="om-sparkle absolute z-10"
-            style={{ top: "5%", left: "15%", fontSize: dim * 0.1, color: "var(--primary)", opacity: 0.8 }}
+            style={{
+              top: "5%",
+              left: "15%",
+              fontSize: dim * 0.1,
+              color: "var(--primary)",
+              opacity: 0.8,
+            }}
           >
             ✦
           </div>
           <div
             className="om-sparkle s2 absolute z-10"
-            style={{ top: "18%", left: "8%", fontSize: dim * 0.08, color: "var(--primary)", opacity: 0.6 }}
+            style={{
+              top: "18%",
+              left: "8%",
+              fontSize: dim * 0.08,
+              color: "var(--primary)",
+              opacity: 0.6,
+            }}
           >
             ✧
           </div>
@@ -113,7 +137,7 @@ export function OctopusMascot({
       <div className={cn("om-img-wrap", mood)}>
         <img
           src="/images/octopus-mascot-new.png"
-          alt="Octopus assistant"
+          alt="EchoAI assistant"
           draggable={false}
           className="om-img"
         />

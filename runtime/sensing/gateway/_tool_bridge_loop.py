@@ -722,6 +722,7 @@ def stream_agentic_fallback(
     tool_specs, workspace_contract = _filter_tool_specs_for_workspace_contract(
         tool_specs,
         intent.normalized_goal,
+        user_context=_intent_user_context,
     )
     evidence_tool_specs = tool_specs
     if bool(_intent_user_context.get("realtime_public_orientation")):
@@ -769,17 +770,18 @@ def stream_agentic_fallback(
                 ),
             ),
         )
-    elif workspace_contract == "read_only":
+    elif workspace_contract in {"read_only", "audit_read_only"}:
         messages.insert(
             0,
             Message(
                 role="system",
                 content=(
                     "READ-ONLY WORKSPACE CONTRACT:\n"
-                    "The user permitted inspection but prohibited mutation. "
-                    "File-write, edit, shell, test, formatting, memory-write, "
-                    "and self-modification tools have been removed. Do not "
-                    "create or modify local files."
+                    "Inspection, search, and focused test/lint verification are "
+                    "permitted, but project mutation is prohibited. File-write, "
+                    "edit, general shell, formatting, memory-write, and "
+                    "self-modification tools have been removed. Do not create or "
+                    "modify local files; switch to develop before applying fixes."
                 ),
             ),
         )
@@ -1778,12 +1780,18 @@ def stream_agentic_fallback(
                 # server process CWD and writes lose their workspace guard.
                 # ``_active_parent_tool_use_id`` carries the id of the
                 # CURRENT call so any nested call_agent reports its parent.
-                from runtime.platform.process.session import _current_session
+                from runtime.platform.process.session import (
+                    _current_session,
+                    parent_tool_use_scope,
+                )
 
                 _call_session_token = _current_session.set(_session_obj)
                 _session_obj.metadata["_active_parent_tool_use_id"] = call.id
                 try:
-                    with scoped_cancellation(tool_batch_source.token):
+                    with (
+                        parent_tool_use_scope(call.id),
+                        scoped_cancellation(tool_batch_source.token),
+                    ):
                         if tool_batch_source.is_cancelled:
                             out, err = (
                                 f"(cancelled before execution: {tool_batch_source.token.reason})",
@@ -1907,10 +1915,15 @@ def stream_agentic_fallback(
                 call: ToolCall,
                 tool_batch_source: Any = _tool_batch_source,
             ) -> tuple[str, bool]:
+                from runtime.platform.process.session import parent_tool_use_scope
+
                 _call_session_token = _current_session.set(_session_obj)
                 _session_obj.metadata["_active_parent_tool_use_id"] = call.id
                 try:
-                    with scoped_cancellation(tool_batch_source.token):
+                    with (
+                        parent_tool_use_scope(call.id),
+                        scoped_cancellation(tool_batch_source.token),
+                    ):
                         if tool_batch_source.is_cancelled:
                             return (
                                 f"(cancelled before execution: {tool_batch_source.token.reason})",

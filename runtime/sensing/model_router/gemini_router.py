@@ -329,6 +329,14 @@ def _split_system_and_contents(
                         },
                     }
                 )
+            elif btype in ("image_url", "image"):
+                # User uploads arrive as OpenAI-shaped ``image_url`` blocks
+                # (built by ``_react_context_attachments``). Without this
+                # branch they matched no case and were dropped, so an
+                # uploaded picture never reached Gemini at all.
+                part = _image_block_to_gemini_part(b)
+                if part is not None:
+                    parts.append(part)
             elif btype == "tool_result":
                 # User returning function result. Gemini wants
                 # ``response`` as a JSON-serializable object, so
@@ -361,6 +369,50 @@ def _split_system_and_contents(
             parts = [{"text": ""}]
         contents.append({"role": role, "parts": parts})
     return system_parts, contents
+
+
+def _image_block_to_gemini_part(block: dict[str, Any]) -> dict[str, Any] | None:
+    """Translate one image block to a Gemini ``inlineData`` / ``fileData`` part.
+
+    Handles the OpenAI ``image_url`` shape we build internally and the
+    Anthropic ``image``/``source`` variant. Remote https URLs become
+    ``fileData``; data URLs and raw base64 become ``inlineData``. Returns
+    ``None`` for a block with no usable reference.
+    """
+    url: str | None = None
+    media_type = "image/png"
+    if block.get("type") == "image_url":
+        raw = block.get("image_url")
+        candidate = raw.get("url") if isinstance(raw, dict) else raw
+        if isinstance(candidate, str) and candidate:
+            url = candidate
+    else:
+        source = block.get("source")
+        if not isinstance(source, dict):
+            return None
+        if source.get("type") == "url":
+            candidate = source.get("url")
+            if isinstance(candidate, str) and candidate:
+                url = candidate
+        else:
+            data = source.get("data")
+            if not isinstance(data, str) or not data:
+                return None
+            return {
+                "inlineData": {
+                    "mimeType": str(source.get("media_type") or media_type),
+                    "data": data,
+                },
+            }
+    if not url:
+        return None
+    if url.startswith("data:"):
+        header, _, data = url.partition(",")
+        if not data:
+            return None
+        media_type = header[len("data:") :].split(";", 1)[0] or media_type
+        return {"inlineData": {"mimeType": media_type, "data": data}}
+    return {"fileData": {"mimeType": media_type, "fileUri": url}}
 
 
 def _flatten_text_blocks(content: Any) -> str:

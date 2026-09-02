@@ -119,6 +119,10 @@ class RealtimeTrialRunner:
     approval_policy: str = "never"
     approval_action: ApprovalAction = "decline"
     approval_responder: ApprovalResponder | None = None
+    # Explicit engine selection is expressed as the server-registered agent
+    # identity.  A fresh eval thread then follows the exact production route:
+    # ``coder`` -> native ReAct, ``local_codex_cli`` -> Codex App Server.
+    agent_id: str | None = None
     model: str | None = None
     topology_id: str | None = None
     workspace: WorkspaceResolver | None = None
@@ -146,6 +150,12 @@ class RealtimeTrialRunner:
             "source": "behavioral-eval",
             "isolatedTrial": True,
         }
+        selected_agent = str(self.agent_id or "").strip()
+        if selected_agent:
+            # The top-level value is inspected before the free-form context by
+            # the production resolver, so backend selection cannot be
+            # shadowed even for a trial that has no workspace context.
+            input_metadata["agent_id"] = selected_agent
         if workspace_root is not None:
             context: dict[str, Any] = {
                 "mode": "code",
@@ -155,6 +165,12 @@ class RealtimeTrialRunner:
             if callable(overrides):
                 overrides = overrides(workspace_root)
             context.update(overrides or {})
+            if selected_agent:
+                # Backend identity is part of the comparison contract, not an
+                # arbitrary context override.  Set it last so a resolver
+                # cannot silently turn a requested Codex trial into native (or
+                # vice versa).
+                context["agent_id"] = selected_agent
             # A caller may select the appropriate work surface, but it cannot
             # weaken trial isolation or redirect the workspace.
             context["workspace_scope"] = "project"
@@ -289,6 +305,9 @@ class RealtimeTrialRunner:
 
 
 def _notification_events(method: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+    if method == "thread/tokenUsage/updated":
+        usage = params.get("tokenUsage")
+        return [{"kind": "token_usage", "usage": usage if isinstance(usage, dict) else {}}]
     if method == "item/agentMessage/delta":
         return [{"kind": "text_delta", "delta": str(params.get("delta") or "")}]
     if method == "item/reasoning/textDelta":

@@ -37,7 +37,46 @@ export function liveEventIsReportLike(event: {
   input?: unknown;
   output?: unknown;
 }): boolean {
-  if (REPORT_DELIVERABLE_PATTERN.test(event.name)) return true;
+  const normalizedName = event.name.trim().toLowerCase();
+  // Capability discovery returns skill descriptions and tags. Those strings
+  // routinely contain words such as "swarm", "research" or "report", but
+  // describe what a skill *can* do rather than what this turn must deliver.
+  if (normalizedName === "query_skill" || normalizedName === "visibility") {
+    return false;
+  }
+  const inputRecord =
+    typeof event.input === "object" &&
+    event.input !== null &&
+    !Array.isArray(event.input)
+      ? (event.input as Record<string, unknown>)
+      : null;
+  // Child-agent lifecycle/tool rows are observability records, not a request
+  // for the parent turn to produce a report artifact. In particular,
+  // `subagent.report` is the child's result channel. Inspecting its payload
+  // would also turn ordinary prompts such as "report the first line" into a
+  // false report-deliverable requirement and leave completed turns running.
+  if (
+    inputRecord?.server === "subagent" ||
+    normalizedName === "subagent" ||
+    normalizedName === "subagent_progress" ||
+    normalizedName.startsWith("subagent.") ||
+    normalizedName.startsWith("runtime.__subagent_")
+  ) {
+    return false;
+  }
+  if (REPORT_DELIVERABLE_PATTERN.test(normalizedName)) return true;
+  // Delegation envelopes contain other agents' prompts and outputs. Words
+  // such as "report" there describe a child's result channel, not a required
+  // parent artifact. Treating arbitrary worker briefs as the lead turn's
+  // deliverable contract leaves a completed replay permanently "running".
+  if (
+    normalizedName === "call_agent" ||
+    normalizedName === "call_agent_parallel" ||
+    normalizedName === "call_agent_vote" ||
+    normalizedName === "run_orchestration"
+  ) {
+    return false;
+  }
   if (event.input != null && serializedMatches(event.input)) return true;
   return event.output != null && serializedMatches(event.output);
 }

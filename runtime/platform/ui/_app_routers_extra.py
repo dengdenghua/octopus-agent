@@ -12,12 +12,36 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
 from runtime.platform.process.paths import app_paths
 
 from ._app_context import AppContext
+
+
+def _register_plugin_hub_lifecycle(app: Any, hub: Any) -> None:
+    """Start loaded plugins with the app and stop their background work cleanly."""
+
+    def _start_plugins() -> None:
+        started = hub.start_all()
+        logging.getLogger(__name__).info(
+            "PluginHub auto-started %d plugins: %s",
+            len(started),
+            started,
+        )
+
+    def _stop_plugins() -> None:
+        stopped = hub.stop_all()
+        logging.getLogger(__name__).info(
+            "PluginHub stopped %d plugins: %s",
+            len(stopped),
+            stopped,
+        )
+
+    app.router.add_event_handler("startup", _start_plugins)
+    app.router.add_event_handler("shutdown", _stop_plugins)
 
 
 def mount_routers_b(
@@ -38,7 +62,15 @@ def mount_routers_b(
             create_ambient_suggestions_router,
         )
 
-        app.include_router(create_ambient_suggestions_router())
+        app.include_router(
+            create_ambient_suggestions_router(
+                identity_store=ctx.identity_store,
+                require_auth=ctx.require_auth,
+                jwt_secret=ctx.jwt_secret,
+                jwt_issuer=ctx.jwt_issuer,
+                jwt_audience=ctx.jwt_audience,
+            )
+        )
     except Exception as _amb_exc:  # noqa: BLE001
         logging.getLogger(__name__).warning(
             "ambient_suggestions_router failed to mount: %s",
@@ -110,6 +142,7 @@ def mount_routers_b(
 
         _prompts_dir = app_paths().data_dir / "prompt_templates"
         _prompt_registry = PromptRegistry(_prompts_dir)
+        app.state.prompt_registry = _prompt_registry
         # Auto-install the default templates the first time the
         # server boots against an empty directory. Safe to call on
         # every boot — it's a no-op once any .md exists.
@@ -318,13 +351,33 @@ def mount_routers_b(
         _allow_approval_bypass = bool(
             getattr(_safety_cfg, "allow_client_approval_bypass", None) or False
         )
+        from runtime.sensing.gateway.thread_access import ThreadAccessResolver
+
+        _realtime_thread_access = ThreadAccessResolver(
+            thread_store=ctx.thread_store,
+            group_store=(
+                getattr(ctx.cowork_runtime, "group_store", None)
+                if ctx.cowork_runtime is not None
+                else None
+            ),
+            collaboration_store=(
+                getattr(ctx.cowork_runtime, "collaboration_store", None)
+                if ctx.cowork_runtime is not None
+                else None
+            ),
+            team_rooms_router=ctx.team_rooms_router,
+            identity_store=ctx.identity_store,
+            # Auth-off is the local single-user compatibility surface. Older
+            # and benchmark-created ThreadState rows have no owner/tenant; the
+            # resolver grants those rows only when they are also unlinked.
+            allow_anonymous_ownerless=not ctx.require_auth,
+        )
 
         if stack is not None:
             from runtime.memory.threads.compaction import (
                 CompactionPolicy,
                 compaction_trigger_tokens,
             )
-            from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
 
             # Compaction kicks in once a thread accrues ~24 turns OR an
             # estimated volume at ~90% of the active model's advertised
@@ -350,7 +403,10 @@ def mount_routers_b(
                 try:
                     from runtime.projectos.llm_hooks import create_llm_hooks
 
-                    _project_os_hooks = create_llm_hooks(ctx.project_model_router)
+                    _project_os_hooks = create_llm_hooks(
+                        ctx.project_model_router,
+                        subagent_runner=ctx.subagent_runner,
+                    )
                 except Exception as exc:  # noqa: BLE001
                     logging.getLogger(__name__).warning(
                         "projectos llm hooks unavailable for realtime: %s",
@@ -381,42 +437,69 @@ def mount_routers_b(
                     )
                     _session_titles = None
 
-            _realtime_runtime: Any = CerebrumRuntime(
-                stack=stack,
-                agent=None,  # resolved per turn from the registry
-                agent_registry=ctx.agent_registry,
-                logs_root=str(_realtime_logs_root),
-                policy_path=app_paths().permissions_path,
-                workspace_root=str(app_paths().data_dir / "workspaces"),
-                compaction_policy=_compaction_policy,
-                summary_router=_summary_router,
-                thread_store=ctx.thread_store,
-                reflex_router=ctx.reflex_router,
-                trace_store=getattr(state, "trace_store", None),
-                task_supervisor=getattr(state, "task_supervisor", None),
-                allow_client_auto_approve=_allow_approval_bypass,
-                cowork_group_store=(
+            _realtime_runtime_kwargs: dict[str, Any] = {
+                "stack": stack,
+                "agent": None,  # resolved per turn from the registry
+                "agent_registry": ctx.agent_registry,
+                "logs_root": str(_realtime_logs_root),
+                "policy_path": app_paths().permissions_path,
+                "workspace_root": str(
+                    ctx.thread_workspace_root or (app_paths().data_dir / "workspaces")
+                ),
+                "compaction_policy": _compaction_policy,
+                "summary_router": _summary_router,
+                "thread_store": ctx.thread_store,
+                "reflex_router": ctx.reflex_router,
+                "trace_store": getattr(state, "trace_store", None),
+                "task_supervisor": getattr(state, "task_supervisor", None),
+                "allow_client_auto_approve": _allow_approval_bypass,
+                "allow_local_workspace_access": ctx.allow_local_workspace_access,
+                "cowork_group_store": (
                     getattr(ctx.cowork_runtime, "group_store", None)
                     if ctx.cowork_runtime is not None
                     else None
                 ),
-                project_store=ctx.project_store,
-                project_os_hooks=_project_os_hooks,
-                session_titles=_session_titles,
-            )
+                "collaboration_store": (
+                    getattr(ctx.cowork_runtime, "collaboration_store", None)
+                    if ctx.cowork_runtime is not None
+                    else None
+                ),
+                "project_store": ctx.project_store,
+                "project_os_hooks": _project_os_hooks,
+                "subagent_runner": ctx.subagent_runner,
+                "session_titles": _session_titles,
+            }
+            if ctx.kernel is not None:
+                _realtime_runtime = ctx.kernel.create_realtime_runtime(**_realtime_runtime_kwargs)
+            else:
+                from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+
+                _realtime_runtime = CerebrumRuntime(**_realtime_runtime_kwargs)
         else:
             from runtime.sensing.gateway.realtime_echo import EchoRuntime
 
             _realtime_runtime = EchoRuntime(logs_root=str(_realtime_logs_root))
 
+        # Runtime request handlers perform their own thread checks after the
+        # gateway handshake. Share the same dynamic resolver so resume/list,
+        # steering and turn execution observe room removal immediately.
+        _realtime_runtime._thread_access_resolver = _realtime_thread_access  # noqa: SLF001
+        # Echo/custom runtimes do not receive these stores in their
+        # constructors, but the claimed gateway boundary and late background
+        # writer guard must still consult the same durable deletion fences.
+        _realtime_runtime._thread_store = ctx.thread_store  # noqa: SLF001
+        _realtime_runtime._project_store = ctx.project_store  # noqa: SLF001
+
         _realtime_gateway = RealtimeGateway(
             runtime=_realtime_runtime,
             identity_store=ctx.identity_store,
             require_auth=ctx.require_auth,
+            allow_local_workspace_access=ctx.allow_local_workspace_access,
             jwt_secret=ctx.jwt_secret,
             jwt_issuer=ctx.jwt_issuer,
             jwt_audience=ctx.jwt_audience,
             allow_client_approval_bypass=_allow_approval_bypass,
+            thread_access_resolver=_realtime_thread_access,
         )
         app.include_router(_realtime_gateway.router)
         # Exposed for introspection/tests (e.g. asserting the secure
@@ -468,6 +551,9 @@ def mount_routers_b(
 
         app.include_router(
             create_evolution_router(
+                stack=stack,
+                agent_registry=ctx.agent_registry,
+                project_root=ctx.project_root,
                 identity_store=ctx.identity_store,
                 require_auth=ctx.require_auth,
                 jwt_secret=ctx.jwt_secret,
@@ -507,14 +593,33 @@ def mount_routers_b(
     # frontend config UI via plugin.yaml + ModulePlugin subclass.
     try:
         from runtime.platform.plugins.plugin_hub import PluginHub
+        from runtime.platform.process.composition import build_default_service_bus
         from runtime.sensing.gateway.plugin_hub_router import (
             create_plugin_hub_router,
         )
 
+        # Composition layer: bind kernel services (journal / memory) and let
+        # plugins declare provides/consumes against them. Exposed on app.state
+        # so future blocks (arms, model router) register here too.
+        _service_bus = build_default_service_bus(
+            journal=getattr(state, "journal", None),
+            event_bus=None,
+        )
+        app.state.service_bus = _service_bus
+
         _hub = PluginHub(
+            # Cloud workbench packages are installed below the runtime data
+            # root.  Appliance deployments set ``OCTOPUS_DATA_DIR`` to an
+            # isolated writable volume, so PluginHub must discover external
+            # packages there instead of falling back to the developer's
+            # ``~/.octopus/plugins`` directory.
+            plugin_dir=app_paths().data_dir / "plugins"
+            if os.environ.get("OCTOPUS_DATA_DIR")
+            else None,
             skill_registry=state.registry,
             channel_manager=ctx.channel_manager,
             fastapi_app=app,
+            service_bus=_service_bus,
         )
         _loaded = _hub.load_all()
         if _loaded:
@@ -535,10 +640,56 @@ def mount_routers_b(
             )
         )
         app.state.plugin_hub = _hub
+        _register_plugin_hub_lifecycle(app, _hub)
     except Exception as _hub_exc:
         logging.getLogger(__name__).warning(
             "PluginHub failed to initialize: %s",
             _hub_exc,
+        )
+
+    # Installed workbench UI packages are independent, versioned assets. The
+    # host frontend keeps only the loader; an uninstalled package has no entry
+    # file to execute and a broken package fails within its own surface.
+    try:
+        from runtime.sensing.gateway.workbench_packages_router import (
+            create_workbench_packages_router,
+        )
+
+        app.include_router(
+            create_workbench_packages_router(
+                identity_store=ctx.identity_store,
+                require_auth=ctx.require_auth,
+                jwt_secret=ctx.jwt_secret,
+                jwt_issuer=ctx.jwt_issuer,
+                jwt_audience=ctx.jwt_audience,
+            )
+        )
+    except Exception as _workbench_packages_exc:
+        logging.getLogger(__name__).warning(
+            "workbench packages router failed to mount: %s",
+            _workbench_packages_exc,
+        )
+
+    # ─── Design Studio / local ComfyUI bridge ──────────────────
+    try:
+        from runtime.sensing.gateway.design_studio_router import (
+            create_design_studio_router,
+        )
+
+        app.include_router(
+            create_design_studio_router(
+                project_store=ctx.project_store,
+                identity_store=ctx.identity_store,
+                require_auth=ctx.require_auth,
+                jwt_secret=ctx.jwt_secret,
+                jwt_issuer=ctx.jwt_issuer,
+                jwt_audience=ctx.jwt_audience,
+            )
+        )
+    except Exception as _design_exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning(
+            "design studio router failed to mount: %s",
+            _design_exc,
         )
 
     from runtime.sensing.gateway.stub_router import create_stub_router
@@ -551,6 +702,28 @@ def mount_routers_b(
             jwt_audience=ctx.jwt_audience,
         )
     )
+
+    # ─── A2A remote agent registry (a2a-agents-panel) ─────────────
+    # Frontend panel shipped earlier without backend routes; mount the
+    # protocol relay so registered remote agents can be listed, probed,
+    # and delegated tasks over the A2A wire protocol.
+    try:
+        from runtime.sensing.gateway.a2a_router import create_a2a_router
+
+        app.include_router(
+            create_a2a_router(
+                identity_store=ctx.identity_store,
+                require_auth=ctx.require_auth,
+                jwt_secret=ctx.jwt_secret,
+                jwt_issuer=ctx.jwt_issuer,
+                jwt_audience=ctx.jwt_audience,
+            )
+        )
+    except Exception as _a2a_exc:  # noqa: BLE001 — optional surface
+        logging.getLogger(__name__).warning(
+            "A2A router failed to initialize: %s",
+            _a2a_exc,
+        )
 
     from runtime.sensing.gateway.teach_repeat_router import create_teach_repeat_router
 

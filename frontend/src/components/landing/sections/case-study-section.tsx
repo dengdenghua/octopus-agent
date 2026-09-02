@@ -64,7 +64,7 @@ export function CaseStudySection({ className }: { className?: string }) {
     <Section
       className={className}
       title="Case Studies"
-      subtitle="See how Octopus is used in the wild"
+      subtitle="See how EchoAI is used in the wild"
     >
       <div className="container-md mt-8 grid grid-cols-1 gap-4 px-4 sm:px-8 lg:px-20 md:grid-cols-2 lg:grid-cols-3">
         {caseStudies.map((caseStudy, index) => (
@@ -81,7 +81,8 @@ export function CaseStudySection({ className }: { className?: string }) {
               <div
                 className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat transition-all duration-slow group-hover/card:scale-110 group-hover/card:brightness-90"
                 style={{
-                  backgroundImage: CARD_GRADIENTS[index % CARD_GRADIENTS.length],
+                  backgroundImage:
+                    CARD_GRADIENTS[index % CARD_GRADIENTS.length],
                 }}
               ></div>
               <div

@@ -1,0 +1,40 @@
+{
+  "id": "twin_failure_analysis_engineer",
+  "templateId": "octopus:digital-twin:failure_analysis_engineer",
+  "templateVersion": "1.0.0",
+  "source_kind": "digital-twin-human-role",
+  "source_plugin": "twin-failure_analysis_engineer",
+  "expertType": "agent",
+  "name": "失效分析工程师 / FA分身",
+  "icon": "🌡️",
+  "description": "代表真人「失效分析工程师 / FA」的数位分身:负责 根因分析、批次关联、FA 报告 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "digital-twin:human-role",
+  "category": "engineering",
+  "tags": [
+    "数字分身",
+    "真人岗位",
+    "真身协同",
+    "岗位模板",
+    "根因分析",
+    "批次关联",
+    "FA 报告"
+  ],
+  "profession": "失效分析工程师 / FA",
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true,
+    "includeUserMd": true,
+    "includeMemoryMd": true
+  },
+  "capabilities": {
+    "digital_twin": true,
+    "human_collab": true,
+    "authorization_boundary": true,
+    "handoff_pack": true
+  }
+}

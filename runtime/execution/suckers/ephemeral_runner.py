@@ -106,6 +106,11 @@ EPHEMERAL_MAX_ROUNDS_BY_ROLE: dict[str, int | None] = {
 # budget-exhausted placeholder.
 EPHEMERAL_TOKEN_BUDGET: int = 0
 
+# Maximum delegation depth. 0 = planner (root), 1 = ephemeral sub-agent,
+# 2 = ephemeral sub-agent's sub-agent. Prevents infinite recursion while
+# allowing hierarchical orchestration (give dimension → sub-agent self-organizes).
+MAX_DELEGATION_DEPTH: int = 2
+
 # Convergence guard. If the agent runs this many consecutive rounds where it
 # only re-invokes tools it has already called (no new tool signature), it is
 # looping rather than exploring. Stop early and hand back the partial work as
@@ -133,6 +138,7 @@ def _loop_budget_seconds(call: Any) -> float:
     if budget <= 0:
         budget = 900.0
     return max(60.0, budget - _LOOP_DEADLINE_MARGIN_S)
+
 
 # Tools that legitimately re-invoke the same signature while a long-running
 # background job is still working. Polling a stable task_id is real progress
@@ -178,12 +184,14 @@ def _tool_path_args(tool_input: Any) -> dict[str, Any]:
 # providers, and agentless executions never see the registration (dsh scope).
 
 REPORT_TOOL_GUIDANCE = (
-    "Deliver your result with the report tool before you finish: call it once "
-    "with a self-contained answer. The agent that started you shares your "
+    "Finish by delivering your result with the report tool: call it exactly once "
+    "with a self-contained final answer. A successful report ends this child "
+    "run immediately, so complete all research and verification before calling it. "
+    "The agent that started you shares your "
     "workspace but does not automatically receive your transcript, tool "
     'output, or reasoning, so a closing remark such as "done" leaves it '
-    "nothing it can use. Report earlier as well whenever a partial finding "
-    "changes what that agent should do next; reporting never ends your turn."
+    "nothing it can use. Do not use report for progress updates and do not "
+    "call any more tools after it."
 )
 
 
@@ -194,15 +202,14 @@ def _report_tool_spec() -> Any:
     return ToolSpec(
         name="report",
         description=(
-            "Report selected content to the agent that started you. Call this "
-            "once before you finish, with a self-contained final result, and "
-            "earlier for progress or findings that change what that agent "
-            "does next. That agent shares your workspace but does not "
+            "Deliver your final result to the agent that started you and end "
+            "this child run. Call this exactly once, only after all research "
+            "and verification are complete, with a self-contained answer. "
+            "That agent shares your workspace but does not "
             "automatically receive your transcript, tool output, or "
-            "reasoning, so finishing your work is not itself a result. "
-            "Reporting does not end your turn or finish your work, and only "
-            "your direct parent receives it. A failed call may still have "
-            "arrived, so do not blindly repeat it."
+            "reasoning. Only your direct parent receives the report. A "
+            "successful call is terminal; a failed call may still have "
+            "arrived, so never blindly repeat it."
         ),
         input_schema={
             "type": "object",
@@ -284,8 +291,7 @@ def _handle_report_tool(
     else:
         note = "The parent has been woken to read this."
     return (
-        f"Report delivered (messageId={message_id}). {note} "
-        "A failed call may still have arrived, so do not blindly repeat it.",
+        f"Report delivered (messageId={message_id}). {note} This child run is now complete.",
         False,
     )
 
@@ -427,6 +433,75 @@ def _select_call_model(default_model: str, context: Any) -> str:
     return default_model
 
 
+def _clone_registry_with_delegation(
+    registry: Any,
+    call: Any,
+    depth: int,
+) -> Any:
+    """Clone the registry and conditionally register delegation skills.
+
+    When a sub-agent is allowed to spawn its own sub-agents (hierarchical
+    orchestration), this creates a shallow registry clone and registers
+    `call_agent_parallel` with depth and budget constraints inherited from
+    the parent.
+
+    Parameters
+    ----------
+    registry :
+        The parent's SkillRegistry.
+    call :
+        The EphemeralCall with context carrying budget and depth.
+    depth :
+        Current delegation depth (0=planner, 1=ephemeral, 2=ephemeral's child).
+
+    Returns
+    -------
+    A new SkillRegistry with delegation skills registered.
+    """
+    from copy import copy
+
+    # Shallow clone: tools dict is new, but tool objects are shared refs
+    cloned = copy(registry)
+    cloned._by_name = dict(registry._by_name)  # noqa: SLF001
+
+    # Depth limit is enforced HERE as defense in depth, not only at the
+    # caller: the clone function must be safe standalone (a node at depth N
+    # may only spawn at N+1 while N+1 < MAX). The caller's pre-gate already
+    # skips this call past the limit, so this is behavior-neutral for the
+    # normal path — it only hardens direct/standalone use.
+    if depth >= MAX_DELEGATION_DEPTH:
+        return cloned
+
+    # Register delegation skills with inherited constraints
+    ctx = getattr(call, "context", None) or {}
+    subdelegation_budget = ctx.get("subdelegation_budget", 0)
+
+    if subdelegation_budget > 0:
+        # Import delegation skills registration function
+        try:
+            from runtime.execution.suckers.delegation_skills import (
+                register_call_agent_parallel,
+            )
+
+            # Register with next depth level
+            register_call_agent_parallel(
+                cloned,
+                max_spawns=min(5, ctx.get("max_subdelegation_spawns", 3)),
+                depth=depth + 1,
+            )
+        except (ImportError, AttributeError) as exc:
+            import logging
+
+            _log = logging.getLogger(__name__)
+            _log.warning(
+                "Failed to register delegation skills for depth=%d: %s",
+                depth,
+                exc,
+            )
+
+    return cloned
+
+
 def make_llm_ephemeral_runner(
     router: Any,
     *,
@@ -522,6 +597,17 @@ def make_llm_ephemeral_runner(
         # ``react_loop_subagent`` opts a dispatch in until the realtime server
         # is validated end-to-end and the default is flipped.
         _ctx = getattr(call, "context", None) or {}
+        # Durable children own a report lane. The report tool is dynamically
+        # bound to this exact session, so those runs use the mini-loop below
+        # (``dispatch_is_restricted`` enforces that) while retaining token and
+        # tool-event streaming. Append its contract before choosing a driver
+        # so every path sees one coherent instruction.
+        report_session_id = _ctx.get("subagent_session_id")
+        report_delivery = str(_ctx.get("subagent_report_delivery") or "wakeup")
+        if report_session_id:
+            call.composed_system_prompt = (
+                f"{call.composed_system_prompt}\n\n## report tool\n{REPORT_TOOL_GUIDANCE}"
+            )
         if _ctx.get("react_loop_subagent") and _ctx.get("react_stack") is not None:
             from runtime.execution.subagents.react_drive import (
                 dispatch_is_restricted,
@@ -546,9 +632,7 @@ def make_llm_ephemeral_runner(
                     role_id=call.role.id,
                     model=effective_model,
                     thread_id=str(
-                        _ctx.get("child_thread_id")
-                        or getattr(call, "caller_thread_id", None)
-                        or ""
+                        _ctx.get("child_thread_id") or getattr(call, "caller_thread_id", None) or ""
                     ),
                     session_id=str(_ctx.get("subagent_session_id") or ""),
                     emitter=_ctx.get("event_emitter"),
@@ -642,13 +726,26 @@ def make_llm_ephemeral_runner(
             return str(getattr(resp, "text", None) or "")
 
         # ── Agentic loop path ────────────────────────────────
-        # Build the tool spec list (filtered by role allowlist).
+        # Conditional delegation: if this sub-agent is allowed to spawn its own
+        # sub-agents (hierarchical orchestration), register delegation skills in
+        # a local registry clone. Gated by depth to prevent infinite recursion.
         from runtime.execution.suckers.layers import select_tool_specs
         from runtime.execution.tool_spec_builder import (
             build_anthropic_tool_specs,
         )
 
-        all_specs = build_anthropic_tool_specs(registry)
+        effective_registry = registry
+        depth = _ctx.get("delegation_depth", 0)
+        allow_subdelegation = _ctx.get("allow_subdelegation", False)
+
+        if allow_subdelegation and depth < MAX_DELEGATION_DEPTH and registry:
+            effective_registry = _clone_registry_with_delegation(
+                registry,
+                call=call,
+                depth=depth,
+            )
+
+        all_specs = build_anthropic_tool_specs(effective_registry)
         ctx_allowlist = call.context.get("tool_allowlist") if call.context else None
         if isinstance(ctx_allowlist, (list, tuple, set)):
             allowlist = tuple(str(name).strip() for name in ctx_allowlist if str(name).strip())
@@ -682,17 +779,8 @@ def make_llm_ephemeral_runner(
         # usage guidance so it can deliver findings to its direct parent
         # mid-round. Only exposed when the bridge stamped a session id;
         # roots / one-shot children / remote providers never see it.
-        report_session_id = call.context.get("subagent_session_id") if call.context else None
-        report_delivery = (
-            str(call.context.get("subagent_report_delivery") or "wakeup")
-            if call.context
-            else "wakeup"
-        )
         if report_session_id:
             tool_specs = list(tool_specs) + [_report_tool_spec()]
-            call.composed_system_prompt = (
-                f"{call.composed_system_prompt}\n\n## report tool\n{REPORT_TOOL_GUIDANCE}"
-            )
 
         # Pull the optional event_emitter injected by the bridge.
         # It's a plain Callable[[dict], None] — fire-and-forget.
@@ -721,6 +809,11 @@ def make_llm_ephemeral_runner(
         # plus a once-per-run flag so we never loop the nudge forever.
         executed_tools: list[dict[str, Any]] = []
         verification_nudged = False
+        # A successful ``report`` is the child's final delivery. Keeping the
+        # terminal payload separately lets us stop immediately after emitting
+        # the matching sub-tool end event, even when the model supplied no
+        # ordinary assistant text in that round.
+        terminal_report_content: str | None = None
         # Write-out grace: rounds consumed past ``max_rounds`` purely to finish a
         # provider-truncated reply. See EPHEMERAL_WRITEOUT_GRACE_ROUNDS.
         writeout_grace_used = 0
@@ -1005,6 +1098,13 @@ def make_llm_ephemeral_runner(
                         report_session_id,
                         delivery=report_delivery,
                     )
+                    if not is_error:
+                        report_args = getattr(tc, "input", None) or {}
+                        report_content = (
+                            report_args.get("output") if isinstance(report_args, dict) else None
+                        )
+                        if isinstance(report_content, str) and report_content.strip():
+                            terminal_report_content = report_content.strip()
                 else:
                     output, is_error = _execute_tool_in_subagent(
                         registry,
@@ -1051,6 +1151,15 @@ def make_llm_ephemeral_runner(
                 if is_error:
                     block["is_error"] = True
                 tool_results.append(block)
+                if terminal_report_content is not None:
+                    # Ignore any tool calls placed after the terminal report
+                    # in the same model response. They are logically outside
+                    # the completed child run and executing them can create
+                    # surprising post-delivery side effects.
+                    break
+
+            if terminal_report_content is not None:
+                return terminal_report_content
             messages.append(
                 Message(
                     role="user",
@@ -1075,8 +1184,7 @@ def make_llm_ephemeral_runner(
                 # legitimate repeated work, not a loop — never let the
                 # convergence guard truncate it.
                 if any(
-                    str(getattr(tc, "name", "") or "") in POLLING_TOOL_NAMES
-                    for tc in tool_calls
+                    str(getattr(tc, "name", "") or "") in POLLING_TOOL_NAMES for tc in tool_calls
                 ):
                     stall_rounds = 0
                 else:

@@ -112,10 +112,63 @@ export interface OctopusElectronAPI {
     clearSiteData: (
       webContentsId: number,
     ) => Promise<{ ok: boolean; origin?: string; error?: string }>;
+    clearBrowsingData: () => Promise<{ ok: boolean; error?: string }>;
+    listPasswords: (origin?: string) => Promise<{
+      ok: boolean;
+      available: boolean;
+      entries: Array<{
+        id: string;
+        origin: string;
+        username: string;
+        updatedAt: number;
+      }>;
+      error?: string;
+    }>;
+    savePassword: (entry: {
+      origin: string;
+      username: string;
+      password: string;
+    }) => Promise<{ ok: boolean; error?: string }>;
+    deletePassword: (id: string) => Promise<{ ok: boolean; error?: string }>;
+    fillPassword: (
+      webContentsId: number,
+      id: string,
+    ) => Promise<{ ok: boolean; error?: string }>;
+    listSitePermissions: () => Promise<{
+      ok: boolean;
+      entries: Array<{
+        origin: string;
+        permission:
+          | "camera"
+          | "microphone"
+          | "camera-microphone"
+          | "location"
+          | "notifications"
+          | "clipboard";
+        decision: "allow" | "block";
+        updatedAt: number;
+      }>;
+      error?: string;
+    }>;
+    setSitePermission: (
+      origin: string,
+      permission:
+        | "camera"
+        | "microphone"
+        | "camera-microphone"
+        | "location"
+        | "notifications"
+        | "clipboard",
+      decision: "ask" | "allow" | "block",
+    ) => Promise<{ ok: boolean; error?: string }>;
     showDownloadInFolder: (
       id: string,
     ) => Promise<{ ok: boolean; error?: string }>;
     openDownload: (id: string) => Promise<{ ok: boolean; error?: string }>;
+    pauseDownload: (id: string) => Promise<{ ok: boolean; error?: string }>;
+    resumeDownload: (id: string) => Promise<{ ok: boolean; error?: string }>;
+    cancelDownload: (id: string) => Promise<{ ok: boolean; error?: string }>;
+    retryDownload: (id: string) => Promise<{ ok: boolean; error?: string }>;
   };
 
   dialog: {
@@ -157,6 +210,15 @@ export interface OctopusElectronAPI {
   };
 
   desktop: {
+    getAutomationPermissions: () => Promise<{
+      supported: boolean;
+      platform: NodeJS.Platform;
+      screenRecording: "granted" | "denied" | "restricted" | "unknown";
+      accessibility: "granted" | "denied" | "unknown";
+    }>;
+    openAutomationPermission: (
+      permission: "screen-recording" | "accessibility",
+    ) => Promise<{ ok: boolean; error?: string }>;
     listItems: () => Promise<{
       ok: boolean;
       desktopPath?: string;
@@ -239,6 +301,9 @@ export interface OctopusElectronAPI {
     /** Open DevTools for the host renderer (used by the preview panel's
      * inspector button so the user can examine runtime errors). */
     openDevTools: () => Promise<{ ok: boolean; error?: string }>;
+    /** Query the native window state so the custom title bar can leave the
+     * correct macOS traffic-light inset. */
+    isFullScreen: () => Promise<{ ok: boolean; fullScreen?: boolean }>;
   };
 
   /* Implementation note. */
@@ -249,7 +314,11 @@ export interface OctopusElectronAPI {
 
   pet: {
     /** Start the Godot desktop pet sidecar process. */
-    start: () => Promise<{ ok: boolean; reason?: string; alreadyRunning?: boolean }>;
+    start: () => Promise<{
+      ok: boolean;
+      reason?: string;
+      alreadyRunning?: boolean;
+    }>;
     /** Stop the Godot desktop pet sidecar process. */
     stop: () => Promise<{ ok: boolean }>;
     isRunning: () => Promise<{ ok: boolean; running: boolean }>;
@@ -280,7 +349,8 @@ export interface OctopusElectronAPI {
       | "browser:download-event"
       | "desktop:organize-now"
       | "desktop:items-changed"
-      | "backend:bootstrap-progress",
+      | "backend:bootstrap-progress"
+      | "window:fullscreen-changed",
     listener: (...args: unknown[]) => void,
   ) => () => void;
 }

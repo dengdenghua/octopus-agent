@@ -30,6 +30,18 @@ from runtime.sensing.gateway.realtime_gateway import EventEmitter
 _logger = logging.getLogger(__name__)
 
 
+def _budget_for_graph(graph: Any) -> tuple[int, float]:
+    """④ 预算随任务规模动态伸缩：节点越多给越大，同时保留硬上限。
+
+    固定 200k/2.0 对单节点任务浪费、对大图又不够。按节点数线性扩展，
+    token 上限 800k、USD 上限 8.0，防止失控。
+    """
+    node_count = max(1, len(getattr(graph, "nodes", None) or []) or 1)
+    tokens = min(800_000, 100_000 + 40_000 * node_count)
+    usd = min(8.0, 1.0 + 0.5 * node_count)
+    return int(tokens), usd
+
+
 def _graph_favors_mesh(graph: Any) -> bool:
     """Decide whether the parallel mesh swarm is worth it for this graph.
 
@@ -118,12 +130,19 @@ async def _drive_swarm_mesh(
         from runtime.memory.journal.journal_context import journal_context
         from runtime.platform.process.session import Session, session_scope
 
+        session_metadata = dict(intent.user_context or {})
+        params = getattr(turn, "params", None)
+        actor = str(getattr(params, "owner_actor_id", None) or "").strip() or None
+        tenant = str(getattr(params, "tenant_id", None) or "").strip()
+        if tenant:
+            session_metadata["tenant_id"] = tenant
         turn_session = Session(
+            actor=actor,
             agent=None,
             thread_id=turn.thread_id,
             conversation_id=turn.thread_id,
             turn_id=turn.id,
-            metadata=dict(intent.user_context or {}),
+            metadata=session_metadata,
         )
         return session_scope(turn_session), journal_context(
             conversation_id=turn.thread_id,
@@ -153,9 +172,10 @@ async def _drive_swarm_mesh(
             grt = GraphRuntime(executor=stack.executor, journal=stack.journal)
             sb = SignalBus()
             pool = build_arm_pool_from_registry(stack.registry, grt, signal_bus=sb)
+            _budget_tokens, _budget_usd = _budget_for_graph(graph)
             budget = Budget(
                 task_id=graph.task_id,
-                limits=BudgetLimits(tokens=200_000, usd=2.0),
+                limits=BudgetLimits(tokens=int(_budget_tokens), usd=_budget_usd),
             )
             strategy = "topo_layers" if getattr(graph, "edges", None) else "per_node"
             signals: list[Any] = []

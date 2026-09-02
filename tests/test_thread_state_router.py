@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from runtime.memory.threads import ThreadStateStore
+from runtime.memory.threads import ThreadPermanentlyDeletedError, ThreadStateStore
 from runtime.memory.threads.event_log import EventLog, list_threads
 from runtime.sensing.gateway.thread_state_router import create_thread_state_router
 
@@ -70,7 +73,8 @@ def test_thread_delete_archives_realtime_event_log(tmp_path) -> None:
     response = client.delete("/api/threads/th-realtime")
 
     assert response.status_code == 204
-    assert store.get("th-realtime") is None
+    with pytest.raises(ThreadPermanentlyDeletedError):
+        store.get("th-realtime")
     summaries = list_threads(logs_root)
     assert len(summaries) == 1
     assert summaries[0].thread_id == "th-realtime"
@@ -154,7 +158,7 @@ def test_thread_state_owner_metadata_blocks_other_actor() -> None:
     assert denied.status_code == 404
 
 
-def test_thread_create_and_update_cannot_spoof_owner_metadata() -> None:
+def test_thread_create_and_update_cannot_spoof_owner_metadata(tmp_path: Path) -> None:
     from runtime.safety.auth import Identity, IdentityStore
 
     identity_store = IdentityStore()
@@ -166,6 +170,7 @@ def test_thread_create_and_update_cannot_spoof_owner_metadata() -> None:
             store=store,
             identity_store=identity_store,
             require_auth=True,
+            workspace_root=tmp_path / "managed-workspaces",
         )
     )
     client = TestClient(app)
@@ -258,19 +263,12 @@ def test_session_title_rename_endpoint_validates() -> None:
     client = _client()
     thread_id = client.post("/api/threads", json={}).json()["thread_id"]
 
+    assert client.post(f"/api/threads/{thread_id}/title/rename", json={}).status_code == 400
     assert (
-        client.post(f"/api/threads/{thread_id}/title/rename", json={}).status_code == 400
-    )
-    assert (
-        client.post(
-            f"/api/threads/{thread_id}/title/rename", json={"title": "   "}
-        ).status_code
+        client.post(f"/api/threads/{thread_id}/title/rename", json={"title": "   "}).status_code
         == 400
     )
-    assert (
-        client.post("/api/threads/missing/title/rename", json={"title": "x"}).status_code
-        == 404
-    )
+    assert client.post("/api/threads/missing/title/rename", json={"title": "x"}).status_code == 404
 
 
 def test_session_title_refresh_endpoint_uses_provider() -> None:
@@ -281,9 +279,7 @@ def test_session_title_refresh_endpoint_uses_provider() -> None:
     service = SessionTitleService(store)
     service.register_provider("llm", lambda _thread: "auto title", model="deepseek-v4")
     app = FastAPI()
-    app.include_router(
-        create_thread_state_router(store=store, session_titles=service)
-    )
+    app.include_router(create_thread_state_router(store=store, session_titles=service))
     client = TestClient(app)
 
     response = client.post(f"/api/threads/{thread_id}/title/refresh", json={})

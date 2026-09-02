@@ -16,7 +16,9 @@ def test_format_vlm_analysis() -> None:
         current_app="Settings",
         screen_state="showing form",
         suggested_actions=[
-            SuggestedAction(action="tap", target="login button", coordinates=(10, 20), confidence=0.9),
+            SuggestedAction(
+                action="tap", target="login button", coordinates=(10, 20), confidence=0.9
+            ),
             SuggestedAction(action="type", target="field", text="hi", confidence=0.7),
         ],
     )

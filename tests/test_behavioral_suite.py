@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import hashlib
 import json
+from types import SimpleNamespace
 
 import pytest
 
 from benchmarks.behavioral_suite import load_behavioral_suite
 from benchmarks.eval_harness import Verdict, run_suite
+from benchmarks.run_behavioral_suite import _load_and_bind_provenance
 
 
 def test_load_behavioral_suite_binds_outcome_grader(tmp_path) -> None:
@@ -81,3 +84,39 @@ def test_load_behavioral_suite_refuses_missing_grader(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="no grader factory"):
         load_behavioral_suite(manifest, grader_factories={})
+
+
+def test_release_provenance_is_bound_to_requested_model_and_config_bytes(tmp_path) -> None:
+    config = tmp_path / "behavioral.yaml"
+    config.write_text("models: {}\n", encoding="utf-8")
+    digest = hashlib.sha256(config.read_bytes()).hexdigest()
+    provenance_path = tmp_path / "provenance.json"
+    provenance_path.write_text(
+        json.dumps(
+            {
+                "schema": "octopus.behavioral_system_provenance.v1",
+                "system_id": "octopus",
+                "model": {"expected": "fixed-model", "requested": "fixed-model"},
+                "config": {"expected_sha256": digest, "observed_sha256": digest},
+            }
+        ),
+        encoding="utf-8",
+    )
+    args = SimpleNamespace(
+        provenance_file=provenance_path,
+        system="octopus",
+        model="fixed-model",
+        octopus_config_path=config,
+        codex_surface="desktop",
+        codex_executable="unused",
+    )
+
+    assert _load_and_bind_provenance(args)["model"]["requested"] == "fixed-model"
+
+    args.model = "substituted-model"
+    with pytest.raises(ValueError, match="--model must exactly match"):
+        _load_and_bind_provenance(args)
+    args.model = "fixed-model"
+    config.write_text("models: {changed: true}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="config changed"):
+        _load_and_bind_provenance(args)

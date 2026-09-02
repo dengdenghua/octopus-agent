@@ -61,6 +61,11 @@ class _RelayBackendMixin:
                 "url": active_tab.get("url"),
                 "title": active_tab.get("title"),
             }
+        recent_human_activity = body.get("recent_human_activity")
+        if isinstance(recent_human_activity, list):
+            self.browser_relay_state["recent_human_activity"] = [
+                item for item in recent_human_activity[-20:] if isinstance(item, dict)
+            ]
         control_event = body.get("control_event")
         if isinstance(control_event, dict):
             event_type = str(control_event.get("type") or "").strip()
@@ -321,6 +326,16 @@ class _RelayBackendMixin:
         lease_seconds = float(body.get("lease_seconds") or max(5.0, timeout_seconds + 2.0))
         lease_seconds = max(3.0, min(60.0, lease_seconds))
         active_tab = self._relay_active_tab_snapshot()
+        selected_tab_id = str(body.get("target_tab_id") or "").strip()
+        if selected_tab_id:
+            # The target is an operator-selected capability, not a hint. Build
+            # the lease around it so the extension fails closed instead of
+            # silently acting on a different active tab.
+            active_tab = {
+                "id": selected_tab_id,
+                "url": str(body.get("target_tab_url") or ""),
+                "title": str(body.get("target_tab_title") or ""),
+            }
         return {
             "schema": "octopus.browser_relay_tab_lease.v1",
             "id": f"lease-{command_id}",
@@ -331,6 +346,7 @@ class _RelayBackendMixin:
             "issued_at": self._now_ts(),
             "expires_at": self._now_ts() + int(lease_seconds),
             "tab": active_tab,
+            "target_source": "operator_selection" if selected_tab_id else "active_tab",
             "require_same_tab": active_tab is not None,
             "require_same_url": bool(active_tab and active_tab.get("url")),
             "site_policy": site_policy,

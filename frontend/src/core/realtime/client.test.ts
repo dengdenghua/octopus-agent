@@ -144,8 +144,8 @@ describe("RealtimeClient", () => {
 
     expect(FakeWebSocket.lastInstance!.url).toBe("ws://test/api/realtime");
     expect(FakeWebSocket.lastInstance!.protocols).toEqual([
-      "bearer",
-      "__guest__",
+      "bearer.b64",
+      "X19ndWVzdF9f",
     ]);
     client.close();
   });
@@ -162,26 +162,28 @@ describe("RealtimeClient", () => {
 
     expect(FakeWebSocket.lastInstance!.url).toBe("ws://test/api/realtime");
     expect(FakeWebSocket.lastInstance!.protocols).toEqual([
-      "bearer",
-      "sk-alice",
+      "bearer.b64",
+      "c2stYWxpY2U",
     ]);
     client.close();
   });
 
-  it("falls back to an encoded query token when it is not subprotocol-safe", async () => {
+  it("keeps unusual UTF-8 auth tokens out of the websocket URL", async () => {
     const client = new RealtimeClient({
       url: "ws://test/api/realtime",
-      authToken: () => "token with spaces",
+      authToken: () => "令牌 with spaces/(test)",
       onIncomingRequest: async () => null,
       onNotification: () => {},
     });
 
     client.connect();
 
-    expect(FakeWebSocket.lastInstance!.url).toBe(
-      "ws://test/api/realtime?token=token%20with%20spaces",
+    expect(FakeWebSocket.lastInstance!.url).toBe("ws://test/api/realtime");
+    expect(FakeWebSocket.lastInstance!.url).not.toContain("token=");
+    expect(FakeWebSocket.lastInstance!.protocols[0]).toBe("bearer.b64");
+    expect(FakeWebSocket.lastInstance!.protocols[1]).toMatch(
+      /^[A-Za-z0-9_-]+$/,
     );
-    expect(FakeWebSocket.lastInstance!.protocols).toEqual([]);
     client.close();
   });
 
@@ -691,6 +693,21 @@ describe("RealtimeClient", () => {
     client.close();
     await vi.advanceTimersByTimeAsync(500);
     expect(FakeWebSocket.instances.length).toBe(1);
+  });
+
+  it("rejects new requests after close instead of retaining an unflushable outbox", async () => {
+    const client = makeClient({});
+    client.connect();
+    const socket = FakeWebSocket.lastInstance!;
+    socket.open();
+
+    client.close();
+    client.notify("client/say", { text: "late" });
+
+    await expect(client.request("thread/resume", {})).rejects.toThrow(
+      "client closed",
+    );
+    expect(socket.sentRaw).toHaveLength(0);
   });
 
   it("does NOT replay buffered requests after a reconnect (P0-5 outbox invariant)", async () => {

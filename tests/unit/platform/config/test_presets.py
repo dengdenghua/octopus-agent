@@ -96,4 +96,3 @@ class TestPresets:
             assert isinstance(config, AgentConfig)
             assert config.name is not None
             assert config.version_compat is not None
-

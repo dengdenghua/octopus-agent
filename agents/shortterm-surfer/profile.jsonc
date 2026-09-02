@@ -1,0 +1,28 @@
+{
+  "id": "shortterm-surfer",
+  "templateId": "workbuddy:stock-partner-team",
+  "templateVersion": "1.0.8",
+  "source_kind": "workbuddy-expert-fork",
+  "source_plugin": "stock-partner-team",
+  "expertType": "member",
+  "name": "磊追浪 · 短线冲浪手",
+  "icon": "⚡",
+  "description": "A股+美股双修短线派（胜率约60%）：热点捕捉+右侧确认+快进快出，看竞价看封单，破均线无条件离场。",
+  "avatar": "avatar.png",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "workbuddy-fork:stock-partner-team",
+  "category": "finance",
+  "tags": [
+    "投研",
+    "股票",
+    "圆桌成员"
+  ],
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true
+  }
+}

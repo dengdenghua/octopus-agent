@@ -431,3 +431,64 @@ class TestToolAllowlist:
         )
 
         assert captured["tools"] == []
+
+
+class TestToolUseContract:
+    """The tool-use contract must be injected when a sub-agent holds tools
+    (mirroring the single-agent ``_TOOL_USE_CONTRACT``) and omitted when it
+    has none — a tool-less role must never be told to call tools."""
+
+    def _make_session(self):
+        from runtime.platform.process.session import Session
+
+        class _StubAgent:
+            agent_id = "coder"
+            capabilities = {"code_mode_unlock": True}
+
+        return Session(
+            actor="u",
+            agent=_StubAgent(),
+            thread_id="t-test",
+            metadata={"recent_messages": []},
+        )
+
+    def test_injects_contract_when_tools_available(self):
+        from runtime.execution.suckers.ephemeral_agents import (
+            BUILTIN_ROLES,
+            _compose_system_prompt,
+        )
+
+        prompt = _compose_system_prompt(
+            BUILTIN_ROLES["reviewer"],
+            self._make_session(),
+            context={"_ephemeral_tools_available": True},
+        )
+        assert "## Tool use contract" in prompt
+        assert "MUST call the appropriate tool first" in prompt
+        assert "are not answers" in prompt
+
+    def test_omits_contract_when_no_tools(self):
+        from runtime.execution.suckers.ephemeral_agents import (
+            BUILTIN_ROLES,
+            _compose_system_prompt,
+        )
+
+        prompt = _compose_system_prompt(
+            BUILTIN_ROLES["reviewer"],
+            self._make_session(),
+            context={},
+        )
+        assert "## Tool use contract" not in prompt
+
+    def test_omits_contract_when_flag_explicitly_false(self):
+        from runtime.execution.suckers.ephemeral_agents import (
+            BUILTIN_ROLES,
+            _compose_system_prompt,
+        )
+
+        prompt = _compose_system_prompt(
+            BUILTIN_ROLES["reviewer"],
+            self._make_session(),
+            context={"_ephemeral_tools_available": False},
+        )
+        assert "## Tool use contract" not in prompt

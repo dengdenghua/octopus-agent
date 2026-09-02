@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import functools
+import os
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -22,6 +24,48 @@ from runtime.platform.models import (
     Trajectory,
     TrajectoryOutcome,
 )
+
+
+@pytest.fixture(autouse=True)
+def _restore_working_directory():
+    """Prevent one test's raw ``os.chdir`` from poisoning later subprocesses.
+
+    ``monkeypatch.chdir`` already restores itself, but a deleted-cwd regression
+    test must use ``os.chdir`` directly.  A prior version restored to the
+    ``tests/`` directory instead of the session's original root; child Python
+    processes then imported ``tests/runtime`` as a namespace package and could
+    no longer find the installed ``runtime.execution`` modules.
+    """
+    starting_directory = Path.cwd()
+    yield
+    os.chdir(starting_directory)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_execution_security_environment():
+    """Keep deployment/sandbox overrides from leaking across tests.
+
+    Some low-level tests intentionally call the serve security preparer
+    directly.  That preparer applies environment variables for the lifetime
+    of a server and returns a restoration token to its caller; an assertion
+    failure before restoration must not silently turn the rest of the suite
+    into a commercial deployment.
+    """
+
+    keys = ("OCTOPUS_DEPLOYMENT_MODE", "OCTOPUS_PROCESS_SANDBOX")
+    for key in keys:
+        os.environ.pop(key, None)
+    yield
+    for key in keys:
+        os.environ.pop(key, None)
+
+
+@pytest.fixture
+def bypass_serve_port_guard(monkeypatch):
+    """Keep mocked-Uvicorn assembly tests independent of host listeners."""
+    import runtime.cli_serve as cli_serve
+
+    monkeypatch.setattr(cli_serve, "_port_held", lambda _host, _port: False)
 
 
 @pytest.fixture(autouse=True)
@@ -126,39 +170,6 @@ def _disable_os_keychain(monkeypatch):
     _ss.reset_key_cache_for_tests()
     yield
     _ss.reset_key_cache_for_tests()
-
-
-@pytest.fixture(autouse=True)
-def _deterministic_plugin_policy_coverage(monkeypatch):
-    """Keep readiness verdicts independent of locally installed Codex plugins.
-
-    ``permission_sandbox_quality._plugin_policy_coverage`` scans
-    ``.octopus/plugins/codex`` and only reports ``ready`` when it finds at
-    least one plugin yielding verified permission-rule drafts. That directory
-    holds whatever the developer installed, so the e2e-surpass verdict tracked
-    the machine rather than the code: this checkout has ~20 plugins and yields
-    ``needs_behavioral_evidence``, while a fresh clone sees the 2 tracked ones,
-    produces no drafts, and drops to ``needs_work`` — nine tests across
-    test_production_readiness_gate / test_evolution_modules /
-    test_evolution_router flipped red on clone alone.
-
-    Pinning a ready report keeps those tests asserting gate logic. Tests that
-    care about the not-ready branch stub the coverage themselves.
-    """
-    from runtime.safety.evolution import permission_sandbox_quality as _psq
-
-    monkeypatch.setattr(
-        _psq,
-        "_plugin_policy_coverage",
-        lambda _base: {
-            "schema": "octopus.plugin_permission_rule_coverage.v1",
-            "ready": True,
-            "plugin_count": 1,
-            "total": 1,
-            "verified": 1,
-            "next_actions": [],
-        },
-    )
 
 
 @pytest.fixture(autouse=True)

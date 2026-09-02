@@ -8,12 +8,13 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from fastapi import APIRouter, HTTPException, Request
+    from fastapi import APIRouter, Depends, HTTPException, Request
 
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment,misc]
+    Depends = None  # type: ignore[assignment,misc]
     HTTPException = None  # type: ignore[assignment,misc]
     Request = None  # type: ignore[assignment,misc]
 
@@ -48,7 +49,26 @@ def create_deep_research_router(
     """Create `/api/research/deep/*` endpoints."""
     require_fastapi(__name__)
 
-    router = APIRouter(tags=["deep-research"])
+    def _operator_dep(request: Request) -> None:
+        from runtime.safety.auth.principal import require_roles
+
+        require_roles(
+            request,
+            identity_store,
+            require_auth,
+            ("admin", "operator"),
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    # ResearchJob and its persistent job store are process-global and do not
+    # yet carry actor/tenant ownership. Keep the entire surface operational
+    # until that schema can be migrated safely.
+    router = APIRouter(
+        tags=["deep-research"],
+        dependencies=[Depends(_operator_dep)],
+    )
     planner = DeepResearchPlanner()
     source_prefetcher = prefetcher or ResearchPrefetcher()
     store_path = job_store_path or _default_job_store_path()

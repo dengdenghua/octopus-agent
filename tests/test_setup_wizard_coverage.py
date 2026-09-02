@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
-
-import pytest
-
 import runtime.platform.lifecycle.setup_wizard as sw_mod
 from runtime.platform.lifecycle.setup_wizard import SetupWizard, _config_to_yaml_dict
 
@@ -96,7 +92,7 @@ def test_input_eof(tmp_path, monkeypatch) -> None:
 
 
 def test_config_to_yaml_dict_cleans() -> None:
-    from runtime.platform.config.schema import AgentConfig, BudgetConfig
+    from runtime.platform.config.schema import AgentConfig
 
     cfg = AgentConfig(planner={"type": "static", "model": "mock/planner"})
     data = _config_to_yaml_dict(cfg)

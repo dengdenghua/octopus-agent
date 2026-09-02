@@ -112,6 +112,11 @@ class TentacleCoordinator:
         pc_screen_config: PcScreenConfig | None = None,
         remote_input: bool = False,
         auth_token: str | None = None,
+        dashboard_require_auth: bool = True,
+        identity_store: Any = None,
+        dashboard_jwt_secret: str | None = None,
+        dashboard_jwt_issuer: str | None = None,
+        dashboard_jwt_audience: str | None = None,
     ) -> None:
         self.pool = TentaclePool()
         self._pet_bridge = PetUdpBridge()
@@ -143,6 +148,15 @@ class TentacleCoordinator:
         self._dashboard_host = dashboard_host
         self._dashboard_server: Any | None = None
         self._mcp_server_enabled = mcp_server
+        self._dashboard_require_auth = dashboard_require_auth
+        self._identity_store = identity_store
+        self._dashboard_jwt_secret = dashboard_jwt_secret
+        self._dashboard_jwt_issuer = dashboard_jwt_issuer
+        self._dashboard_jwt_audience = dashboard_jwt_audience
+
+    def _dashboard_host_is_loopback(self) -> bool:
+        host = (self._dashboard_host or "127.0.0.1").strip().lower()
+        return host in {"127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1"}
 
     async def start(self) -> None:
         """启动协调器（WebSocket + 可选 Dashboard + 可选 PC屏幕捕获）."""
@@ -169,8 +183,42 @@ class TentacleCoordinator:
 
                 from runtime.tentacle.dashboard import create_tentacle_router
 
+                # If auth is required but no identity store is available, build
+                # one from the WebSocket auth token so the dashboard is never
+                # exposed anonymously. A loopback-only dashboard with auth
+                # disabled stays allowed for local development.
+                identity_store = self._identity_store
+                if self._dashboard_require_auth and identity_store is None:
+                    from runtime.safety.auth import Identity, IdentityStore
+
+                    if self._dashboard_require_auth and not self._dashboard_host_is_loopback():
+                        raise RuntimeError(
+                            "Tentacle dashboard requires authentication but no "
+                            "identity_store/auth_token is configured; refusing to "
+                            "bind an unauthenticated dashboard to the network"
+                        )
+                    token = self.ws_server.auth_token
+                    if token:
+                        store = IdentityStore()
+                        store.add(Identity(actor_id="tentacle-dashboard"), api_key_plaintext=token)
+                        identity_store = store
+                    else:
+                        logger.warning(
+                            "Tentacle dashboard auth enabled but no credentials; "
+                            "dashboard runs unauthenticated (loopback only)"
+                        )
+
                 app = FastAPI(title="Octopus Tentacle Dashboard")
-                app.include_router(create_tentacle_router(self))
+                app.include_router(
+                    create_tentacle_router(
+                        self,
+                        require_auth=self._dashboard_require_auth,
+                        identity_store=identity_store,
+                        jwt_secret=self._dashboard_jwt_secret,
+                        jwt_issuer=self._dashboard_jwt_issuer,
+                        jwt_audience=self._dashboard_jwt_audience,
+                    )
+                )
                 config = uvicorn.Config(
                     app,
                     host=self._dashboard_host,  # loopback unless explicitly opened via dashboard_host

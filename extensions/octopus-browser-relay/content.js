@@ -124,6 +124,28 @@
   }
 
   let lastActivityAt = 0;
+  function compactText(value, limit = 120) {
+    return String(value || "").replace(/\s+/g, " ").trim().slice(0, limit);
+  }
+
+  function semanticTarget(event) {
+    const raw = event?.target;
+    if (!(raw instanceof Element)) return null;
+    const node =
+      raw.closest(
+        "button,a,input,textarea,select,[role],[contenteditable='true']",
+      ) || raw;
+    if (!(node instanceof HTMLElement)) return null;
+    return {
+      tag: node.tagName.toLowerCase(),
+      role: node.getAttribute("role") || undefined,
+      id: node.id || undefined,
+      name: node.getAttribute("name") || undefined,
+      aria_label: node.getAttribute("aria-label") || undefined,
+      text: compactText(node.innerText || node.textContent),
+    };
+  }
+
   function reportUserActivity(kind, event) {
     if (!event?.isTrusted || typeof chrome === "undefined" || !chrome.runtime?.sendMessage) {
       return;
@@ -139,6 +161,12 @@
           at: now / 1000,
           url: location.href,
           title: document.title,
+          target: semanticTarget(event),
+          data:
+            event instanceof KeyboardEvent &&
+            ["Enter", "Escape", "Tab", "Backspace", "Delete"].includes(event.key)
+              ? { key: event.key }
+              : undefined,
         },
       })
       .catch(() => {

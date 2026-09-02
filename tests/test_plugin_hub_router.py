@@ -8,6 +8,9 @@ from runtime.sensing.gateway.plugin_hub_router import create_plugin_hub_router
 
 
 class _FakeHub:
+    def __init__(self):
+        self.calls = []
+
     def list_plugins(self):
         return []
 
@@ -31,6 +34,22 @@ class _FakeHub:
 
     def update_plugin_config(self, _name: str, _body):
         return True
+
+    def install_plugin(self, name: str, **kwargs):
+        self.calls.append(("install", name, kwargs))
+        return {"ok": True, "plugin_id": name, "installed": True, **kwargs}
+
+    def enable_plugin(self, name: str):
+        self.calls.append(("enable", name, {}))
+        return {"ok": True, "plugin_id": name, "enabled": True}
+
+    def disable_plugin(self, name: str):
+        self.calls.append(("disable", name, {}))
+        return {"ok": True, "plugin_id": name, "enabled": False}
+
+    def uninstall_plugin(self, name: str, **kwargs):
+        self.calls.append(("uninstall", name, kwargs))
+        return {"ok": True, "plugin_id": name, "installed": False, **kwargs}
 
 
 def test_plugin_hub_router_requires_auth_when_enabled() -> None:
@@ -74,3 +93,35 @@ def test_plugin_hub_mutation_requires_operator_role() -> None:
         headers={"Authorization": "Bearer sk-alice"},
     )
     assert response.status_code == 403
+
+
+def test_persistent_lifecycle_route_contract() -> None:
+    hub = _FakeHub()
+    app = FastAPI()
+    app.include_router(create_plugin_hub_router(hub=hub))
+    client = TestClient(app)
+
+    installed = client.post(
+        "/api/plugin-hub/plugins/narrative_studio/install",
+        json={"enabled": False, "restore_data": True, "recovery_id": "recovery-1"},
+    )
+    assert installed.status_code == 200
+    assert hub.calls[-1] == (
+        "install",
+        "narrative_studio",
+        {"enabled": False, "restore_data": True, "recovery_id": "recovery-1"},
+    )
+
+    assert client.post("/api/plugin-hub/plugins/narrative_studio/enable").status_code == 200
+    assert client.post("/api/plugin-hub/plugins/narrative_studio/disable").status_code == 200
+
+    removed = client.delete(
+        "/api/plugin-hub/plugins/narrative_studio/install",
+        params={"data_policy": "trash", "confirm_data_move": "true"},
+    )
+    assert removed.status_code == 200
+    assert hub.calls[-1] == (
+        "uninstall",
+        "narrative_studio",
+        {"data_policy": "trash", "confirm_data_move": True},
+    )

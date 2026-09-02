@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   getEvolutionOverview,
+  getEvolutionStory,
   getLearningCurve,
   getSkillPerformance,
   getMemoryGrowth,
@@ -14,10 +15,22 @@ import {
 } from "./api";
 import { queryKeys } from "@/core/api/query-keys";
 
-export function useEvolutionOverview() {
+export function useEvolutionOverview(options: { enabled?: boolean } = {}) {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: queryKeys.evolution.overview,
     queryFn: getEvolutionOverview,
+    enabled: options.enabled ?? true,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+    retry: false,
+  });
+  return { data: data ?? null, isLoading, error, refetch };
+}
+
+export function useEvolutionStory() {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: [...queryKeys.evolution.overview, "story"],
+    queryFn: getEvolutionStory,
     refetchInterval: 60_000,
     staleTime: 30_000,
     retry: false,
@@ -80,11 +93,11 @@ export function useDrift(agentId: string | undefined) {
 }
 
 export function useLedger(opts?: { limit?: number; offset?: number }) {
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: [...queryKeys.evolution.overview, "ledger", opts],
     queryFn: () => getLedger(opts),
   });
-  return { data: data ?? null, isLoading, error };
+  return { data: data ?? null, isLoading, isFetching, error, refetch };
 }
 
 export function useCanary() {

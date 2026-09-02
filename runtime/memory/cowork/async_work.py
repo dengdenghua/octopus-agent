@@ -13,19 +13,27 @@ streaming loop.
 
 from __future__ import annotations
 
+import builtins
+import json
 import sqlite3
 import threading
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
+from runtime.memory.cowork._group_sqlite_coordination import (
+    cowork_storage_write_lock,
+    require_delete_journals,
+)
 from runtime.memory.cowork.group_store import GroupStore
 from runtime.memory.cowork.ids import (
     MAX_COWORK_MESSAGE_TEXT_LENGTH,
     normalize_actor_id,
     require_cowork_id,
 )
+from runtime.platform.io.sqlite import connect_closing
 
 _STATUSES = ("pending", "working", "done", "failed")
 _ASYNC_TEXT_MAX_LENGTH = MAX_COWORK_MESSAGE_TEXT_LENGTH
@@ -85,16 +93,80 @@ class AsyncWorkStore:
         from runtime.platform.process.paths import app_paths
 
         d = Path(base_dir) if base_dir else app_paths().data_dir / "cowork"
+        if group_store is not None and d.resolve() != group_store.base_dir.resolve():
+            raise ValueError("AsyncWorkStore and GroupStore must share one storage directory")
         d.mkdir(parents=True, exist_ok=True)
         self._db = d / "async_work.db"
         self._lock = threading.Lock()
         self._groups = group_store or GroupStore(base_dir=d)
-        with self._lock, self._connect() as conn:
+        board = self._groups.blackboard("async-schema")
+        board.close()
+        with cowork_storage_write_lock(d), self._lock, self._connect() as conn:
             self._ensure_schema(conn)
 
     def _connect(self) -> sqlite3.Connection:
         self._db.parent.mkdir(parents=True, exist_ok=True)
-        return sqlite3.connect(str(self._db), timeout=10.0)
+        if not self._groups.events_db_path.exists():
+            self._groups.ensure_storage()
+        if not self._groups.board_db_path.exists():
+            board = self._groups.blackboard("async-schema")
+            board.close()
+        conn = connect_closing(str(self._db), timeout=10.0)
+        # Keep every attached participant in DELETE mode; see GroupStore's
+        # cross-database thread-deletion transaction invariant.
+        conn.execute("PRAGMA journal_mode=DELETE")
+        conn.execute("PRAGMA synchronous=FULL")
+        conn.execute("PRAGMA busy_timeout=10000")
+        try:
+            conn.execute("ATTACH DATABASE ? AS group_guard", (str(self._groups.events_db_path),))
+            conn.execute("ATTACH DATABASE ? AS group_board", (str(self._groups.board_db_path),))
+            require_delete_journals(conn, ("main", "group_guard", "group_board"))
+        except Exception:
+            conn.close()
+            raise
+        return conn
+
+    @staticmethod
+    def _assert_thread_writable(conn: sqlite3.Connection, thread_id: str) -> None:
+        from runtime.memory.cowork.group_store import GroupThreadDeletingError
+
+        if conn.execute(
+            "SELECT 1 FROM group_guard.group_thread_delete_claims WHERE thread_id=? "
+            "UNION ALL SELECT 1 FROM group_guard.group_thread_delete_tombstones "
+            "WHERE thread_id=? LIMIT 1",
+            (thread_id, thread_id),
+        ).fetchone():
+            raise GroupThreadDeletingError(thread_id)
+
+    @staticmethod
+    def _write_board(
+        conn: sqlite3.Connection,
+        thread_id: str,
+        key: str,
+        value: str,
+        *,
+        writer: str,
+    ) -> None:
+        payload = json.dumps(value, ensure_ascii=False, default=str)
+        row = conn.execute(
+            "SELECT writers_json FROM group_board.blackboard WHERE turn_id=? AND key=?",
+            (thread_id, key),
+        ).fetchone()
+        if row is None:
+            conn.execute(
+                "INSERT INTO group_board.blackboard(turn_id, key, value_json, writers_json, "
+                "write_count, overwrite_count, updated_at) VALUES(?,?,?,?,?,?,?)",
+                (thread_id, key, payload, json.dumps([writer]), 1, 0, time.time()),
+            )
+            return
+        writers = set(json.loads(row[0] or "[]"))
+        writers.add(writer)
+        conn.execute(
+            "UPDATE group_board.blackboard SET value_json=?, writers_json=?, "
+            "write_count=write_count+1, overwrite_count=overwrite_count+1, updated_at=? "
+            "WHERE turn_id=? AND key=?",
+            (payload, json.dumps(sorted(writers)), time.time(), thread_id, key),
+        )
 
     def _ensure_schema(self, conn: sqlite3.Connection) -> None:
         conn.execute(
@@ -106,6 +178,7 @@ class AsyncWorkStore:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_async_thread ON async_tasks(thread_id, status)"
         )
+        conn.commit()
 
     def _migrate_schema(self, conn: sqlite3.Connection) -> None:
         columns = {row[1] for row in conn.execute("PRAGMA table_info(async_tasks)").fetchall()}
@@ -141,8 +214,10 @@ class AsyncWorkStore:
         task = AsyncTask(
             uuid4().hex, thread_id, assignee, prompt, "pending", None, actor, now, now, 0
         )
-        with self._lock, self._connect() as conn:
+        with cowork_storage_write_lock(self._db.parent), self._lock, self._connect() as conn:
             self._ensure_schema(conn)
+            conn.execute("BEGIN IMMEDIATE")
+            self._assert_thread_writable(conn, thread_id)
             conn.execute(
                 "INSERT INTO async_tasks("
                 "task_id, thread_id, assignee, prompt, status, result, "
@@ -177,14 +252,22 @@ class AsyncWorkStore:
         if result is not None:
             result = _normalize_async_text(result, label="result")
         where = "WHERE task_id=?"
-        params: tuple[str, ...]
+        params: tuple[object, ...]
         if expected_status is None:
             params = (status, result, _now(), task_id)
         else:
             where = "WHERE task_id=? AND status=?"
             params = (status, result, _now(), task_id, expected_status)
-        with self._lock, self._connect() as conn:
+        with cowork_storage_write_lock(self._db.parent), self._lock, self._connect() as conn:
             self._ensure_schema(conn)
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT thread_id FROM async_tasks WHERE task_id=?",
+                (task_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            self._assert_thread_writable(conn, str(row[0]))
             cur = conn.execute(
                 "UPDATE async_tasks SET status=?, result=COALESCE(?, result), updated_at=? "  # nosec B608 — WHERE built from ? placeholders; values parameterized
                 f"{where}",
@@ -195,8 +278,16 @@ class AsyncWorkStore:
     def claim(self, task_id: str) -> bool:
         """A runner takes the task (pending → working). False if not pending."""
         task_id = require_cowork_id(task_id, label="task_id")
-        with self._lock, self._connect() as conn:
+        with cowork_storage_write_lock(self._db.parent), self._lock, self._connect() as conn:
             self._ensure_schema(conn)
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT thread_id FROM async_tasks WHERE task_id=?",
+                (task_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            self._assert_thread_writable(conn, str(row[0]))
             cur = conn.execute(
                 "UPDATE async_tasks SET status='working', updated_at=?, "
                 "attempts=COALESCE(attempts, 0) + 1 "
@@ -212,19 +303,30 @@ class AsyncWorkStore:
         result = _normalize_async_text(result, label="result")
         if blackboard_key is not None:
             blackboard_key = require_cowork_id(blackboard_key, label="blackboard_key")
-        task = self.get(task_id)
-        if task is None:
-            return False
-        ok = self._set_status(
-            task_id,
-            "done",
-            result=result,
-            expected_status="working",
-        )
-        if ok:
+        with cowork_storage_write_lock(self._db.parent), self._lock, self._connect() as conn:
+            self._ensure_schema(conn)
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT * FROM async_tasks WHERE task_id=?", (task_id,)).fetchone()
+            if row is None:
+                return False
+            task = self._row_to_task(row)
+            self._assert_thread_writable(conn, task.thread_id)
+            if task.status != "working":
+                return False
+            conn.execute(
+                "UPDATE async_tasks SET status='done', result=?, updated_at=? "
+                "WHERE task_id=? AND status='working'",
+                (result, _now(), task_id),
+            )
             key = blackboard_key or f"task:{task.assignee}:{task_id[:8]}"
-            self._groups.blackboard(task.thread_id).write(key, result, writer=task.assignee)
-        return ok
+            self._write_board(
+                conn,
+                task.thread_id,
+                key,
+                result,
+                writer=task.assignee,
+            )
+            return True
 
     def fail(self, task_id: str, error: str) -> bool:
         task_id = require_cowork_id(task_id, label="task_id")
@@ -257,19 +359,26 @@ class AsyncWorkStore:
             max_attempts = 3
         cutoff = (datetime.now(UTC) - timedelta(seconds=max_age_seconds)).isoformat()
         now = _now()
-        with self._lock, self._connect() as conn:
+        with cowork_storage_write_lock(self._db.parent), self._lock, self._connect() as conn:
             self._ensure_schema(conn)
+            conn.execute("BEGIN IMMEDIATE")
+            writable = (
+                "AND NOT EXISTS (SELECT 1 FROM group_guard.group_thread_delete_claims "
+                "WHERE thread_id=async_tasks.thread_id) "
+                "AND NOT EXISTS (SELECT 1 FROM group_guard.group_thread_delete_tombstones "
+                "WHERE thread_id=async_tasks.thread_id)"
+            )
             failed = conn.execute(
                 "UPDATE async_tasks SET status='failed', updated_at=?, "
                 "result=COALESCE(result, ?) "
                 "WHERE status='working' AND COALESCE(updated_at, created_at) <= ? "
-                "AND COALESCE(attempts, 0) >= ?",
+                f"AND COALESCE(attempts, 0) >= ? {writable}",  # nosec B608 - fixed SQL
                 (now, "task abandoned after repeated worker restarts", cutoff, max_attempts),
             ).rowcount
             requeued = conn.execute(
                 "UPDATE async_tasks SET status='pending', result=NULL, updated_at=? "
                 "WHERE status='working' AND COALESCE(updated_at, created_at) <= ? "
-                "AND COALESCE(attempts, 0) < ?",
+                f"AND COALESCE(attempts, 0) < ? {writable}",  # nosec B608 - fixed SQL
                 (now, cutoff, max_attempts),
             ).rowcount
         return {"requeued": requeued, "failed": failed}
@@ -327,7 +436,7 @@ class AsyncWorkStore:
             ).fetchall()
         return [self._row_to_task(r) for r in rows]
 
-    def _by_status(self, thread_id: str, status: str) -> list[AsyncTask]:
+    def _by_status(self, thread_id: str, status: str) -> builtins.list[AsyncTask]:
         thread_id = require_cowork_id(thread_id, label="thread_id")
         if status not in _STATUSES:
             raise ValueError(f"invalid status: {status!r}")

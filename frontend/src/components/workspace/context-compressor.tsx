@@ -58,6 +58,7 @@ export function ContextCompressor({
       !hasAutoCompressed &&
       !autoCompressRef.current &&
       !isCompressing &&
+      !disabled &&
       onCompress
     ) {
       autoCompressRef.current = true;
@@ -69,6 +70,7 @@ export function ContextCompressor({
     compressThreshold,
     hasAutoCompressed,
     isCompressing,
+    disabled,
     onCompress,
   ]);
 
@@ -88,7 +90,7 @@ export function ContextCompressor({
   const isFull = progress >= 0.95;
   const circumference = 2 * Math.PI * 7;
   const strokeLength = circumference * progress;
-  const canCompress = Boolean(onCompress) && !isCompressing;
+  const canCompress = Boolean(onCompress) && !isCompressing && !disabled;
   const contextLabel = `${t.contextCompressor?.contextUsage ?? "Context Usage"}: ${percentage}%`;
 
   return (

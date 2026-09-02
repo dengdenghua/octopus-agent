@@ -59,14 +59,7 @@ export function TeamRoster({
             {agents.map((agent) => {
               const name = agent.display_name ?? agent.name;
               const isLeader = team?.leaderId === agent.name;
-              // Local CLI partners may arrive without an avatar_url (older
-              // roster snapshots only carried the emoji icon) — fall back to
-              // their registered brand avatar endpoint so they match the chat.
-              const rawAvatar =
-                agent.avatar_url ??
-                (agent.name.startsWith("local_")
-                  ? `/api/agents/${agent.name}/avatar`
-                  : undefined);
+              const rawAvatar = agent.avatar_url;
               const avatarSrc = rawAvatar
                 ? withAgentAvatarVersion(rawAvatar)
                 : undefined;
@@ -132,9 +125,7 @@ export function TeamRoster({
                     participant.role,
                   )}
                   dotClassName={
-                    isOnline
-                      ? "bg-success"
-                      : "bg-muted-foreground/35"
+                    isOnline ? "bg-success" : "bg-muted-foreground/35"
                   }
                   dotLabel={statusText}
                   badge={

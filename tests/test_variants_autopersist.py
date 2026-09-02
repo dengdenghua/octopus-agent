@@ -8,6 +8,8 @@ from uuid import uuid4
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("bypass_serve_port_guard")
+
 yaml = pytest.importorskip("yaml")
 
 from runtime.platform.config import AgentConfig, PlannerConfig, build_from_config
@@ -331,7 +333,7 @@ class TestServeAutoPersist:
 
         captured = {}
 
-        def fake_uvicorn_run(app, host, port, log_level):
+        def fake_uvicorn_run(app, host, port, log_level, ws):
             # Implementation note.
             # Implementation note.
             captured["variants_after_start"] = variants_path.read_text(encoding="utf-8")

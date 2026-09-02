@@ -2,6 +2,8 @@
 
 import {
   forwardRef,
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -9,6 +11,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ComponentType,
   type DragEvent,
   type KeyboardEvent,
 } from "react";
@@ -43,26 +46,49 @@ import { copyTextToClipboard } from "@/core/clipboard";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
+import { loadProjectsPage } from "@/core/navigation/workspace-route-preload";
+import { WORKBENCH_BUILTIN_APPS } from "@/core/workbench/apps";
+import { RemoteWorkbenchSurface } from "@/core/workbench/remote-surface";
+import { WorkbenchSurfaceProvider } from "@/core/workbench/workbench-surface";
+import { useActiveAgentId } from "@/core/agents/active";
+import { useEnabledModuleIds } from "@/core/modules/enabled-modules";
+import { useWorkbenchAvailabilitySync } from "@/core/workbench/availability";
+import {
+  AUTOMATION_CAPSULE_CONTROLS_CLASS_NAME,
+  AUTOMATION_CAPSULE_OVERLAY_CLASS_NAME,
+  AUTOMATION_CAPSULE_SURFACE_CLASS_NAME,
+} from "@/components/ui/automation-capsule";
 
-import { BROWSER_HOME_URL, type BrowserTab } from "./browser-store";
-import { BrowserHome } from "./browser-home";
+import {
+  BROWSER_EDIT_HOME_EVENT,
+  BROWSER_HOME_URL,
+  type BrowserTab,
+} from "./browser-store";
 import {
   RELAY_STATUS_REFRESH_MS,
   getRelayStatusRetryDelay,
 } from "./relay-polling";
 
+const BrowserHome = lazy(() =>
+  import("./browser-home").then((module) => ({
+    default: module.BrowserHome,
+  })),
+);
+
 interface Props {
   tab: BrowserTab;
   active: boolean;
   onPatch: (patch: Partial<BrowserTab>) => void;
+  onClose?: () => void;
   renderDevice?: BrowserTab["device"];
 }
 
+const BROWSER_CORE_COMPONENTS: Record<string, ComponentType> = {
+  projects: lazy(loadProjectsPage),
+};
+
 /* Implementation note. */
-interface CrashInfo {
-  reason: string;
-  exitCode: number;
-}
+type CrashInfo = NonNullable<BrowserTab["crash"]>;
 
 type WebviewElement = HTMLElement & {
   src: string;
@@ -107,6 +133,10 @@ export interface WebviewTabHandle {
     mode: "idle" | "action" | "paused",
     detail?: Record<string, unknown>,
   ) => void;
+}
+
+export function browserWebContentsAdoptionLease(tabId: string): string {
+  return `octopus-webcontents:${tabId}`;
 }
 
 interface BrowserRelayStatus {
@@ -624,110 +654,123 @@ function BackendBrowserTab({
       }
       className="relative flex-col overflow-auto bg-muted/20"
     >
-      <div className="absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-full border bg-background/90 p-1 text-mini shadow-[var(--shadow-xs)] backdrop-blur">
-        <button
-          type="button"
-          onClick={() => setExtensionGuideOpen((v) => !v)}
+      <div
+        className={cn(
+          AUTOMATION_CAPSULE_OVERLAY_CLASS_NAME,
+          "absolute inset-x-3 top-3 z-10 flex justify-end",
+        )}
+      >
+        <div
           className={cn(
-            "flex h-7 items-center gap-1.5 rounded-full px-2.5 font-medium transition-colors",
-            relayStatus?.connected
-              ? "bg-success/10 text-success"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            AUTOMATION_CAPSULE_CONTROLS_CLASS_NAME,
+            AUTOMATION_CAPSULE_SURFACE_CLASS_NAME,
+            "relative flex items-center gap-1.5 p-1 text-mini",
           )}
         >
-          <PlugIcon className="size-3.5" />
-          {wt.extPluginButton}
-        </button>
-        <button
-          type="button"
-          className="h-7 rounded-full bg-primary px-2.5 font-medium text-primary-foreground hover:bg-primary/90"
-          onClick={openExtensionFolder}
-        >
-          {wt.openDirectory}
-        </button>
-        {extensionGuideOpen && (
-          <div className="absolute right-0 top-full mt-2 w-[360px] max-w-[calc(100vw-1rem)] rounded-2xl border bg-background/98 p-4 text-left shadow-xl backdrop-blur">
-            <div className="flex items-start gap-3">
-              <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-                <PlugIcon className="size-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold text-foreground">
-                  {wt.extPluginTitle}
-                </div>
-                <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {wt.extPluginDesc}
-                </div>
-              </div>
-            </div>
-            <div className="mt-3 rounded-2xl border bg-primary/5 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-xs font-semibold text-foreground">
-                    {wt.dragToBookmarks}
-                  </div>
-                  <div className="mt-1 text-mini leading-4 text-muted-foreground">
-                    {wt.dragToBookmarksDesc}
-                  </div>
-                </div>
-                <a
-                  href={bookmarkletHref}
-                  draggable
-                  onClick={(event) => event.preventDefault()}
-                  className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-[var(--shadow-xs)] hover:bg-primary/90"
-                  title={wt.dragToBookmarksTitle}
-                >
-                  Octopus Agent
-                </a>
-              </div>
-            </div>
-            <div className="mt-3 grid gap-2 text-xs">
-              <div className="rounded-xl bg-muted/55 px-3 py-2">
-                {wt.step1Temporary}
-              </div>
-              <div className="rounded-xl bg-muted/55 px-3 py-2">
-                {wt.step2LongTerm}
-              </div>
-              <div className="rounded-xl bg-muted/55 px-3 py-2">
-                {wt.step3LoadExtension}
-              </div>
-            </div>
-            {extensionPath && (
-              <div className="mt-3 rounded-xl border bg-muted/25 px-3 py-2">
-                <div className="text-mini text-muted-foreground">
-                  {wt.pluginDirectory}
-                </div>
-                <div className="mt-1 break-all font-mono text-mini text-foreground">
-                  {extensionPath}
-                </div>
-              </div>
+          <button
+            type="button"
+            onClick={() => setExtensionGuideOpen((v) => !v)}
+            className={cn(
+              "flex h-7 items-center gap-1.5 rounded-full px-2.5 font-medium transition-colors",
+              relayStatus?.connected
+                ? "bg-success/10 text-success"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground",
             )}
-            <div className="mt-3 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={copyBookmarklet}
-                className="flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                <CopyIcon className="size-3.5" />
-                {wt.copyBookmarklet}
-              </button>
-              <button
-                type="button"
-                onClick={copyExtensionPath}
-                className="h-8 rounded-full border px-3 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                {wt.copyPath}
-              </button>
-              <button
-                type="button"
-                onClick={openExtensionFolder}
-                className="h-8 rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-              >
-                {wt.openPluginDirectory}
-              </button>
+          >
+            <PlugIcon className="size-3.5" />
+            {wt.extPluginButton}
+          </button>
+          <button
+            type="button"
+            className="h-7 rounded-full bg-primary px-2.5 font-medium text-primary-foreground hover:bg-primary/90"
+            onClick={openExtensionFolder}
+          >
+            {wt.openDirectory}
+          </button>
+          {extensionGuideOpen && (
+            <div className="absolute right-0 top-full mt-2 w-[360px] max-w-[calc(100vw-1rem)] rounded-2xl border bg-background/98 p-4 text-left shadow-xl backdrop-blur">
+              <div className="flex items-start gap-3">
+                <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                  <PlugIcon className="size-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-foreground">
+                    {wt.extPluginTitle}
+                  </div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                    {wt.extPluginDesc}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 rounded-2xl border bg-primary/5 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-semibold text-foreground">
+                      {wt.dragToBookmarks}
+                    </div>
+                    <div className="mt-1 text-mini leading-4 text-muted-foreground">
+                      {wt.dragToBookmarksDesc}
+                    </div>
+                  </div>
+                  <a
+                    href={bookmarkletHref}
+                    draggable
+                    onClick={(event) => event.preventDefault()}
+                    className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-[var(--shadow-xs)] hover:bg-primary/90"
+                    title={wt.dragToBookmarksTitle}
+                  >
+                    EchoAI
+                  </a>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2 text-xs">
+                <div className="rounded-xl bg-muted/55 px-3 py-2">
+                  {wt.step1Temporary}
+                </div>
+                <div className="rounded-xl bg-muted/55 px-3 py-2">
+                  {wt.step2LongTerm}
+                </div>
+                <div className="rounded-xl bg-muted/55 px-3 py-2">
+                  {wt.step3LoadExtension}
+                </div>
+              </div>
+              {extensionPath && (
+                <div className="mt-3 rounded-xl border bg-muted/25 px-3 py-2">
+                  <div className="text-mini text-muted-foreground">
+                    {wt.pluginDirectory}
+                  </div>
+                  <div className="mt-1 break-all font-mono text-mini text-foreground">
+                    {extensionPath}
+                  </div>
+                </div>
+              )}
+              <div className="mt-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={copyBookmarklet}
+                  className="flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <CopyIcon className="size-3.5" />
+                  {wt.copyBookmarklet}
+                </button>
+                <button
+                  type="button"
+                  onClick={copyExtensionPath}
+                  className="h-8 rounded-full border px-3 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {wt.copyPath}
+                </button>
+                <button
+                  type="button"
+                  onClick={openExtensionFolder}
+                  className="h-8 rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                >
+                  {wt.openPluginDirectory}
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
       {screenshot ? (
         <img
@@ -778,6 +821,12 @@ function BrowserDesktopHome({
   const wt = t.browser.webviewTab;
   const [activePanel, setActivePanel] = useState<DesktopPanelId>("home");
   const [editMode, setEditMode] = useState(false);
+  useEffect(() => {
+    const enterEditMode = () => setEditMode(true);
+    window.addEventListener(BROWSER_EDIT_HOME_EVENT, enterEditMode);
+    return () =>
+      window.removeEventListener(BROWSER_EDIT_HOME_EVENT, enterEditMode);
+  }, []);
   const [appOrder, setAppOrder] = useState<string[]>(() =>
     loadDesktopAppOrder(),
   );
@@ -1008,18 +1057,15 @@ function BrowserDesktopHome({
               {wt.resetLayout}
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => setEditMode((value) => !value)}
-            className={cn(
-              "rounded-full px-3 py-1.5 text-xs font-medium shadow-[var(--shadow-md)] shadow-black/10 backdrop-blur-xl transition",
-              editMode
-                ? "bg-info text-white hover:bg-info"
-                : "bg-white/55 text-foreground hover:bg-white/75",
-            )}
-          >
-            {editMode ? wt.finishEditing : wt.editDesktop}
-          </button>
+          {editMode && (
+            <button
+              type="button"
+              onClick={() => setEditMode(false)}
+              className="rounded-full bg-info px-3 py-1.5 text-xs font-medium text-white shadow-[var(--shadow-md)] shadow-black/10 backdrop-blur-xl transition hover:bg-info"
+            >
+              {wt.finishEditing}
+            </button>
+          )}
         </div>
         {editMode && (
           <div
@@ -1344,7 +1390,9 @@ function DesktopControlPanel({
       <div className="flex items-center justify-between border-b border-white/32 px-5 py-4">
         <div>
           <div className="text-base font-semibold">{title}</div>
-          <div className="text-xs text-muted-foreground">{wt.panelSubtitle}</div>
+          <div className="text-xs text-muted-foreground">
+            {wt.panelSubtitle}
+          </div>
         </div>
         <button
           type="button"
@@ -1578,12 +1626,24 @@ function DesktopAppIcon({
 }
 
 export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
-  function WebviewTab({ tab, active, onPatch, renderDevice }, imperativeRef) {
+  function WebviewTab(
+    { tab, active, onPatch, onClose, renderDevice },
+    imperativeRef,
+  ) {
+    useWorkbenchAvailabilitySync();
+    const activeAgentId = useActiveAgentId() ?? "general";
+    const enabledModuleIds = useEnabledModuleIds(activeAgentId);
+    const enabledModuleIdSet = useMemo(
+      () => new Set(enabledModuleIds),
+      [enabledModuleIds],
+    );
     const ref = useRef<WebviewElement | null>(null);
     const { t } = useI18n();
     const wt = t.browser.webviewTab;
-    const [crash, setCrash] = useState<CrashInfo | null>(null);
+    const [crash, setCrash] = useState<CrashInfo | null>(tab.crash ?? null);
     const [reloadSeed, setReloadSeed] = useState(0); // Implementation note.
+    const crashTimesRef = useRef<number[]>([]);
+    const autoRecoveryTimerRef = useRef<number | null>(null);
     const [controlIndicator, setControlIndicatorState] = useState<{
       mode: "idle" | "action" | "paused";
       action?: string;
@@ -1591,6 +1651,10 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
       nonce: number;
     }>({ mode: "idle", nonce: 0 });
     const controlIndicatorTimerRef = useRef<number | null>(null);
+    const adoptionLease = useMemo(
+      () => browserWebContentsAdoptionLease(tab.id),
+      [tab.id],
+    );
 
     // Implementation note.
     // Implementation note.
@@ -1764,6 +1828,21 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
 
       const onDomReady = () => {
         readyRef.current = true;
+        // Every tab remains mounted while hidden. Publish a stable logical
+        // lease and current native id so the desktop host can move the same
+        // live webContents between surfaces without navigating it again.
+        wv.setAttribute(
+          "data-octopus-webcontents-adoption-lease",
+          adoptionLease,
+        );
+        try {
+          wv.setAttribute(
+            "data-octopus-adopted-web-contents-id",
+            String(wv.getWebContentsId()),
+          );
+        } catch (error) {
+          swallow(error);
+        }
       };
       wv.addEventListener("dom-ready", onDomReady);
 
@@ -1784,11 +1863,34 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
       // Implementation note.
       const onCrashed = (e: Event & { reason?: string; exitCode?: number }) => {
         readyRef.current = false;
-        setCrash({
+        const occurredAt = Date.now();
+        crashTimesRef.current = [
+          ...crashTimesRef.current.filter(
+            (timestamp) => occurredAt - timestamp < 60_000,
+          ),
+          occurredAt,
+        ];
+        const attempts = crashTimesRef.current.length;
+        const info: CrashInfo = {
           reason: e.reason || "render-process-gone",
           exitCode: e.exitCode ?? -1,
-        });
-        onPatch({ isLoading: false });
+          occurredAt,
+          attempts,
+          autoRecovering: attempts === 1,
+        };
+        setCrash(info);
+        onPatch({ isLoading: false, crash: info });
+        if (attempts === 1) {
+          if (autoRecoveryTimerRef.current !== null) {
+            window.clearTimeout(autoRecoveryTimerRef.current);
+          }
+          autoRecoveryTimerRef.current = window.setTimeout(() => {
+            setCrash(null);
+            onPatch({ crash: undefined, isLoading: true });
+            setReloadSeed((seed) => seed + 1);
+            autoRecoveryTimerRef.current = null;
+          }, 900);
+        }
       };
 
       wv.addEventListener("page-title-updated", onTitle as EventListener);
@@ -1820,7 +1922,16 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
           onCrashed as EventListener,
         );
       };
-    }, [onPatch, reloadSeed]);
+    }, [adoptionLease, onPatch, reloadSeed]);
+
+    useEffect(
+      () => () => {
+        if (autoRecoveryTimerRef.current !== null) {
+          window.clearTimeout(autoRecoveryTimerRef.current);
+        }
+      },
+      [],
+    );
 
     // Implementation note.
     useEffect(() => {
@@ -1866,17 +1977,106 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
     // Implementation note.
     const onReloadAfterCrash = () => {
       setCrash(null);
+      onPatch({ crash: undefined, isLoading: true });
       setReloadSeed((s) => s + 1);
     };
 
     const homeDevice = renderDevice ?? tab.device;
     if (tab.url === BROWSER_HOME_URL) {
       return (
-        <BrowserHome
-          active={active}
-          device={homeDevice}
-          onOpen={(url) => onPatch({ url, title: url, isLoading: true })}
-        />
+        <Suspense
+          fallback={
+            <div
+              className="size-full animate-pulse bg-muted/25"
+              role="status"
+              aria-label="加载浏览器桌面"
+            />
+          }
+        >
+          <BrowserHome
+            active={active}
+            device={homeDevice}
+            onOpen={(url) => {
+              const builtinApp = WORKBENCH_BUILTIN_APPS.find(
+                (app) => app.launchUrl === url,
+              );
+              onPatch({
+                url,
+                title: builtinApp?.name ?? url,
+                isLoading: !builtinApp,
+              });
+            }}
+          />
+        </Suspense>
+      );
+    }
+
+    const requestedBuiltinApp = WORKBENCH_BUILTIN_APPS.find(
+      (app) => app.launchUrl === tab.url,
+    );
+    const builtinApp =
+      requestedBuiltinApp &&
+      enabledModuleIdSet.has(requestedBuiltinApp.moduleId)
+        ? requestedBuiltinApp
+        : undefined;
+    if (requestedBuiltinApp && !builtinApp) {
+      return (
+        <div
+          style={style}
+          className="grid size-full place-items-center bg-background p-6"
+        >
+          <div className="max-w-sm text-center">
+            <PlugIcon className="mx-auto size-8 text-muted-foreground" />
+            <h2 className="mt-3 text-base font-semibold">应用未安装或已停用</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              请在 HUB 的应用市场中安装并启用{requestedBuiltinApp.name}。
+            </p>
+            <button
+              type="button"
+              className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+              onClick={() =>
+                onPatch({
+                  url: BROWSER_HOME_URL,
+                  title: "浏览器桌面",
+                  isLoading: false,
+                })
+              }
+            >
+              返回桌面
+            </button>
+          </div>
+        </div>
+      );
+    }
+    const CoreBuiltinPage = builtinApp
+      ? BROWSER_CORE_COMPONENTS[builtinApp.id]
+      : undefined;
+    if (builtinApp && (builtinApp.delivery === "remote" || CoreBuiltinPage)) {
+      return (
+        <div
+          style={style}
+          className="relative min-h-0 flex-col overflow-hidden bg-background"
+          data-browser-native-app={builtinApp.id}
+        >
+          <WorkbenchSurfaceProvider surface="browser">
+            <Suspense
+              fallback={
+                <div className="grid h-full place-items-center text-sm text-muted-foreground">
+                  正在打开{builtinApp.name}…
+                </div>
+              }
+            >
+              {builtinApp.delivery === "remote" ? (
+                <RemoteWorkbenchSurface
+                  app={builtinApp}
+                  hostPath={builtinApp.workspaceRoute}
+                />
+              ) : CoreBuiltinPage ? (
+                <CoreBuiltinPage />
+              ) : null}
+            </Suspense>
+          </WorkbenchSurfaceProvider>
+        </div>
       );
     }
 
@@ -1886,17 +2086,34 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
           style={{ width: "100%", height: "100%" }}
           className="flex flex-col items-center justify-center gap-3 bg-muted/30 px-6 text-center"
         >
-          <div className="text-4xl">😵</div>
-          <div className="text-base font-semibold">{wt.crashTitle}</div>
-          <div className="max-w-md text-xs text-muted-foreground">
-            {crash.reason} (exit {crash.exitCode}) · {wt.crashDesc}
+          <div className="text-4xl">{crash.autoRecovering ? "🔄" : "😵"}</div>
+          <div className="text-base font-semibold">
+            {crash.autoRecovering ? "正在恢复标签页" : wt.crashTitle}
           </div>
-          <button
-            onClick={onReloadAfterCrash}
-            className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            {wt.crashReload}
-          </button>
+          <div className="max-w-md text-xs text-muted-foreground">
+            {crash.reason} (exit {crash.exitCode}) ·{" "}
+            {crash.autoRecovering
+              ? "首次异常，正在自动重建网页进程…"
+              : `${wt.crashDesc} · 60 秒内已异常 ${crash.attempts} 次，已停止自动重试。`}
+          </div>
+          {!crash.autoRecovering && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onReloadAfterCrash}
+                className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                {wt.crashReload}
+              </button>
+              {onClose && (
+                <button
+                  onClick={onClose}
+                  className="rounded-md border border-border-default px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                >
+                  关闭标签页
+                </button>
+              )}
+            </div>
+          )}
         </div>
       );
     }
@@ -1944,6 +2161,8 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
           ref={ref as unknown as React.RefObject<HTMLElement>}
           src={tab.url}
           partition="persist:octopus-browser"
+          data-octopus-webcontents-adoption-lease={adoptionLease}
+          data-octopus-adopted-web-contents-id="pending"
           style={{ width: "100%", height: "100%" }}
         />
         {controlEdgeVisible && (

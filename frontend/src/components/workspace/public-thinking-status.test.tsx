@@ -56,7 +56,7 @@ describe("PublicThinkingStatus", () => {
     // Mid-task pauses are NOT "thinking" — that label is reserved for the
     // pre-first-response window of a fresh turn (see the waiting case).
     expect(status).toHaveTextContent("正在处理");
-    expect(status).not.toHaveTextContent("8s");
+    expect(status).toHaveTextContent("8s");
     expect(status).not.toHaveTextContent("思考中");
     expect(status).not.toHaveTextContent("理解");
     expect(status).not.toHaveTextContent("规划");
@@ -75,7 +75,7 @@ describe("PublicThinkingStatus", () => {
 
     const status = screen.getByRole("status");
     expect(status).toHaveTextContent("思考中");
-    expect(status).not.toHaveTextContent("18s");
+    expect(status).toHaveTextContent("18s");
     expect(status).not.toHaveTextContent("模型处理中");
     expect(status).not.toHaveTextContent("模型");
   });
@@ -138,9 +138,9 @@ describe("PublicThinkingStatus", () => {
     expect(screen.getByTestId("conversation-activity-pulse")).toHaveTextContent(
       "执行操作",
     );
-    expect(screen.getByTestId("conversation-activity-pulse")).not.toHaveTextContent(
-      "cat ~/.ssh/id_rsa",
-    );
+    expect(
+      screen.getByTestId("conversation-activity-pulse"),
+    ).not.toHaveTextContent("cat ~/.ssh/id_rsa");
   });
 
   test("gets out of the way while answer tokens are flowing", () => {
@@ -178,7 +178,47 @@ describe("PublicThinkingStatus", () => {
 
     const status = screen.getByRole("status");
     expect(status).toHaveTextContent("还在继续，稍慢一些");
-    expect(status).not.toHaveTextContent("31s");
+    expect(status).toHaveTextContent("31s");
     expect(status).toHaveAttribute("data-phase", "slow");
+  });
+
+  test("shows a waiting lane before turn vitals are seeded", () => {
+    renderWithProviders(
+      <PublicThinkingStatus
+        isLoading
+        liveToolEvents={[]}
+        vitals={vitals({ phase: "idle", elapsedMs: 0 })}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(screen.getByTestId("conversation-activity-pulse")).toHaveTextContent(
+      "思考中",
+    );
+    expect(
+      screen.queryByTestId("conversation-activity-elapsed"),
+    ).not.toBeInTheDocument();
+  });
+
+  test("formats minute-long first-response waits as a readable duration", () => {
+    renderWithProviders(
+      <PublicThinkingStatus
+        isLoading
+        liveToolEvents={[]}
+        vitals={vitals({ phase: "waiting", elapsedMs: 104_500 })}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(
+      screen.getByTestId("conversation-activity-elapsed"),
+    ).toHaveTextContent("1m 44s");
+    expect(screen.getByTestId("conversation-activity-pulse")).toHaveTextContent(
+      "首个响应较慢，任务仍在等待",
+    );
+    expect(screen.getByTestId("conversation-activity-pulse")).toHaveAttribute(
+      "data-first-response-delayed",
+      "true",
+    );
   });
 });

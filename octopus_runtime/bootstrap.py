@@ -1,8 +1,9 @@
 """octopus-runtime · 启动同步 / lockfile(capability-plane.md §B「拉取 pin 好的 lockfile」)。
 
-**「停止打包」的消费机制**:产品不再把成百个 SKILL.md 提交进 git,改为提交**一个 lockfile**
-(列出要的技能 slug,可选 pin 版本);启动时 `bootstrap_skills` 从 registry 同步**缺失**的到本地现有布局,
-再由产品自有 loader 加载。git 里只剩一个 lockfile,资产成为版本化、可共享的单一事实源。
+**外部目录的消费机制**:产品不把 registry 管理的 SKILL.md 缓存提交进 git,而是提交**一个
+lockfile**(列出要的技能 slug);启动时 `bootstrap_skills` 从 registry 同步**缺失**项到本地现有
+布局,再由产品 loader 加载。Python wheel 另带 package-relative 的只读 fallback catalog,因此
+registry 不可达时仍可启动;本模块只负责更新外部目录。
 
 迁移辅助:`write_lockfile` 把现有已打包技能列成 lockfile,便于日后逐步停止打包。
 """
@@ -82,6 +83,9 @@ def bootstrap_skills(
     *,
     base_url: str = DEFAULT_BASE,
     force: bool = False,
+    request_timeout_s: float | None = None,
+    max_workers: int | None = None,
+    total_timeout_s: float | None = None,
 ) -> tuple[list[str], list[str], list[tuple[str, str]]]:
     """按 lockfile 同步**缺失**的技能到 skills_dir(已存在且非 force 则跳过)。
     返回 (synced, present, errors)。启动时调一发即可。"""
@@ -97,7 +101,23 @@ def bootstrap_skills(
             todo.append(slug)
     if not todo:
         return [], present, []
-    ok, skipped, errors = sync_skills(todo, skills_dir, base_url=base_url)
+    if max_workers is None:
+        ok, skipped, errors = sync_skills(
+            todo,
+            skills_dir,
+            base_url=base_url,
+            request_timeout_s=request_timeout_s,
+            total_timeout_s=total_timeout_s,
+        )
+    else:
+        ok, skipped, errors = sync_skills(
+            todo,
+            skills_dir,
+            base_url=base_url,
+            max_workers=max_workers,
+            request_timeout_s=request_timeout_s,
+            total_timeout_s=total_timeout_s,
+        )
     errors = [*errors, *[(slug, f"skipped:{why}") for slug, why in skipped]]
     return [s for s, _ in ok], present, errors
 
@@ -114,5 +134,7 @@ def write_lockfile(skills_dir: Path | str, out_path: Path | str) -> list[str]:
         except ValueError:
             continue
     slugs = sorted(slugs)
-    _atomic_write_text(Path(out_path), json.dumps({"skills": slugs}, ensure_ascii=False, indent=2) + "\n")
+    _atomic_write_text(
+        Path(out_path), json.dumps({"skills": slugs}, ensure_ascii=False, indent=2) + "\n"
+    )
     return slugs

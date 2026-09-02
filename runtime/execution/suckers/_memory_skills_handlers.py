@@ -36,10 +36,22 @@ from .registry import Skill, SkillRegistry
 from .testing import SkillExpect, SkillTestCase
 
 
+def _register(registry: SkillRegistry, skill: Skill) -> None:
+    """Idempotent family registration.
+
+    The same family may be loaded twice — once by the default skill
+    assembly (``all_skills``) and once by the composition-layer ``memory_arm``
+    plugin. Duplicate names are therefore replaced (last definition wins)
+    instead of raising, so re-loading a block is always safe.
+    """
+    registry.register(skill, replace=True)
+
+
 def register_memory_skills(registry: SkillRegistry) -> int:
     """Register remember / recall / note_user / diary_write."""
 
-    registry.register(
+    _register(
+        registry,
         Skill(
             name="remember",
             description=(
@@ -67,10 +79,11 @@ def register_memory_skills(registry: SkillRegistry) -> int:
                     expect=SkillExpect(raises="RuntimeError"),
                 ),
             ],
-        )
+        ),
     )
 
-    registry.register(
+    _register(
+        registry,
         Skill(
             name="recall",
             description=(
@@ -96,10 +109,11 @@ def register_memory_skills(registry: SkillRegistry) -> int:
                     expect=SkillExpect(raises="RuntimeError"),
                 ),
             ],
-        )
+        ),
     )
 
-    registry.register(
+    _register(
+        registry,
         Skill(
             name="note_user",
             description=(
@@ -124,10 +138,11 @@ def register_memory_skills(registry: SkillRegistry) -> int:
                     expect=SkillExpect(raises="RuntimeError"),
                 ),
             ],
-        )
+        ),
     )
 
-    registry.register(
+    _register(
+        registry,
         Skill(
             name="diary_write",
             description=(
@@ -146,10 +161,11 @@ def register_memory_skills(registry: SkillRegistry) -> int:
                     expect=SkillExpect(raises="RuntimeError"),
                 ),
             ],
-        )
+        ),
     )
 
-    registry.register(
+    _register(
+        registry,
         Skill(
             name="update_soul",
             description=(
@@ -181,10 +197,11 @@ def register_memory_skills(registry: SkillRegistry) -> int:
                     custom_predicate=lambda r: isinstance(r, dict) and r.get("ok") is False,
                 ),
             ],
-        )
+        ),
     )
 
-    registry.register(
+    _register(
+        registry,
         Skill(
             name="list_soul_history",
             description=(
@@ -212,11 +229,12 @@ def register_memory_skills(registry: SkillRegistry) -> int:
                     expect=SkillExpect(raises="RuntimeError"),
                 ),
             ],
-        )
+        ),
     )
 
     # ── self-evaluation skills (Phase B1) ─────────────────
-    registry.register(
+    _register(
+        registry,
         Skill(
             name="recall_scores",
             description=(
@@ -240,10 +258,11 @@ def register_memory_skills(registry: SkillRegistry) -> int:
                     expect=SkillExpect(raises="RuntimeError"),
                 ),
             ],
-        )
+        ),
     )
 
-    registry.register(
+    _register(
+        registry,
         Skill(
             name="deep_reflect",
             description=(
@@ -271,10 +290,11 @@ def register_memory_skills(registry: SkillRegistry) -> int:
                     expect=SkillExpect(raises="RuntimeError"),
                 ),
             ],
-        )
+        ),
     )
 
-    registry.register(
+    _register(
+        registry,
         Skill(
             name="deep_evolve",
             description=(
@@ -305,10 +325,11 @@ def register_memory_skills(registry: SkillRegistry) -> int:
                     expect=SkillExpect(raises="RuntimeError"),
                 ),
             ],
-        )
+        ),
     )
 
-    registry.register(
+    _register(
+        registry,
         Skill(
             name="analyze_soul_impact",
             description=(
@@ -335,10 +356,11 @@ def register_memory_skills(registry: SkillRegistry) -> int:
                     expect=SkillExpect(raises="RuntimeError"),
                 ),
             ],
-        )
+        ),
     )
 
-    registry.register(
+    _register(
+        registry,
         Skill(
             name="auto_regression_check",
             description=(
@@ -368,10 +390,11 @@ def register_memory_skills(registry: SkillRegistry) -> int:
                     expect=SkillExpect(raises="RuntimeError"),
                 ),
             ],
-        )
+        ),
     )
 
-    registry.register(
+    _register(
+        registry,
         Skill(
             name="revert_soul",
             description=(
@@ -398,7 +421,7 @@ def register_memory_skills(registry: SkillRegistry) -> int:
                     expect=SkillExpect(raises="RuntimeError"),
                 ),
             ],
-        )
+        ),
     )
 
     # ── count of the always-registered skills above ───────

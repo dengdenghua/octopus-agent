@@ -287,7 +287,8 @@ _BACKGROUND_MAX_CONCURRENT = 16
 
 
 def _prune_finished_background_processes(
-    *, ttl_s: float = _BACKGROUND_FINISHED_TTL_S,
+    *,
+    ttl_s: float = _BACKGROUND_FINISHED_TTL_S,
     max_keep: int = _BACKGROUND_REGISTRY_MAX,
 ) -> int:
     """Drop finished registry entries older than ``ttl_s`` (or beyond ``max_keep``).
@@ -384,9 +385,7 @@ def _background_file_truncated(path: Path) -> bool:
 _BACKGROUND_DIR_TTL_S = 7 * 24 * 3600.0
 _BACKGROUND_DIR_MAX = 256
 _BACKGROUND_TASK_ID_RE = re.compile(r"^[0-9a-f]{8,64}$")
-_BACKGROUND_TERMINAL_RECOVERY = frozenset(
-    {"orphaned_process_exited", "orphaned_process_missing"}
-)
+_BACKGROUND_TERMINAL_RECOVERY = frozenset({"orphaned_process_exited", "orphaned_process_missing"})
 
 
 def _background_dir_mtime(task_dir: Path) -> float:
@@ -424,9 +423,7 @@ def _sweep_background_dirs(
         if not _BACKGROUND_TASK_ID_RE.match(task_dir.name):
             continue
         try:
-            metadata = json.loads(
-                (task_dir / "metadata.json").read_text(encoding="utf-8")
-            )
+            metadata = json.loads((task_dir / "metadata.json").read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
         if not isinstance(metadata, dict):

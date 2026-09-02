@@ -1,0 +1,46 @@
+{
+  "runtime": {
+    "type": "node",
+    "version": ">=16"
+  },
+  "detect": {
+    "commands": [
+      "freebuff"
+    ]
+  },
+  "initIfMissing": true,
+  "init": {
+    "darwin": "npm install -g freebuff@latest",
+    "linux": "npm install -g freebuff@latest",
+    "win32": "npm install -g freebuff@latest"
+  },
+  "versionCheck": {
+    "command": {
+      "darwin": "freebuff --version",
+      "linux": "freebuff --version",
+      "win32": "freebuff.cmd --version"
+    },
+    "minVersion": "0.0.160",
+    "versionPattern": "(\\d+\\.\\d+\\.\\d+)"
+  },
+  "auth": {
+    "darwin": "freebuff login",
+    "linux": "freebuff login",
+    "win32": "freebuff.cmd login"
+  },
+  "status": {
+    "darwin": "node -e \"const fs=require('fs'),os=require('os'),p=require('path').join(os.homedir(),'.config','manicode','credentials.json');if(fs.existsSync(p)&&fs.statSync(p).size>0){console.log('Authenticated')}else{process.exit(1)}\"",
+    "linux": "node -e \"const fs=require('fs'),os=require('os'),p=require('path').join(os.homedir(),'.config','manicode','credentials.json');if(fs.existsSync(p)&&fs.statSync(p).size>0){console.log('Authenticated')}else{process.exit(1)}\"",
+    "win32": "node -e \"const fs=require('fs'),os=require('os'),p=require('path').join(os.homedir(),'.config','manicode','credentials.json');if(fs.existsSync(p)&&fs.statSync(p).size>0){console.log('Authenticated')}else{process.exit(1)}\""
+  },
+  "statusMatch": "Authenticated",
+  "authDeviceFlow": {
+    "uriPattern": "(https://(?:[A-Za-z0-9.-]+\\.)?freebuff\\.com[^\\s\\u001b]*)",
+    "codePattern": "",
+    "codeEmbeddedInUri": true,
+    "defaultExpiresInSeconds": 600
+  },
+  "authUrlDomain": "freebuff.com",
+  "authWaitForExit": true,
+  "authSuppressBrowser": false
+}

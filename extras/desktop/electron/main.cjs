@@ -25,6 +25,7 @@ const {
   crashReporter,
   protocol,
   session,
+  safeStorage,
 } = require("electron");
 const path = require("path");
 const fs = require("fs");
@@ -236,6 +237,43 @@ const knownExtensionSessions = new Set();
 const loadedExtensionIdsBySession = new WeakMap();
 const downloadListenerSessions = new WeakSet();
 const browserDownloads = new Map();
+
+function browserPasswordVaultPath() {
+  return path.join(app.getPath("userData"), "browser-passwords.json");
+}
+
+function browserPasswordStorageAvailable() {
+  if (!safeStorage.isEncryptionAvailable()) return false;
+  const backend = safeStorage.getSelectedStorageBackend?.();
+  return !(process.platform === "linux" && backend === "basic_text");
+}
+
+function readBrowserPasswordVault() {
+  try {
+    const file = browserPasswordVaultPath();
+    if (!fs.existsSync(file)) return [];
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeBrowserPasswordVault(entries) {
+  const file = browserPasswordVaultPath();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(entries, null, 2), { mode: 0o600 });
+  try { fs.chmodSync(file, 0o600); } catch { /* Windows / restricted FS */ }
+}
+
+function browserCredentialOrigin(value) {
+  try {
+    const parsed = new URL(String(value || ""));
+    return ["http:", "https:"].includes(parsed.protocol) ? parsed.origin : "";
+  } catch {
+    return "";
+  }
+}
 
 function extensionsStatePath() {
   return path.join(app.getPath("userData"), "browser-extensions.json");
@@ -564,29 +602,6 @@ function backendConfigPath() {
   return path.join(app.getPath("userData"), "config.yaml");
 }
 
-function migrateDesktopConfig(configPath) {
-  if (isDev || !fs.existsSync(configPath)) return;
-  try {
-    const raw = fs.readFileSync(configPath, "utf8");
-    if (
-      !/name:\s*octopus-desktop\b/.test(raw) ||
-      !/planner:\s*\r?\n\s*type:\s*static\b/.test(raw)
-    ) {
-      return;
-    }
-    const migrated = raw.replace(
-      /planner:\s*\r?\n\s*type:\s*static\s*(?:\r?\n\s*model:\s*.*)?\r?\n(\s*max_nodes:\s*\d+)/,
-      "planner:\n  type: llm\n  model: molili\n$1",
-    );
-    if (migrated !== raw) {
-      fs.writeFileSync(configPath, migrated);
-      console.log("[backend] migrated desktop config planner to llm/molili");
-    }
-  } catch (e) {
-    console.warn("[backend] desktop config migration failed:", e?.message || e);
-  }
-}
-
 function backendRuntimeStatePath() {
   return path.join(app.getPath("userData"), "backend-runtime.json");
 }
@@ -661,7 +676,6 @@ function prepareDesktopRuntime() {
     }
     fs.copyFileSync(templatePath, configPath);
   }
-  migrateDesktopConfig(configPath);
   return { configPath, dataDir, agentsRoot };
 }
 
@@ -1696,6 +1710,144 @@ ipcMain.handle("browser:clear-site-data", async (event, args) => {
   });
   await wc.session.clearCache();
   return { ok: true, origin };
+});
+
+ipcMain.handle("browser:clear-browsing-data", async (event) => {
+  if (!mainWindow || mainWindow.isDestroyed()
+      || !event || event.sender !== mainWindow.webContents) {
+    return { ok: false, error: "browser:clear-browsing-data forbidden" };
+  }
+  const browserSession = session.fromPartition("persist:octopus-browser");
+  await browserSession.clearStorageData({
+    storages: [
+      "cookies",
+      "filesystem",
+      "indexdb",
+      "localstorage",
+      "serviceworkers",
+      "cachestorage",
+    ],
+  });
+  await browserSession.clearCache();
+  await browserSession.clearAuthCache();
+  return { ok: true };
+});
+
+ipcMain.handle("browser:list-passwords", async (event, args) => {
+  if (!mainWindow || mainWindow.isDestroyed()
+      || !event || event.sender !== mainWindow.webContents) {
+    return { ok: false, available: false, entries: [], error: "forbidden" };
+  }
+  const origin = browserCredentialOrigin(args?.origin);
+  const entries = readBrowserPasswordVault()
+    .filter((entry) => !origin || entry.origin === origin)
+    .map(({ id, origin: entryOrigin, username, updatedAt }) => ({
+      id,
+      origin: entryOrigin,
+      username,
+      updatedAt,
+    }));
+  return {
+    ok: true,
+    available: browserPasswordStorageAvailable(),
+    entries,
+  };
+});
+
+ipcMain.handle("browser:save-password", async (event, args) => {
+  if (!mainWindow || mainWindow.isDestroyed()
+      || !event || event.sender !== mainWindow.webContents) {
+    return { ok: false, error: "forbidden" };
+  }
+  if (!browserPasswordStorageAvailable()) {
+    return { ok: false, error: "system credential encryption is unavailable" };
+  }
+  const origin = browserCredentialOrigin(args?.origin);
+  const username = String(args?.username || "").trim().slice(0, 320);
+  const password = String(args?.password || "");
+  if (!origin || !username || !password || password.length > 4096) {
+    return { ok: false, error: "origin, username and password are required" };
+  }
+  const entries = readBrowserPasswordVault();
+  const existing = entries.find(
+    (entry) => entry.origin === origin && entry.username === username,
+  );
+  const next = {
+    id: existing?.id || crypto.randomUUID(),
+    origin,
+    username,
+    encryptedPassword: safeStorage.encryptString(password).toString("base64"),
+    updatedAt: Date.now(),
+  };
+  writeBrowserPasswordVault([
+    next,
+    ...entries.filter((entry) => entry.id !== next.id),
+  ].slice(0, 500));
+  return { ok: true, entry: { id: next.id, origin, username, updatedAt: next.updatedAt } };
+});
+
+ipcMain.handle("browser:delete-password", async (event, args) => {
+  if (!mainWindow || mainWindow.isDestroyed()
+      || !event || event.sender !== mainWindow.webContents) {
+    return { ok: false, error: "forbidden" };
+  }
+  const id = String(args?.id || "");
+  const entries = readBrowserPasswordVault();
+  writeBrowserPasswordVault(entries.filter((entry) => entry.id !== id));
+  return { ok: true };
+});
+
+ipcMain.handle("browser:fill-password", async (event, args) => {
+  if (!browserPasswordStorageAvailable()) {
+    return { ok: false, error: "system credential encryption is unavailable" };
+  }
+  let wc;
+  try {
+    wc = _resolveBrowserWebContents(event, args?.webContentsId);
+  } catch (error) {
+    return { ok: false, error: error?.message || "webContents not found" };
+  }
+  const origin = browserCredentialOrigin(wc.getURL());
+  const entry = readBrowserPasswordVault().find(
+    (candidate) => candidate.id === String(args?.id || ""),
+  );
+  if (!entry || !origin || entry.origin !== origin) {
+    return { ok: false, error: "credential origin does not match current page" };
+  }
+  let password;
+  try {
+    password = safeStorage.decryptString(
+      Buffer.from(entry.encryptedPassword, "base64"),
+    );
+  } catch {
+    return { ok: false, error: "credential could not be decrypted" };
+  }
+  const result = await wc.executeJavaScript(`(() => {
+    const setValue = (element, value) => {
+      const prototype = element instanceof HTMLInputElement
+        ? HTMLInputElement.prototype
+        : HTMLElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+      if (setter) setter.call(element, value); else element.value = value;
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    const passwordInput = [...document.querySelectorAll('input[type="password"]')]
+      .find((element) => !element.disabled && element.offsetParent !== null);
+    if (!passwordInput) return { ok: false, error: "password field not found" };
+    const inputs = [...document.querySelectorAll('input')];
+    const passwordIndex = inputs.indexOf(passwordInput);
+    const usernameInput = inputs.slice(0, passwordIndex).reverse().find((element) =>
+      !element.disabled && element.offsetParent !== null &&
+      ["email", "text", "tel", ""].includes(element.type)
+    );
+    if (usernameInput) setValue(usernameInput, ${JSON.stringify(entry.username)});
+    setValue(passwordInput, ${JSON.stringify(password)});
+    passwordInput.focus();
+    return { ok: true, usernameFilled: Boolean(usernameInput) };
+  })()`, true);
+  password = "";
+  return result?.ok ? { ok: true } : { ok: false, error: result?.error || "fill failed" };
 });
 
 ipcMain.handle("browser:show-download-in-folder", async (_event, args) => {

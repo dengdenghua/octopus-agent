@@ -26,13 +26,34 @@ import { swallow } from "@/core/utils/log";
 import { useThreadStream } from "@/core/threads/hooks";
 import { isAIMessage, isHumanMessage } from "@/core/api/types";
 import { useI18n } from "@/core/i18n/hooks";
-import {
-  ACTIVE_AGENT_EVENT,
-  ACTIVE_AGENT_KEY,
-  useActiveAgentId,
-} from "@/core/agents/active";
+import { useActiveAgentId } from "@/core/agents/active";
 import { useAgents } from "@/core/agents/hooks";
+import { isPrimaryPersonaAgentId } from "@/core/agents/persona-policy";
 import { copyTextToClipboard } from "@/core/clipboard";
+import { emitAgentChanged } from "@/core/events";
+import { useCapabilitySurface } from "@/core/plugins/use-capability-surface";
+import {
+  appendRecordingEvents,
+  getRecordingStatus,
+  startRecording,
+  stopRecording,
+} from "@/core/teach-repeat/api";
+import {
+  browserRecorderDrainScript,
+  normalizeBrowserRecordingEvents,
+} from "@/core/teach-repeat/browser-events";
+import {
+  subscribeBrowserRelayStatus,
+  type BrowserRelayStatus,
+} from "@/core/settings/automation-status-api";
+import type { RecordingEvent } from "@/core/teach-repeat/types";
+import {
+  BROWSER_AGENT_POLICY_EVENT,
+  browserHttpOrigin,
+  getBrowserAgentPermission,
+  recordBrowserAgentAudit,
+  setBrowserAgentPermission,
+} from "@/core/browser/agent-permissions";
 import { cn } from "@/lib/utils";
 
 import {
@@ -63,6 +84,11 @@ interface PendingConfirmation {
   createdAt: number;
 }
 
+interface PendingSiteAccess {
+  origin: string;
+  aiMessageId: string;
+}
+
 interface ResearchPlatform {
   name: string;
   url: string;
@@ -80,6 +106,7 @@ interface ResearchLogEntry {
 
 export function AssistantPanel({ webviewHandle }: Props) {
   const { t } = useI18n();
+  const recorderPluginEnabled = useCapabilitySurface("browser.recorder");
   const { activeTab, state, setCopilotOpen, setCopilotWidth } =
     useBrowserStore();
   const [input, setInput] = useState("");
@@ -88,10 +115,19 @@ export function AssistantPanel({ webviewHandle }: Props) {
   const [pendingConfirmations, setPendingConfirmations] = useState<
     PendingConfirmation[]
   >([]);
+  const [pendingSiteAccess, setPendingSiteAccess] =
+    useState<PendingSiteAccess | null>(null);
+  const [policyVersion, setPolicyVersion] = useState(0);
   const [recorderMode, setRecorderMode] = useState(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("octopus:browser-recorder-mode") === "1";
   });
+  const [recorderProviderState, setRecorderProviderState] = useState<
+    "idle" | "embedded" | "relay" | "agent-only"
+  >("idle");
+  useEffect(() => {
+    if (!recorderPluginEnabled) setRecorderMode(false);
+  }, [recorderPluginEnabled]);
   const [researchGoal, setResearchGoal] = useState("");
   const [researchLog, setResearchLog] = useState<ResearchLogEntry[]>(() => {
     if (typeof window === "undefined") return [];
@@ -138,10 +174,32 @@ export function AssistantPanel({ webviewHandle }: Props) {
   const activeAgentId = useActiveAgentId();
   const agentName = activeAgentId ?? "general";
   const { agents } = useAgents();
-  const activeAgent = useMemo(
-    () => agents.find((a) => a.name === agentName) ?? null,
-    [agents, agentName],
+  const primaryAgents = useMemo(
+    () => agents.filter((agent) => isPrimaryPersonaAgentId(agent.name)),
+    [agents],
   );
+  const activeAgent = useMemo(
+    () => primaryAgents.find((a) => a.name === agentName) ?? null,
+    [agentName, primaryAgents],
+  );
+  const activeOrigin = useMemo(
+    () => browserHttpOrigin(activeTab?.url),
+    [activeTab?.url],
+  );
+  const [activeSitePermission, setActiveSitePermission] = useState(() =>
+    getBrowserAgentPermission(activeTab?.url),
+  );
+
+  useEffect(() => {
+    setActiveSitePermission(getBrowserAgentPermission(activeTab?.url));
+  }, [activeTab?.url, policyVersion]);
+
+  useEffect(() => {
+    const refresh = () => setPolicyVersion((value) => value + 1);
+    window.addEventListener(BROWSER_AGENT_POLICY_EVENT, refresh);
+    return () =>
+      window.removeEventListener(BROWSER_AGENT_POLICY_EVENT, refresh);
+  }, []);
 
   // Implementation note.
   // Implementation note.
@@ -155,6 +213,107 @@ export function AssistantPanel({ webviewHandle }: Props) {
     context: { agent_name: agentName, mode: "chat" },
   });
 
+  useEffect(() => {
+    if (!recorderPluginEnabled) return;
+    let cancelled = false;
+    void getRecordingStatus(threadId)
+      .then((status) => {
+        if (!cancelled) setRecorderMode(status.recording);
+      })
+      .catch((error) => swallow(error, "browser-recorder-status"));
+    return () => {
+      cancelled = true;
+    };
+  }, [recorderPluginEnabled, threadId]);
+
+  useEffect(() => {
+    if (!recorderMode) {
+      setRecorderProviderState("idle");
+      return;
+    }
+
+    let disposed = false;
+    let flushing = false;
+    const queue: RecordingEvent[] = [];
+    const seenRelayEvents = new Set<string>();
+    const embeddedAvailable = Boolean(webviewHandle && window.octopus);
+    setRecorderProviderState(embeddedAvailable ? "embedded" : "agent-only");
+
+    const flush = async () => {
+      if (disposed || flushing || queue.length === 0) return;
+      flushing = true;
+      const batch = queue.splice(0, 100);
+      try {
+        await appendRecordingEvents(threadId, batch);
+      } catch (error) {
+        if (!disposed) {
+          queue.unshift(...batch);
+          if (queue.length > 300) queue.splice(0, queue.length - 300);
+          swallow(error, "browser-recorder-events");
+        }
+      } finally {
+        flushing = false;
+        if (!disposed && queue.length > 0) window.setTimeout(flush, 500);
+      }
+    };
+    const enqueue = (events: RecordingEvent[]) => {
+      if (disposed || events.length === 0) return;
+      queue.push(...events);
+      if (queue.length > 300) queue.splice(0, queue.length - 300);
+      void flush();
+    };
+
+    const drainWebview = async () => {
+      if (!webviewHandle || !embeddedAvailable || disposed) return;
+      const result = await webviewHandle.executeJS(
+        browserRecorderDrainScript(),
+      );
+      const events = normalizeBrowserRecordingEvents(result);
+      if (events.length > 0) enqueue(events);
+    };
+    void drainWebview();
+    const drainTimer = window.setInterval(() => void drainWebview(), 650);
+
+    const consumeRelay = (status: BrowserRelayStatus) => {
+      if (disposed) return;
+      if (status.connected) setRecorderProviderState("relay");
+      else if (!embeddedAvailable) setRecorderProviderState("agent-only");
+      const events: RecordingEvent[] = [];
+      for (const activity of status.recent_human_activity ?? []) {
+        const at = Number(activity.at || 0);
+        const key = [
+          at,
+          activity.kind || "activity",
+          activity.tabId ?? "",
+          activity.url || "",
+        ].join(":");
+        if (!at || seenRelayEvents.has(key)) continue;
+        seenRelayEvents.add(key);
+        events.push({
+          ts: new Date(at * 1000).toISOString(),
+          source: "browser",
+          kind: String(activity.kind || "activity"),
+          app: "Chrome",
+          window: String(activity.url || ""),
+          target: activity.target,
+          data: {
+            ...(activity.data ?? {}),
+            title: String(activity.title || ""),
+            tab_id: activity.tabId,
+          },
+        });
+      }
+      enqueue(events);
+    };
+    const unsubscribeRelay = subscribeBrowserRelayStatus(consumeRelay);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(drainTimer);
+      unsubscribeRelay();
+    };
+  }, [recorderMode, threadId, webviewHandle]);
+
   // Implementation note.
   useEffect(() => {
     const el = listRef.current;
@@ -167,6 +326,26 @@ export function AssistantPanel({ webviewHandle }: Props) {
   // Implementation note.
   // Implementation note.
   const [autoBrowse, setAutoBrowse] = useState(true);
+  const toggleRecorderMode = useCallback(async () => {
+    setErrorMsg(null);
+    try {
+      if (recorderMode) {
+        await stopRecording({ thread_id: threadId, use_llm: true });
+        setRecorderMode(false);
+        return;
+      }
+      await startRecording({
+        thread_id: threadId,
+        name: researchGoal.trim() || t.browser.assistant.recorderTitle,
+        description: "AI 浏览器中的真人示范与 Agent 操作轨迹。",
+        provider: "hybrid",
+      });
+      setRecorderMode(true);
+      setAutoBrowse(true);
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : "REC 操作失败");
+    }
+  }, [recorderMode, researchGoal, t, threadId]);
   const lastProcessedAiIdRef = useRef<string | null>(null);
   const protocolInjectedRef = useRef<Set<string>>(new Set());
   const loopCountRef = useRef(0);
@@ -311,6 +490,27 @@ export function AssistantPanel({ webviewHandle }: Props) {
       setAgentLoopActive(false);
       return;
     }
+    if (!activeOrigin || activeSitePermission === "block") {
+      lastProcessedAiIdRef.current = aiId;
+      const origin = activeOrigin ?? activeTab?.url ?? "internal-page";
+      recordBrowserAgentAudit({
+        origin,
+        action: "site-access",
+        outcome: "blocked",
+        detail: "Agent access is blocked for this site",
+      });
+      void sendMessage(threadId, {
+        text: `[浏览器权限] 已阻止 Agent 操作 ${origin}。可在浏览器数据与隐私中修改站点权限。`,
+        files: [],
+      });
+      setAgentLoopActive(false);
+      return;
+    }
+    if (activeSitePermission === "ask") {
+      setPendingSiteAccess({ origin: activeOrigin, aiMessageId: aiId });
+      setAgentLoopActive(false);
+      return;
+    }
     lastProcessedAiIdRef.current = aiId;
 
     if (webviewHandle && !window.octopus) {
@@ -355,6 +555,12 @@ export function AssistantPanel({ webviewHandle }: Props) {
               action.type,
             );
             results.push(r);
+            recordBrowserAgentAudit({
+              origin: activeOrigin,
+              action: actionIdentity(action),
+              outcome: r.ok ? "allowed" : "failed",
+              detail: r.error,
+            });
             if (needsUserConfirmation(r)) {
               addPendingConfirmation(action, r);
               stopRequestedRef.current = true;
@@ -447,6 +653,12 @@ export function AssistantPanel({ webviewHandle }: Props) {
             action.type,
           );
           results.push(r);
+          recordBrowserAgentAudit({
+            origin: activeOrigin,
+            action: actionIdentity(action),
+            outcome: r.ok ? "allowed" : "failed",
+            detail: r.error,
+          });
           // Implementation note.
           if (action.type === "wait" || action.type === "navigate") {
             await new Promise((res) => setTimeout(res, 300));
@@ -485,7 +697,29 @@ export function AssistantPanel({ webviewHandle }: Props) {
     webviewHandle,
     addPendingConfirmation,
     buildBrowserControl,
+    activeOrigin,
+    activeSitePermission,
+    activeTab?.url,
   ]);
+
+  const resolveSiteAccess = useCallback(
+    (permission: "allow" | "block") => {
+      if (!pendingSiteAccess) return;
+      setBrowserAgentPermission(pendingSiteAccess.origin, permission);
+      recordBrowserAgentAudit({
+        origin: pendingSiteAccess.origin,
+        action: "site-access",
+        outcome: permission === "allow" ? "confirmed" : "blocked",
+      });
+      if (permission === "block") {
+        lastProcessedAiIdRef.current = pendingSiteAccess.aiMessageId;
+        stopRequestedRef.current = true;
+      }
+      setPendingSiteAccess(null);
+      setPolicyVersion((value) => value + 1);
+    },
+    [pendingSiteAccess],
+  );
 
   const confirmPendingAction = useCallback(
     async (pending: PendingConfirmation) => {
@@ -501,6 +735,12 @@ export function AssistantPanel({ webviewHandle }: Props) {
           }),
           pending.action.type,
         );
+        recordBrowserAgentAudit({
+          origin: activeOrigin ?? activeTab?.url ?? "internal-page",
+          action: actionIdentity(pending.action),
+          outcome: result.ok ? "confirmed" : "failed",
+          detail: result.error,
+        });
         setPendingConfirmations((prev) =>
           prev.filter((item) => item.id !== pending.id),
         );
@@ -525,7 +765,15 @@ export function AssistantPanel({ webviewHandle }: Props) {
         setBusy(false);
       }
     },
-    [sendMessage, threadId, webviewHandle, t, buildBrowserControl],
+    [
+      sendMessage,
+      threadId,
+      webviewHandle,
+      t,
+      buildBrowserControl,
+      activeOrigin,
+      activeTab?.url,
+    ],
   );
 
   const dismissPendingAction = useCallback((id: string) => {
@@ -742,7 +990,7 @@ export function AssistantPanel({ webviewHandle }: Props) {
       dragRef.current = { startX: e.clientX, startW: state.copilotWidth };
       const onMove = (ev: MouseEvent) => {
         if (!dragRef.current) return;
-        const delta = ev.clientX - dragRef.current.startX;
+        const delta = dragRef.current.startX - ev.clientX;
         setCopilotWidth(dragRef.current.startW + delta);
       };
       const onUp = () => {
@@ -764,20 +1012,20 @@ export function AssistantPanel({ webviewHandle }: Props) {
       // Implementation note.
       // Implementation note.
       className={cn(
-        "relative flex h-full w-full min-w-[280px] flex-1 flex-col border-r border-white/24 bg-transparent",
+        "relative flex h-full w-full min-w-[280px] flex-1 flex-col bg-transparent",
       )}
     >
       {/* Implementation note. */}
       <div
         onMouseDown={onResizeStart}
-        className="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/30"
+        className="absolute left-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/30"
       />
 
       {/* Implementation note. */}
       <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-white/24 bg-white/[0.06] px-3">
         <AgentPicker
           activeAgent={activeAgent}
-          agents={agents}
+          agents={primaryAgents}
           activeAgentId={agentName}
         />
         {activeTab?.title && (
@@ -816,18 +1064,20 @@ export function AssistantPanel({ webviewHandle }: Props) {
         >
           {autoBrowse ? "AUTO" : "READ"}
         </button>
-        <button
-          onClick={() => setRecorderMode((v) => !v)}
-          className={cn(
-            "shrink-0 rounded px-1.5 py-0.5 text-micro font-medium transition-colors",
-            recorderMode
-              ? "bg-success/10 text-success"
-              : "border border-white/28 text-muted-foreground hover:bg-white/18",
-          )}
-          title={t.browser.assistant.recorderTitle}
-        >
-          REC
-        </button>
+        {recorderPluginEnabled ? (
+          <button
+            onClick={() => void toggleRecorderMode()}
+            className={cn(
+              "shrink-0 rounded px-1.5 py-0.5 text-micro font-medium transition-colors",
+              recorderMode
+                ? "bg-success/10 text-success"
+                : "border border-white/28 text-muted-foreground hover:bg-white/18",
+            )}
+            title={t.browser.assistant.recorderTitle}
+          >
+            REC
+          </button>
+        ) : null}
         <button
           onClick={() => setCopilotOpen(false)}
           className="grid size-7 shrink-0 place-items-center rounded text-muted-foreground hover:bg-white/18 hover:text-foreground"
@@ -848,7 +1098,9 @@ export function AssistantPanel({ webviewHandle }: Props) {
         <QuickAction
           icon={ListIcon}
           label={t.browser.assistant.extractKeyPoints}
-          onClick={() => askWithPage(t.browser.assistant.extractKeyPointsPrompt)}
+          onClick={() =>
+            askWithPage(t.browser.assistant.extractKeyPointsPrompt)
+          }
           disabled={busy}
         />
         <QuickAction
@@ -870,6 +1122,13 @@ export function AssistantPanel({ webviewHandle }: Props) {
               </div>
               <div className="truncate text-micro text-muted-foreground">
                 {t.browser.assistant.recorderDesc}
+              </div>
+              <div className="mt-0.5 text-micro text-muted-foreground">
+                {recorderProviderState === "embedded"
+                  ? "内置页面已接入"
+                  : recorderProviderState === "relay"
+                    ? "Chrome Relay 已接入"
+                    : "页面采集离线，仅记录 Agent 轨迹"}
               </div>
             </div>
           </div>
@@ -977,6 +1236,37 @@ export function AssistantPanel({ webviewHandle }: Props) {
       {errorMsg && (
         <div className="shrink-0 border-b border-white/20 bg-destructive/10 px-3 py-1.5 text-mini text-destructive">
           {errorMsg}
+        </div>
+      )}
+
+      {pendingSiteAccess && (
+        <div className="shrink-0 border-b border-white/20 bg-primary/8 px-3 py-2">
+          <div className="rounded-md border border-primary/25 bg-white/10 p-2 text-mini">
+            <div className="font-medium text-foreground">
+              允许 Agent 操作此网站？
+            </div>
+            <div className="mt-1 break-all text-muted-foreground">
+              {pendingSiteAccess.origin}
+            </div>
+            <div className="mt-1 text-muted-foreground">
+              允许后，Agent
+              可以读取页面并点击、输入和滚动；提交、支付、删除等敏感操作仍需单独确认。
+            </div>
+            <div className="mt-2 flex gap-2">
+              <button
+                onClick={() => resolveSiteAccess("allow")}
+                className="rounded bg-primary px-2 py-1 font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                允许此网站
+              </button>
+              <button
+                onClick={() => resolveSiteAccess("block")}
+                className="rounded border border-white/28 px-2 py-1 text-muted-foreground hover:bg-white/18"
+              >
+                阻止
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1327,14 +1617,8 @@ function AgentPicker({
   }, [open]);
 
   const select = (name: string) => {
-    try {
-      window.localStorage.setItem(ACTIVE_AGENT_KEY, name);
-    } catch (e) {
-      swallow(e);
-    }
-    window.dispatchEvent(
-      new CustomEvent(ACTIVE_AGENT_EVENT, { detail: { name } }),
-    );
+    if (!isPrimaryPersonaAgentId(name)) return;
+    emitAgentChanged(name);
     setOpen(false);
   };
 
@@ -1392,9 +1676,7 @@ function AgentPicker({
                   <span className="min-w-0 flex-1 truncate">
                     {a.display_name || a.name}
                   </span>
-                  {active && (
-                    <span className="text-micro text-primary">●</span>
-                  )}
+                  {active && <span className="text-micro text-primary">●</span>}
                 </button>
               );
             })

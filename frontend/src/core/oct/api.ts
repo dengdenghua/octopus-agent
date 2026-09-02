@@ -1,5 +1,5 @@
 /**
- * oct 账号网关 client(octopus 自己的网关,api.octoapk.com)— 替代 molili。
+ * oct 账号网关 client（octopus 自己的网关，octopus.aurest.ai）。
  *
  * 邮箱验证码登录 + 积分/会员/用量/商品/订单。所有请求经 agent 后端
  * /api/auth/oct/* 与 /api/account/oct/*(后端用存的网关 JWT 调上游 + 网关计费)。
@@ -17,6 +17,51 @@ export class OctApiError extends Error {
   }
 }
 
+function messageFromRecord(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  for (const key of ["detail", "message", "error"] as const) {
+    const candidate = record[key];
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+    const nested = messageFromRecord(candidate);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function embeddedGatewayMessage(raw: string): string | null {
+  for (
+    let index = raw.indexOf("{");
+    index >= 0;
+    index = raw.indexOf("{", index + 1)
+  ) {
+    try {
+      const parsed = JSON.parse(raw.slice(index)) as unknown;
+      const message = messageFromRecord(parsed);
+      if (message) return message;
+    } catch {
+      // A wrapper can contain non-JSON braces; continue with the next one.
+    }
+  }
+  return null;
+}
+
+/** Convert gateway/proxy diagnostics into concise copy suitable for UI. */
+export function octErrorMessage(error: unknown, fallback: string): string {
+  const raw = error instanceof Error ? error.message.trim() : "";
+  if (!raw) return fallback;
+  const embedded = embeddedGatewayMessage(raw);
+  const concise = (embedded ?? raw)
+    .replace(/^oct\s+[^:：]+[:：]\s*/i, "")
+    .replace(/^gateway rejected[:：]\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!concise || /<\/?(?:html|body)\b/i.test(concise)) return fallback;
+  return concise.length > 240 ? `${concise.slice(0, 239)}…` : concise;
+}
+
 async function _request<T>(
   path: string,
   init?: RequestInit & { signal?: AbortSignal },
@@ -26,10 +71,16 @@ async function _request<T>(
     headers: { ...authHeaders(), ...(init?.headers || {}) },
   });
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { detail?: string } | null;
+    const body = (await res.json().catch(() => null)) as {
+      detail?: unknown;
+    } | null;
+    const detail = body?.detail;
     throw new OctApiError(
       res.status,
-      body?.detail ?? `${init?.method ?? "GET"} ${path} → ${res.status}`,
+      typeof detail === "string"
+        ? detail
+        : (messageFromRecord(detail) ??
+            `${init?.method ?? "GET"} ${path} → ${res.status}`),
     );
   }
   return (await res.json()) as T;
@@ -85,7 +136,7 @@ export interface OctBalance {
   // hooks 归一补出的兼容字段(消费者读总余额/会员态)
   surplusCredits?: number;
   isMember?: boolean;
-  // molili 历史展示字段:oct 无 credit 分桶/套餐名 → 永不填,使旧渲染块优雅显示空
+  // 兼容展示字段：oct 无 credit 分桶/套餐名 → 永不填，使旧渲染块优雅显示空
   // (会员信息改由 OctMembership 提供;消费者可逐步迁到 membership 展示)
   plan?: string;
   modelDisplayName?: string;
@@ -120,7 +171,12 @@ export interface OctLink {
 
 export interface OctUsage {
   total?: number;
-  summary?: { tokensIn?: number; tokensOut?: number; credits?: number; calls?: number };
+  summary?: {
+    tokensIn?: number;
+    tokensOut?: number;
+    credits?: number;
+    calls?: number;
+  };
   items?: Array<Record<string, unknown>>;
   [key: string]: unknown;
 }
@@ -158,20 +214,27 @@ export const octApi = {
   get: () => _request<OctLink | null>("/api/account/oct"),
 
   /** 强制刷新(拉网关 balance + membership)。 */
-  refresh: () => _request<OctLink>("/api/account/oct/refresh", { method: "POST" }),
+  refresh: () =>
+    _request<OctLink>("/api/account/oct/refresh", { method: "POST" }),
 
   /** 解绑。 */
   unlink: () =>
-    _request<{ unlinked: boolean }>("/api/account/oct/link", { method: "DELETE" }),
+    _request<{ unlinked: boolean }>("/api/account/oct/link", {
+      method: "DELETE",
+    }),
 
   membership: () => _request<OctMembership>("/api/account/oct/membership"),
 
   usage: (page = 1, pageSize = 50) =>
-    _request<OctUsage>(`/api/account/oct/usage?page=${page}&page_size=${pageSize}`),
+    _request<OctUsage>(
+      `/api/account/oct/usage?page=${page}&page_size=${pageSize}`,
+    ),
 
   /** 每日签到领免费积分。 */
   dailyClaim: () =>
-    _request<Record<string, unknown>>("/api/account/oct/daily-claim", { method: "POST" }),
+    _request<Record<string, unknown>>("/api/account/oct/daily-claim", {
+      method: "POST",
+    }),
 
   goods: () => _request<OctGoodsResponse>("/api/account/oct/goods"),
 
@@ -186,11 +249,15 @@ export const octApi = {
 
     /** 查单(status=PAID 时后端顺手刷余额)。 */
     findByOrderNo: (orderNo: string) =>
-      _request<OctOrder>(`/api/account/oct/orders/${encodeURIComponent(orderNo)}`),
+      _request<OctOrder>(
+        `/api/account/oct/orders/${encodeURIComponent(orderNo)}`,
+      ),
   },
 };
 
 /** 商品列表归一为数组。 */
-export function extractOctGoods(resp: OctGoodsResponse | null | undefined): OctGoods[] {
+export function extractOctGoods(
+  resp: OctGoodsResponse | null | undefined,
+): OctGoods[] {
   return Array.isArray(resp?.items) ? resp.items : [];
 }

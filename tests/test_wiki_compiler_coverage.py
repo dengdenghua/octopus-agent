@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 from types import SimpleNamespace
 
 from runtime.memory.diagnostics.wiki_compiler import WikiCompiler
@@ -182,8 +181,8 @@ def test_compile_from_journal_with_stubs(monkeypatch, tmp_path) -> None:
         def evaluate(self):
             return _recipe_report()
 
-    import runtime.safety.recovery as rec
     import runtime.memory.knowledge_graph as kg_mod
+    import runtime.safety.recovery as rec
 
     monkeypatch.setattr(rec, "RuleExtractor", _RuleExtractor)
     monkeypatch.setattr(rec, "MemoryConsolidator", _MemoryConsolidator)

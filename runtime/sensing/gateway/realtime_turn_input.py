@@ -11,12 +11,19 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 from runtime.platform.models import ParsedIntent, TaskId
 from runtime.protocol import TurnParams
+from runtime.safety.auth.scope import TenantScope
+from runtime.safety.recovery.tenant_scope import (
+    AUTHORITATIVE_SCOPE_CONTEXT_KEY,
+    authoritative_scope_context,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -28,6 +35,57 @@ _CODEX_COMPOSER_MODE_RE = re.compile(
     r"^\s*/(codex|mode)\s+(plan|spec|goal)(?:\s+|$)",
     re.IGNORECASE,
 )
+_PRODUCTION_DEPLOYMENT_MODES = frozenset({"commercial", "production", "server", "shared"})
+
+
+def _validated_local_project_workspace(
+    context: dict[str, Any],
+    *,
+    allow_authenticated_selection: bool = False,
+) -> str | None:
+    """Resolve a desktop-selected project without weakening remote isolation.
+
+    The local realtime client carries its chosen folder in turn context rather
+    than in ``TurnParams.cwd``.  Historically ``WorkspaceManager.resolve_cwd``
+    ran first and silently replaced that project with the thread scratch root.
+    Accept the context path only for a local deployment and only when it is a
+    real directory. Anonymous local clients remain bounded by the same
+    process-wide roots used by the filesystem API. An authenticated client on
+    an explicitly loopback-only desktop server may use the directory it chose
+    in the native picker even when that directory is a sibling of the server
+    checkout; shared/authenticated deployments never call this resolver.
+    """
+
+    deployment = str(os.environ.get("OCTOPUS_DEPLOYMENT_MODE") or "local").strip().lower()
+    if deployment in _PRODUCTION_DEPLOYMENT_MODES:
+        return None
+    if str(context.get("workspace_scope") or "").strip().lower() != "project":
+        return None
+    raw = context.get("workspace_path")
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    candidate = Path(raw.strip()).expanduser()
+    if not candidate.is_absolute():
+        return None
+    try:
+        resolved = candidate.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return None
+    if not resolved.is_dir():
+        return None
+
+    if allow_authenticated_selection:
+        return str(resolved)
+
+    from runtime.sensing.gateway._fs_router_paths import _allowed_fs_roots
+
+    for root in _allowed_fs_roots():
+        try:
+            resolved.relative_to(root.resolve(strict=True))
+        except (OSError, RuntimeError, ValueError):
+            continue
+        return str(resolved)
+    return None
 
 
 def _extract_codex_composer_mode(text: str) -> tuple[str, str | None]:
@@ -657,6 +715,7 @@ def _apply_runtime_surface_context(
         out["browser_operation_mode"] = True
         out.setdefault("browser_surface", "browser")
         out.setdefault("browser_session_policy", "thread_native")
+        out.setdefault("browser_track_preference", "electron")
         out.setdefault(
             "browser_evidence_policy",
             "state_first_screenshot_only_for_visual_evidence",
@@ -688,6 +747,30 @@ _AUDIT_INTENT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# An audit/review surface is a default posture, not a permanent write lock.
+# When the user explicitly asks to repair/change something in the same turn,
+# promote that turn to the normal development workflow.  Keep question/report
+# phrasing ("哪些问题需要修复？") in audit mode; only imperative language or a
+# bare repair verb opts into mutation.
+_EXPLICIT_CHANGE_RE = re.compile(
+    r"^(?:修复|修改|重构|实现|改造|清理|部署|安装|删除|补上|加上|提交)(?:\b|[\u4e00-\u9fff])|"
+    r"(?:请|帮我|直接|现在|开始|着手|把|将).{0,24}(?:修复|修改|重构|实现|改造|清理|部署|安装|删除|补上|加上|提交)",
+    re.IGNORECASE,
+)
+
+
+def _is_explicit_change_request(text: str) -> bool:
+    """Whether the current turn clearly requests a state-changing action."""
+
+    normalized = " ".join(str(text or "").strip().split())
+    if not normalized or (
+        "问题" in normalized
+        and "需要修复" in normalized
+        and not re.search(r"(?:请|帮我|直接|把|将)", normalized)
+    ):
+        return False
+    return bool(_EXPLICIT_CHANGE_RE.search(normalized))
+
 
 def _is_audit_intent(text: str, context_payload: dict[str, Any]) -> bool:
     if _AUDIT_INTENT_RE.search(text):
@@ -705,15 +788,54 @@ def _build_intent(
     workspaces: Any = None,
     thread_store: Any = None,
     allow_client_auto_approve: bool = False,
+    allow_local_workspace_access: bool = False,
     conversation_messages: list[dict[str, str]] | None = None,
 ) -> ParsedIntent:
-    cwd = params.cwd
-    if workspaces is not None:
-        cwd = workspaces.resolve_cwd(params.thread_id, params.cwd)
+    owner_actor_id = str(getattr(params, "owner_actor_id", None) or "").strip()
+    tenant_id = str(getattr(params, "tenant_id", None) or "").strip()
+    authenticated_principal = bool(owner_actor_id or tenant_id)
+    if authenticated_principal and (not owner_actor_id or not tenant_id):
+        raise RuntimeError("authenticated realtime principal is incomplete")
+    authenticated_workspace = authenticated_principal and not allow_local_workspace_access
+
+    managed_layout: Any = None
+    cwd: str | None
+    if authenticated_workspace:
+        if workspaces is None or thread_store is None:
+            raise RuntimeError("authenticated realtime workspace service unavailable")
+        from runtime.sensing.gateway.thread_workspace import (
+            ensure_managed_thread_workspace,
+        )
+
+        managed_workspace = ensure_managed_thread_workspace(
+            getattr(workspaces, "root", None),
+            thread_id=params.thread_id,
+            actor_id=owner_actor_id,
+            tenant_id=tenant_id,
+            store=thread_store,
+        )
+        managed_layout = workspaces.bind_managed(params.thread_id, managed_workspace)
+        cwd = str(managed_layout.root)
+    else:
+        cwd = params.cwd
+        if workspaces is not None:
+            cwd = workspaces.resolve_cwd(params.thread_id, params.cwd)
     text, marker_mode = _extract_codex_composer_mode(text)
     metadata = _input_metadata(params)
     context = metadata.get("context")
     context_payload = context if isinstance(context, dict) else {}
+    local_project_workspace = (
+        None
+        if authenticated_workspace
+        else _validated_local_project_workspace(
+            context_payload,
+            allow_authenticated_selection=(
+                authenticated_principal and allow_local_workspace_access
+            ),
+        )
+    )
+    if local_project_workspace is not None:
+        cwd = local_project_workspace
     if thread_store is not None:
         from runtime.sensing.gateway.turn_session import build_turn_metadata
 
@@ -721,8 +843,19 @@ def _build_intent(
             thread_id=params.thread_id,
             body={"context": context_payload},
             store=thread_store,
+            authoritative_workspace=(managed_layout.root if managed_layout is not None else None),
+            owner_actor_id=owner_actor_id or None,
+            tenant_id=tenant_id or None,
         )
     context_payload = dict(context_payload)
+    # This private marker is consumed by memory/context readers.  It must
+    # never survive from client metadata; authenticated TurnParams are the
+    # server-overwritten authority and are re-injected below.
+    context_payload.pop(AUTHORITATIVE_SCOPE_CONTEXT_KEY, None)
+    if authenticated_principal:
+        context_payload[AUTHORITATIVE_SCOPE_CONTEXT_KEY] = authoritative_scope_context(
+            TenantScope(tenant_id=tenant_id, actor_id=owner_actor_id)
+        )
     attachments = _input_attachments(params.input)
     # Attachment paths arrive from the client and therefore are not authority.
     # Grant read access only to the upload directory derived server-side from
@@ -742,7 +875,10 @@ def _build_intent(
     # to the same project context the interactive work-directory selector
     # emits.  Auto-allocated per-thread cwd values still follow the personal
     # workspace path below and do not gain project scope implicitly.
-    explicit_cwd = isinstance(params.cwd, str) and bool(params.cwd.strip())
+    explicit_cwd = not authenticated_workspace and (
+        (isinstance(params.cwd, str) and bool(params.cwd.strip()))
+        or local_project_workspace is not None
+    )
     if explicit_cwd and isinstance(cwd, str) and cwd.strip():
         context_payload.setdefault("workspace_path", cwd.strip())
         context_payload.setdefault("workspace_scope", "project")
@@ -755,9 +891,26 @@ def _build_intent(
         if marker_mode == "goal":
             context_payload.setdefault("goal_mode", True)
     context_payload = _apply_runtime_surface_context(text, context_payload)
-    actor_id = metadata.get("actor_id") or metadata.get("actorId")
+    actor_id = owner_actor_id or metadata.get("actor_id") or metadata.get("actorId")
     if isinstance(actor_id, str) and actor_id.strip():
-        context_payload.setdefault("owner_actor_id", actor_id.strip())
+        if authenticated_principal:
+            context_payload["owner_actor_id"] = actor_id.strip()
+            context_payload["tenant_id"] = tenant_id
+        else:
+            context_payload.setdefault("owner_actor_id", actor_id.strip())
+    if managed_layout is not None:
+        # Reassert the execution boundary after all client-controlled context
+        # shaping. These paths are consumed independently by cwd resolution,
+        # filesystem scope, attachments and artifact publishing.
+        for key in (
+            "extra_workspaces",
+            "personal_workspace_path",
+            "allowed_write_paths",
+        ):
+            context_payload.pop(key, None)
+        context_payload["workspace_path"] = str(managed_layout.root)
+        context_payload["workspace_scope"] = "project"
+        context_payload["_artifact_output_root"] = str(managed_layout.final)
     if conversation_messages and not isinstance(
         context_payload.get("conversation_messages"),
         list,
@@ -797,6 +950,20 @@ def _build_intent(
     audit_mode = _is_audit_intent(text, context_payload)
     if audit_mode:
         context_payload = {**context_payload, "audit_mode": True}
+        if _is_explicit_change_request(text):
+            # Preserve the audit surface for inspection turns, but let an
+            # explicit repair request become executable without requiring the
+            # user to manually switch modes first.
+            audit_mode = False
+            context_payload = {
+                **context_payload,
+                "audit_mode": False,
+                "mode": "code",
+                "workflow_mode": "develop",
+                "completion_policy": "develop",
+                "mode_preset": "develop.mode",
+                "workflow_preset": "develop.iterate",
+            }
     # Thread the turn's declared sandbox policy through to execution so
     # exec_shell can honour ``sandboxPolicy.networkAccess``. Default when
     # absent is network denied — a turn must explicitly opt in.

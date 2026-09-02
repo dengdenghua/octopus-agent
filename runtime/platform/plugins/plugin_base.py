@@ -28,10 +28,13 @@ Naming convention
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
+import inspect
 import logging
 from abc import ABC
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 # ── Capability declaration ─────────────────────────────────────
@@ -67,6 +70,12 @@ class ModuleContext:
     channel_manager: Any = None  # runtime.adapters.channels.manager.ChannelManager
     fastapi_app: Any = None  # FastAPI application
     event_bus: Any = None  # runtime.platform.process.eventbus.EventBus
+    service_bus: Any = None  # runtime.platform.process.service_bus.ServiceBus
+    tool_registry: Any = None  # runtime.execution.arms.tool_registry.ToolRegistry
+    prompt_registry: Any = None  # runtime.platform.prompts.registry.PromptRegistry
+    hook_registry: Any = None  # runtime.safety.hooks.registry.HookRegistry
+    jobs_registry: Any = None  # runtime.execution.jobs.registry.LocalJobRegistry
+    contribution_registry: Any = None  # descriptor-oriented Octopus capability seams
 
     # Plugin's own persisted config (from plugin.yaml ``config`` field)
     config: dict[str, Any] = field(default_factory=dict)
@@ -74,6 +83,51 @@ class ModuleContext:
     # Tracking for cleanup on unload
     _registered_skill_names: list[str] = field(default_factory=list)
     _registered_channel_ids: list[str] = field(default_factory=list)
+    _registration_disposers: list[Callable[[], Any]] = field(default_factory=list)
+    _provided_capabilities: list[ProvidedCapability] = field(default_factory=list)
+    _jobs_lifecycle_registered: bool = False
+    _pending_cleanup_tasks: set[asyncio.Task[Any]] = field(default_factory=set)
+
+    @property
+    def job_owner(self) -> str:
+        """Stable owner key for every background job created by this plugin."""
+
+        return f"plugin:{self.plugin_name}"
+
+    @property
+    def provided_capabilities(self) -> list[ProvidedCapability]:
+        """Fresh snapshot of concrete contributions registered by the plugin."""
+
+        return list(self._provided_capabilities)
+
+    def register_cleanup(
+        self,
+        disposer: Callable[[], Any],
+        *,
+        capability_type: str | None = None,
+        name: str | None = None,
+        description: str = "",
+    ) -> Callable[[], Any]:
+        """Attach a registration to this plugin's unload transaction.
+
+        Cleanup runs in reverse registration order.  This mirrors a resource
+        stack: a tool registered after its provider is removed before the
+        provider itself, and jobs are drained before their controller token is
+        detached.  The same path is also used when ``on_load`` fails halfway.
+        """
+
+        if not callable(disposer):
+            raise TypeError("plugin registration disposer must be callable")
+        self._registration_disposers.append(disposer)
+        if capability_type and name:
+            self._provided_capabilities.append(
+                ProvidedCapability(
+                    type=capability_type,
+                    name=name,
+                    description=description,
+                )
+            )
+        return disposer
 
     def register_skill(self, skill: Any) -> None:
         """Register a Skill with the SkillRegistry."""
@@ -87,8 +141,234 @@ class ModuleContext:
             self.channel_manager.register(channel)
             self._registered_channel_ids.append(channel.channel_id)
 
+    def register_tool_provider(
+        self,
+        provider_id: str,
+        display_name: str,
+        *,
+        feature_flags: list[str] | None = None,
+    ) -> Any:
+        """Register Octopus Native tool-provider metadata owned by this plugin."""
+
+        if self.tool_registry is None:
+            raise RuntimeError("Octopus tool registry is unavailable")
+        provider = self.tool_registry.register_provider(
+            provider_id,
+            display_name,
+            feature_flags=feature_flags,
+        )
+        self.register_cleanup(
+            lambda: self.tool_registry.unregister_provider(provider_id),
+            capability_type="tool_provider",
+            name=provider_id,
+            description=display_name,
+        )
+        return provider
+
+    def register_tool(
+        self,
+        name: str,
+        description: str,
+        input_schema: dict[str, Any],
+        handler: Callable[[dict[str, Any]], Any],
+        **options: Any,
+    ) -> Callable[[], None]:
+        """Register an Octopus tool whose exact definition is removed on unload."""
+
+        if self.tool_registry is None:
+            raise RuntimeError("Octopus tool registry is unavailable")
+        disposer = self.tool_registry.register_tool(
+            name,
+            description,
+            input_schema,
+            handler,
+            **options,
+        )
+        return self.register_cleanup(
+            disposer,
+            capability_type="tool",
+            name=name,
+            description=description,
+        )
+
+    def register_tool_pipeline_handler(
+        self,
+        stage: str,
+        handler: Callable[..., Any],
+    ) -> Callable[[], None]:
+        """Contribute one disposable handler to the Octopus tool pipeline."""
+
+        if self.tool_registry is None:
+            raise RuntimeError("Octopus tool registry is unavailable")
+        methods = {
+            "will_call": self.tool_registry.on_will_call_tool,
+            "did_call": self.tool_registry.on_did_call_tool,
+            "pre_execute": self.tool_registry.on_pre_execute,
+            "execute": self.tool_registry.on_execute,
+            "post_execute": self.tool_registry.on_post_execute,
+            "result": self.tool_registry.on_result,
+        }
+        register = methods.get(stage)
+        if register is None:
+            raise ValueError(f"unknown Octopus tool pipeline stage: {stage}")
+        disposer = register(handler)
+        return self.register_cleanup(
+            disposer,
+            capability_type="tool_pipeline",
+            name=f"{self.plugin_name}.{stage}",
+        )
+
+    def register_prompt_section(self, name: str, **options: Any) -> Callable[[], None]:
+        if self.prompt_registry is None:
+            raise RuntimeError("Octopus prompt registry is unavailable")
+        disposer = self.prompt_registry.register_section(name, **options)
+        return self.register_cleanup(
+            disposer,
+            capability_type="prompt_section",
+            name=name,
+        )
+
+    def register_prompt_context(self, name: str, **options: Any) -> Callable[[], None]:
+        if self.prompt_registry is None:
+            raise RuntimeError("Octopus prompt registry is unavailable")
+        disposer = self.prompt_registry.register_context(name, **options)
+        return self.register_cleanup(
+            disposer,
+            capability_type="prompt_context",
+            name=name,
+        )
+
+    def register_prompt_variable(
+        self,
+        name: str,
+        provider: Callable[[str | None], str | None],
+        **options: Any,
+    ) -> Callable[[], None]:
+        if self.prompt_registry is None:
+            raise RuntimeError("Octopus prompt registry is unavailable")
+        disposer = self.prompt_registry.register_variable(name, provider, **options)
+        return self.register_cleanup(
+            disposer,
+            capability_type="prompt_variable",
+            name=name,
+        )
+
+    def register_hook(
+        self,
+        event_type: type,
+        handler: Callable[..., Any],
+    ) -> Callable[[], None]:
+        """Register one runtime hook and bind its lifetime to this plugin."""
+
+        if self.hook_registry is None:
+            raise RuntimeError("Octopus hook registry is unavailable")
+        disposer = self.hook_registry.register(event_type, handler)
+        return self.register_cleanup(
+            disposer,
+            capability_type="hook",
+            name=f"{self.plugin_name}.{event_type.__name__}",
+        )
+
+    def start_job(self, spec: Any) -> str:
+        """Start a background job that is drained when this plugin unloads."""
+
+        if self.jobs_registry is None:
+            raise RuntimeError("Octopus jobs registry is unavailable")
+        if not self._jobs_lifecycle_registered:
+            detach = self.jobs_registry.attach_controller(self.job_owner)
+            self.register_cleanup(detach)
+            self.register_cleanup(
+                lambda: self.jobs_registry.dispose_owned(self.job_owner),
+                capability_type="jobs",
+                name=self.job_owner,
+            )
+            self._jobs_lifecycle_registered = True
+        return self.jobs_registry.start(replace(spec, owner=self.job_owner))
+
+    def register_contribution(
+        self,
+        kind: str,
+        name: str,
+        value: Any,
+        *,
+        description: str = "",
+        metadata: dict[str, Any] | None = None,
+    ) -> Callable[[], None]:
+        """Register a descriptor-oriented Octopus contribution.
+
+        Use this for agents, workflows, model providers, UI surfaces,
+        renderers, commands, and settings schemas. Executable tools, prompts,
+        hooks, and jobs use their specialised methods above.
+        """
+
+        if self.contribution_registry is None:
+            raise RuntimeError("Octopus contribution registry is unavailable")
+        disposer = self.contribution_registry.register(
+            kind=kind,
+            name=name,
+            owner=self.plugin_name,
+            value=value,
+            description=description,
+            metadata=metadata,
+        )
+        return self.register_cleanup(
+            disposer,
+            capability_type=kind,
+            name=name,
+            description=description,
+        )
+
+    def register_agent(
+        self,
+        name: str,
+        descriptor: Any,
+        **options: Any,
+    ) -> Callable[[], None]:
+        return self.register_contribution("agent", name, descriptor, **options)
+
+    def register_workflow(
+        self,
+        name: str,
+        descriptor: Any,
+        **options: Any,
+    ) -> Callable[[], None]:
+        return self.register_contribution("workflow", name, descriptor, **options)
+
+    def register_model_provider(
+        self,
+        name: str,
+        provider: Any,
+        **options: Any,
+    ) -> Callable[[], None]:
+        return self.register_contribution("model_provider", name, provider, **options)
+
+    def register_ui_surface(
+        self,
+        name: str,
+        descriptor: Any,
+        **options: Any,
+    ) -> Callable[[], None]:
+        return self.register_contribution("ui_surface", name, descriptor, **options)
+
     def cleanup_registrations(self) -> None:
-        """Unregister all skills and channels registered via this context."""
+        """Unregister every contribution owned by this plugin.
+
+        Dynamic Octopus contributions are disposed first in reverse order, then
+        legacy skill/channel registrations are removed.  Awaitable cleanup
+        (notably job draining) is completed synchronously when the lifecycle is
+        invoked from a worker thread; when already inside an event loop it is
+        scheduled on that loop and any failure is contained and logged.
+        """
+
+        for disposer in reversed(self._registration_disposers):
+            with contextlib.suppress(Exception):
+                result = disposer()
+                if inspect.isawaitable(result):
+                    self._finish_awaitable_cleanup(result)
+        self._registration_disposers.clear()
+        self._provided_capabilities.clear()
+        self._jobs_lifecycle_registered = False
+
         if self.skill_registry is not None:
             for skill_name in self._registered_skill_names:
                 with contextlib.suppress(
@@ -102,6 +382,36 @@ class ModuleContext:
                 with contextlib.suppress(Exception):  # best-effort channel removal during teardown
                     self.channel_manager._channels.pop(ch_id, None)
             self._registered_channel_ids.clear()
+
+    def _finish_awaitable_cleanup(self, awaitable: Any) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(awaitable)
+            return
+
+        task = loop.create_task(awaitable)
+        self._pending_cleanup_tasks.add(task)
+
+        def report_failure(done: asyncio.Task[Any]) -> None:
+            self._pending_cleanup_tasks.discard(done)
+            with contextlib.suppress(asyncio.CancelledError):
+                error = done.exception()
+                if error is not None:
+                    self.logger.warning(
+                        "plugin %s async cleanup failed: %s",
+                        self.plugin_name,
+                        error,
+                    )
+
+        task.add_done_callback(report_failure)
+
+    async def wait_for_cleanup(self) -> None:
+        """Wait for asynchronous teardown scheduled on the current loop."""
+
+        pending = list(self._pending_cleanup_tasks)
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
 
 
 # ── Plugin base class ──────────────────────────────────────────
@@ -146,6 +456,7 @@ class ModulePlugin(ABC):  # noqa: B024
         self.register_skills()
         self.register_channels()
         self.register_routes()
+        self.register_octopus()
 
     def on_start(self, ctx: ModuleContext) -> None:  # noqa: B027
         """Called when the plugin is started (after all loading).
@@ -186,6 +497,25 @@ class ModulePlugin(ABC):  # noqa: B024
 
         Access the FastAPI app via ``self.ctx.fastapi_app``.
         Routes should be mounted under ``/api/plugins/<plugin_name>/...``.
+        """
+
+    def register_octopus(self) -> None:  # noqa: B027
+        """Register Octopus tools, prompts, hooks, jobs, agents, or workflows.
+
+        Contributions should use the methods on ``self.ctx`` so PluginHub can
+        roll them back after a failed load and dispose them atomically during
+        disable or uninstall.
+
+        The default delegates to the legacy ``register_dsh`` hook so plugins
+        written before the engine-identity migration continue to load.
+        """
+        self.register_dsh()
+
+    def register_dsh(self) -> None:  # noqa: B027
+        """Legacy contribution hook retained for existing third-party plugins.
+
+        New plugins must override :meth:`register_octopus`. DSH is an
+        implementation-lineage reference, not an Octopus runtime identity.
         """
 
     # ── Frontend configuration UI ───────────────────────────────
@@ -237,6 +567,19 @@ class ModulePlugin(ABC):  # noqa: B024
                     description="Custom configuration UI",
                 )
             )
+        if (
+            self.__class__.register_octopus is not ModulePlugin.register_octopus
+            or self.__class__.register_dsh is not ModulePlugin.register_dsh
+        ):
+            caps.append(
+                ProvidedCapability(
+                    type="octopus",
+                    name=f"{self.name}.octopus",
+                    description="Octopus Native runtime contributions",
+                )
+            )
+        if self.ctx is not None:
+            caps.extend(self.ctx.provided_capabilities)
         return caps
 
 

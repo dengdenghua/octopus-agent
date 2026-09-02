@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 
+from runtime.platform.process.thread_turn_claim import acquire_thread_turn_claim
 from runtime.protocol import Turn
 from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
 
@@ -103,8 +104,16 @@ async def test_turn_steer_is_persisted_and_queued_for_the_active_model(tmp_path:
         )
 
         assert result == {"turnId": turn.id, "itemId": "itm_client_1", "accepted": True}
-        assert runtime._drain_turn_steering(turn.id) == ["先别改文件，先确认根因"]
+        drained = runtime._drain_turn_steering(turn.id)
+        assert drained == ["先别改文件，先确认根因"]
         assert runtime._drain_turn_steering(turn.id) == []
+        runtime._turn_steering[turn.id].put(("itm_client_2", "随后到达的修正"))
+        runtime._restore_turn_steering(turn.id, drained)
+        assert runtime._drain_turn_steering(turn.id) == [
+            "先别改文件，先确认根因",
+            "随后到达的修正",
+        ]
+        assert len(turn.items) == 1
         assert turn.items[0].type == "steeringUserMessage"
         assert turn.items[0].status == "completed"
         assert (turn.items[0].timeline_sequence or 0) > 0
@@ -133,6 +142,8 @@ async def test_turn_steer_crosses_runtime_instances_and_reaches_the_active_clien
     remote_emitter = _Emitter()
     log = await active_runtime._ensure_thread("thread-shared", active_emitter)
     turn = Turn(thread_id="thread-shared")
+    claim = acquire_thread_turn_claim(logs_root, turn.thread_id)
+    assert claim.bind_turn(turn.id)
     log.turn_started(turn.thread_id, turn)
     active_runtime._active_turn_ids.add(turn.id)
     active_runtime._register_active_turn(turn, log)
@@ -192,6 +203,7 @@ async def test_turn_steer_crosses_runtime_instances_and_reaches_the_active_clien
     finally:
         active_runtime._active_turn_ids.discard(turn.id)
         active_runtime._unregister_active_turn(turn.id)
+        claim.release()
 
 
 @pytest.mark.asyncio

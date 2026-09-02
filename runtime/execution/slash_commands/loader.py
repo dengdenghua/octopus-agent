@@ -107,6 +107,18 @@ def _project_commands_dir(project_dir: Path | str | None) -> Path | None:
     return Path(project_dir) / ".octopus" / "commands"
 
 
+def _bundled_commands_dir() -> Path | None:
+    """Bundled commands shipped with the app (<pkg>/slash_commands/bundled/).
+
+    Lowest-precedence tier: users can shadow a bundled command by dropping a
+    same-named file in their global or project commands dir. Returns None if
+    the directory is absent (e.g. source-tree layouts without the bundled
+    folder) so a missing bundle never crashes loading.
+    """
+    bundle = Path(__file__).resolve().parent / "bundled"
+    return bundle if bundle.is_dir() else None
+
+
 # ═══════════════════════════════════════════════════════════
 # Public API
 # ═══════════════════════════════════════════════════════════
@@ -115,11 +127,13 @@ def _project_commands_dir(project_dir: Path | str | None) -> Path | None:
 def load_slash_commands(
     project_dir: Path | str | None = None,
 ) -> list[SlashCommand]:
-    """Load + merge commands from global + project directories.
+    """Load + merge commands from bundled → global → project directories.
 
     Project-level commands override global commands with the same
-    name · this mirrors how project-level directories shadow
-    user-level ones in standard slash-command layouts.
+    name · global overrides bundled · this mirrors how project-level
+    directories shadow user-level ones in standard slash-command layouts.
+    The bundled tier ships app-built-in commands (e.g. the Project OS
+    control surface) so the composer typeahead works out of the box.
 
     Missing directories are fine (returns empty list from that tier).
     Malformed files are skipped silently · one bad file shouldn't
@@ -129,6 +143,7 @@ def load_slash_commands(
     by_name: dict[str, SlashCommand] = {}
 
     for source, dirpath in (
+        ("bundled", _bundled_commands_dir()),
         ("global", _global_commands_dir()),
         ("project", _project_commands_dir(project_dir)),
     ):

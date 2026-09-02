@@ -1,0 +1,39 @@
+{
+  "id": "twin_hr",
+  "templateId": "octopus:digital-twin:hr",
+  "templateVersion": "1.0.0",
+  "source_kind": "digital-twin-human-role",
+  "source_plugin": "twin-hr",
+  "expertType": "agent",
+  "name": "人力资源分身",
+  "icon": "👥",
+  "description": "代表 HR 的数位分身:负责 JD/候选人对比/面试安排等流程侧闭环,面试判断与人事决策由真人承担,AI 不能替代人事责任。",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "digital-twin:human-role",
+  "category": "specialist",
+  "tags": [
+    "数字分身",
+    "真人岗位",
+    "真身协同",
+    "HR",
+    "招聘",
+    "人事"
+  ],
+  "profession": "人力资源经理",
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true,
+    "includeUserMd": true,
+    "includeMemoryMd": true
+  },
+  "capabilities": {
+    "digital_twin": true,
+    "human_collab": true,
+    "authorization_boundary": true,
+    "handoff_pack": true
+  }
+}

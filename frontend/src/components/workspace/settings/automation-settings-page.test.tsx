@@ -131,11 +131,11 @@ describe("AutomationSettingsPage", () => {
     const tool = await screen.findByLabelText("工具名（支持通配符）");
     await screen.findByText("尚未配置审批规则，可直接使用下方表单添加第一条。");
     await waitFor(() => expect(tool).toBeEnabled());
-    expect(screen.getByLabelText("效果")).toBeVisible();
+    expect(screen.getByLabelText("调用处理方式")).toBeVisible();
     expect(screen.getByLabelText("参数包含（可选）")).toBeVisible();
     expect(screen.getByLabelText("理由（可选）")).toBeVisible();
     await user.type(tool, "read_*");
-    await user.click(screen.getByRole("button", { name: "添加规则" }));
+    await user.click(screen.getByRole("button", { name: "保存审批规则" }));
 
     await waitFor(() =>
       expect(api.addPermissionRule).toHaveBeenCalledWith({
@@ -181,7 +181,9 @@ describe("AutomationSettingsPage", () => {
     const failure = await screen.findByText("加载规则失败");
     expect(failure).toBeInTheDocument();
     expect(screen.getByLabelText("工具名（支持通配符）")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "添加规则" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "保存审批规则" }),
+    ).toBeDisabled();
     expect(screen.queryByText("raw policy path")).not.toBeInTheDocument();
   });
 });

@@ -203,17 +203,19 @@ _FRONTMATTER_PATTERN = re.compile(
 
 
 def _default_skill_library_dir() -> Path:
-    """Preferred skill library directory (``skills/public/``).
+    """Return the built-in, file-backed skill library.
 
-    Falls back to the legacy in-package ``all_skills/`` directory when the
-    external resources root is unavailable.
+    Public resource directories are supplied separately by the application.
+    Prefer the packaged library here so an existing but intentionally sparse
+    ``skills/public`` cache cannot hide built-in skills from the catalog.
     """
+    packaged = Path(__file__).resolve().parents[2] / "execution" / "all_skills"
+    if packaged.is_dir():
+        return packaged
+
     from runtime.platform.process.paths import resources_root
 
-    external = resources_root() / "skills" / "public"
-    if external.is_dir():
-        return external
-    return Path(__file__).resolve().parents[2] / "execution" / "all_skills"
+    return resources_root() / "skills" / "public"
 
 
 def _permission_group_for_skill(skill_id: str) -> str | None:
@@ -268,12 +270,19 @@ def _dynamic_plugin_skill_names() -> set[str]:
         project = _default_skill_library_dir().parents[2]
     except Exception:
         project = Path.cwd()
+    # 统一读 octopus 名下插件(~/.octopus/plugins/codex);旧 ~/.codex 缓存先同步一次
+    try:
+        from runtime.platform.plugins.codex_discovery import (
+            sync_codex_cache_to_octopus,
+        )
+
+        sync_codex_cache_to_octopus()
+    except Exception:  # noqa: BLE001
+        pass
     roots.extend(
         [
             project / ".octopus" / "plugins" / "codex",
             Path.home() / ".octopus" / "plugins" / "codex",
-            project / ".codex" / "plugins" / "cache",
-            Path.home() / ".codex" / "plugins" / "cache",
         ]
     )
     names: set[str] = set()

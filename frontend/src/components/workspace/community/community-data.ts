@@ -16,6 +16,8 @@
  *   3. 内置种子（永远有内容、不空屏）
  */
 
+import { communityAssetURL } from "./community-assets";
+
 export type CommunityPostKind = "post" | "mini-app" | "";
 
 /** 单条评论。 */
@@ -456,30 +458,30 @@ export const COMMUNITY_TABS: Array<{ key: string; label: string }> =
 
 /** 帖子 id → 专属封面图（单图，详情页轮播即该图）。 */
 const PER_POST_IMG: Record<string, string> = {
-  "seed.1": "/community/memory-video(1).jpg",
-  "seed.2": "/community/food-delivery(1).jpg",
-  "seed.3": "/community/weekly-report(1).jpg",
-  "seed.4": "/community/voice-reply.jpg",
-  "seed.5": "/community/price-watch(1).jpg",
-  "seed.6": "/community/smart-home.jpg",
-  "seed.7": "/community/travel-plan(1).jpg",
-  "seed.8": "/community/study-paper(1).jpg",
-  "seed.9": "/community/resume(1).jpg",
-  "seed.10": "/community/email-draft.jpg",
-  "seed.11": "/community/plan-tomorrow.jpg",
-  "seed.12": "/community/language-coach.jpg",
-  "seed.13": "/community/game-auto-daily.jpg",
-  "seed.14": "/community/game-guide(1).jpg",
-  "seed.15": "/community/meeting-notes.jpg",
-  "seed.16": "/community/coupon.jpg",
-  "seed.17": "/community/weekend.jpg",
-  "seed.18": "/community/wrong-questions.jpg",
-  "seed.19": "/community/mock-interview.jpg",
-  "seed.20": "/community/gacha.jpg",
-  "seed.21": "/community/todo.jpg",
-  "seed.22": "/community/daily-album.jpg",
-  "seed.23": "/community/web-summary.jpg",
-  "seed.24": "/community/weekly-highlights.jpg",
+  "seed.1": communityAssetURL("memory-video(1).jpg"),
+  "seed.2": communityAssetURL("food-delivery(1).jpg"),
+  "seed.3": communityAssetURL("weekly-report(1).jpg"),
+  "seed.4": communityAssetURL("voice-reply.jpg"),
+  "seed.5": communityAssetURL("price-watch(1).jpg"),
+  "seed.6": communityAssetURL("smart-home.jpg"),
+  "seed.7": communityAssetURL("travel-plan(1).jpg"),
+  "seed.8": communityAssetURL("study-paper(1).jpg"),
+  "seed.9": communityAssetURL("resume(1).jpg"),
+  "seed.10": communityAssetURL("email-draft.jpg"),
+  "seed.11": communityAssetURL("plan-tomorrow.jpg"),
+  "seed.12": communityAssetURL("language-coach.jpg"),
+  "seed.13": communityAssetURL("game-auto-daily.jpg"),
+  "seed.14": communityAssetURL("game-guide(1).jpg"),
+  "seed.15": communityAssetURL("meeting-notes.jpg"),
+  "seed.16": communityAssetURL("coupon.jpg"),
+  "seed.17": communityAssetURL("weekend.jpg"),
+  "seed.18": communityAssetURL("wrong-questions.jpg"),
+  "seed.19": communityAssetURL("mock-interview.jpg"),
+  "seed.20": communityAssetURL("gacha.jpg"),
+  "seed.21": communityAssetURL("todo.jpg"),
+  "seed.22": communityAssetURL("daily-album.jpg"),
+  "seed.23": communityAssetURL("web-summary.jpg"),
+  "seed.24": communityAssetURL("weekly-highlights.jpg"),
 };
 
 /** 为帖子补全专属封面（未配置图片的帖子保持原渐变）。 */

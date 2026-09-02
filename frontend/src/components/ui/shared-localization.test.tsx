@@ -15,7 +15,7 @@ it("localizes the shared dismiss control", () => {
 });
 
 it("localizes the composer send button", () => {
-  renderWithProviders(<ChatInputBox onSubmit={vi.fn()} showPet={false} />, {
+  renderWithProviders(<ChatInputBox onSubmit={vi.fn()} />, {
     locale: "zh-CN",
   });
 
@@ -26,18 +26,13 @@ it.each([
   ["ja-JP" as const, "送信", "停止"],
   ["ko-KR" as const, "보내기", "중지"],
 ])("localizes composer send and stop in %s", (locale, send, stop) => {
-  renderWithProviders(<ChatInputBox onSubmit={vi.fn()} showPet={false} />, {
+  renderWithProviders(<ChatInputBox onSubmit={vi.fn()} />, {
     locale,
   });
   expect(screen.getByRole("button", { name: send })).toBeInTheDocument();
 
   renderWithProviders(
-    <ChatInputBox
-      onSubmit={vi.fn()}
-      status="streaming"
-      defaultValue="hello"
-      showPet={false}
-    />,
+    <ChatInputBox onSubmit={vi.fn()} status="streaming" defaultValue="hello" />,
     { locale },
   );
   expect(screen.getByRole("button", { name: stop })).toBeInTheDocument();

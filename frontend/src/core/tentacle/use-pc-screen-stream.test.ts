@@ -10,6 +10,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/core/auth/api", () => ({
+  authHeaders: () => ({}),
+  getToken: () => "令牌 with spaces/(test)",
+}));
+
 import { usePcScreenStream } from "./use-pc-screen-stream";
 
 const FRAME_TYPE_KEEPALIVE = 0x01;
@@ -21,6 +26,7 @@ class FakeWebSocket {
   static lastInstance: FakeWebSocket | null = null;
 
   url: string;
+  protocols?: string | string[];
   binaryType = "";
   readyState: number = FakeWebSocket.CONNECTING;
 
@@ -29,8 +35,9 @@ class FakeWebSocket {
   onclose: ((ev: CloseEvent) => void) | null = null;
   onerror: ((ev: Event) => void) | null = null;
 
-  constructor(url: string) {
+  constructor(url: string, protocols?: string | string[]) {
     this.url = url;
+    this.protocols = protocols;
     FakeWebSocket.lastInstance = this;
   }
 
@@ -81,6 +88,18 @@ function connectAndOpen() {
 }
 
 describe("usePcScreenStream frame-count/fps throttling", () => {
+  it("keeps the bearer token out of the screen-stream URL", () => {
+    const { view, ws } = connectAndOpen();
+
+    expect(ws.url).toContain("/api/tentacle/pc-screen/stream");
+    expect(ws.url).not.toContain("token=");
+    expect(ws.protocols).toEqual([
+      "bearer.b64",
+      "5Luk54mMIHdpdGggc3BhY2VzLyh0ZXN0KQ",
+    ]);
+    view.unmount();
+  });
+
   it("flushes frameCount/fps immediately on the first frame", () => {
     const { view, ws } = connectAndOpen();
     vi.mocked(performance.now).mockReturnValue(1000);

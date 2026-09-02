@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { swallow } from "@/core/utils/log";
 import { copyTextToClipboard } from "@/core/clipboard";
+import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 
 import {
@@ -62,7 +63,7 @@ export function ChannelPairingsSheet({
       setError(null);
       try {
         const r = await fetch(
-          `/api/channels/${encodeURIComponent(channelId)}/pairings`,
+          `${getBackendBaseURL()}/api/channels/${encodeURIComponent(channelId)}/pairings`,
         );
         if (!r.ok) throw new Error(r.statusText);
         const body = (await r.json()) as PairingsPayload;

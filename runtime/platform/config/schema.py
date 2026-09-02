@@ -38,10 +38,15 @@ class BudgetConfig(BaseModel):
     # Forced-convergence max_tokens cap for normal (non research/swarm) mode.
     # Default 2000; research/swarm convergence stays fixed at 5000.
     convergence_max_tokens: int = Field(default=2000, gt=0)
-    # Elastic budget: when a task passes the token/usd threshold, auto-pause
-    # and ask the user instead of only logging a warning. Pause is non-lossy
-    # (user can add budget and continue), so long tasks are not blocked.
+    # Elastic budget: pause on the hard USD spend ceiling when the threshold is
+    # reached. Cumulative tokens are accounting telemetry by default because a
+    # multi-step task resends prompt tokens on every model call; treating that
+    # cumulative counter as context pressure prematurely interrupts long jobs.
     budget_auto_pause: bool = False
+    # Legacy/strict accounting mode. Only when BOTH flags are true may the
+    # cumulative token counter auto-pause a task. Current context pressure is
+    # tracked separately and handled by compaction.
+    cumulative_token_auto_pause: bool = False
 
 
 class ImmunityConfig(BaseModel):
@@ -322,7 +327,7 @@ class OctConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     enabled: bool = False
-    base_url: str = "https://api.octoapk.com"
+    base_url: str = "https://api.echo-age.com"
     default_model: str = "qwen3.5-flash"
     request_timeout_seconds: float = Field(default=15.0, ge=1.0, le=600.0)
     llm_timeout_seconds: float = Field(default=120.0, ge=1.0, le=600.0)
@@ -348,6 +353,11 @@ class LocalAuthConfig(BaseModel):
     allow_any_username: bool = False
     allowed_usernames: list[str] = Field(default_factory=list)
     users: dict[str, str] = Field(default_factory=dict)
+    login_max_failures: int = Field(default=5, ge=1, le=100)
+    login_ip_max_failures: int = Field(default=20, ge=1, le=1_000)
+    login_failure_window_seconds: float = Field(default=300.0, gt=0, le=86_400)
+    login_lockout_seconds: float = Field(default=60.0, gt=0, le=86_400)
+    login_rate_limit_max_entries: int = Field(default=10_000, ge=1, le=1_000_000)
     jwt_secret: str | None = Field(default=None, min_length=32)
     jwt_expire_seconds: int = Field(default=604_800, gt=0)
     jwt_issuer: str = "octopus-agent"

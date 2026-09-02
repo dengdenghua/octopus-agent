@@ -8,7 +8,15 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 repo_root = Path(SPECPATH).parents[1]
 entry = repo_root / "packaging" / "windows" / "octopus_backend_entry.py"
 
-hiddenimports = collect_submodules("runtime") + [
+remote_plugin_prefixes = (
+    "runtime.platform.plugins.bundled.narrative_studio",
+    "runtime.platform.plugins.bundled.paper_trading",
+)
+hiddenimports = [
+    module
+    for module in collect_submodules("runtime")
+    if not module.startswith(remote_plugin_prefixes)
+] + [
     "uvicorn.logging",
     "uvicorn.loops",
     "uvicorn.loops.auto",
@@ -23,7 +31,17 @@ hiddenimports = collect_submodules("runtime") + [
     "python_multipart",
 ]
 
-datas = collect_data_files("runtime", include_py_files=False)
+datas = [
+    item
+    for item in collect_data_files("runtime", include_py_files=False)
+    if not any(
+        prefix in item[0].replace("\\", "/")
+        for prefix in (
+            "runtime/platform/plugins/bundled/narrative_studio",
+            "runtime/platform/plugins/bundled/paper_trading",
+        )
+    )
+]
 reflex_rules = repo_root / "data" / "reflex_rules.yaml"
 if reflex_rules.exists():
     datas.append((str(reflex_rules), "data"))

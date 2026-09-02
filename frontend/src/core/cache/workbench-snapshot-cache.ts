@@ -53,7 +53,11 @@ interface WorkbenchCacheDB extends DBSchema {
 const DB_NAME = "octopus-workbench-cache";
 const DB_VERSION = 1;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 分钟
-const CACHE_VERSION = 1; // 快照格式版本
+// This version covers both the serialized shape and the semantics used to
+// derive it. Bump whenever phase/agent normalization changes; an event-only
+// fingerprint cannot tell that an older client interpreted the same events
+// differently.
+const CACHE_VERSION = 2;
 
 // ============================================================================
 // 工作台快照缓存
@@ -64,7 +68,8 @@ export class WorkbenchSnapshotCache {
   private _enabled: boolean;
 
   constructor(enabled = true) {
-    this._enabled = enabled && typeof window !== "undefined" && "indexedDB" in window;
+    this._enabled =
+      enabled && typeof window !== "undefined" && "indexedDB" in window;
   }
 
   /**
@@ -103,14 +108,18 @@ export class WorkbenchSnapshotCache {
       const db = await this._getDB();
       const key = this._makeKey(threadId, turnId);
 
-      await db.put("snapshots", {
-        threadId,
-        turnId,
-        snapshot,
-        events,
-        timestamp: Date.now(),
-        version: CACHE_VERSION,
-      }, key);
+      await db.put(
+        "snapshots",
+        {
+          threadId,
+          turnId,
+          snapshot,
+          events,
+          timestamp: Date.now(),
+          version: CACHE_VERSION,
+        },
+        key,
+      );
     } catch (error) {
       console.warn("[WorkbenchCache] Failed to save snapshot", error);
     }
@@ -166,13 +175,14 @@ export class WorkbenchSnapshotCache {
 
     try {
       const db = await this._getDB();
-      const keys = await db.getAllKeysFromIndex("snapshots", "by-thread", threadId);
+      const keys = await db.getAllKeysFromIndex(
+        "snapshots",
+        "by-thread",
+        threadId,
+      );
 
       const tx = db.transaction("snapshots", "readwrite");
-      await Promise.all([
-        ...keys.map((key) => tx.store.delete(key)),
-        tx.done,
-      ]);
+      await Promise.all([...keys.map((key) => tx.store.delete(key)), tx.done]);
     } catch (error) {
       console.warn("[WorkbenchCache] Failed to clear thread", error);
     }
@@ -232,7 +242,9 @@ export class WorkbenchSnapshotCache {
 
       const totalCount = all.length;
       const totalSizeBytes = JSON.stringify(all).length;
-      const timestamps = all.map((item) => item.timestamp).sort((a, b) => a - b);
+      const timestamps = all
+        .map((item) => item.timestamp)
+        .sort((a, b) => a - b);
 
       return {
         totalCount,
@@ -295,7 +307,8 @@ export function useCachedWorkbenchSnapshot(
   isLoadingFromCache: boolean;
 } {
   const cache = useRef(globalWorkbenchCache);
-  const [cachedSnapshot, setCachedSnapshot] = useState<AgentWorkbenchSnapshot | null>(null);
+  const [cachedSnapshot, setCachedSnapshot] =
+    useState<AgentWorkbenchSnapshot | null>(null);
   const [isLoadingFromCache, setIsLoadingFromCache] = useState(true);
 
   // 尝试从缓存加载

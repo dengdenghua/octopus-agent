@@ -80,6 +80,8 @@ export {
   DEFAULT_VITALS_THRESHOLDS,
   emptyVitals,
   emptyVitalsMarks,
+  FIRST_RESPONSE_DELAY_NOTICE_MS,
+  formatStreamElapsed,
   seedVitalsFromResumedTurn,
 } from "./stream-vitals";
 export { useStreamVitals } from "./use-stream-vitals";

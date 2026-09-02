@@ -3,11 +3,10 @@ import {
   ArrowRightIcon,
   CheckIcon,
   ChevronDownIcon,
-  ExternalLinkIcon,
-  FileTextIcon,
   GlobeIcon,
   ImageIcon,
   Loader2Icon,
+  Maximize2Icon,
   MoreHorizontalIcon,
   MousePointerClickIcon,
   MonitorIcon,
@@ -32,8 +31,18 @@ import {
   createOctopusBrowserSessionIdentity,
   type OctopusBrowserSessionIdentity,
 } from "@/core/browser/api";
+import {
+  detectLocalServices,
+  type DetectedLocalService,
+} from "@/core/browser/local-services";
 import { useI18n } from "@/core/i18n/hooks";
+import { BROWSER_WORKSPACE_ROUTE } from "@/core/workspace/sidebar-routing";
 import { cn } from "@/lib/utils";
+import {
+  AUTOMATION_CAPSULE_CONTROLS_CLASS_NAME,
+  AUTOMATION_CAPSULE_OVERLAY_CLASS_NAME,
+  AUTOMATION_CAPSULE_SURFACE_CLASS_NAME,
+} from "@/components/ui/automation-capsule";
 import {
   BROWSER_OPEN_URL_REQUEST_KEY,
   type BrowserOpenUrlRequest,
@@ -517,55 +526,6 @@ const browserApi = {
 // Local port detection
 // ---------------------------------------------------------------------------
 
-interface DetectedService {
-  port: number;
-  name: string;
-  type: "frontend" | "backend" | "other";
-  url: string;
-}
-
-const COMMON_DEV_PORTS = [
-  { port: 5173, name: "Vite", type: "frontend" as const },
-  { port: 5174, name: "Vite", type: "frontend" as const },
-  { port: 3000, name: "React/Next.js", type: "frontend" as const },
-  { port: 3001, name: "React", type: "frontend" as const },
-  { port: 4000, name: "Remix/Svelte", type: "frontend" as const },
-  { port: 4200, name: "Angular", type: "frontend" as const },
-  { port: 8080, name: "HTTP Server", type: "other" as const },
-  { port: 8000, name: "FastAPI/Django", type: "backend" as const },
-  { port: 8001, name: "FastAPI", type: "backend" as const },
-  { port: 8888, name: "Jupyter", type: "backend" as const },
-  { port: 5000, name: "Flask", type: "backend" as const },
-  { port: 4321, name: "Astro", type: "frontend" as const },
-];
-
-async function detectLocalServices(): Promise<DetectedService[]> {
-  const results: DetectedService[] = [];
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 3000);
-
-  await Promise.allSettled(
-    COMMON_DEV_PORTS.map(async ({ port, name, type }) => {
-      try {
-        const res = await fetch(`http://localhost:${port}/`, {
-          method: "HEAD",
-          signal: controller.signal,
-          mode: "no-cors",
-        });
-        // no-cors always returns opaque response, but if we get here the port is open
-        if (res.type === "opaque" || res.ok) {
-          results.push({ port, name, type, url: `http://localhost:${port}` });
-        }
-      } catch {
-        // Port not available
-      }
-    }),
-  );
-
-  clearTimeout(timeout);
-  return results.sort((a, b) => a.port - b.port);
-}
-
 // ---------------------------------------------------------------------------
 // Action icon helper
 // ---------------------------------------------------------------------------
@@ -640,6 +600,231 @@ function actionEntryKey(entry: ActionLogEntry, absoluteIndex: number): string {
   return `${entry.timestamp}-${entry.action}-${absoluteIndex}`;
 }
 
+interface BrowserPreviewToolbarProps {
+  urlInput: string;
+  onUrlInputChange: (value: string) => void;
+  onNavigate: () => void;
+  onBack: () => void;
+  onForward: () => void;
+  onReload: () => void;
+  onOpenFullBrowser: () => void;
+  onEndSession: () => void;
+  canLivePreview: boolean;
+  surfaceMode: PreviewSurfaceMode;
+  onSurfaceModeChange: (mode: PreviewSurfaceMode) => void;
+  devicePreview: DevicePreviewPreset;
+  viewportChanging: boolean;
+  onDevicePreviewChange: (preset: DevicePreviewPreset) => void;
+  onAttachScreenshot: () => void;
+  autoRefresh: boolean;
+  onAutoRefreshChange: (enabled: boolean) => void;
+  sessionHealthy: boolean;
+  runtimeLabel: string;
+}
+
+/**
+ * The preview's persistent navigation row. Contextual screenshot actions stay
+ * on the canvas so this toolbar keeps one stable browser-like hierarchy.
+ */
+export function BrowserPreviewToolbar({
+  urlInput,
+  onUrlInputChange,
+  onNavigate,
+  onBack,
+  onForward,
+  onReload,
+  onOpenFullBrowser,
+  onEndSession,
+  canLivePreview,
+  surfaceMode,
+  onSurfaceModeChange,
+  devicePreview,
+  viewportChanging,
+  onDevicePreviewChange,
+  onAttachScreenshot,
+  autoRefresh,
+  onAutoRefreshChange,
+  sessionHealthy,
+  runtimeLabel,
+}: BrowserPreviewToolbarProps) {
+  const { t } = useI18n();
+  const bp = t.browserPreviewPanel;
+  const switchToLive = surfaceMode !== "live";
+
+  return (
+    <div
+      role="toolbar"
+      aria-label={t.browser.browserAutomation}
+      className="@container/browser-preview-toolbar flex shrink-0 items-center gap-1.5 border-b border-border-default bg-background px-2 py-1.5"
+    >
+      <div className="flex shrink-0 items-center rounded-lg border border-border-subtle bg-muted/35 p-0.5">
+        <button
+          type="button"
+          onClick={onBack}
+          className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+          title={t.browser.back}
+          aria-label={t.browser.back}
+        >
+          <ArrowLeftIcon className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={onForward}
+          className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+          title={t.browser.forward}
+          aria-label={t.browser.forward}
+        >
+          <ArrowRightIcon className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={onReload}
+          className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+          title={t.browser.reload}
+          aria-label={t.browser.reload}
+        >
+          <RefreshCwIcon className="size-3.5" />
+        </button>
+      </div>
+
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onNavigate();
+        }}
+        className="flex min-w-0 flex-1 items-center"
+      >
+        <div className="relative flex h-8 min-w-0 flex-1 items-center rounded-lg border border-border-default bg-muted/35 transition-colors focus-within:border-ring focus-within:bg-background">
+          <GlobeIcon className="absolute left-2.5 size-3.5 text-muted-foreground" />
+          <input
+            type="text"
+            value={urlInput}
+            onChange={(event) => onUrlInputChange(event.target.value)}
+            placeholder={t.browser.urlPlaceholder}
+            aria-label={t.browser.urlPlaceholder}
+            className="h-full w-full bg-transparent pr-2 pl-8 text-xs outline-none"
+          />
+        </div>
+      </form>
+
+      <button
+        type="button"
+        onClick={onOpenFullBrowser}
+        className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border-default bg-background px-2 text-xs font-medium text-foreground transition-colors hover:bg-muted/55"
+        title={bp.continueInFullBrowser}
+        aria-label={bp.continueInFullBrowser}
+      >
+        <Maximize2Icon className="size-3.5" />
+        <span className="hidden @min-[520px]/browser-preview-toolbar:inline">
+          {bp.takeoverButton}
+        </span>
+      </button>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/55 hover:text-foreground"
+            title={t.common.more}
+            aria-label={t.common.more}
+          >
+            <MoreHorizontalIcon className="size-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-64">
+          <DropdownMenuItem
+            disabled={!canLivePreview}
+            onSelect={() =>
+              onSurfaceModeChange(switchToLive ? "live" : "screenshot")
+            }
+          >
+            {switchToLive ? (
+              <MonitorIcon className="size-3.5" />
+            ) : (
+              <ImageIcon className="size-3.5" />
+            )}
+            <span className="grid min-w-0 gap-0.5">
+              <span className="font-medium">
+                {switchToLive ? bp.switchToLivePreview : bp.switchToScreenshot}
+              </span>
+              <span className="whitespace-normal text-xs leading-snug text-muted-foreground">
+                {switchToLive
+                  ? bp.switchToLivePreviewDescription
+                  : bp.switchToScreenshotDescription}
+              </span>
+            </span>
+          </DropdownMenuItem>
+          <div className="px-2 py-1.5">
+            <label className="mb-1 block text-xs text-muted-foreground">
+              {bp.selectDevicePreset}
+            </label>
+            <select
+              value={devicePreview}
+              onChange={(event) =>
+                onDevicePreviewChange(event.target.value as DevicePreviewPreset)
+              }
+              disabled={viewportChanging}
+              className="h-8 w-full rounded-md border border-border-default bg-background px-2 text-xs font-medium text-foreground outline-none"
+              aria-label={bp.selectDevicePreset}
+            >
+              {(
+                Object.keys(DEVICE_PREVIEW_PRESETS) as DevicePreviewPreset[]
+              ).map((preset) => {
+                const device = DEVICE_PREVIEW_PRESETS[preset];
+                return (
+                  <option key={preset} value={preset}>
+                    {preset === "desktop" ? bp.desktopLabel : device.label}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+          <DropdownMenuItem onSelect={onAttachScreenshot}>
+            <ImageIcon className="size-3.5" />
+            {bp.attachScreenshotToComposer}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onAutoRefreshChange(!autoRefresh)}>
+            {autoRefresh ? (
+              <SquareIcon className="size-3.5" />
+            ) : (
+              <RefreshCwIcon className="size-3.5" />
+            )}
+            {autoRefresh
+              ? t.browser.stopAutoRefresh
+              : t.browser.startAutoRefresh}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <div
+            role="status"
+            aria-label={
+              sessionHealthy ? bp.sessionHealthyLabel : bp.sessionAttentionLabel
+            }
+            className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground"
+          >
+            <span
+              className={cn(
+                "size-1.5 shrink-0 rounded-full",
+                sessionHealthy ? "bg-success" : "bg-destructive",
+              )}
+            />
+            <span className="min-w-0 flex-1 truncate">
+              {sessionHealthy
+                ? bp.sessionHealthyLabel
+                : bp.sessionAttentionLabel}
+            </span>
+            <span className="shrink-0 font-mono text-xs">{runtimeLabel}</span>
+          </div>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" onSelect={onEndSession}>
+            <XIcon className="size-3.5" />
+            {bp.endSession}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // BrowserPreviewPanel
 // ---------------------------------------------------------------------------
@@ -679,14 +864,13 @@ export function BrowserPreviewPanel({
   const [viewportChanging, setViewportChanging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const [detectedServices, setDetectedServices] = useState<DetectedService[]>(
-    [],
-  );
+  const [detectedServices, setDetectedServices] = useState<
+    DetectedLocalService[]
+  >([]);
   const [localServicesExpanded, setLocalServicesExpanded] = useState(false);
   const [scanningPorts, setScanningPorts] = useState(false);
   const [semanticSnapshot, setSemanticSnapshot] =
     useState<BrowserSemanticSnapshot | null>(null);
-  const [semanticOpen, setSemanticOpen] = useState(false);
   const [annotationMode, setAnnotationMode] = useState(false);
   const [annotationText, setAnnotationText] = useState("");
   const [annotationPoints, setAnnotationPoints] = useState<
@@ -1351,7 +1535,7 @@ export function BrowserPreviewPanel({
         swallow(e);
       }
     }
-    window.location.hash = "/browser";
+    window.location.hash = BROWSER_WORKSPACE_ROUTE;
   }, [devicePreview, pageInfo.title, pageInfo.url, sessionId, urlInput]);
 
   const runtimeLabel = session?.runtime || session?.mode || "mock";
@@ -1483,187 +1667,29 @@ export function BrowserPreviewPanel({
         className,
       )}
     >
-      {/* URL Bar */}
-      <div className="flex shrink-0 items-center gap-1 border-b border-border-default bg-background/82 px-2 py-1.5 shadow-[inset_0_-1px_0_rgba(255,255,255,0.22)] backdrop-blur-xl">
-        <button
-          onClick={handleBack}
-          className="grid size-7 place-items-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border-default hover:bg-muted/65 hover:text-foreground"
-          title={t.browser.back}
-        >
-          <ArrowLeftIcon className="size-3.5" />
-        </button>
-        <button
-          onClick={handleForward}
-          className="grid size-7 place-items-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border-default hover:bg-muted/65 hover:text-foreground"
-          title={t.browser.forward}
-        >
-          <ArrowRightIcon className="size-3.5" />
-        </button>
-        <button
-          onClick={handleReload}
-          className="grid size-7 place-items-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border-default hover:bg-muted/65 hover:text-foreground"
-          title={t.browser.reload}
-        >
-          <RefreshCwIcon className="size-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => void handleAttachScreenshotToComposer()}
-          className="grid size-7 place-items-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border-default hover:bg-muted/65 hover:text-foreground"
-          title={bp.attachScreenshotToComposer}
-        >
-          <ImageIcon className="size-3.5" />
-        </button>
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleNavigate();
-          }}
-          className="flex min-w-0 flex-1 items-center"
-        >
-          <div className="relative flex h-7 min-w-0 flex-1 items-center rounded-md border border-border-default bg-muted/45 shadow-inner transition-colors focus-within:border-ring focus-within:bg-background/80">
-            <GlobeIcon className="absolute left-2 size-3 text-muted-foreground" />
-            <input
-              type="text"
-              value={urlInput}
-              onChange={(e) => setUrlInput(e.target.value)}
-              placeholder={t.browser.urlPlaceholder}
-              aria-label={t.browser.urlPlaceholder}
-              className="h-full w-full bg-transparent pl-7 pr-2 text-xs outline-none"
-            />
-          </div>
-        </form>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="grid size-7 shrink-0 place-items-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border-default hover:bg-muted/65 hover:text-foreground"
-              title={t.common.more}
-              aria-label={t.common.more}
-            >
-              <MoreHorizontalIcon className="size-3.5" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuItem
-              disabled={!canLivePreview}
-              onSelect={() =>
-                setSurfaceMode(
-                  effectiveSurfaceMode === "live" ? "screenshot" : "live",
-                )
-              }
-            >
-              {effectiveSurfaceMode === "live" ? (
-                <MonitorIcon className="size-3.5" />
-              ) : (
-                <ImageIcon className="size-3.5" />
-              )}
-              {effectiveSurfaceMode === "live"
-                ? bp.surfaceModeLive
-                : bp.surfaceModeScreenshot}
-            </DropdownMenuItem>
-            <div className="px-2 py-1.5">
-              <label className="mb-1 block text-xs text-muted-foreground">
-                {bp.selectDevicePreset}
-              </label>
-              <select
-                value={devicePreview}
-                onChange={(event) =>
-                  void handleDevicePreviewChange(
-                    event.target.value as DevicePreviewPreset,
-                  )
-                }
-                disabled={viewportChanging}
-                className="h-8 w-full rounded-md border border-border-default bg-background px-2 text-xs font-medium text-foreground outline-none"
-                aria-label={bp.selectDevicePreset}
-              >
-                {(
-                  Object.keys(DEVICE_PREVIEW_PRESETS) as DevicePreviewPreset[]
-                ).map((preset) => {
-                  const device = DEVICE_PREVIEW_PRESETS[preset];
-                  return (
-                    <option key={preset} value={preset}>
-                      {preset === "desktop" ? bp.desktopLabel : device.label}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-            <DropdownMenuItem
-              onSelect={() => void handleAttachScreenshotToComposer()}
-            >
-              <ImageIcon className="size-3.5" />
-              {bp.attachScreenshotToComposer}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => setAutoRefresh((value) => !value)}
-            >
-              {autoRefresh ? (
-                <SquareIcon className="size-3.5" />
-              ) : (
-                <RefreshCwIcon className="size-3.5" />
-              )}
-              {autoRefresh
-                ? t.browser.stopAutoRefresh
-                : t.browser.startAutoRefresh}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <span
-                className={cn(
-                  "size-1.5 rounded-full",
-                  sessionHealthy ? "bg-success" : "bg-destructive",
-                )}
-              />
-              {sessionHealthy ? "Session healthy" : "Session needs attention"}
-              <span className="ml-auto text-xs text-muted-foreground">
-                {runtimeLabel}
-              </span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <button
-          type="button"
-          disabled={!screenshot}
-          onClick={() => {
-            setAnnotationMode((value) => !value);
-            setAnnotationPoints([]);
-          }}
-          className={cn(
-            "flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-colors",
-            annotationMode
-              ? "border-primary/25 bg-primary/10 text-primary"
-              : "border-transparent text-muted-foreground hover:border-border-default hover:bg-muted/65 hover:text-foreground",
-            !screenshot && "pointer-events-none opacity-35",
-          )}
-          title="标注截图并发送到对话"
-          aria-label="标注截图并发送到对话"
-        >
-          <PencilIcon className="size-3.5" />
-          <span className="hidden sm:inline">标注</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={openInFullBrowser}
-          className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-primary/15 bg-primary/10 px-2 text-xs font-medium text-primary shadow-[var(--shadow-xs)] transition-colors hover:bg-primary/15"
-          title={bp.continueInFullBrowser}
-        >
-          <ExternalLinkIcon className="size-3" />
-          <span>{bp.takeoverButton}</span>
-        </button>
-
-        <button
-          onClick={handleClose}
-          className="grid size-7 place-items-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
-          title={t.browser.closeSession}
-        >
-          <XIcon className="size-3.5" />
-        </button>
-      </div>
+      <BrowserPreviewToolbar
+        urlInput={urlInput}
+        onUrlInputChange={setUrlInput}
+        onNavigate={() => void handleNavigate()}
+        onBack={() => void handleBack()}
+        onForward={() => void handleForward()}
+        onReload={() => void handleReload()}
+        onOpenFullBrowser={openInFullBrowser}
+        onEndSession={() => void handleClose()}
+        canLivePreview={canLivePreview}
+        surfaceMode={effectiveSurfaceMode}
+        onSurfaceModeChange={setSurfaceMode}
+        devicePreview={devicePreview}
+        viewportChanging={viewportChanging}
+        onDevicePreviewChange={(preset) =>
+          void handleDevicePreviewChange(preset)
+        }
+        onAttachScreenshot={() => void handleAttachScreenshotToComposer()}
+        autoRefresh={autoRefresh}
+        onAutoRefreshChange={setAutoRefresh}
+        sessionHealthy={sessionHealthy}
+        runtimeLabel={runtimeLabel}
+      />
 
       {!sessionHealthy && sessionIssues.length > 0 && (
         <div className="flex h-8 shrink-0 items-center gap-2 border-b border-destructive/20 bg-destructive/8 px-2 text-xs text-destructive">
@@ -1680,35 +1706,6 @@ export function BrowserPreviewPanel({
           >
             {bp.reconnectButton}
           </button>
-        </div>
-      )}
-
-      {semanticOpen && semanticSnapshot && (
-        <div className="shrink-0 border-b border-border-subtle bg-background/90 px-2 py-2">
-          <div className="mb-1 flex items-center gap-2">
-            <FileTextIcon className="size-3.5 text-primary" />
-            <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
-              {semanticSnapshot.name ||
-                semanticSnapshot.url ||
-                bp.semanticSnapshotFallback}
-            </span>
-            {semanticSnapshot.truncated && (
-              <span className="rounded-full bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-warning">
-                {bp.truncatedBadge}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => setSemanticOpen(false)}
-              className="flex size-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              title={bp.closeSemanticSnapshot}
-            >
-              <XIcon className="size-3" />
-            </button>
-          </div>
-          <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-md bg-muted/45 p-2 text-xs leading-relaxed text-muted-foreground">
-            {(semanticSnapshot.text || bp.noReadableText).slice(0, 3000)}
-          </pre>
         </div>
       )}
 
@@ -1729,37 +1726,80 @@ export function BrowserPreviewPanel({
 
       {/* Screenshot area */}
       <div className="relative flex-1 overflow-auto bg-[radial-gradient(circle_at_top,color-mix(in_oklch,var(--primary)_8%,transparent),transparent_34%),linear-gradient(180deg,color-mix(in_oklch,var(--muted)_34%,transparent),var(--background))] [&::-webkit-scrollbar]:size-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/80 [&::-webkit-scrollbar-track]:bg-transparent">
-        {annotationMode && (
-          <div className="absolute inset-x-3 top-3 z-40 flex items-center gap-2 rounded-lg border border-primary/20 bg-background/95 p-2 shadow-[var(--shadow-floating)] backdrop-blur">
-            <PencilIcon className="size-3.5 shrink-0 text-primary" />
-            <input
-              value={annotationText}
-              onChange={(event) => setAnnotationText(event.target.value)}
-              placeholder="写下要修改的地方，可点击截图标记位置"
-              aria-label="截图标注说明"
-              className="h-7 min-w-0 flex-1 bg-transparent text-xs outline-none"
-            />
+        {screenshot && effectiveSurfaceMode === "screenshot" && (
+          <div
+            className={cn(
+              AUTOMATION_CAPSULE_OVERLAY_CLASS_NAME,
+              "absolute top-3 right-3 z-40",
+            )}
+          >
             <button
               type="button"
-              onClick={() => void handleSendAnnotation()}
-              className="flex h-7 shrink-0 items-center gap-1 rounded-md bg-primary px-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              <CheckIcon className="size-3.5" />
-              发送
-            </button>
-            <button
-              type="button"
+              aria-pressed={annotationMode}
               onClick={() => {
-                setAnnotationMode(false);
+                setAnnotationMode((value) => !value);
                 setAnnotationPoints([]);
               }}
-              className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label="取消标注"
+              className={cn(
+                AUTOMATION_CAPSULE_CONTROLS_CLASS_NAME,
+                AUTOMATION_CAPSULE_SURFACE_CLASS_NAME,
+                "flex h-8 items-center gap-1.5 px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground",
+                annotationMode && "text-primary ring-primary/30",
+              )}
+              title={bp.annotateScreenshot}
+              aria-label={bp.annotateScreenshot}
             >
-              <XIcon className="size-3.5" />
+              <PencilIcon className="size-3.5" />
+              <span>{bp.annotationButton}</span>
             </button>
           </div>
         )}
+        {annotationMode &&
+          screenshot &&
+          effectiveSurfaceMode === "screenshot" && (
+            <div
+              className={cn(
+                AUTOMATION_CAPSULE_OVERLAY_CLASS_NAME,
+                "absolute inset-x-3 top-14 z-40 flex justify-center",
+              )}
+            >
+              <div
+                className={cn(
+                  AUTOMATION_CAPSULE_CONTROLS_CLASS_NAME,
+                  AUTOMATION_CAPSULE_SURFACE_CLASS_NAME,
+                  "flex w-full max-w-2xl items-center gap-2 p-2",
+                )}
+              >
+                <PencilIcon className="size-3.5 shrink-0 text-primary" />
+                <input
+                  value={annotationText}
+                  onChange={(event) => setAnnotationText(event.target.value)}
+                  placeholder={bp.annotationPlaceholder}
+                  aria-label={bp.annotationInputLabel}
+                  className="h-7 min-w-0 flex-1 bg-transparent text-xs outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleSendAnnotation()}
+                  className="flex h-7 shrink-0 items-center gap-1 rounded-md bg-primary px-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                >
+                  <CheckIcon className="size-3.5" />
+                  {bp.sendAnnotation}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAnnotationMode(false);
+                    setAnnotationPoints([]);
+                  }}
+                  className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label={bp.cancelAnnotation}
+                >
+                  <XIcon className="size-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         {effectiveSurfaceMode === "live" ? (
           <div className="flex min-h-full items-center justify-center p-3">
             <div
@@ -2091,6 +2131,7 @@ export function BrowserPreviewPanel({
                 onClick={() => setSelectedActionKey(null)}
                 className="ml-auto grid size-5 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 title={bp.deselectTitle}
+                aria-label={bp.deselectTitle}
               >
                 <XIcon className="size-3" />
               </button>

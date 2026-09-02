@@ -27,9 +27,17 @@ def install_local_plugin(
     publisher_trust_store_path: str | Path | None = None,
     confirm_install: bool = False,
     allow_downgrade: bool = False,
+    require_trusted_publisher: bool = False,
 ) -> dict[str, Any]:
     if not confirm_install:
         raise ValueError("confirm_install=true is required")
+    from runtime.safety.sandboxing.sandbox import commercial_execution_mode
+
+    # Shared/commercial processes never install executable plugin code without
+    # a publisher identity anchored in the configured trust store.  Keeping
+    # this at the lifecycle chokepoint covers local-path, registry, and future
+    # callers instead of relying on every HTTP adapter to remember the flag.
+    require_trusted_publisher = require_trusted_publisher or commercial_execution_mode()
     source = Path(source_path).expanduser().resolve(strict=True)
     root = Path(plugin_root).expanduser().resolve(strict=False)
     manifest = _manifest(source)
@@ -76,16 +84,21 @@ def install_local_plugin(
                 staging,
                 publisher_trust_store_path=publisher_trust_store_path,
             )
-            smoke = candidate.get("smoke") if isinstance(candidate.get("smoke"), dict) else {}
+            raw_smoke = candidate.get("smoke")
+            smoke: dict[str, Any] = raw_smoke if isinstance(raw_smoke, dict) else {}
+            raw_publisher = smoke.get("publisher_provenance")
+            publisher: dict[str, Any] = raw_publisher if isinstance(raw_publisher, dict) else {}
+            if require_trusted_publisher and not (
+                publisher.get("verified") is True and publisher.get("trusted") is True
+            ):
+                reason = str(publisher.get("reason") or "publisher provenance is unavailable")
+                raise ValueError("trusted publisher signature is required: " + reason)
             if smoke.get("ok") is not True:
                 raise ValueError(
                     "plugin smoke gate failed: " + "; ".join(smoke.get("issues") or [])
                 )
-            provenance = (
-                smoke.get("content_provenance")
-                if isinstance(smoke.get("content_provenance"), dict)
-                else {}
-            )
+            raw_provenance = smoke.get("content_provenance")
+            provenance: dict[str, Any] = raw_provenance if isinstance(raw_provenance, dict) else {}
             if provenance.get("complete") is not True:
                 raise ValueError("plugin content provenance is incomplete")
             migration = compute_plugin_migration_readiness(plugins=[candidate])
@@ -119,6 +132,7 @@ def install_local_plugin(
             "destination": str(destination),
             "backup": str(backup) if backup.exists() else "",
             "smoke_ok": True,
+            "publisher_verified": bool(publisher.get("verified")),
             "migration_ready": bool(migration.get("ready")),
             "rollback_available": operation == "install" or backup.exists(),
         }

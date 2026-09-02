@@ -1,0 +1,39 @@
+{
+  "id": "twin_finance",
+  "templateId": "octopus:digital-twin:finance",
+  "templateVersion": "1.0.0",
+  "source_kind": "digital-twin-human-role",
+  "source_plugin": "twin-finance",
+  "expertType": "agent",
+  "name": "财务分身",
+  "icon": "💹",
+  "description": "代表财务经理的数位分身:负责预算台账/付款节点/现金流预警等文档侧闭环,审批付款与对外承诺由真人承担,AI 不能替代财务责任。",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "digital-twin:human-role",
+  "category": "financial",
+  "tags": [
+    "数字分身",
+    "真人岗位",
+    "真身协同",
+    "财务",
+    "预算",
+    "现金流"
+  ],
+  "profession": "财务经理",
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true,
+    "includeUserMd": true,
+    "includeMemoryMd": true
+  },
+  "capabilities": {
+    "digital_twin": true,
+    "human_collab": true,
+    "authorization_boundary": true,
+    "handoff_pack": true
+  }
+}

@@ -28,7 +28,9 @@ def _reset():
 
 def test_scope_prefers_root_thread_id_from_metadata():
     with session_scope(
-        Session(actor="alice", thread_id="child", turn_id="turn-x", metadata={"root_thread_id": "ROOT"})
+        Session(
+            actor="alice", thread_id="child", turn_id="turn-x", metadata={"root_thread_id": "ROOT"}
+        )
     ):
         r = _bb_write("decision", "go")
         assert r["ok"] is True
@@ -99,7 +101,9 @@ def test_claim_then_write_ok_and_readable():
 
 
 def test_pin_seals_key():
-    with session_scope(Session(actor="alice", turn_id="turn-p", metadata={"root_thread_id": "ROOT"})):
+    with session_scope(
+        Session(actor="alice", turn_id="turn-p", metadata={"root_thread_id": "ROOT"})
+    ):
         _bb_write("decision", "v1")
         p = _bb_pin("decision")
         assert p["ok"] is True

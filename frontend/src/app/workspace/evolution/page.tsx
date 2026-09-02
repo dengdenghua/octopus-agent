@@ -1,106 +1,144 @@
-import { ActivityIcon, GaugeIcon, SparklesIcon } from "lucide-react";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import {
+  ActivityIcon,
+  DnaIcon,
+  GitBranchIcon,
+  RocketIcon,
+  ShieldCheckIcon,
+} from "lucide-react";
+import { lazy, Suspense } from "react";
+import { useSearchParams } from "react-router-dom";
 
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { EvolutionControlPanel } from "@/components/workspace/evolution-control-panel";
-import EvolutionDashboard from "@/components/workspace/evolution-dashboard";
-import EvolutionSettingsPage from "@/components/workspace/settings/evolution-settings-page";
+import { DualHelixEvolutionPanel } from "@/components/workspace/dual-helix-evolution-panel";
 import {
   WorkspaceBody,
   WorkspaceContainer,
 } from "@/components/workspace/workspace-container";
 import { useI18n } from "@/core/i18n/hooks";
 
+const EvolutionGovernancePanel = lazy(() =>
+  import("@/components/workspace/evolution-governance-panel").then(
+    (module) => ({
+      default: module.EvolutionGovernancePanel,
+    }),
+  ),
+);
+
+function SectionLoading() {
+  return (
+    <div className="space-y-3" role="status" aria-label="加载自进化模块">
+      <div className="h-24 animate-pulse border-y bg-muted/30" />
+      <div className="h-72 animate-pulse border-y bg-muted/20" />
+    </div>
+  );
+}
+
+type EvolutionSection =
+  | "overview"
+  | "experiments"
+  | "candidates"
+  | "deployments"
+  | "governance";
+
+function normalizeSection(value: string | null): EvolutionSection {
+  if (value === "evidence") return "experiments";
+  return value === "experiments" ||
+    value === "candidates" ||
+    value === "deployments" ||
+    value === "governance"
+    ? value
+    : "overview";
+}
+
 export default function EvolutionPage() {
   const { t } = useI18n();
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const section = normalizeSection(searchParams.get("section"));
+  const changeSection = (next: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === "overview") params.delete("section");
+    else params.set("section", next);
+    setSearchParams(params, { replace: true });
+  };
 
   return (
     <WorkspaceContainer>
       <WorkspaceBody className="pt-0">
         <div className="flex h-full min-h-0 w-full flex-col bg-card">
-          <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-muted px-3">
+          <header className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-3 py-2">
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold">
                 {t.evolutionDashboard.title}
               </div>
               <div className="truncate text-xs text-muted-foreground">
-                {t.evolutionDashboard.pageDescription}
+                从真实任务中学习，并在验证、安全和可回退的前提下应用改进。
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                className="h-7 whitespace-nowrap px-2.5 text-xs"
-              >
-                <Link to="/workspace/reflex">
-                  <ActivityIcon className="mr-1.5 size-3.5" />
-                  {t.evolutionDashboard.reflexRules}
-                </Link>
-              </Button>
-              <Button
-                type="button"
-                variant={showAdvanced ? "secondary" : "outline"}
-                size="sm"
-                className="h-7 whitespace-nowrap px-2.5 text-xs"
-                onClick={() => setShowAdvanced((value) => !value)}
-                aria-expanded={showAdvanced}
-                aria-controls="evolution-runtime-monitor"
-              >
-                <GaugeIcon className="mr-1.5 size-3.5" />
-                {showAdvanced
-                  ? t.evolutionDashboard.hideRuntimeMonitor
-                  : t.evolutionDashboard.showRuntimeMonitor}
-              </Button>
-            </div>
+            <Tabs
+              value={section}
+              onValueChange={changeSection}
+              className="max-w-full overflow-x-auto"
+            >
+              <TabsList className="h-9 min-w-max rounded-none bg-transparent p-0">
+                <TabsTrigger
+                  value="overview"
+                  className="h-9 shrink-0 gap-1 rounded-none border-b-2 border-transparent bg-transparent px-2 text-xs shadow-none sm:gap-1.5 sm:px-3 data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                >
+                  <DnaIcon className="hidden size-3.5 sm:block" />
+                  进化总览
+                </TabsTrigger>
+                <TabsTrigger
+                  value="experiments"
+                  className="h-9 shrink-0 gap-1 rounded-none border-b-2 border-transparent bg-transparent px-2 text-xs shadow-none sm:gap-1.5 sm:px-3 data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                >
+                  <ActivityIcon className="hidden size-3.5 sm:block" />
+                  实验
+                </TabsTrigger>
+                <TabsTrigger
+                  value="candidates"
+                  className="h-9 shrink-0 gap-1 rounded-none border-b-2 border-transparent bg-transparent px-2 text-xs shadow-none sm:gap-1.5 sm:px-3 data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                >
+                  <GitBranchIcon className="hidden size-3.5 sm:block" />
+                  候选
+                </TabsTrigger>
+                <TabsTrigger
+                  value="deployments"
+                  className="h-9 shrink-0 gap-1 rounded-none border-b-2 border-transparent bg-transparent px-2 text-xs shadow-none sm:gap-1.5 sm:px-3 data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                >
+                  <RocketIcon className="hidden size-3.5 sm:block" />
+                  部署
+                </TabsTrigger>
+                <TabsTrigger
+                  value="governance"
+                  className="h-9 shrink-0 gap-1 rounded-none border-b-2 border-transparent bg-transparent px-2 text-xs shadow-none sm:gap-1.5 sm:px-3 data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                >
+                  <ShieldCheckIcon className="hidden size-3.5 sm:block" />
+                  安全治理
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           </header>
 
           <div className="min-h-0 flex-1 overflow-auto bg-card p-3">
-            <EvolutionDashboard />
-
-            {showAdvanced && (
-              <section
-                id="evolution-runtime-monitor"
-                className="mt-3 scroll-mt-4 rounded-md border border-border bg-card p-3"
-              >
-                <div className="mb-3 flex flex-col gap-1">
-                  <h2 className="text-sm font-semibold">
-                    {t.evolutionDashboard.showRuntimeMonitor}
-                  </h2>
-                  <p className="text-xs text-muted-foreground">
-                    {t.evolutionDashboard.runtimeMonitorDescription}
-                  </p>
-                </div>
-                <Tabs defaultValue="control" className="flex flex-col gap-3">
-                  <TabsList className="h-8 w-fit rounded-md">
-                    <TabsTrigger
-                      value="control"
-                      className="h-7 gap-1.5 px-2.5 text-xs"
-                    >
-                      <GaugeIcon className="size-3.5" />
-                      {t.evolutionControl.panelTitle}
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="status"
-                      className="h-7 gap-1.5 px-2.5 text-xs"
-                    >
-                      <SparklesIcon className="size-3.5" />
-                      {t.settings.sections.evolution}
-                    </TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="control" className="mt-0">
-                    <EvolutionControlPanel />
-                  </TabsContent>
-                  <TabsContent value="status" className="mt-0">
-                    <EvolutionSettingsPage />
-                  </TabsContent>
-                </Tabs>
-              </section>
-            )}
+            <Tabs value={section} onValueChange={changeSection}>
+              <TabsContent value="overview" className="mt-0">
+                <DualHelixEvolutionPanel view="overview" />
+              </TabsContent>
+              <TabsContent value="experiments" className="mt-0">
+                <DualHelixEvolutionPanel view="experiments" />
+              </TabsContent>
+              <TabsContent value="candidates" className="mt-0">
+                <DualHelixEvolutionPanel view="candidates" />
+              </TabsContent>
+              <TabsContent value="deployments" className="mt-0">
+                <DualHelixEvolutionPanel view="deployments" />
+              </TabsContent>
+              <TabsContent value="governance" className="mt-0">
+                <Suspense fallback={<SectionLoading />}>
+                  <EvolutionGovernancePanel />
+                </Suspense>
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
       </WorkspaceBody>

@@ -1,5 +1,5 @@
 /**
- * DSH P2 React Hooks
+ * Octopus Native Session API v2 React hooks
  *
  * Custom hooks for Session-query, Feedback, and Export features.
  */
@@ -46,20 +46,17 @@ export interface UseThreadSearchResult {
  * Hook for full-text search of threads
  */
 export function useThreadSearch(
-  options: UseThreadSearchOptions = {}
+  options: UseThreadSearchOptions = {},
 ): UseThreadSearchResult {
-  const {
-    debounceMs = 300,
-    minQueryLength = 2,
-    agent_id,
-    team_id,
-  } = options;
+  const { debounceMs = 300, minQueryLength = 2, agent_id, team_id } = options;
 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
 
   const search = useCallback(
     async (q: string) => {
@@ -85,7 +82,7 @@ export function useThreadSearch(
         setLoading(false);
       }
     },
-    [minQueryLength, agent_id, team_id]
+    [minQueryLength, agent_id, team_id],
   );
 
   const handleSetQuery = useCallback(
@@ -100,7 +97,7 @@ export function useThreadSearch(
         search(newQuery);
       }, debounceMs);
     },
-    [search, debounceMs]
+    [search, debounceMs],
   );
 
   const clear = useCallback(() => {
@@ -144,7 +141,7 @@ export interface UseMessageFeedbackResult {
     messageIndex: number,
     feedbackType: FeedbackType,
     tags?: string[],
-    comment?: string
+    comment?: string,
   ) => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -153,7 +150,7 @@ export interface UseMessageFeedbackResult {
  * Hook for managing message feedback
  */
 export function useMessageFeedback(
-  thread_id: string | null
+  thread_id: string | null,
 ): UseMessageFeedbackResult {
   const [feedbacks, setFeedbacks] = useState<MessageFeedback[]>([]);
   const [stats, setStats] = useState<FeedbackStats | null>(null);
@@ -190,7 +187,7 @@ export function useMessageFeedback(
       messageIndex: number,
       feedbackType: FeedbackType,
       tags: string[] = [],
-      comment: string = ""
+      comment = "",
     ) => {
       if (!thread_id) return;
 
@@ -214,7 +211,7 @@ export function useMessageFeedback(
         setLoading(false);
       }
     },
-    [thread_id, refresh]
+    [thread_id, refresh],
   );
 
   useEffect(() => {
@@ -263,7 +260,7 @@ export function useThreadExport(): UseThreadExportResult {
         setExporting(false);
       }
     },
-    []
+    [],
   );
 
   return {

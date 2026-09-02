@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -47,12 +48,18 @@ class ResearchPrefetcher:
         self.max_fetches = max(0, max_fetches)
         self.max_results_per_query = max(1, max_results_per_query)
         self.timeout_ms = timeout_ms
+        # 并发搜索的最大 worker 数。web_search 是同步 httpx 调用(每 query
+        # 自建 client),线程安全;限制上限避免同时打爆搜索后端限流。
+        self.max_concurrent_searches = 4
 
     def prefetch(self, job: ResearchJob) -> PrefetchResult:
         evidence: list[ResearchEvidence] = []
         logs: list[ResearchPrefetchLog] = []
-        remaining_queries = self.max_queries
 
+        # 预取全部待搜索 query(受 max_queries 预算约束),再并发执行,
+        # 而不是逐个串行等待——对照 DeepSeek Harness RC.8 的 web_search 并发。
+        pending: list[tuple[ResearchSource, str]] = []
+        remaining_queries = self.max_queries
         for source in job.sources:
             if not source.enabled:
                 continue
@@ -61,9 +68,7 @@ class ResearchPrefetcher:
                     if remaining_queries <= 0:
                         break
                     remaining_queries -= 1
-                    result = self._search(source, job.topic, query)
-                    evidence.extend(result.evidence)
-                    logs.extend(result.logs)
+                    pending.append((source, query))
             elif source.provider == "fetch_url" and self.fetch_handler:
                 result = self._fetch_user_urls(source, job)
                 evidence.extend(result.evidence)
@@ -82,7 +87,57 @@ class ResearchPrefetcher:
                     )
                 )
 
+        if pending:
+            search_results = self._run_searches(pending, job.topic)
+            for result in search_results:
+                evidence.extend(result.evidence)
+                logs.extend(result.logs)
+
         return PrefetchResult(evidence=_dedupe_prefetch(evidence), logs=logs)
+
+    def _run_searches(
+        self,
+        pending: list[tuple[ResearchSource, str]],
+        topic: str,
+    ) -> list[PrefetchResult]:
+        """并发执行多个 web_search query,保持输入顺序返回结果。
+
+        用 ThreadPoolExecutor 并发;每个 query 独立失败互不影响(单个失败
+        只产出 error evidence,不拖垮整批)。线程数 = min(配置上限, query 数)。
+        """
+        workers = min(self.max_concurrent_searches, len(pending))
+        if workers <= 1:
+            return [self._search(source, topic, query) for source, query in pending]
+
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="prefetch-search") as pool:
+            futures = [pool.submit(self._search, source, topic, query) for source, query in pending]
+            results: list[PrefetchResult | None] = []
+            for idx, fut in enumerate(futures):
+                source, query = pending[idx]
+                try:
+                    results.append(fut.result())
+                except Exception as exc:  # noqa: BLE001 — 兜底:worker 崩溃不拖垮整批
+                    results.append(
+                        PrefetchResult(
+                            evidence=[
+                                _error_evidence(
+                                    source,
+                                    topic,
+                                    f"search_worker_error: {type(exc).__name__}: {exc}",
+                                )
+                            ],
+                            logs=[
+                                _log_for_source(
+                                    source,
+                                    action="search",
+                                    query=query,
+                                    status="failed",
+                                    error=f"search_worker_error: {type(exc).__name__}: {exc}",
+                                )
+                            ],
+                        )
+                    )
+        return [r for r in results if r is not None]
 
     def _search(
         self,

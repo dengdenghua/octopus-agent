@@ -76,11 +76,16 @@ class LoopRunStore:
         mode: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        include_unowned: bool = True,
     ) -> list[LoopRun]:
         with self._lock:
             runs = self._read_runs()
         if owner_id is not None:
-            runs = [run for run in runs if run.owner_id in (None, "", owner_id)]
+            runs = [
+                run
+                for run in runs
+                if run.owner_id == owner_id or (include_unowned and run.owner_id in (None, ""))
+            ]
         if status:
             runs = [run for run in runs if run.status.value == str(status).strip()]
         if mode:
@@ -94,8 +99,17 @@ class LoopRunStore:
         owner_id: str | None = None,
         status: str | None = None,
         mode: str | None = None,
+        include_unowned: bool = True,
     ) -> int:
-        return len(self.list(owner_id=owner_id, status=status, mode=mode, limit=1_000_000))
+        return len(
+            self.list(
+                owner_id=owner_id,
+                status=status,
+                mode=mode,
+                limit=1_000_000,
+                include_unowned=include_unowned,
+            )
+        )
 
     #: Run statuses that mean "in flight". After a restart nothing is
     #: driving them (no dispatcher future, no controller thread), so the
@@ -162,8 +176,8 @@ class LoopRunStore:
         """
         from datetime import UTC, datetime
 
-        cap = DEFAULT_MAX_RUNS if max_runs is None else max(0, int(max_runs))
-        ttl = DEFAULT_TTL_SECONDS if ttl_seconds is None else max(0, int(ttl_seconds))
+        cap = self.DEFAULT_MAX_RUNS if max_runs is None else max(0, int(max_runs))
+        ttl = self.DEFAULT_TTL_SECONDS if ttl_seconds is None else max(0, int(ttl_seconds))
         now = datetime.now(UTC)
         with self._write_lock():
             payload = self._read_payload()

@@ -66,9 +66,7 @@ export function PresenceDots({
           />
         ))}
         {extra > 0 && (
-          <span className="pl-1.5 text-xs text-muted-foreground">
-            +{extra}
-          </span>
+          <span className="pl-1.5 text-xs text-muted-foreground">+{extra}</span>
         )}
       </div>
       <span className="shrink-0 text-xs text-muted-foreground">
@@ -131,7 +129,7 @@ export function CoworkCollabBar({
 }) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
-  const session = useCollabSession(threadId);
+  const session = useCollabSession(threadId, { live: true });
   const search = useCoworkSearch(threadId, query);
 
   const seatNames: Record<string, string> = {};

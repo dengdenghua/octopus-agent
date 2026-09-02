@@ -124,6 +124,11 @@ def mount_agents(
             text=str(message.get("text") or ""),
             participant_id=str(message.get("participant_id") or ""),
             display_name=str(message.get("display_name") or ""),
+            metadata=(
+                dict(message.get("metadata") or {})
+                if isinstance(message.get("metadata"), dict)
+                else None
+            ),
         )
 
     def _collaboration_room_messages(
@@ -167,6 +172,7 @@ def mount_agents(
 
     _broadcast_room = getattr(team_rooms_router, "broadcast", None)
     _resolve_room_members = getattr(team_rooms_router, "list_room_members", None)
+    _resolve_room_participant = getattr(team_rooms_router, "get_room_participant", None)
 
     async def _team_event_broadcaster(room_id: str, payload: dict[str, Any]) -> None:
         task_payload = payload.get("task")
@@ -229,6 +235,7 @@ def mount_agents(
         task_projection=_project_task_to_collaboration,
         task_delete_projection=_delete_task_from_collaboration,
         room_membership_resolver=_resolve_room_members,
+        room_participant_resolver=_resolve_room_participant,
     )
     app.state.team_tasks_router = team_tasks_router
     app.include_router(team_tasks_router)

@@ -163,8 +163,7 @@ def test_assembly_injects_frame_before_goal() -> None:
 
     goal = "please do X"
     frame = (
-        "## Referenced sessions\n\n"
-        "<referenced-sessions>{\"sessionId\": \"s1\"}</referenced-sessions>"
+        '## Referenced sessions\n\n<referenced-sessions>{"sessionId": "s1"}</referenced-sessions>'
     )
     intent = ParsedIntent(
         raw=goal,

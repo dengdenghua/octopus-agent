@@ -111,6 +111,10 @@ class SteeringUserMessageItem(_ItemBase):
     type: Literal[ItemType.STEERING_USER_MESSAGE] = ItemType.STEERING_USER_MESSAGE
     text: str
     target_turn_id: str | None = Field(default=None, alias="targetTurnId")
+    # Human steering is rendered as a user message. Internal child reports use
+    # the same live queue for model context but must remain inside the owning
+    # assistant turn rather than manufacturing new visible user turns.
+    source: Literal["user", "subagent_report"] = "user"
 
 
 class AgentMessageItem(_ItemBase):
@@ -132,6 +136,9 @@ class AgentMessageItem(_ItemBase):
     agent_display_name: str | None = Field(default=None, alias="agentDisplayName")
     agent_avatar_url: str | None = Field(default=None, alias="agentAvatarUrl")
     agent_icon: str | None = Field(default=None, alias="agentIcon")
+    # ③ @因果链：本气泡回应/反驳的成员 display name，前端在气泡标题旁显示
+    # "回应 @谁"。
+    reply_to: str | None = Field(default=None, alias="replyTo")
 
 
 class ReasoningItem(_ItemBase):
@@ -514,6 +521,18 @@ class TurnParams(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     thread_id: str = Field(alias="threadId")
+    # Client-stable id for the one first-class userMessage item created by a
+    # new turn.  Keeping the optimistic UI row and durable server item on the
+    # same coordinate makes replay/reconnect reduction idempotent.  The
+    # namespace is deliberately narrower than arbitrary Item ids because this
+    # value crosses a trust boundary.
+    user_item_id: str | None = Field(
+        default=None,
+        alias="userItemId",
+        min_length=8,
+        max_length=96,
+        pattern=r"^itm_[A-Za-z0-9][A-Za-z0-9_-]*$",
+    )
     input: list[dict[str, Any]] = Field(default_factory=list)
     cwd: str | None = None
     approval_policy: Literal["never", "on-request", "untrusted"] = Field(
@@ -587,6 +606,13 @@ class Turn(BaseModel):
     # and taskId.
     objective_id: str | None = Field(default=None, alias="objectiveId")
     task_id: str | None = Field(default=None, alias="taskId")
+    # Trusted runtime-only execution strand used by the evolution ledger.
+    # It is never accepted from or serialized back to the client.
+    execution_engine: str | None = Field(default=None, exclude=True)
+    # Resolved cwd after authentication, local-workspace validation, and
+    # managed-workspace allocation. Task supervision consumes this trusted
+    # value instead of guessing from the client's raw TurnParams shape.
+    execution_workspace_path: str | None = Field(default=None, exclude=True)
     checkpoint_id: int | None = Field(default=None, alias="checkpointId")
     outcome_reason: str | None = Field(default=None, alias="outcomeReason")
     # Canonical semantic result emitted by the agent loop. ``status`` remains

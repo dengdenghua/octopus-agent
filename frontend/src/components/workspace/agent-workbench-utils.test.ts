@@ -1,7 +1,11 @@
 import { describe, expect, test } from "vitest";
 
 import type { LiveToolEvent } from "./live-tool-timeline";
-import { diffEntriesFromBlocks } from "./agent-workbench-utils";
+import {
+  diffEntriesFromBlocks,
+  finalOutputArtifactEntries,
+  isInternalWorkingFilePath,
+} from "./agent-workbench-utils";
 import { toWorkBlocks } from "./work-blocks";
 
 function event(partial: Partial<LiveToolEvent>): LiveToolEvent {
@@ -16,6 +20,30 @@ function event(partial: Partial<LiveToolEvent>): LiveToolEvent {
 }
 
 describe("agent workbench diff entries", () => {
+  test("keeps working files out of final artifacts while preserving their trace", () => {
+    expect(isInternalWorkingFilePath("output/final/plan.md")).toBe(true);
+    expect(isInternalWorkingFilePath("output/final/research-plan.md")).toBe(
+      false,
+    );
+
+    const artifacts = finalOutputArtifactEntries([
+      event({
+        id: "write-plan",
+        name: "write_text_file",
+        input: { path: "data/workspaces/thread-1/output/final/plan.md" },
+      }),
+      event({
+        id: "write-report",
+        name: "write_text_file",
+        input: { path: "data/workspaces/thread-1/output/final/report.md" },
+      }),
+    ]);
+
+    expect(artifacts.map((entry) => entry.path)).toEqual([
+      "data/workspaces/thread-1/output/final/report.md",
+    ]);
+  });
+
   test("does not classify read-only source evidence as changed files", () => {
     const blocks = toWorkBlocks([
       event({

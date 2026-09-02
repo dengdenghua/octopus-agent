@@ -32,6 +32,7 @@ _VERIFY_SKILLS = frozenset(
         "run_command",
     }
 )
+_MODEL_PROTOCOL_MODES = frozenset({"react", "flash", "conversation", "discuss"})
 TOOL_OBSERVATION_MAX_CHARS = 16000
 
 # Argument-validation rejections ("old_string must be non-empty", "missing
@@ -189,7 +190,12 @@ def _execute_action_via_beak(
     try:
         from contextlib import nullcontext
 
-        from runtime.platform.process.session import Session, current_session, session_scope
+        from runtime.platform.process.session import (
+            Session,
+            current_session,
+            parent_tool_use_scope,
+            session_scope,
+        )
 
         session_cm: Any = nullcontext()
         active_session = current_session()
@@ -222,6 +228,19 @@ def _execute_action_via_beak(
                 "chrome_operation_mode",
                 "browser_regression_enabled",
                 "browser_regression_preview_url",
+                # Work strategy is chosen per turn. A prior audit preset must
+                # never remain in Session metadata after the user switches the
+                # next task to develop (or vice versa).
+                "mode",
+                "capability_mode",
+                "agent_mode",
+                "personal_mode",
+                "workflow_mode",
+                "completion_policy",
+                "mode_preset",
+                "workflow_preset",
+                "verification_policy",
+                "mode_contract",
             }
             for key in (
                 "workspace_path",
@@ -259,6 +278,23 @@ def _execute_action_via_beak(
                 "team_id",
                 "agent_name",
             ):
+                # Some legacy callers use ``mode`` for the model-driving
+                # protocol (react/flash/etc.), while Session.metadata["mode"]
+                # is the authoritative filesystem permission tier
+                # (chat/team/code/browser/plan).  Treating a protocol label as
+                # a per-turn scope override silently demotes an already-bound
+                # code workspace to chat scope, so relative parallel reads
+                # land under ``output/final``.  Preserve an already-bound
+                # permission scope. When none exists, remain fail-closed in
+                # chat scope; a protocol label must never grant code access.
+                if (
+                    key == "mode"
+                    and str(user_context.get(key) or "").strip().lower() in _MODEL_PROTOCOL_MODES
+                ):
+                    existing_mode = str(metadata.get("mode") or "").strip().lower()
+                    if not existing_mode or existing_mode in _MODEL_PROTOCOL_MODES:
+                        metadata["mode"] = "chat"
+                    continue
                 if key in user_context and (key not in metadata or key in surface_overrides):
                     metadata[key] = user_context[key]
             session_agent = agent or getattr(active_session, "agent", None)
@@ -316,18 +352,40 @@ def _execute_action_via_beak(
                         or user_context.get("browser_regression_enabled") is True
                     )
                 )
-                step = executor.execute_step(
-                    step_id=react_step_counter,
-                    node_id=f"react_n{react_step_counter}",
-                    sucker_id=SkillId(skill_name),
-                    args=args,
-                    caller="react_loop",
-                    task_id=react_task_id,
-                    arm_id=ArmId("react_arm"),
-                    budget=budget,
-                    actor=None,
-                    trusted_browser_loopback=trusted_browser_loopback,
+                # Nested delegation needs the concrete parent tool-use id for
+                # lifecycle correlation. Native tool mode already binds this
+                # scope; the ReAct compatibility dispatcher must do the same.
+                # Mirror it in Session metadata for legacy consumers, while
+                # the ContextVar remains authoritative under parallel calls.
+                executing_session = current_session()
+                executing_meta = getattr(executing_session, "metadata", None)
+                previous_parent = (
+                    executing_meta.get("_active_parent_tool_use_id")
+                    if isinstance(executing_meta, dict)
+                    else None
                 )
+                if isinstance(executing_meta, dict):
+                    executing_meta["_active_parent_tool_use_id"] = call.id
+                try:
+                    with parent_tool_use_scope(call.id):
+                        step = executor.execute_step(
+                            step_id=react_step_counter,
+                            node_id=f"react_n{react_step_counter}",
+                            sucker_id=SkillId(skill_name),
+                            args=args,
+                            caller="react_loop",
+                            task_id=react_task_id,
+                            arm_id=ArmId("react_arm"),
+                            budget=budget,
+                            actor=None,
+                            trusted_browser_loopback=trusted_browser_loopback,
+                        )
+                finally:
+                    if isinstance(executing_meta, dict):
+                        if previous_parent is None:
+                            executing_meta.pop("_active_parent_tool_use_id", None)
+                        else:
+                            executing_meta["_active_parent_tool_use_id"] = previous_parent
             finally:
                 if _sandbox_md is not None:
                     if _sandbox_prev is None:

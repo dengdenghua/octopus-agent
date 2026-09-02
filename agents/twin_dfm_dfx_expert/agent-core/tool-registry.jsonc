@@ -1,0 +1,17 @@
+{
+  "arms": [
+    "web_read",
+    "fs_writer",
+    "shell"
+  ],
+  "extra_affinity": [
+    "数字分身",
+    "真人岗位",
+    "岗位模板",
+    "可制造性",
+    "可测试性",
+    "可维护性检查"
+  ],
+  "private_skills": [],
+  "digital_twin": true
+}

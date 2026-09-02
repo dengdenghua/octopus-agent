@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .registry import Skill, SkillRegistry
@@ -16,6 +16,7 @@ _MAX_GREP_FILE_BYTES = 1_024 * 1024  # Implementation note.
 _MAX_TREE_NODES = 1_000  # Implementation note.
 _MAX_TREE_DEPTH = 8  # Implementation note.
 _MAX_RANGE_LINES = 2_000  # Implementation note.
+_GLOB_META = re.compile(r"[*?\[\]{}]")  # A segment with these is a guess, not an explicit name.
 _SEARCH_EXCLUDED_DIRS = frozenset(
     {
         ".git",
@@ -31,13 +32,62 @@ _SEARCH_EXCLUDED_DIRS = frozenset(
 )
 
 
-def _is_search_excluded(path: Path, base: Path) -> bool:
-    """Skip hidden/generated dependency trees, not merely hidden basenames."""
+def _hidden_segments(*specs: str) -> frozenset[str]:
+    """Literal dot-prefixed segments the caller named in a pattern or root.
+
+    ``.github/workflows/*`` means the caller explicitly wants ``.github``; only
+    wildcard segments are guesses.  Segments containing glob metacharacters are
+    ignored so ``.*`` cannot re-open every hidden tree.
+    """
+    named: set[str] = set()
+    for spec in specs:
+        for segment in PurePosixPath(str(spec or "").replace("\\", "/")).parts:
+            if (
+                segment.startswith(".")
+                and segment not in {".", ".."}
+                and not _GLOB_META.search(segment)
+            ):
+                named.add(segment)
+    return frozenset(named)
+
+
+def _is_search_excluded(path: Path, base: Path, allow_hidden: frozenset[str] = frozenset()) -> bool:
+    """Skip hidden/generated dependency trees, not merely hidden basenames.
+
+    ``allow_hidden`` carries the dot-prefixed segments the caller spelled out.
+    Without it a pattern like ``.github/workflows/*`` matched on disk and was
+    then filtered back out here, so the tool reported ``count: 0`` for a
+    directory that plainly exists — a silent false negative that reads as
+    "the file isn't there" rather than "I refuse to look".  Noise trees in
+    ``_SEARCH_EXCLUDED_DIRS`` stay excluded unless named just as explicitly.
+    """
     try:
         relative_parts = path.relative_to(base).parts
     except ValueError:
         relative_parts = path.parts
-    return any(part.startswith(".") or part in _SEARCH_EXCLUDED_DIRS for part in relative_parts)
+    for part in relative_parts:
+        if part in allow_hidden:
+            continue
+        if part.startswith(".") or part in _SEARCH_EXCLUDED_DIRS:
+            return True
+    return False
+
+
+def _normalise_recursive_tail(pattern: str) -> str:
+    """Make a trailing ``**`` mean "every file under here", as shells do.
+
+    ``Path.glob`` resolves a trailing ``**`` to directories only (CPython <=
+    3.12), so a file-only search for ``.github/**`` could never match anything:
+    the pattern was guaranteed to return zero regardless of what was on disk.
+    Callers write it expecting bash/ripgrep semantics, so rewrite it to
+    ``**/*``, which enumerates files on every supported version.
+    """
+    text = str(pattern or "").strip()
+    if text == "**":
+        return "**/*"
+    if text.endswith("/**"):
+        return text + "/*"
+    return text
 
 
 def _expand_brace_patterns(pattern: str) -> tuple[str, ...]:
@@ -77,7 +127,7 @@ def _safe_resolve(
 
 
 def _glob_files(
-    pattern: str,
+    pattern: str | None = None,
     root: str = ".",
     *,
     sandbox_dir: str | None = None,
@@ -86,6 +136,8 @@ def _glob_files(
     include_dirs: bool = False,
     **_kw: Any,
 ) -> dict[str, Any]:
+    if not pattern or not str(pattern).strip():
+        return {"error": "missing required 'pattern' (e.g. '**/*.py')"}
     base, err = _safe_resolve(root, sandbox_dir=sandbox_dir, allow_sensitive=allow_sensitive)
     if err:
         return {"error": err, "root": root}
@@ -96,11 +148,15 @@ def _glob_files(
 
     cap = max(1, min(int(max_results), _MAX_GLOB_RESULTS))
     matches: list[Path] = []
+    # ``root`` counts as explicit too: root='.github' + pattern='**/*.yml' is the
+    # same request as pattern='.github/**/*.yml'.
+    allow_hidden = _hidden_segments(pattern, root)
     try:
         seen: set[Path] = set()
-        for expanded_pattern in _expand_brace_patterns(pattern):
+        effective_glob = pattern if include_dirs else _normalise_recursive_tail(pattern)
+        for expanded_pattern in _expand_brace_patterns(effective_glob):
             for p in base.glob(expanded_pattern):
-                if p in seen or _is_search_excluded(p, base):
+                if p in seen or _is_search_excluded(p, base, allow_hidden):
                     continue
                 seen.add(p)
                 if not include_dirs and p.is_dir():
@@ -194,8 +250,12 @@ def _grep_text(
         else:
             seen: set[Path] = set()
 
+            # grep only ever reads files, so a trailing ``**`` is always the
+            # file-recursive form here.
+            file_glob = _normalise_recursive_tail(glob)
+
             def _candidates() -> Any:
-                for expanded_glob in _expand_brace_patterns(glob):
+                for expanded_glob in _expand_brace_patterns(file_glob):
                     for candidate in base.glob(expanded_glob):
                         if candidate in seen:
                             continue
@@ -206,8 +266,11 @@ def _grep_text(
     except Exception as exc:  # noqa: BLE001
         return {"error": f"bad_glob: {exc}", "glob": glob}
 
+    # Same rule as glob_files: honour hidden segments the caller spelled out in
+    # the file glob or in root/path.
+    grep_allow_hidden = _hidden_segments(glob, effective_root)
     for p in candidates:
-        if not p.is_file() or _is_search_excluded(p, search_base):
+        if not p.is_file() or _is_search_excluded(p, search_base, grep_allow_hidden):
             continue
         if scanned >= file_cap:
             truncated = True

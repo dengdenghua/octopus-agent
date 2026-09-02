@@ -1,0 +1,13 @@
+# Imported MCP servers — DISABLED by default.
+# Review each, copy the full server definition from its `origin`, add
+# credentials, then paste under `mcp_servers:` in your config.yaml.
+mcp_servers:
+  - name: computer-use
+    # needs: review
+    # full definition in: /Users/dangbei/.codex/config.toml
+  - name: node_repl
+    # needs: credentials, node
+    # full definition in: /Users/dangbei/.codex/config.toml
+  - name: openaiDeveloperDocs
+    # needs: auth
+    # full definition in: /Users/dangbei/.codex/config.toml

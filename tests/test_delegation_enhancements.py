@@ -206,6 +206,15 @@ def test_custom_agent_id_parallel(mock_subagent, mock_builtins):
     assert result["success_count"] == 2
     # Both should have been resolved to researcher
     assert mock_subagent.call_count == 2
+    requested_ids = {
+        call.kwargs["context"]["requested_agent_id"] for call in mock_subagent.call_args_list
+    }
+    assert requested_ids == {"sleep_researcher_one", "sleep_researcher_two"}
+    resolved_ids = {
+        call.kwargs["context"]["resolved_agent_id"] for call in mock_subagent.call_args_list
+    }
+    assert resolved_ids
+    assert resolved_ids <= {"explorer", "researcher", "general"}
 
 
 def test_builtin_agent_id_not_wrapped(mock_subagent, mock_builtins):
@@ -513,6 +522,46 @@ def test_call_agent_parallel_propagates_react_stack(mock_subagent, mock_builtins
         assert ctx.get("react_stack") is fake_stack
 
 
+def test_call_agent_parallel_propagates_parent_tool_id(mock_subagent, mock_builtins):
+    from runtime.execution.suckers.delegation_skills import _call_agent_parallel
+    from runtime.platform.process.session import Session
+
+    mock_subagent.return_value = {
+        "agent_id": "researcher",
+        "output": "done",
+        "success": True,
+    }
+    session = Session(metadata={"_active_parent_tool_use_id": "parallel-parent-1"})
+
+    _call_agent_parallel(
+        specs=[{"agent_id": "researcher", "prompt": "inspect"}],
+        session=session,
+    )
+
+    assert mock_subagent.call_args.kwargs["context"]["parent_tool_use_id"] == ("parallel-parent-1")
+
+
+def test_call_agent_parallel_prefers_context_local_parent_tool_id(mock_subagent, mock_builtins):
+    """Parallel parent calls must not race through shared Session metadata."""
+    from runtime.execution.suckers.delegation_skills import _call_agent_parallel
+    from runtime.platform.process.session import Session, parent_tool_use_scope
+
+    mock_subagent.return_value = {
+        "agent_id": "researcher",
+        "output": "done",
+        "success": True,
+    }
+    session = Session(metadata={"_active_parent_tool_use_id": "stale-parent"})
+
+    with parent_tool_use_scope("exact-parent-call"):
+        _call_agent_parallel(
+            specs=[{"agent_id": "researcher", "prompt": "inspect"}],
+            session=session,
+        )
+
+    assert mock_subagent.call_args.kwargs["context"]["parent_tool_use_id"] == "exact-parent-call"
+
+
 # ─── Audit F-04: git lane failure degrades, never breaks the batch ─────────
 
 
@@ -521,8 +570,8 @@ def test_isolated_git_lane_failure_degrades_to_failed_lane(mock_builtins, monkey
     one failed lane instead of escaping and killing the whole parallel batch."""
     import subprocess
 
-    from runtime.execution.suckers._delegation_skills_parallel import _call_agent_parallel
     import runtime.execution.subagents.worktree_loop as wt_loop
+    from runtime.execution.suckers._delegation_skills_parallel import _call_agent_parallel
 
     def _boom(repo_root, name):
         raise subprocess.CalledProcessError(128, ["git", "worktree", "add"])

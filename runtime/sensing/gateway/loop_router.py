@@ -174,6 +174,7 @@ def create_loop_router(
         runs = store.list(
             owner_id=actor_id if require_auth else None,
             limit=1_000_000,
+            include_unowned=not require_auth or _is_admin(actor_id),
         )
         by_status: dict[str, int] = {}
         by_mode: dict[str, int] = {}
@@ -261,6 +262,28 @@ def create_loop_router(
             jwt_audience=jwt_audience,
         )
 
+    def _is_admin(actor_id: str | None) -> bool:
+        if actor_id is None or identity_store is None:
+            return False
+        identity = identity_store.get(actor_id)
+        roles = getattr(identity, "roles", ()) or ()
+        return "admin" in {str(role).strip().lower() for role in roles}
+
+    def _operator(request: Request) -> None:
+        from runtime.safety.auth.principal import require_operator
+
+        # Loop execution accepts workspace/thread inputs and can run tools.
+        # Until it is bound to a verified managed thread workspace, keep its
+        # mutating/execution surface operational-only in shared deployments.
+        require_operator(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     def _can_access(run: LoopRun | None, actor_id: str | None) -> bool:
         if run is None:
             return False
@@ -268,7 +291,7 @@ def create_loop_router(
         if not require_auth:
             return True
         if not owner:
-            return True
+            return _is_admin(actor_id)
         return owner == str(actor_id or "").strip()
 
     def _owned_run(run_id: str, actor_id: str | None) -> LoopRun:
@@ -352,6 +375,7 @@ def create_loop_router(
         request: Request,
         body: CreateLoopRunRequest,
     ) -> dict[str, Any]:
+        _operator(request)
         actor = _auth(request)
         if body.execute and controller is None:
             raise HTTPException(503, "loop controller unavailable")
@@ -377,6 +401,7 @@ def create_loop_router(
         response_model=LoopRun,
     )
     def api_loop_execute(request: Request, run_id: str) -> dict[str, Any]:
+        _operator(request)
         actor = _auth(request)
         _owned_run(run_id, actor)
         if controller is None:
@@ -392,6 +417,7 @@ def create_loop_router(
         response_model=LoopRun,
     )
     def api_loop_dispatch(request: Request, run_id: str) -> dict[str, Any]:
+        _operator(request)
         actor = _auth(request)
         _owned_run(run_id, actor)
         if dispatcher is None:
@@ -439,6 +465,7 @@ def create_loop_router(
         run_id: str,
         body: RestartLoopRunRequest | None = None,
     ) -> dict[str, Any]:
+        _operator(request)
         actor = _auth(request)
         _owned_run(run_id, actor)
         if controller is None:
@@ -474,6 +501,7 @@ def create_loop_router(
         run_id: str,
         body: RestartLoopRunRequest | None = None,
     ) -> dict[str, Any]:
+        _operator(request)
         actor = _auth(request)
         _owned_run(run_id, actor)
         if controller is None:
@@ -518,11 +546,13 @@ def create_loop_router(
             mode=mode,
             limit=limit,
             offset=offset,
+            include_unowned=not require_auth or _is_admin(actor),
         )
         total = store.count(
             owner_id=actor if require_auth else None,
             status=status,
             mode=mode,
+            include_unowned=not require_auth or _is_admin(actor),
         )
         return {
             "runs": [run.model_dump(mode="json") for run in runs],

@@ -5,6 +5,9 @@ export type PauseReason =
   | "user_request"
   | "budget_near_limit"
   | "iteration_near_limit"
+  | "model_spinning"
+  | "client_disconnect"
+  | "approval_required"
   | "external";
 
 export interface PauseRequest {
@@ -24,7 +27,15 @@ export interface ActiveTask {
   started_at: number;
   current_iteration: number;
   max_iterations: number;
+  /** Cumulative model accounting across every call in this task. */
   tokens_spent: number;
+  input_tokens_spent?: number;
+  output_tokens_spent?: number;
+  cache_read_tokens?: number;
+  /** Provider-reported size of the latest live model request. */
+  current_context_tokens?: number;
+  context_capacity_tokens?: number;
+  context_utilization?: number;
   cost_usd: number;
   max_tokens: number;
   max_usd: number;

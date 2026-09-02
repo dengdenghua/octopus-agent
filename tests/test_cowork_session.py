@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -303,11 +304,127 @@ def test_collab_room_endpoint_creates_and_links_persistent_room(tmp_path) -> Non
     assert body["session"]["room_id"] == body["room"]["id"]
     assert body["session"]["mode"] == "swarm"
 
+    # The server-owned room binding, not a mutable URL query, carries the
+    # canonical thread through human invitation preview and acceptance.
+    invite = c.post(
+        f"/api/teams/{body['room']['id']}/invites",
+        json={"role": "member", "expires_in_seconds": 3600},
+    ).json()
+    preview = c.get(f"/api/team-invites/{invite['invite_token']}").json()
+    assert preview["thread_id"] == "t1"
+    joined = c.post(
+        f"/api/team-invites/{invite['invite_token']}/join",
+        json={"participant_id": "human-bob", "display_name": "Bob"},
+    ).json()
+    assert joined["thread_id"] == "t1"
+
     # Idempotent: the same session keeps the same linked room instead of
     # creating another "team" path.
     again = c.post("/api/collab/t1/room", json={"name": "ignored"}).json()
     assert again["created"] is False
     assert again["room"]["id"] == body["room"]["id"]
+
+    # GroupStore is the AI-membership authority. An atomic roster change is
+    # immediately projected into the linked TeamRoom without dropping human
+    # participants, its canonical thread, or retained display metadata.
+    replaced = c.put(
+        "/api/cowork/t1/roster",
+        json={"agent_ids": ["alice", "critic"], "mode": "cluster"},
+    )
+    assert replaced.status_code == 200, replaced.json()
+    assert replaced.json()["room_projection"] == {
+        "ok": True,
+        "room_id": body["room"]["id"],
+    }
+    projected = c.get(f"/api/teams/{body['room']['id']}").json()
+    assert [member["name"] for member in projected["members"]] == ["alice", "critic"]
+    assert projected["members"][0]["display_name"] == "Alice"
+    assert projected["thread_id"] == "t1"
+    assert any(item["display_name"] == "Bob" for item in projected["participants"])
+    assert c.get(f"/api/team-invites/{invite['invite_token']}").json()["team"]["member_count"] == 2
+
+    # Plugin-style single-member add/remove uses the same canonical projection
+    # as bulk roster replacement and remains idempotent on retries.
+    invited = c.post(
+        "/api/cowork/t1/members",
+        json={"target_id": "reviewer", "kind": "agent"},
+    )
+    assert invited.status_code == 200, invited.json()
+    assert invited.json()["added"] is True
+    assert invited.json()["room_projection"] == {
+        "ok": True,
+        "room_id": body["room"]["id"],
+    }
+    projected = c.get(f"/api/teams/{body['room']['id']}").json()
+    assert [member["name"] for member in projected["members"]] == [
+        "alice",
+        "critic",
+        "reviewer",
+    ]
+
+    removed = c.delete("/api/cowork/t1/members/critic")
+    assert removed.status_code == 200, removed.json()
+    assert removed.json()["removed"] is True
+    assert [
+        member["name"] for member in c.get(f"/api/teams/{body['room']['id']}").json()["members"]
+    ] == ["alice", "reviewer"]
+
+
+def test_collab_room_endpoint_backfills_legacy_thread_binding(tmp_path) -> None:
+    from runtime.memory.cowork.collaboration_store import CollaborationStore
+    from runtime.sensing.gateway.team_rooms_router import create_team_rooms_router
+
+    store = GroupStore(base_dir=tmp_path / "cowork")
+    collab_store = CollaborationStore(base_dir=tmp_path / "cowork")
+    rooms = create_team_rooms_router(
+        state_path=tmp_path / "team_rooms.json",
+        room_projection=collab_store.upsert_room_by_id,
+    )
+    app = FastAPI()
+    app.include_router(rooms)
+    app.include_router(
+        create_cowork_group_router(
+            store=store,
+            collaboration_store=collab_store,
+            team_rooms_state_path=tmp_path / "team_rooms.json",
+            team_rooms_router=rooms,
+        )
+    )
+    client = TestClient(app)
+
+    legacy_room = client.post(
+        "/api/teams",
+        json={
+            "id": "legacy-room",
+            "name": "Legacy room",
+            "members": [{"name": "alice", "display_name": "Alice"}],
+            # Public callers cannot choose this binding.
+            "thread_id": "attacker-controlled",
+        },
+    ).json()
+    assert legacy_room["thread_id"] is None
+    link_room(store, "t1", legacy_room["id"])
+
+    ensured = client.post("/api/collab/t1/room", json={"name": "ignored"})
+    assert ensured.status_code == 200
+    assert ensured.json()["created"] is False
+    assert ensured.json()["room"]["thread_id"] == "t1"
+    persisted = client.get(f"/api/teams/{legacy_room['id']}").json()
+    assert persisted["thread_id"] == "t1"
+    assert persisted["participants"][0]["role"] == "owner"
+    assert collab_store.room_by_id(legacy_room["id"])["participants"][0]["role"] == "owner"
+
+    invite = client.post(f"/api/teams/{legacy_room['id']}/invites").json()
+    preview = client.get(f"/api/team-invites/{invite['invite_token']}").json()
+    assert preview["thread_id"] == "t1"
+
+    # The durable room reservation rejects a corrupt second group link before
+    # any Team/Collaboration projection can move the established room.
+    from runtime.memory.cowork.group_store import GroupRoomLinkConflict
+
+    with pytest.raises(GroupRoomLinkConflict):
+        link_room(store, "t2", legacy_room["id"])
+    assert store.state("t2").room_id is None
 
 
 def test_collab_task_endpoint_auto_creates_room_and_folds_task(tmp_path) -> None:
@@ -478,7 +595,20 @@ def test_team_room_projection_can_promote_to_thread_session(tmp_path) -> None:
     from runtime.memory.cowork.collaboration_store import CollaborationStore
 
     collab_store = CollaborationStore(base_dir=tmp_path / "cowork")
-    collab_store.upsert_room_by_id({"id": "room-1", "name": "Team first"})
+    collab_store.upsert_room_by_id(
+        {
+            "id": "room-1",
+            "name": "Team first",
+            "participants": [
+                {
+                    "id": "actor-bob",
+                    "actor_id": "bob",
+                    "display_name": "Bob",
+                    "role": "member",
+                }
+            ],
+        }
+    )
     collab_store.upsert_task_for_room(
         "room-1",
         {
@@ -495,11 +625,34 @@ def test_team_room_projection_can_promote_to_thread_session(tmp_path) -> None:
         "created from team"
     ]
 
-    collab_store.upsert_room("thread-1", {"id": "room-1", "name": "Thread linked"})
+    collab_store.upsert_room(
+        "thread-1",
+        {
+            "id": "room-1",
+            "name": "Thread linked",
+        },
+    )
+    collab_store.set_room_project_metadata("thread-1", "P-1", generation=1)
 
     assert collab_store.session_id_for_room("room-1") == "thread-1"
     assert collab_store.room_for_session("team:room-1") is None
+    linked_room = collab_store.room_for_session("thread-1")
+    assert linked_room["participants"][0]["actor_id"] == "bob"
+    assert linked_room["metadata"]["project_id"] == "P-1"
     assert [t["title"] for t in collab_store.tasks_for_session("thread-1")] == ["created from team"]
+
+    # A later authoritative Team Room update refreshes participants without
+    # erasing the Project OS metadata contributed by the other projection.
+    collab_store.upsert_room_by_id(
+        {
+            "id": "room-1",
+            "name": "Thread linked",
+            "participants": [],
+        }
+    )
+    refreshed_room = collab_store.room_for_session("thread-1")
+    assert refreshed_room["participants"] == []
+    assert refreshed_room["metadata"]["project_id"] == "P-1"
 
 
 def test_team_room_delete_projection_removes_unified_room_state(tmp_path) -> None:

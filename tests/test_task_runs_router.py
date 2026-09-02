@@ -261,7 +261,7 @@ def test_task_runs_router_records_approval_decision_with_owner_isolation(tmp_pat
     assert body["lease_health"]["recommended_action"] == "monitor"
 
 
-def test_task_runs_router_auth_list_includes_public_tasks_but_isolates_other_owners(
+def test_task_runs_router_auth_hides_unowned_and_other_owners(
     tmp_path,
 ):
     supervisor = TaskSupervisor.from_path(tmp_path / "task_runs.json", holder_id="worker-a")
@@ -270,6 +270,10 @@ def test_task_runs_router_auth_list_includes_public_tasks_but_isolates_other_own
     supervisor.start_task(task_id="task-bob", kind="loop", owner_id="bob")
     identity_store = IdentityStore()
     identity_store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    identity_store.add(
+        Identity(actor_id="admin", roles=("admin",)),
+        api_key_plaintext="sk-admin",
+    )
 
     app = FastAPI()
     app.include_router(
@@ -291,16 +295,26 @@ def test_task_runs_router_auth_list_includes_public_tasks_but_isolates_other_own
         headers={"Authorization": "Bearer sk-alice"},
     )
     overview = client.get("/api/task-runs/overview", headers={"Authorization": "Bearer sk-alice"})
+    admin_listed = client.get(
+        "/api/task-runs",
+        headers={"Authorization": "Bearer sk-admin"},
+    )
+    admin_public_detail = client.get(
+        "/api/task-runs/task-public",
+        headers={"Authorization": "Bearer sk-admin"},
+    )
 
     assert listed.status_code == 200
     task_ids = {task["task_id"] for task in listed.json()["tasks"]}
-    assert task_ids == {"task-public", "task-alice"}
-    assert listed.json()["total"] == 2
-    assert public_detail.status_code == 200
+    assert task_ids == {"task-alice"}
+    assert listed.json()["total"] == 1
+    assert public_detail.status_code == 404
     assert bob_detail.status_code == 404
     assert overview.status_code == 200
-    assert overview.json()["total"] == 2
+    assert overview.json()["total"] == 1
     assert overview.json()["filters"]["owner_id"] == "alice"
+    assert {task["task_id"] for task in admin_listed.json()["tasks"]} == {"task-public"}
+    assert admin_public_detail.status_code == 200
 
 
 def test_task_runs_router_records_approval_rejection(tmp_path):

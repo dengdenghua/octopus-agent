@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from runtime.safety.auth.scope import TenantScope
 from runtime.safety.evolution.fitness import (
     FitnessReport,
     compute_fitness,
@@ -35,6 +36,14 @@ class StrategyEngine:
         self._history: list[FitnessReport] = []
 
     def decide(self, report: FitnessReport) -> StrategyDecision:
+        incoming_scope = _report_scope_key(report)
+        if self._history and {_report_scope_key(existing) for existing in self._history} != {
+            incoming_scope
+        }:
+            # Strategy trend is meaningful only within one exact
+            # agent+tenant+owner namespace.  Reset rather than mixing a prior
+            # tenant into the next tenant's evolution decision.
+            self._history = []
         self._history.append(report)
         if len(self._history) > 20:
             self._history = self._history[-20:]
@@ -98,7 +107,20 @@ class StrategyEngine:
         return variance < 0.01
 
 
-def run_strategy_cycle(agent_id: str) -> dict[str, Any]:
+def _report_scope_key(report: FitnessReport) -> tuple[str, str, str, str]:
+    return (
+        report.agent_id,
+        report.scope_mode,
+        report.tenant_id,
+        report.owner_actor_id,
+    )
+
+
+def run_strategy_cycle(
+    agent_id: str,
+    *,
+    scope: TenantScope | None = None,
+) -> dict[str, Any]:
     """Decision-only evolution cycle, for external orchestrators.
 
     Computes fitness for ``agent_id`` and returns the strategy decision as a
@@ -109,11 +131,12 @@ def run_strategy_cycle(agent_id: str) -> dict[str, Any]:
     function exists so a standalone scheduler can drive the same decision
     logic without hosting the daemon thread.
     """
-    report = compute_fitness(agent_id)
+    report = compute_fitness(agent_id, scope=scope)
     engine = StrategyEngine()
     decision = engine.decide(report)
     return {
         "agent_id": agent_id,
+        "scope_mode": report.scope_mode,
         "fitness": {
             "combined": report.combined,
             "verdict": report.verdict,

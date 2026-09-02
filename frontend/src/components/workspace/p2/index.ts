@@ -1,5 +1,5 @@
 /**
- * DSH P2 Components
+ * Octopus Native Session API v2 components
  *
  * React components for Session-query, Feedback, and Export features.
  */

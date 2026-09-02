@@ -10,7 +10,12 @@
  * ``data:`` URL — this module never fetches the network.
  */
 
-import type { ReplayData, ReplayStep } from "@/core/sharing/replay-html";
+import type {
+  ReplayData,
+  ReplayReceipt,
+  ReplayReceiptItem,
+  ReplayStep,
+} from "@/core/sharing/replay-html";
 
 import {
   stripInternalToolProtocol,
@@ -171,6 +176,7 @@ export function buildReplayFromBlocks(
       };
     })
     .filter((step) => step.title || step.body || step.image);
+  const receipt = receiptFromBlocks(blocks, steps, labels);
 
   return {
     title: meta.title,
@@ -178,5 +184,90 @@ export function buildReplayFromBlocks(
     brand: meta.brand,
     footer: meta.footer,
     frameMs: meta.frameMs,
+    receipt,
   };
+}
+
+function receiptFromBlocks(
+  blocks: WorkBlock[],
+  steps: ReplayStep[],
+  labels?: WorkBlockLabels,
+): ReplayReceipt | undefined {
+  const latestTodo = [...blocks]
+    .reverse()
+    .find((block) => block.kind === "todo");
+  const items = checklistFromTodo(latestTodo?.event.input);
+  const recoveryCount = blocks.filter((block) => block.status === "warning").length;
+  const attentionCount = blocks.filter(
+    (block) => block.status === "error" || block.status === "waiting_approval",
+  ).length;
+  const completedCount = steps.filter((step) => step.status === "done").length;
+  const verification = blocks
+    .filter(
+      (block) =>
+        block.status === "done" &&
+        (block.kind === "terminal" || block.actionKey === "submitResult"),
+    )
+    .slice(-3)
+    .map((block) => sanitizeReplayText(workBlockTitle(block, labels), { max: 160 }))
+    .filter(Boolean);
+
+  if (items.length === 0 && recoveryCount === 0 && attentionCount === 0) {
+    return undefined;
+  }
+
+  const summaryParts = [
+    `${completedCount}/${steps.length} visible steps completed`,
+    attentionCount > 0
+      ? `${attentionCount} item${attentionCount === 1 ? "" : "s"} need attention`
+      : "no unresolved items",
+    recoveryCount > 0
+      ? `${recoveryCount} ${recoveryCount === 1 ? "recovery" : "recoveries"} recorded`
+      : "",
+  ].filter(Boolean);
+
+  return {
+    summary: summaryParts.join(" · "),
+    items,
+    verification,
+  };
+}
+
+function checklistFromTodo(input: unknown): ReplayReceiptItem[] {
+  if (!input || typeof input !== "object") return [];
+  const record = input as Record<string, unknown>;
+  const raw = Array.isArray(record.items)
+    ? record.items
+    : Array.isArray(record.todos)
+      ? record.todos
+      : [];
+  return raw.flatMap((item): ReplayReceiptItem[] => {
+    if (!item || typeof item !== "object") return [];
+    const candidate = item as Record<string, unknown>;
+    const title = ["content", "title", "text", "task"]
+      .map((key) => candidate[key])
+      .find((value): value is string => typeof value === "string" && value.trim().length > 0);
+    if (!title) return [];
+    const rawStatus = typeof candidate.status === "string" ? candidate.status : "pending";
+    const status = replayReceiptStatus(rawStatus);
+    const detail = ["activeForm", "active_form", "detail", "description"]
+      .map((key) => candidate[key])
+      .find((value): value is string => typeof value === "string" && value.trim().length > 0);
+    return [
+      {
+        title: sanitizeReplayText(title, { max: 180 }),
+        status,
+        detail: detail ? sanitizeReplayText(detail, { max: 240 }) : undefined,
+      },
+    ];
+  });
+}
+
+function replayReceiptStatus(status: string): string {
+  const normalized = status.trim().toLowerCase();
+  if (/done|complete|success|finished/.test(normalized)) return "done";
+  if (/error|fail|blocked/.test(normalized)) return "error";
+  if (/wait|approval|review/.test(normalized)) return "waiting_approval";
+  if (/progress|running|active/.test(normalized)) return "running";
+  return "pending";
 }

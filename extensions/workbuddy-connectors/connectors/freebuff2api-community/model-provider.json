@@ -1,0 +1,32 @@
+{
+  "schema": "octopus.model-provider.v1",
+  "entry_id": "freebuff2api-community",
+  "display_name": "Freebuff2API Community",
+  "display_name_zh": "Freebuff2API 社区适配器",
+  "protocol": "openai-compatible",
+  "base_url": "https://open.freebuff.app/v1",
+  "models_endpoint": "https://open.freebuff.app/v1/models",
+  "configurable_base_url": true,
+  "dashboard_url": "https://open.freebuff.app",
+  "docs_url": "https://github.com/chenjh16/freebuff2api",
+  "api_key_label_zh": "Freebuff2API API Key",
+  "login_cta_zh": "打开社区服务并获取 API Key",
+  "connection_note_zh": "第三方社区模型网关，不安装 Freebuff CLI",
+  "model_list_label_zh": "模型将在连接时动态读取",
+  "free_models": [],
+  "excluded_models": [],
+  "responses_models": [],
+  "discover_all_models": true,
+  "context_window": 128000,
+  "supports_thinking": false,
+  "supports_vision": false,
+  "supports_tool_use": true,
+  "models_are_free": true,
+  "compat_profile": "openai_compat",
+  "probe_timeout_seconds": 20,
+  "privacy_notices_zh": [
+    "这是第三方社区适配器，不是 Freebuff 官方服务或官方插件。",
+    "API Key、对话、代码和工具上下文会发送到你填写的 Freebuff2API 服务。",
+    "使用公共托管服务前，请自行评估账号、数据与服务稳定性风险；也可以填写自托管地址。"
+  ]
+}

@@ -144,7 +144,9 @@ def test_launch_ensure_viewport(client) -> None:
     assert r.status_code == 200
     assert r.json()["status"] == "ready"
 
-    r = c.post("/api/browser/session/viewport", json={"session_id": "s2", "width": 800, "height": 600})
+    r = c.post(
+        "/api/browser/session/viewport", json={"session_id": "s2", "width": 800, "height": 600}
+    )
     assert r.status_code == 200
     assert r.json()["ok"] is True
     # Empty session_id defaults to "default" rather than erroring.
@@ -197,9 +199,8 @@ def test_actions_without_page(client) -> None:
 def _page_client(client):
     c = _c(client)
     _ensure(client)
-    from runtime.platform.runtime_policy.browser_sessions import BrowserSessionCenter
 
-    center = c.app.state  # not used; sessions live in the backend instance
+    _ = c.app.state  # not used; sessions live in the backend instance
     # Reach into the router's session registry via the sessions endpoint.
     return c
 
@@ -210,14 +211,11 @@ def test_actions_with_page(client, monkeypatch) -> None:
     page = _FakePage()
 
     # Grab the backend session object so we can attach a fake page.
-    backend = br_mod._BrowserBackend  # patched class; instance lives in router closure.
+    _ = br_mod._BrowserBackend  # patched class; instance lives in router closure.
     # The TestClient app holds no reference; instead, drive via a page-aware
     # backend by pre-seeding the session through launch + page injection.
-    from runtime.platform.runtime_policy.browser_sessions import BrowserSessionCenter
 
     # Simplest: monkeypatch _ensure_real_browser_session to attach a page.
-    orig = _StubBackend._ensure_real_browser_session
-
     def _attach(self, session):
         session["page"] = page
         return True
@@ -263,6 +261,7 @@ def test_action_failure_records_replay_evidence(client, monkeypatch) -> None:
         raise RuntimeError("browser exploded")
 
     page.click = _boom
+
     def _attach(self, session):
         session["page"] = page
         return True
@@ -297,7 +296,10 @@ def test_read_endpoints(client) -> None:
 def test_replay_case_queue(client) -> None:
     c = _c(client)
     _ensure(client)
-    assert c.post("/api/browser/session/replay-case/queue", json={"session_id": "s1"}).status_code == 409
+    assert (
+        c.post("/api/browser/session/replay-case/queue", json={"session_id": "s1"}).status_code
+        == 409
+    )
     c.post("/api/browser/action", json={"session_id": "s1", "action": "press", "key": "Enter"})
     r = c.post(
         "/api/browser/session/replay-case/queue",
@@ -357,7 +359,9 @@ def test_relay_status_heartbeat_result(client) -> None:
 
 def test_relay_control_actions(client) -> None:
     c = _c(client)
-    r = c.post("/api/browser/relay/control", json={"action": "interrupt", "reason": "user stepped in"})
+    r = c.post(
+        "/api/browser/relay/control", json={"action": "interrupt", "reason": "user stepped in"}
+    )
     assert r.status_code == 200
     assert r.json()["interrupt"]["reason"] == "user stepped in"
     assert r.json()["control"]["blocked"] is True
@@ -380,9 +384,12 @@ def test_relay_command_policy_and_timeout(client) -> None:
     # Connect it via heartbeat
     c.post("/api/browser/relay/heartbeat", json={})
     assert c.post("/api/browser/relay/command", json={}).status_code == 400
-    assert c.post(
-        "/api/browser/relay/command", json={"action": "extract", "timeout_seconds": "oops"}
-    ).status_code == 400
+    assert (
+        c.post(
+            "/api/browser/relay/command", json={"action": "extract", "timeout_seconds": "oops"}
+        ).status_code
+        == 400
+    )
 
     # Site policy: allowlist blocks unknown hosts.
     c.put(
@@ -417,7 +424,12 @@ def test_relay_command_policy_and_timeout(client) -> None:
 def test_bookmarklet(client) -> None:
     c = _c(client)
     assert c.get("/api/browser/relay/bookmarklet.js").status_code == 200
-    assert c.get("/api/browser/relay/bookmarklet-poll", params={"callback": "bad-callback"}).status_code == 400
+    assert (
+        c.get(
+            "/api/browser/relay/bookmarklet-poll", params={"callback": "bad-callback"}
+        ).status_code
+        == 400
+    )
     r = c.get(
         "/api/browser/relay/bookmarklet-poll",
         params={"callback": "window.__cb", "url": "https://x/", "title": "X"},

@@ -3,14 +3,22 @@
 from __future__ import annotations
 
 import json
+import logging
+import threading
+import time
 from pathlib import Path
+
+import pytest
 
 from runtime.execution.suckers import SkillRegistry
 from runtime.execution.suckers.market_skills import (
+    _PROMPT_REFRESH_MAX_DEADLINE_S,
     _parse_frontmatter,
+    _prompt_refresh_deadline,
     _sanitize_skill_name,
     load_single_market_skill,
     register_market_skills,
+    register_prompt_market_skills,
 )
 
 # Implementation note.
@@ -193,6 +201,449 @@ class TestRegistration:
             all_skills_dir=tmp_path / "does_not_exist",
         )
         assert count == 0
+
+    def test_production_chokepoint_rejects_direct_mutable_catalog_registration(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        skill = tmp_path / "remote"
+        skill.mkdir()
+        (skill / "SKILL.md").write_text(
+            "---\nname: remote\ndescription: mutable\n---\nMUTABLE REMOTE PROMPT",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "shared")
+        registry = SkillRegistry()
+
+        assert register_market_skills(registry, all_skills_dir=tmp_path) == 0
+        assert not load_single_market_skill(registry, "remote", all_skills_dir=tmp_path)
+        assert not registry.has("remote")
+
+
+class TestPromptCatalogDistribution:
+    @staticmethod
+    def _write_skill(root: Path, name: str, body: str = "body") -> None:
+        skill = root / name
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text(
+            f"---\nname: {name}\ndescription: packaged fallback.\n---\n{body}\n",
+            encoding="utf-8",
+        )
+
+    def test_empty_external_metadata_dir_uses_bundled_fallback(self, tmp_path: Path):
+        resources = tmp_path / "resources"
+        external = resources / "skills" / "public"
+        external.mkdir(parents=True)
+        (external / "skills_config.json").write_text("{}\n", encoding="utf-8")
+        bundled = tmp_path / "bundled"
+        self._write_skill(bundled, "offline-core")
+        registry = SkillRegistry()
+
+        count = register_prompt_market_skills(
+            registry,
+            resource_dir=resources,
+            bundled_dir=bundled,
+        )
+
+        assert count == 1
+        assert registry.has("offline-core")
+
+    def test_bounded_refresh_errors_are_observable_after_bundled_registration(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        resources = tmp_path / "resources"
+        external = resources / "skills" / "public"
+        external.mkdir(parents=True)
+        (resources / "skills.lock.json").write_text(
+            '{"skills": ["registry-only"]}\n',
+            encoding="utf-8",
+        )
+        bundled = tmp_path / "bundled"
+        self._write_skill(bundled, "offline-core")
+
+        monkeypatch.setattr(
+            "octopus_runtime.bootstrap_skills",
+            lambda *_args, **_kwargs: ([], [], [("registry-only", "registry offline")]),
+        )
+        registry = SkillRegistry()
+
+        with caplog.at_level(logging.WARNING):
+            count = register_prompt_market_skills(
+                registry,
+                resource_dir=resources,
+                bundled_dir=bundled,
+            )
+
+        assert count == 1
+        assert registry.has("offline-core")
+        assert "bounded refresh incomplete" in caplog.text
+        assert "registry offline" in caplog.text
+
+    def test_partial_external_catalog_is_supplemented_by_bundled_fallback(
+        self,
+        tmp_path: Path,
+    ):
+        resources = tmp_path / "resources"
+        external = resources / "skills" / "public"
+        bundled = tmp_path / "bundled"
+        self._write_skill(external, "external-newer", "external body")
+        self._write_skill(bundled, "external-newer", "bundled body")
+        self._write_skill(bundled, "offline-core")
+        registry = SkillRegistry()
+
+        count = register_prompt_market_skills(
+            registry,
+            resource_dir=resources,
+            bundled_dir=bundled,
+        )
+
+        assert count == 2
+        assert registry.has("external-newer")
+        assert registry.has("offline-core")
+        assert registry.get("external-newer").handler()["instructions"] == "external body"
+
+    def test_production_uses_only_build_bound_catalog_and_never_refreshes(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        resources = tmp_path / "resources"
+        external = resources / "skills" / "public"
+        bundled = tmp_path / "bundled"
+        self._write_skill(external, "shared-name", "mutable external body")
+        self._write_skill(external, "external-only", "remote-only body")
+        self._write_skill(bundled, "shared-name", "build-bound body")
+        (resources / "skills.lock.json").write_text(
+            '{"skills": ["external-only"]}\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "production")
+        monkeypatch.setattr(
+            "runtime.platform.process.paths.bundled_market_skills_dir",
+            lambda: bundled,
+        )
+
+        def unexpected_bootstrap(*_args, **_kwargs):
+            raise AssertionError("production startup must not contact the skill registry")
+
+        monkeypatch.setattr("octopus_runtime.bootstrap_skills", unexpected_bootstrap)
+        registry = SkillRegistry()
+
+        with caplog.at_level(logging.WARNING):
+            count = register_prompt_market_skills(
+                registry,
+                resource_dir=resources,
+                bundled_dir=bundled,
+            )
+
+        assert count == 1
+        assert registry.get("shared-name").handler()["instructions"] == "build-bound body"
+        assert not registry.has("external-only")
+        assert "ignoring mutable external prompt-skill catalog" in caplog.text
+
+    def test_production_fails_closed_without_build_bound_catalog(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        resources = tmp_path / "resources"
+        external = resources / "skills" / "public"
+        self._write_skill(external, "external-only")
+        monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "server")
+
+        def unexpected_bootstrap(*_args, **_kwargs):
+            raise AssertionError("production startup must not contact the skill registry")
+
+        monkeypatch.setattr("octopus_runtime.bootstrap_skills", unexpected_bootstrap)
+
+        with pytest.raises(RuntimeError, match="Remote and mutable external catalogs are disabled"):
+            register_prompt_market_skills(
+                SkillRegistry(),
+                resource_dir=resources,
+                bundled_dir=tmp_path / "missing-bundle",
+            )
+
+    def test_bounded_refresh_exception_is_observable_after_bundled_registration(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        resources = tmp_path / "resources"
+        (resources / "skills" / "public").mkdir(parents=True)
+        (resources / "skills.lock.json").write_text(
+            '{"skills": ["registry-only"]}\n',
+            encoding="utf-8",
+        )
+        bundled = tmp_path / "bundled"
+        self._write_skill(bundled, "offline-core")
+
+        def fail_bootstrap(*_args, **_kwargs):
+            raise OSError("registry socket unavailable")
+
+        monkeypatch.setattr("octopus_runtime.bootstrap_skills", fail_bootstrap)
+        registry = SkillRegistry()
+
+        with caplog.at_level(logging.WARNING):
+            count = register_prompt_market_skills(
+                registry,
+                resource_dir=resources,
+                bundled_dir=bundled,
+            )
+
+        assert count == 1
+        assert "bounded refresh failed" in caplog.text
+        assert "registry socket unavailable" in caplog.text
+
+    def test_packaged_catalog_passes_small_deadline_without_waiting_for_default_timeout(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        resources = tmp_path / "resources"
+        external = resources / "skills" / "public"
+        external.mkdir(parents=True)
+        lockfile = resources / "skills.lock.json"
+        lockfile.write_text('{"skills": ["registry-only"]}\n', encoding="utf-8")
+        bundled = tmp_path / "bundled"
+        self._write_skill(bundled, "offline-core")
+        calls: list[dict[str, object]] = []
+
+        def fake_bootstrap(*_args, **kwargs):
+            calls.append(kwargs)
+            return [], [], [("registry-only", "fake blackhole deadline")]
+
+        monkeypatch.setattr("octopus_runtime.bootstrap_skills", fake_bootstrap)
+        registry = SkillRegistry()
+
+        count = register_prompt_market_skills(
+            registry,
+            resource_dir=resources,
+            bundled_dir=bundled,
+            refresh_deadline_s=0.05,
+        )
+
+        assert count == 1
+        assert registry.has("offline-core")
+        assert calls == [
+            {
+                "request_timeout_s": 0.05,
+                "max_workers": 8,
+                "total_timeout_s": 0.05,
+            }
+        ]
+
+    def test_packaged_startup_returns_within_deadline_when_refresh_worker_blocks(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        resources = tmp_path / "resources"
+        external = resources / "skills" / "public"
+        external.mkdir(parents=True)
+        (resources / "skills.lock.json").write_text(
+            '{"skills": ["registry-only"]}\n',
+            encoding="utf-8",
+        )
+        bundled = tmp_path / "bundled"
+        self._write_skill(bundled, "offline-core")
+        started = threading.Event()
+        release = threading.Event()
+
+        def fake_sync_one(slug, *_args, **_kwargs):
+            started.set()
+            release.wait(timeout=2)
+            return slug, None, "__error__:released"
+
+        monkeypatch.setattr("octopus_runtime.materialize._sync_one", fake_sync_one)
+        registry = SkillRegistry()
+        began = time.monotonic()
+        try:
+            count = register_prompt_market_skills(
+                registry,
+                resource_dir=resources,
+                bundled_dir=bundled,
+                refresh_deadline_s=0.05,
+            )
+            elapsed = time.monotonic() - began
+        finally:
+            release.set()
+
+        assert started.is_set()
+        assert elapsed < 0.5
+        assert count == 1
+        assert registry.has("offline-core")
+        assert not registry.has("registry-only")
+
+    def test_successful_refresh_is_only_visible_after_next_registry_construction(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        resources = tmp_path / "resources"
+        external = resources / "skills" / "public"
+        (resources / "skills.lock.json").parent.mkdir(parents=True)
+        (resources / "skills.lock.json").write_text(
+            '{"skills": ["registry-only"]}\n',
+            encoding="utf-8",
+        )
+        bundled = tmp_path / "bundled"
+        self._write_skill(bundled, "offline-core")
+
+        def fake_bootstrap(*_args, **_kwargs):
+            self._write_skill(external, "registry-only", "downloaded body")
+            return ["registry-only"], [], []
+
+        monkeypatch.setattr("octopus_runtime.bootstrap_skills", fake_bootstrap)
+        first_registry = SkillRegistry()
+
+        with caplog.at_level(logging.INFO):
+            first_count = register_prompt_market_skills(
+                first_registry,
+                resource_dir=resources,
+                bundled_dir=bundled,
+            )
+
+        assert first_count == 1
+        assert first_registry.has("offline-core")
+        assert not first_registry.has("registry-only")
+        assert "apply after the next restart" in caplog.text
+
+        second_registry = SkillRegistry()
+        second_count = register_prompt_market_skills(
+            second_registry,
+            resource_dir=resources,
+            bundled_dir=bundled,
+            refresh_deadline_s=0,
+        )
+        assert second_count == 2
+        assert second_registry.get("registry-only").handler()["instructions"] == "downloaded body"
+
+    def test_without_bundled_catalog_preserves_synchronous_bootstrap(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        resources = tmp_path / "resources"
+        external = resources / "skills" / "public"
+        lockfile = resources / "skills.lock.json"
+        lockfile.parent.mkdir(parents=True)
+        lockfile.write_text('{"skills": ["registry-only"]}\n', encoding="utf-8")
+        calls: list[dict[str, object]] = []
+
+        def fake_bootstrap(*_args, **kwargs):
+            calls.append(kwargs)
+            self._write_skill(external, "registry-only")
+            return ["registry-only"], [], []
+
+        monkeypatch.setattr("octopus_runtime.bootstrap_skills", fake_bootstrap)
+        registry = SkillRegistry()
+
+        count = register_prompt_market_skills(
+            registry,
+            resource_dir=resources,
+            bundled_dir=tmp_path / "missing-bundle",
+        )
+
+        assert count == 1
+        assert registry.has("registry-only")
+        assert calls == [{}]
+
+    def test_refresh_deadline_is_operator_configurable_but_hard_capped(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setenv("OCTOPUS_PROMPT_SKILL_REFRESH_DEADLINE_S", "1.25")
+        assert _prompt_refresh_deadline(None) == 1.25
+
+        monkeypatch.setenv("OCTOPUS_PROMPT_SKILL_REFRESH_DEADLINE_S", "999")
+        assert _prompt_refresh_deadline(None) == _PROMPT_REFRESH_MAX_DEADLINE_S
+
+        assert _prompt_refresh_deadline(0) == 0
+
+    def test_missing_external_and_bundled_catalogs_fail_fast(self, tmp_path: Path):
+        resources = tmp_path / "resources"
+        (resources / "skills" / "public").mkdir(parents=True)
+        registry = SkillRegistry()
+
+        with pytest.raises(RuntimeError, match="installation is incomplete"):
+            register_prompt_market_skills(
+                registry,
+                resource_dir=resources,
+                bundled_dir=tmp_path / "missing-bundle",
+            )
+
+
+class TestMainSkillRegistration:
+    def test_uses_runtime_policy_capabilities_despite_legacy_package(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        import runtime.platform.capabilities  # noqa: F401
+        from runtime.execution import all_skills
+
+        class _Capabilities:
+            @staticmethod
+            def disabled_skill_groups() -> set[str]:
+                return {"web"}
+
+        called: list[str] = []
+        monkeypatch.setattr(
+            "runtime.platform.runtime_policy.capabilities.load",
+            lambda: _Capabilities(),
+        )
+        monkeypatch.setattr(
+            all_skills,
+            "_GROUP_REGISTRARS",
+            {
+                "builtin": lambda _registry: called.append("builtin"),
+                "web": lambda _registry: called.append("web"),
+                "market": lambda _registry: called.append("market"),
+            },
+        )
+        monkeypatch.setattr(
+            all_skills,
+            "_register_prompt_market",
+            lambda _registry: called.append("prompt"),
+        )
+
+        all_skills.register_all(SkillRegistry())
+
+        assert called == ["builtin", "prompt", "market"]
+
+    def test_production_agent_docs_ignore_mutable_external_override(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        from runtime.execution.suckers.agent_doc_skills import register_agent_doc_skills
+
+        external = tmp_path / "skills" / "public"
+        TestPromptCatalogDistribution._write_skill(
+            external,
+            "frontend-design",
+            "MUTABLE REMOTE OVERRIDE",
+        )
+        monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "commercial")
+        monkeypatch.setattr(
+            "runtime.platform.process.paths.resources_root",
+            lambda: tmp_path,
+        )
+        registry = SkillRegistry()
+
+        register_agent_doc_skills(registry)
+
+        assert registry.has("frontend-design")
+        assert (
+            "MUTABLE REMOTE OVERRIDE"
+            not in registry.get("frontend-design").handler()["instructions"]
+        )
 
 
 # Implementation note.

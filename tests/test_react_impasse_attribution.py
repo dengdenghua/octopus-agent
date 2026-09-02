@@ -64,10 +64,11 @@ def test_omitting_steps_preserves_legacy_wording() -> None:
 
 
 def test_specific_hints_win_over_action_deficit() -> None:
-    """A sandbox-path diagnosis is more useful than the deficit wording."""
+    """A workspace-scope diagnosis is more useful than deficit wording."""
     steps = [_step(thought="t", action="", observation="")]
     hint = _guard_impasse_actionable_hint("evidence guard", "path_blocked: /etc/passwd", steps)
-    assert "工作区沙箱之外" in hint
+    assert "不在当前任务获准的工作区内" in hint
+    assert "不代表执行沙箱已开启" in hint
 
 
 def test_stall_kind_separates_deficit_from_evidence() -> None:

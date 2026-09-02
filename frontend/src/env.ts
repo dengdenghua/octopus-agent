@@ -15,6 +15,13 @@ export const env = {
     import.meta.env.NEXT_PUBLIC_OCTOPUS_BASE_URL ??
     "",
 
+  // Optional Echo OS shell address used when the independently served Agent
+  // workbench needs to return to the desktop application.
+  ECHO_OS_DESKTOP_URL:
+    import.meta.env.VITE_ECHO_OS_DESKTOP_URL ??
+    import.meta.env.NEXT_PUBLIC_ECHO_OS_DESKTOP_URL ??
+    "",
+
   // Implementation note.
   NEXT_PUBLIC_STATIC_WEBSITE_ONLY: _staticWebsiteOnly,
   // Short alias used by most callsites (header, chat-box, artifacts,

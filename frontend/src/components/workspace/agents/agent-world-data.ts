@@ -16,50 +16,124 @@ import {
   LandmarkIcon,
   PaletteIcon,
   SearchCheckIcon,
-  TargetIcon,
+  ShoppingBagIcon,
   WorkflowIcon,
 } from "lucide-react";
 
-import type {
-  Agent,
-  AgentWorldAgent,
-  AgentWorldCategory,
-} from "@/core/agents/types";
+import type { Agent, AgentWorldAgent } from "@/core/agents/types";
+import {
+  WHITE_GHOST_AGENT_IDS,
+  WHITE_GHOST_AGENT_ORDER,
+} from "@/core/agents/persona-policy";
 
-export type AgentCategoryFilter = "all" | AgentWorldCategory;
+/**
+ * User-facing discovery domains. These deliberately do not mirror the raw
+ * profile category: `expert`/`specialist` describe a member's form, while
+ * commerce/finance/coding describe what the member helps with.
+ */
+export type AgentCategoryFilter =
+  | "all"
+  | "general"
+  | "coding"
+  | "research"
+  | "creative"
+  | "automation"
+  | "ecommerce"
+  | "finance";
 
-export const LOCAL_AGENT_ORDER = [
-  "general",
-  "coder",
-  "vibe_selling",
-  "ecommerce_mind",
-  "market_researcher",
-  "aoi",
-] as const;
-export const LOCAL_AGENT_IDS = new Set<string>(LOCAL_AGENT_ORDER);
+/** @deprecated Prefer the primary-persona names from core/agents. */
+export const LOCAL_AGENT_ORDER = WHITE_GHOST_AGENT_ORDER;
+/** @deprecated Prefer the primary-persona names from core/agents. */
+export const LOCAL_AGENT_IDS = WHITE_GHOST_AGENT_IDS;
 export const LOCAL_AGENT_RANK = new Map<string, number>(
   LOCAL_AGENT_ORDER.map((id, index) => [id, index]),
 );
 export const AGENT_CATEGORY_FILTERS: AgentCategoryFilter[] = [
   "all",
-  "assistant",
-  "coder",
-  "researcher",
+  "general",
+  "coding",
+  "research",
   "creative",
   "automation",
-  "specialist",
-  "financial",
+  "ecommerce",
+  "finance",
 ];
 export const CATEGORY_ICONS: Record<AgentCategoryFilter, LucideIcon> = {
   all: Layers3Icon,
-  assistant: BotIcon,
-  coder: Code2Icon,
-  researcher: SearchCheckIcon,
+  general: BotIcon,
+  coding: Code2Icon,
+  research: SearchCheckIcon,
   creative: PaletteIcon,
   automation: WorkflowIcon,
-  specialist: TargetIcon,
-  financial: LandmarkIcon,
+  ecommerce: ShoppingBagIcon,
+  finance: LandmarkIcon,
 };
+
+const DOMAIN_HINTS: Record<Exclude<AgentCategoryFilter, "all">, RegExp> = {
+  general: /\b(?:assistant|general)\b|助手|通用/i,
+  coding:
+    /\b(?:coder|coding|code|developer|engineering|engineer|firmware|software|hardware|linux|android|algorithm|pcb|robotics)\b|编程|代码|开发|工程|固件|算法|硬件|软件/i,
+  research: /\b(?:research|researcher|analysis|analyst)\b|研究|调研|分析/i,
+  creative:
+    /\b(?:creative|design|designer|media|image|video|audio|writer)\b|创意|设计|图像|视频|音频|写作/i,
+  automation:
+    /\b(?:automation|operator|workflow|desktop|browser)\b|自动化|工作流|桌面操作|浏览器操作/i,
+  ecommerce:
+    /\b(?:ecommerce|e-commerce|commerce|selling|retail|shopify|tiktok shop|product listing|merchandising)\b|电商|零售|带货|选品|商品运营|店铺/i,
+  finance:
+    /\b(?:finance|financial|stock|investment|investor|valuation|trading|audit|tax)\b|财经|金融|股票|投资|估值|交易|审计|税务/i,
+};
+
+const RAW_CATEGORY_DOMAINS: Record<string, AgentCategoryFilter> = {
+  assistant: "general",
+  coder: "coding",
+  engineering: "coding",
+  researcher: "research",
+  creative: "creative",
+  automation: "automation",
+  finance: "finance",
+  financial: "finance",
+};
+
+/** Return every business domain a member belongs to, in stable UI order. */
+export function getAgentDomains(agent: AgentWorldAgent): AgentCategoryFilter[] {
+  const domains = new Set<AgentCategoryFilter>();
+  const rawCategory = String(agent.category ?? "").toLowerCase();
+  const mappedCategory = RAW_CATEGORY_DOMAINS[rawCategory];
+  if (mappedCategory) domains.add(mappedCategory);
+
+  const searchable = [
+    agent.id,
+    agent.name,
+    agent.display_name,
+    agent.description,
+    rawCategory,
+    ...(agent.tags ?? []),
+    ...(agent.tool_groups ?? []),
+    ...(agent.key_skills ?? []),
+    ...(agent.available_skills ?? []),
+  ].join(" ");
+
+  for (const category of AGENT_CATEGORY_FILTERS) {
+    if (category !== "all" && DOMAIN_HINTS[category].test(searchable)) {
+      domains.add(category);
+    }
+  }
+
+  // `specialist`, `expert`, and `product` are profile shapes rather than
+  // discoverable domains. Keep an otherwise unclassified member findable.
+  if (domains.size === 0) domains.add("general");
+  return AGENT_CATEGORY_FILTERS.filter(
+    (category) => category !== "all" && domains.has(category),
+  );
+}
+
+export function agentMatchesCategory(
+  agent: AgentWorldAgent,
+  category: AgentCategoryFilter,
+): boolean {
+  return category === "all" || getAgentDomains(agent).includes(category);
+}
 
 export function localAgentToWorldAgent(agent: Agent): AgentWorldAgent {
   const displayName = agent.display_name ?? agent.name;
@@ -69,7 +143,7 @@ export function localAgentToWorldAgent(agent: Agent): AgentWorldAgent {
     name: agent.name,
     display_name: displayName,
     description: agent.description || `${displayName} Agent`,
-    author: "Octopus",
+    author: "EchoOS",
     category: toolGroups.length > 0 ? "automation" : "assistant",
     tags: toolGroups,
     icon: agent.icon || "🤖",

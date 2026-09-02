@@ -77,16 +77,33 @@ class _DaemonThreadPoolExecutor(ThreadPoolExecutor):
 
         num_threads = len(self._threads)
         if num_threads < self._max_workers:
-            thread_name = "%s_%d" % (self._thread_name_prefix or self, num_threads)
+            thread_name = f"{self._thread_name_prefix or self}_{num_threads}"
+            executor_reference = weakref.ref(self, weakref_cb)
+
+            # CPython 3.14 replaced the legacy ``initializer``/``initargs``
+            # worker protocol with a per-thread WorkerContext.  Capability
+            # detection keeps this compatible with both implementations (and
+            # with downstream backports) without assuming a Python version.
+            create_worker_context = getattr(self, "_create_worker_context", None)
+            worker_args: tuple[object, ...]
+            if callable(create_worker_context):
+                worker_args = (
+                    executor_reference,
+                    create_worker_context(),
+                    self._work_queue,
+                )
+            else:
+                worker_args = (
+                    executor_reference,
+                    self._work_queue,
+                    getattr(self, "_initializer", None),
+                    getattr(self, "_initargs", ()),
+                )
+
             t = threading.Thread(
                 name=thread_name,
                 target=_cf_thread._worker,
-                args=(
-                    weakref.ref(self, weakref_cb),
-                    self._work_queue,
-                    self._initializer,
-                    self._initargs,
-                ),
+                args=worker_args,
                 daemon=True,
             )
             t.start()

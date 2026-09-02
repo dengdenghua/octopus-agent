@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { getBackendBaseURL } from "@/core/config";
+import { getBackendTransportBaseURL } from "@/core/config";
 import { getToken } from "@/core/auth/api";
 import type { SandboxPolicy } from "@/core/permissions";
 import type { ReasoningEffort } from "@/core/threads";
@@ -73,7 +73,8 @@ export interface UseRealtimeThreadArgs {
    * Enables instant cold-start rendering from the persisted event log;
    * omit to disable the cache entirely. */
   replayCache?: ReplayCacheStore;
-  // Inject for tests. Defaults to a real client backed by getBackendBaseURL().
+  // Inject for tests. Defaults to a real client backed by the raw WebSocket
+  // transport URL (the packaged renderer uses a custom origin for HTTP only).
   clientFactory?: (deps: {
     onIncomingRequest: (req: JsonRpcRequest) => Promise<unknown>;
     onNotification: (n: {
@@ -95,6 +96,11 @@ export interface UseRealtimeThreadValue {
   connected: boolean;
   startTurn: (params: {
     input: string;
+    /** Explicit local project directory. The backend validates/rewrites this
+     * at the authenticated boundary before it becomes the execution cwd. */
+    cwd?: string;
+    /** Stable client-minted id reused by the server's UserMessageItem. */
+    clientItemId?: string;
     attachments?: Record<string, unknown>[];
     approvalPolicy?: "never" | "on-request" | "untrusted";
     sandboxPolicy?: SandboxPolicy;
@@ -153,18 +159,14 @@ export interface UseRealtimeThreadValue {
 // Newest turns fetched per thread/resume page. Large threads resume
 // with the most recent window; older history pages in on demand via
 // loadOlderTurns().
-const RESUME_TURN_LIMIT = 50;
-// A route switch or hot reload unmounts the thread hook. Closing its socket
-// immediately also cancels the server-side turn, even though the user never
-// pressed Stop. Keep that one transport alive until the active turn emits a
-// terminal event; the timeout is only a leak guard for a wedged provider.
-const DETACHED_TURN_CLOSE_TIMEOUT_MS = 10 * 60 * 1_000;
-
+const RESUME_TURN_LIMIT = 20;
 interface ResumeResponse {
   thread?: { id: string; path?: string };
   turns: Conversation["turns"];
   hasMore?: boolean;
   totalTurns?: number;
+  lastTurnId?: string | null;
+  lastTurnStatus?: string | null;
   incremental?: boolean;
   nextEventSequence?: number;
   eventStreamId?: string | null;
@@ -189,11 +191,25 @@ interface ThreadEventsResponse {
 // bounded for threads with huge logs; the client loops until hasMore.
 const EVENTS_PAGE_LIMIT = 5000;
 
+// A recovered in-flight turn may be owned by a different gateway worker,
+// which means this socket cannot rely on that worker's in-memory live fanout.
+// Poll the durable log while such a tail is active. The loop self-schedules
+// only after the previous request settles, so a slow request can never stack
+// another one on top of it.
+const ACTIVE_TAIL_POLL_INTERVAL_MS = 750;
+const ACTIVE_TAIL_POLL_MAX_BACKOFF_MS = 3_000;
+// Normal same-worker turns primarily use live fanout. If their live-first
+// dedupe ledger reaches this watermark, immediately start durable polling to
+// confirm and compact it instead of letting it grow for the life of a tab.
+const UNCONFIRMED_LIVE_EVENT_ID_POLL_THRESHOLD = 512;
+
 // Live notifications and log-folded events both carry the persisted
 // ``eventId``. Either path can deliver an event first (live push vs.
-// incremental thread/events fetch), so each id is applied exactly once —
-// this set is the dedupe ledger. Bounded FIFO: the window only needs to
-// cover events since the last resume cursor, never the whole thread.
+// incremental thread/events fetch), so each id is applied exactly once.
+// Confirmed ids may be bounded because the durable cursor has moved beyond
+// them. Live ids are held in a separate, unbounded-until-confirmed ledger
+// below: trimming one before thread/events supplies its log coordinate could
+// duplicate a delta when live fanout and polling overlap.
 const SEEN_EVENT_ID_LIMIT = 10_000;
 
 function markSeenEventId(seen: Set<string>, eventId: string): void {
@@ -270,11 +286,14 @@ export function useRealtimeThread(
   // If a log is replaced or restored, the server returns a full snapshot
   // instead of interpreting the old cursor inside unrelated history.
   const resumeStreamIdRef = useRef<string | null>(null);
-  // Dedupe ledger for eventId-stamped deliveries (live push and log fold
-  // can both deliver the same event; see ``markSeenEventId``). Lives at
-  // component scope so it survives reconnects; ids are random per thread,
-  // so cross-thread reuse is safe.
+  // Event ids whose physical log position has been observed by
+  // thread/events. These can use the bounded FIFO because the resume cursor
+  // is already beyond them.
   const seenEventIdsRef = useRef<Set<string>>(new Set());
+  // Live event ids without a confirmed log position. Never FIFO-trim these:
+  // a slow/cross-worker poll may fetch the matching delta much later. A
+  // fetched page moves the id into ``seenEventIdsRef``.
+  const unconfirmedLiveEventIdsRef = useRef<Set<string>>(new Set());
   // Lazily created default replay cache (IndexedDB where available).
   // Explicit ``args.replayCache`` wins; ``null`` here means "not yet
   // created", so tests injecting their own store never pay for one.
@@ -290,7 +309,9 @@ export function useRealtimeThread(
   // A turn/started notification observed after the request went out is
   // the real delivery signal — ``startTurn`` uses it to swallow later
   // transport rejections (reconnect + resume recover the turn state).
-  const turnDeliveryWatchesRef = useRef<Set<{ delivered: boolean }>>(new Set());
+  const turnDeliveryWatchesRef = useRef<
+    Set<{ delivered: boolean; clientItemId?: string }>
+  >(new Set());
 
   // Reducer anomalies feed the per-turn vitals marks so the turn's
   // telemetry record carries them. Keep the callback stable — it sits
@@ -410,12 +431,202 @@ export function useRealtimeThread(
         );
       });
 
+    let cancelled = false;
+    let openedOnce = false;
+    let online = false;
     let resumeSeq = 0;
     let resumeInFlight = false;
+
+    // The confirmed ledger is safe to bound only because every id in it has
+    // been observed in a fetched log slice. Keep live-only ids separate until
+    // a slice supplies their durable position.
+    seenEventIdsRef.current.clear();
+    unconfirmedLiveEventIdsRef.current.clear();
+
+    type EventFetchOutcome =
+      | { reset: true }
+      | {
+          reset: false;
+          events: SequencedLoggedEvent[];
+          finalPage: ThreadEventsResponse;
+        };
+
+    const fetchEventPages = async (
+      client: RealtimeClient,
+      afterSequence: number,
+      eventStreamId: string | null,
+    ): Promise<EventFetchOutcome> => {
+      const fetchPage = (after: number): Promise<ThreadEventsResponse> =>
+        client.request<ThreadEventsResponse>("thread/events", {
+          threadId: args.threadId,
+          afterSequence: after,
+          ...(eventStreamId ? { eventStreamId } : {}),
+          limit: EVENTS_PAGE_LIMIT,
+        });
+      let page = await fetchPage(afterSequence);
+      if (page.requiresReset === true) return { reset: true };
+      const events = [...(page.events ?? [])];
+      while (page.hasMore === true && events.length > 0) {
+        const lastSequence = events[events.length - 1]!.sequence;
+        page = await fetchPage(lastSequence);
+        if (page.requiresReset === true) return { reset: true };
+        events.push(...(page.events ?? []));
+      }
+      return { reset: false, events, finalPage: page };
+    };
+
+    /** Fold one authoritative event slice and advance the shared cursor.
+     * Returns null when drift makes a snapshot reset necessary. */
+    const foldFetchedEvents = (
+      events: SequencedLoggedEvent[],
+      finalPage: ThreadEventsResponse,
+    ): string | null => {
+      const confirmed = seenEventIdsRef.current;
+      const liveUnconfirmed = unconfirmedLiveEventIdsRef.current;
+      const fresh = events.filter(
+        (event) =>
+          typeof event.eventId !== "string" ||
+          (!confirmed.has(event.eventId) &&
+            !liveUnconfirmed.has(event.eventId)),
+      );
+      const probe = replayEvents(fresh, {
+        base: stateRef.current,
+      }).conversation;
+      const lastTurn = probe.turns[probe.turns.length - 1];
+      const tailDrift =
+        typeof finalPage.lastTurnId === "string" &&
+        (!lastTurn ||
+          lastTurn.id !== finalPage.lastTurnId ||
+          lastTurn.status !== finalPage.lastTurnStatus);
+      const countDrift =
+        typeof finalPage.turnCount === "number" &&
+        stateRef.current.hasMoreTurns === false &&
+        probe.turns.length !== finalPage.turnCount;
+      if (tailDrift || countDrift) return null;
+
+      if (
+        typeof finalPage.cursor === "number" &&
+        Number.isFinite(finalPage.cursor) &&
+        finalPage.cursor >= 0
+      ) {
+        resumeCursorRef.current = finalPage.cursor;
+      }
+      if (typeof finalPage.streamId === "string") {
+        resumeStreamIdRef.current = finalPage.streamId;
+      }
+      void replayCache
+        .append(args.threadId, events, {
+          streamId: resumeStreamIdRef.current,
+          cursor: resumeCursorRef.current ?? 0,
+        })
+        .catch(() => {});
+
+      // Cursor confirmation comes before the React fold so a simultaneous
+      // live duplicate cannot append the same delta twice.
+      for (const event of events) {
+        if (typeof event.eventId !== "string") continue;
+        liveUnconfirmed.delete(event.eventId);
+        markSeenEventId(confirmed, event.eventId);
+      }
+      setState((prev) => {
+        const folded = replayEvents(fresh, { base: prev }).conversation;
+        const next: Conversation = { ...folded, resumeState: "resumed" };
+        const resumedActive = [...next.turns]
+          .reverse()
+          .find((turn) => turn.status === "inProgress");
+        seedVitalsFromResumedTurn(
+          vitalsMarksRef.current,
+          resumedActive ?? null,
+          Date.now(),
+        );
+        stateRef.current = next;
+        return next;
+      });
+      return typeof finalPage.lastTurnStatus === "string"
+        ? finalPage.lastTurnStatus
+        : (lastTurn?.status ?? "");
+    };
+
+    let tailPollActive = false;
+    let tailPollInFlight = false;
+    let tailPollSettlement: Promise<void> | null = null;
+    let tailPollTimer: ReturnType<typeof setTimeout> | null = null;
+    let tailPollGeneration = 0;
+    let tailPollFailures = 0;
+    let terminalDrainNeeded = false;
+    let terminalDrainStarted = false;
+
+    const clearTailPollTimer = (): void => {
+      if (tailPollTimer === null) return;
+      clearTimeout(tailPollTimer);
+      tailPollTimer = null;
+    };
+
+    const stopTailPolling = (): void => {
+      tailPollActive = false;
+      tailPollGeneration += 1;
+      clearTailPollTimer();
+      tailPollFailures = 0;
+      terminalDrainNeeded = false;
+      terminalDrainStarted = false;
+    };
+
+    const latestTailIsActive = (): boolean =>
+      stateRef.current.turns.at(-1)?.status === "inProgress";
+
+    const scheduleTailPoll = (
+      client: RealtimeClient,
+      delayMs: number,
+    ): void => {
+      if (
+        cancelled ||
+        !online ||
+        !tailPollActive ||
+        tailPollInFlight ||
+        tailPollTimer !== null
+      ) {
+        return;
+      }
+      tailPollTimer = setTimeout(() => {
+        tailPollTimer = null;
+        void runTailPoll(client);
+      }, delayMs);
+    };
+
+    const startTailPolling = (
+      client: RealtimeClient,
+      recoveredActive = false,
+      initialDelayMs = ACTIVE_TAIL_POLL_INTERVAL_MS,
+    ): void => {
+      if (cancelled || !online || (!recoveredActive && !latestTailIsActive())) {
+        return;
+      }
+      if (!tailPollActive) {
+        tailPollActive = true;
+        tailPollFailures = 0;
+        terminalDrainNeeded = false;
+        terminalDrainStarted = false;
+      }
+      if (initialDelayMs === 0 && !tailPollInFlight) {
+        clearTailPollTimer();
+      }
+      scheduleTailPoll(client, initialDelayMs);
+    };
+
+    const observeTailTerminal = (client: RealtimeClient): void => {
+      if (!tailPollActive || terminalDrainNeeded) return;
+      terminalDrainNeeded = true;
+      if (!tailPollInFlight) {
+        clearTailPollTimer();
+        scheduleTailPoll(client, 0);
+      }
+    };
     const requestResume = (
       client: RealtimeClient,
       mode: "preserve-live" | "replace",
     ): void => {
+      const pendingTailPoll = tailPollSettlement;
+      stopTailPolling();
       const seq = ++resumeSeq;
       resumeInFlight = true;
       setState((prev) => {
@@ -431,9 +642,22 @@ export function useRealtimeThread(
       // snapshot path below remains the authoritative fallback (first
       // resume, stream replacement, drift).
       if (afterSequence !== null) {
-        runEventResume(client, seq, afterSequence, eventStreamId);
+        const beginEventResume = (): void => {
+          if (cancelled || seq !== resumeSeq) return;
+          runEventResume(client, seq, afterSequence, eventStreamId);
+        };
+        // A transport can report close/open before a mocked or unusual
+        // request implementation rejects its old poll. Preserve strict
+        // single-flight across that boundary: catch-up starts only after the
+        // physical request settles, not merely after its generation is stale.
+        if (pendingTailPoll) {
+          void pendingTailPoll.then(beginEventResume);
+        } else {
+          beginEventResume();
+        }
         return;
       }
+      const liveIdsBeforeSnapshot = new Set(unconfirmedLiveEventIdsRef.current);
       void client
         .request<ResumeResponse>("thread/resume", {
           threadId: args.threadId,
@@ -448,6 +672,14 @@ export function useRealtimeThread(
             result.nextEventSequence >= 0
           ) {
             resumeCursorRef.current = result.nextEventSequence;
+            // These ids were already live-applied before the authoritative
+            // snapshot was requested; its returned cursor is proof that the
+            // snapshot covers their durable prefix. Live ids arriving while
+            // the request was in flight remain unconfirmed for the next poll.
+            for (const eventId of liveIdsBeforeSnapshot) {
+              unconfirmedLiveEventIdsRef.current.delete(eventId);
+              markSeenEventId(seenEventIdsRef.current, eventId);
+            }
           }
           if (typeof result.eventStreamId === "string") {
             resumeStreamIdRef.current = result.eventStreamId;
@@ -464,12 +696,32 @@ export function useRealtimeThread(
                 : null,
             );
           }
+          const current = stateRef.current;
+          const serverTurns = result.turns ?? [];
+          // A full snapshot is authoritative about the tail lifecycle. Do
+          // not preserve a locally hydrated in-progress turn when the
+          // server has already reaped it and reports a terminal tail; that
+          // combination leaves the UI stuck on “thinking” after a dropped
+          // socket or a stale replay-cache entry.
+          const authoritativeTerminal =
+            result.incremental !== true &&
+            typeof result.lastTurnStatus === "string" &&
+            result.lastTurnStatus !== "inProgress";
+          const projectedTurns =
+            result.incremental === true
+              ? mergeTurnSnapshots(current.turns, serverTurns)
+              : mode === "preserve-live" &&
+                  !authoritativeTerminal &&
+                  current.turns.length > 0 &&
+                  (!result.thread?.id || current.threadId === result.thread.id)
+                ? mergeTurnSnapshots(serverTurns, current.turns)
+                : serverTurns;
           setState((prev) => {
-            const serverTurns = result.turns ?? [];
             const turns =
               result.incremental === true
                 ? mergeTurnSnapshots(prev.turns, serverTurns)
                 : mode === "preserve-live" &&
+                    !authoritativeTerminal &&
                     prev.turns.length > 0 &&
                     (!result.thread?.id || prev.threadId === result.thread.id)
                   ? mergeTurnSnapshots(serverTurns, prev.turns)
@@ -494,6 +746,9 @@ export function useRealtimeThread(
             stateRef.current = next;
             return next;
           });
+          if (projectedTurns.at(-1)?.status === "inProgress") {
+            startTailPolling(client, true);
+          }
         })
         .catch(() => {
           if (cancelled || seq !== resumeSeq) return;
@@ -528,8 +783,11 @@ export function useRealtimeThread(
       eventStreamId: string | null,
     ): void => {
       const fallbackToSnapshot = (): void => {
+        stopTailPolling();
         resumeCursorRef.current = null;
         resumeStreamIdRef.current = null;
+        seenEventIdsRef.current.clear();
+        unconfirmedLiveEventIdsRef.current.clear();
         resumeInFlight = false;
         // The stream was replaced or the window is unsafe — the cached
         // prefix is no longer interpretable either. Refilled by the
@@ -537,53 +795,18 @@ export function useRealtimeThread(
         void replayCache.clear(args.threadId).catch(() => {});
         requestResume(client, "replace");
       };
-      const fetchPage = (after: number): Promise<ThreadEventsResponse> =>
-        client.request<ThreadEventsResponse>("thread/events", {
-          threadId: args.threadId,
-          afterSequence: after,
-          ...(eventStreamId ? { eventStreamId } : {}),
-          limit: EVENTS_PAGE_LIMIT,
-        });
-      void (async () => {
-        let page = await fetchPage(afterSequence);
-        if (page.requiresReset === true) return { reset: true as const };
-        const events = [...(page.events ?? [])];
-        while (page.hasMore === true && events.length > 0) {
-          const lastSequence = events[events.length - 1]!.sequence;
-          page = await fetchPage(lastSequence);
-          if (page.requiresReset === true) return { reset: true as const };
-          events.push(...(page.events ?? []));
-        }
-        return { reset: false as const, events, finalPage: page };
-      })()
+      void fetchEventPages(client, afterSequence, eventStreamId)
         .then((outcome) => {
           if (cancelled || seq !== resumeSeq) return;
           if (outcome.reset) {
             fallbackToSnapshot();
             return;
           }
-          const { events, finalPage } = outcome;
-          const seen = seenEventIdsRef.current;
-          const fresh = events.filter(
-            (e) => typeof e.eventId !== "string" || !seen.has(e.eventId),
+          const tailStatus = foldFetchedEvents(
+            outcome.events,
+            outcome.finalPage,
           );
-          // Drift probe: fold onto the latest reduced state (pure — the
-          // real fold below re-runs inside the setState updater) and check
-          // the rebuilt tail against the server's metadata.
-          const probe = replayEvents(fresh, {
-            base: stateRef.current,
-          }).conversation;
-          const lastTurn = probe.turns[probe.turns.length - 1];
-          const tailDrift =
-            typeof finalPage.lastTurnId === "string" &&
-            (!lastTurn ||
-              lastTurn.id !== finalPage.lastTurnId ||
-              lastTurn.status !== finalPage.lastTurnStatus);
-          const countDrift =
-            typeof finalPage.turnCount === "number" &&
-            stateRef.current.hasMoreTurns === false &&
-            probe.turns.length !== finalPage.turnCount;
-          if (tailDrift || countDrift) {
+          if (tailStatus === null) {
             if (import.meta.env.DEV) {
               console.warn(
                 "[realtime] event-mode resume diverged from authoritative tail; falling back to snapshot resume",
@@ -592,50 +815,8 @@ export function useRealtimeThread(
             fallbackToSnapshot();
             return;
           }
-          if (
-            typeof finalPage.cursor === "number" &&
-            Number.isFinite(finalPage.cursor) &&
-            finalPage.cursor >= 0
-          ) {
-            resumeCursorRef.current = finalPage.cursor;
-          }
-          if (typeof finalPage.streamId === "string") {
-            resumeStreamIdRef.current = finalPage.streamId;
-          }
           resumeInFlight = false;
-          // Cache the authoritative slice for the next cold start. ALL
-          // fetched events go in (not just ``fresh``) — events the client
-          // already applied live were never written to the cache (they
-          // carry no sequence on the wire), and this slice re-supplies
-          // them with their log coordinates.
-          void replayCache
-            .append(args.threadId, events, {
-              streamId: resumeStreamIdRef.current,
-              cursor: resumeCursorRef.current ?? 0,
-            })
-            .catch(() => {});
-          // Ledger before the fold: a live duplicate of a folded event
-          // arriving while the state update is queued is dropped by
-          // onNotification's dedupe.
-          for (const event of fresh) {
-            if (typeof event.eventId === "string") {
-              markSeenEventId(seen, event.eventId);
-            }
-          }
-          setState((prev) => {
-            const folded = replayEvents(fresh, { base: prev }).conversation;
-            const next: Conversation = { ...folded, resumeState: "resumed" };
-            const resumedActive = [...next.turns]
-              .reverse()
-              .find((turn) => turn.status === "inProgress");
-            seedVitalsFromResumedTurn(
-              vitalsMarksRef.current,
-              resumedActive ?? null,
-              Date.now(),
-            );
-            stateRef.current = next;
-            return next;
-          });
+          if (tailStatus === "inProgress") startTailPolling(client, true);
         })
         .catch(() => {
           if (cancelled || seq !== resumeSeq) return;
@@ -645,8 +826,114 @@ export function useRealtimeThread(
             stateRef.current = next;
             return next;
           });
+          // The cursor remains valid after a transient fetch error. Let the
+          // recovered-tail loop retry with bounded backoff if work is live.
+          startTailPolling(client);
         });
     };
+
+    async function runTailPoll(client: RealtimeClient): Promise<void> {
+      if (cancelled || !online || !tailPollActive || tailPollInFlight) return;
+      if (!terminalDrainNeeded && !latestTailIsActive()) {
+        terminalDrainNeeded = true;
+      }
+      const isFinalDrain = terminalDrainNeeded && !terminalDrainStarted;
+      if (terminalDrainNeeded && !isFinalDrain) return;
+      const afterSequence = resumeCursorRef.current;
+      if (afterSequence === null) {
+        stopTailPolling();
+        requestResume(client, "replace");
+        return;
+      }
+
+      const generation = tailPollGeneration;
+      const eventStreamId = resumeStreamIdRef.current;
+      tailPollInFlight = true;
+      if (isFinalDrain) terminalDrainStarted = true;
+      const fetchPromise = fetchEventPages(
+        client,
+        afterSequence,
+        eventStreamId,
+      );
+      const settlement = fetchPromise.then(
+        () => undefined,
+        () => undefined,
+      );
+      tailPollSettlement = settlement;
+      const releasePhysicalRequest = (): void => {
+        if (tailPollSettlement !== settlement) return;
+        tailPollSettlement = null;
+        tailPollInFlight = false;
+      };
+      try {
+        const outcome = await fetchPromise;
+        releasePhysicalRequest();
+        if (
+          cancelled ||
+          !online ||
+          !tailPollActive ||
+          generation !== tailPollGeneration
+        ) {
+          if (tailPollActive && online) {
+            scheduleTailPoll(client, ACTIVE_TAIL_POLL_INTERVAL_MS);
+          }
+          return;
+        }
+        if (outcome.reset) {
+          stopTailPolling();
+          resumeCursorRef.current = null;
+          resumeStreamIdRef.current = null;
+          seenEventIdsRef.current.clear();
+          unconfirmedLiveEventIdsRef.current.clear();
+          void replayCache.clear(args.threadId).catch(() => {});
+          requestResume(client, "replace");
+          return;
+        }
+        const tailStatus = foldFetchedEvents(outcome.events, outcome.finalPage);
+        if (tailStatus === null) {
+          stopTailPolling();
+          resumeCursorRef.current = null;
+          resumeStreamIdRef.current = null;
+          seenEventIdsRef.current.clear();
+          unconfirmedLiveEventIdsRef.current.clear();
+          void replayCache.clear(args.threadId).catch(() => {});
+          requestResume(client, "replace");
+          return;
+        }
+
+        tailPollFailures = 0;
+        if (isFinalDrain) {
+          stopTailPolling();
+          return;
+        }
+        if (terminalDrainNeeded || tailStatus !== "inProgress") {
+          terminalDrainNeeded = true;
+          scheduleTailPoll(client, 0);
+          return;
+        }
+        scheduleTailPoll(client, ACTIVE_TAIL_POLL_INTERVAL_MS);
+      } catch {
+        releasePhysicalRequest();
+        if (
+          cancelled ||
+          !online ||
+          !tailPollActive ||
+          generation !== tailPollGeneration
+        ) {
+          if (tailPollActive && online) {
+            scheduleTailPoll(client, ACTIVE_TAIL_POLL_INTERVAL_MS);
+          }
+          return;
+        }
+        if (isFinalDrain) terminalDrainStarted = false;
+        tailPollFailures += 1;
+        const retryDelay = Math.min(
+          ACTIVE_TAIL_POLL_INTERVAL_MS * 2 ** (tailPollFailures - 1),
+          ACTIVE_TAIL_POLL_MAX_BACKOFF_MS,
+        );
+        scheduleTailPoll(client, retryDelay);
+      }
+    }
 
     /**
      * Refill the replay cache in the background after a full snapshot
@@ -708,50 +995,32 @@ export function useRealtimeThread(
       }
     };
 
-    let cancelled = false;
-    let openedOnce = false;
-    let detached = false;
-    let detachedCloseTimer: ReturnType<typeof setTimeout> | null = null;
-    let detachedClient: RealtimeClient | null = null;
-    const closeDetachedClient = (): void => {
-      if (detachedCloseTimer !== null) {
-        clearTimeout(detachedCloseTimer);
-        detachedCloseTimer = null;
-      }
-      detachedClient?.close();
-      detachedClient = null;
-      detached = false;
-    };
-
     const onNotification = (note: {
       method: string;
       params: Record<string, unknown>;
     }): void => {
-      if (cancelled) {
-        const belongsToDetachedThread = note.params?.threadId === args.threadId;
-        const turn = note.params?.turn as { status?: unknown } | undefined;
-        const reachedTerminalState =
-          (note.method === "turn/completed" &&
-            (turn?.status === "completed" ||
-              turn?.status === "paused" ||
-              turn?.status === "cancelled" ||
-              turn?.status === "interrupted" ||
-              turn?.status === "failed")) ||
-          note.method === "turn/interrupted";
-        if (detached && belongsToDetachedThread && reachedTerminalState) {
-          closeDetachedClient();
-        }
-        return;
-      }
-      // Dedupe against the eventId ledger: this notification may be a live
-      // duplicate of an event an incremental thread/events fold already
-      // applied (or vice versa, delivered live first and folded later).
-      const eventId = note.params?.eventId;
-      if (typeof eventId === "string") {
-        if (seenEventIdsRef.current.has(eventId)) return;
-        markSeenEventId(seenEventIdsRef.current, eventId);
-      }
+      if (cancelled) return;
       const belongsToThread = note.params?.threadId === args.threadId;
+      // Live-first ids stay unconfirmed until a fetched cursor includes the
+      // same persisted event. This prevents a long recovered turn from
+      // FIFO-evicting an id and then double-appending its delta via polling.
+      const eventId = note.params?.eventId;
+      if (belongsToThread && typeof eventId === "string") {
+        if (
+          seenEventIdsRef.current.has(eventId) ||
+          unconfirmedLiveEventIdsRef.current.has(eventId)
+        ) {
+          return;
+        }
+        unconfirmedLiveEventIdsRef.current.add(eventId);
+        if (
+          unconfirmedLiveEventIdsRef.current.size >=
+          UNCONFIRMED_LIVE_EVENT_ID_POLL_THRESHOLD
+        ) {
+          const activeClient = clientRef.current;
+          if (activeClient) startTailPolling(activeClient, true, 0);
+        }
+      }
       // Record liveness telemetry before the reducer runs. Cheap, pure,
       // ref-mutating — never triggers a render on its own.
       if (belongsToThread) {
@@ -796,15 +1065,49 @@ export function useRealtimeThread(
             break;
           }
         }
+      } else if (
+        note.method === "item/started" &&
+        note.params?.threadId === args.threadId
+      ) {
+        // The durable user-item receipt is an equally authoritative delivery
+        // anchor. In a fast failure the detached turn can publish item/started
+        // while the originating socket misses turn/started; treating the later
+        // RPC rejection as a send failure then restores an already-persisted
+        // draft and invites a duplicate retry.
+        const item = note.params?.item as { id?: unknown } | undefined;
+        if (typeof item?.id === "string") {
+          for (const watch of turnDeliveryWatchesRef.current) {
+            if (!watch.delivered && watch.clientItemId === item.id) {
+              watch.delivered = true;
+              break;
+            }
+          }
+        }
       }
       // ``ConversationEvent`` is a discriminated union over a closed
       // method set. Cast through ``unknown`` because the wire side is
       // open-ended; the reducer no-ops anything it doesn't recognize.
       applyEvent(note as unknown as ConversationEvent);
+      const turn = note.params?.turn as { status?: unknown } | undefined;
+      const terminalObserved =
+        belongsToThread &&
+        ((note.method === "turn/completed" &&
+          (turn?.status === "completed" ||
+            turn?.status === "paused" ||
+            turn?.status === "cancelled" ||
+            turn?.status === "interrupted" ||
+            turn?.status === "failed")) ||
+          note.method === "turn/interrupted");
+      if (terminalObserved) {
+        const activeClient = clientRef.current;
+        if (activeClient) observeTailTerminal(activeClient);
+      }
     };
 
     const onClose = (_code: number, _reason: string): void => {
       if (cancelled) return;
+      online = false;
+      stopTailPolling();
       // The socket is gone — flip ``connected`` to false so the UI
       // can show a "reconnecting..." pill. The auto-reconnect logic
       // inside ``RealtimeClient`` will call onOpen again when the
@@ -834,6 +1137,7 @@ export function useRealtimeThread(
 
     const onOpen = (): void => {
       if (cancelled) return;
+      online = true;
       // Real socket open — only now can the client actually send /
       // receive. Previously we set ``connected`` true the moment
       // ``client.connect()`` returned, which was optimistic: the
@@ -867,7 +1171,7 @@ export function useRealtimeThread(
         onClose?: (code: number, reason: string) => void;
       }) =>
         createDefaultClient({
-          baseURL: getBackendBaseURL(),
+          baseURL: getBackendTransportBaseURL(),
           authToken: () => getToken(),
           onIncomingRequest: deps.onIncomingRequest,
           onNotification: deps.onNotification,
@@ -881,7 +1185,6 @@ export function useRealtimeThread(
       onOpen,
       onClose,
     });
-    detachedClient = client;
     clientRef.current = client;
     // Cold start: hydrate from the local replay cache BEFORE the first
     // resume goes out. A hydrated cursor routes the initial resume into
@@ -902,6 +1205,11 @@ export function useRealtimeThread(
         const replayed = replayEvents(cached.events, {
           threadId: args.threadId,
         }).conversation;
+        for (const event of cached.events) {
+          if (typeof event.eventId === "string") {
+            markSeenEventId(seenEventIdsRef.current, event.eventId);
+          }
+        }
         resumeCursorRef.current = cached.cursor;
         resumeStreamIdRef.current = cached.streamId;
         const hydrated: Conversation = {
@@ -922,18 +1230,20 @@ export function useRealtimeThread(
 
     return () => {
       cancelled = true;
-      const latestTurn = stateRef.current.turns.at(-1);
-      if (latestTurn?.status === "inProgress") {
-        // Navigating away is not an implicit Stop. The detached socket keeps
-        // the server-side request and event journal alive; its terminal event
-        // closes this transport, with a bounded timeout as a final safeguard.
-        detached = true;
-        detachedCloseTimer = setTimeout(
-          closeDetachedClient,
-          DETACHED_TURN_CLOSE_TIMEOUT_MS,
-        );
-      } else {
-        closeDetachedClient();
+      online = false;
+      stopTailPolling();
+      // A turn is server-resident and survives its originating WebSocket.
+      // Release this invisible route's connection immediately so a visible,
+      // reconnected watcher can receive live events and approval requests.
+      // Keeping the old owner alive intercepted approvals in an unmounted
+      // React tree and could make a healthy long task time out waiting for a
+      // prompt the user could never see.
+      client.close();
+      // Settle client-side incoming-request promises before clearing their
+      // timers. The server connection is already closing, so this is local
+      // resource cleanup rather than an authoritative approval decision.
+      for (const resolvePending of Array.from(resolvers.values())) {
+        resolvePending({ action: "decline", reason: "client disconnected" });
       }
       clientRef.current = null;
       resolvers.clear();
@@ -955,7 +1265,10 @@ export function useRealtimeThread(
     async (input) => {
       const client = clientRef.current;
       if (!client) throw new Error("realtime client not ready");
-      const watch = { delivered: false };
+      const watch = {
+        delivered: false,
+        ...(input.clientItemId ? { clientItemId: input.clientItemId } : {}),
+      };
       turnDeliveryWatchesRef.current.add(watch);
       try {
         await client.request("turn/start", {
@@ -970,6 +1283,8 @@ export function useRealtimeThread(
               ...(input.metadata ? { metadata: input.metadata } : {}),
             },
           ],
+          ...(input.clientItemId ? { userItemId: input.clientItemId } : {}),
+          ...(input.cwd ? { cwd: input.cwd } : {}),
           approvalPolicy: input.approvalPolicy ?? "on-request",
           ...(input.sandboxPolicy
             ? { sandboxPolicy: input.sandboxPolicy }
@@ -988,7 +1303,12 @@ export function useRealtimeThread(
         // would make callers flag a successful send as failed (error
         // banner + draft restore → duplicate sends). Turn state is
         // recovered by the reconnect/resume path.
-        if (!watch.delivered) throw err;
+        const persistedAfterStart = input.clientItemId
+          ? stateRef.current.turns.some((turn) =>
+              turn.items.some((item) => item.id === input.clientItemId),
+            )
+          : false;
+        if (!watch.delivered && !persistedAfterStart) throw err;
       } finally {
         turnDeliveryWatchesRef.current.delete(watch);
       }
@@ -1132,9 +1452,24 @@ export function useRealtimeThread(
     const turns = stateRef.current.turns;
     const active = turns.length ? turns[turns.length - 1] : null;
     if (!active || active.status !== "inProgress") return;
-    // Approval requests belong to the running turn. Decline and settle them
-    // locally before sending the interrupt so stale approval cards cannot
-    // outlive the action they guarded (and cannot execute after Stop).
+    const result = await client.request<{ interrupted?: boolean }>(
+      "turn/interrupt",
+      {
+        threadId: args.threadId,
+        turnId: active.id,
+      },
+    );
+    if (result.interrupted !== true) {
+      // A false acknowledgement means this worker did not accept the stop.
+      // Reconcile from durable server state, but never manufacture a terminal
+      // event or telemetry receipt on the client.
+      await resume();
+      throw new Error("the active turn could not be interrupted");
+    }
+
+    // Approval requests belong to the acknowledged running turn. Settle their
+    // local request promises now; the authoritative turn terminal still comes
+    // from live fanout or the durable polling fold.
     for (const pending of stateRef.current.pendingApprovals) {
       if (pending.params.turnId !== active.id) continue;
       approvalResolvers.current.get(pending.requestId)?.({
@@ -1142,26 +1477,7 @@ export function useRealtimeThread(
         reason: "turn interrupted",
       });
     }
-    // Fire the interrupt request but don't await — update local UI immediately.
-    // If the network call fails, the UI still shows interrupted (better UX than
-    // leaving the turn stuck in inProgress on transient network errors).
-    client.request("turn/interrupt", {
-      threadId: args.threadId,
-      turnId: active.id,
-    }).catch((err) => {
-      console.error("[realtime] turn/interrupt request failed:", err);
-    });
-
-    persistTurnTelemetry(active.id, "interrupted");
-    applyEvent({
-      method: "turn/interrupted",
-      params: {
-        threadId: args.threadId,
-        turnId: active.id,
-        completedAt: new Date().toISOString(),
-      },
-    });
-  }, [args.threadId, applyEvent, persistTurnTelemetry]);
+  }, [args.threadId, resume]);
 
   const compact = useCallback<UseRealtimeThreadValue["compact"]>(async () => {
     const client = clientRef.current;

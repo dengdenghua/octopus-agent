@@ -275,6 +275,7 @@ def test_vote_n_is_clamped(monkeypatch):
     ds._call_agent_vote(question="q", n=99, choices=["yes", "no"])
     assert seen["count"] == ds._VOTE_MAX
 
+
 def test_vote_panel_uses_distinct_roles(monkeypatch):
     # Independence: N voters must not all be the same persona. The first
     # voter is the requested role, the rest rotate through distinct roles.

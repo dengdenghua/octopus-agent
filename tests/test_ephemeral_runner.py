@@ -554,9 +554,7 @@ def test_agentic_loop_stalls_on_repeated_tool_calls():
     )
 
     # The model keeps emitting the exact same tool call every round.
-    script = [
-        [{"name": "read_file", "input": {"path": "x.py"}}]
-    ] * 30
+    script = [[{"name": "read_file", "input": {"path": "x.py"}}]] * 30
     router = _ScriptedAgenticRouter(script=script)
     registry = _StubRegistry({"read_file": lambda **kw: {"ok": True}})
     runner = make_llm_ephemeral_runner(
@@ -588,9 +586,7 @@ def test_agentic_loop_does_not_stall_on_polling_tools():
         make_llm_ephemeral_runner,
     )
 
-    script = [
-        [{"name": "read_background_output", "input": {"task_id": "bg_abc"}}]
-    ] * 10
+    script = [[{"name": "read_background_output", "input": {"task_id": "bg_abc"}}]] * 10
     router = _ScriptedAgenticRouter(script=script)
     registry = _StubRegistry({"read_background_output": lambda **kw: {"ok": True}})
     runner = make_llm_ephemeral_runner(
@@ -1265,6 +1261,42 @@ class TestEphemeralInjectionTaintGate:
         assert ran["exec"] is True
         assert "prompt_injection_taint" not in output
 
+    def test_relative_file_tool_uses_inherited_artifact_root(self, tmp_path, monkeypatch):
+        from runtime.execution.suckers import SkillRegistry
+        from runtime.execution.suckers.builtins import register_builtins
+        from runtime.execution.suckers.ephemeral_runner import (
+            _execute_tool_in_subagent,
+        )
+        from runtime.platform.process.session import Session, session_scope
+
+        monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path))
+        artifact_root = tmp_path / "parent-final"
+        artifact_root.mkdir()
+        (artifact_root / "agent-regression.json").write_text(
+            '{"schema":"octopus.regression.v1"}',
+            encoding="utf-8",
+        )
+        registry = register_builtins(SkillRegistry())
+        call = self._call(
+            "read_file",
+            {"path": "agent-regression.json"},
+            context={},
+        )
+        child = Session(
+            thread_id="child-thread",
+            metadata={
+                "mode": "code",
+                "_artifact_output_root": str(artifact_root),
+            },
+        )
+
+        with session_scope(child):
+            output, is_error = _execute_tool_in_subagent(registry, call)
+
+        assert is_error is False
+        assert "octopus.regression.v1" in output
+        assert str(artifact_root / "agent-regression.json") in output
+
 
 class TestVerificationGate:
     """The ephemeral runner refuses to conclude with unverified code."""
@@ -1288,9 +1320,7 @@ class TestVerificationGate:
                 "That is the final answer",
             ]
         )
-        registry = _StubRegistry(
-            {"edit_text_file": lambda **kw: {"ok": True}}
-        )
+        registry = _StubRegistry({"edit_text_file": lambda **kw: {"ok": True}})
         runner = self._runner(router, registry)
         call = _make_call(role_id="implementer")
         call.context["tool_allowlist"] = ["edit_text_file"]
@@ -1326,7 +1356,4 @@ class TestVerificationGate:
 
         assert "All green" in out
         # No verification nudge was injected anywhere.
-        assert not any(
-            "验证" in req.messages[-1].content
-            for req in router.call_log
-        )
+        assert not any("验证" in req.messages[-1].content for req in router.call_log)

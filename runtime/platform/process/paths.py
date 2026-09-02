@@ -104,6 +104,30 @@ class AppPaths:
         return self.data_dir / "proposal_ledger.jsonl"
 
     @property
+    def evolution_experiments_path(self) -> Path:
+        """Controlled same-task engine and genome experiment trials."""
+
+        return self.data_dir / "evolution_experiments.jsonl"
+
+    @property
+    def evolution_candidates_path(self) -> Path:
+        """Append-only typed candidate lineage events."""
+
+        return self.data_dir / "evolution_candidates.jsonl"
+
+    @property
+    def candidate_canary_state_dir(self) -> Path:
+        """Per-candidate staged rollout state."""
+
+        return self.data_dir / "candidate_canary_states"
+
+    @property
+    def candidate_runtime_outcomes_path(self) -> Path:
+        """Durable governed-candidate turn activation inbox."""
+
+        return self.data_dir / "candidate_runtime_outcomes.json"
+
+    @property
     def auto_verifier_metrics_path(self) -> Path:
         return self.data_dir / "auto_verifier_metrics.jsonl"
 
@@ -157,6 +181,12 @@ class AppPaths:
         See :mod:`runtime.safety.hooks`.
         """
         return self.data_dir / "hooks.json"
+
+    @property
+    def codex_plugins_path(self) -> Path:
+        """Writable Codex-compatible plugin root for installed deployments."""
+
+        return self.data_dir / "plugins" / "codex"
 
 
 def _looks_like_project_root(path: Path) -> bool:
@@ -212,17 +242,21 @@ def app_paths(root: str | Path | None = None) -> AppPaths:
 
 
 def resources_root() -> Path:
-    """Root for READ-ONLY bundled assets: skills/, prompts/, protocols/,
+    """Root for deployment-owned assets: skills/, prompts/, protocols/,
     agents/ presets.
+
+    Assets are read-only except for the registry-managed ``skills/public``
+    materialization directory.
 
     In a source checkout this is the project root. In the Docker image
     the code is pip-installed and the working dir is the data volume
     (``/data``), so ``project_root()`` resolves to ``/data`` — which has
-    no bundled assets. The image copies them to ``/app/resources`` and
-    sets ``OCTOPUS_RESOURCES_DIR`` so loaders find them; without this the
-    container silently loses the file-backed skill catalog (87+ skills).
+    no deployment-owned assets. The image copies them to ``/app/resources``
+    and sets ``OCTOPUS_RESOURCES_DIR`` so loaders find agents, prompts,
+    protocols, and the registry skill lock. Prompt skills additionally have a
+    package-relative fallback via :func:`bundled_market_skills_dir`.
     Honour the env var, else resolve relative to this package so source
-    checkouts and editable installs find the bundled assets regardless of cwd.
+    checkouts and editable installs find bundled assets regardless of cwd.
     """
     env = os.environ.get("OCTOPUS_RESOURCES_DIR")
     if env:
@@ -241,4 +275,24 @@ def resources_root() -> Path:
     return project_root()
 
 
-__all__ = ["AppPaths", "app_paths", "project_root", "resources_root"]
+def bundled_market_skills_dir() -> Path:
+    """Return the prompt-skill fallback bundled inside the Python package.
+
+    ``resources_root()`` intentionally follows ``OCTOPUS_RESOURCES_DIR`` for
+    deployment-owned assets.  A non-editable wheel, however, cannot assume a
+    repository-shaped resource root next to the current working directory.
+    The deterministic fallback therefore lives under the installed
+    ``runtime`` package and is located relative to this module.
+    """
+
+    # paths.py -> process/ -> platform/ -> runtime/
+    return Path(__file__).resolve().parents[2] / "execution" / "all_skills"
+
+
+__all__ = [
+    "AppPaths",
+    "app_paths",
+    "bundled_market_skills_dir",
+    "project_root",
+    "resources_root",
+]

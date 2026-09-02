@@ -11,7 +11,6 @@ import {
   MessageSquareIcon,
   XIcon,
   CalendarIcon,
-  HashIcon,
 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useThreadSearch } from "@/core/api/p2-hooks";

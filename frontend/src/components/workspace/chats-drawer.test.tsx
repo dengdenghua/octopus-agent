@@ -20,10 +20,10 @@ vi.mock("@/core/threads/hooks", () => ({
 describe("ChatsDrawer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    window.localStorage.setItem("octopus.active-agent", "local_opencode_cli");
+    window.localStorage.setItem("octopus.active-agent", "installed_researcher");
   });
 
-  it("scopes conversation history to the bottom-left active role", () => {
+  it("migrates an on-demand identity selection to the default fixed persona", () => {
     renderWithProviders(<ChatsDrawer open onOpenChange={vi.fn()} />, {
       locale: "zh-CN",
     });
@@ -31,7 +31,7 @@ describe("ChatsDrawer", () => {
     expect(useThreadsMock).toHaveBeenCalledWith(
       expect.objectContaining({ limit: 50 }),
       undefined,
-      "local_opencode_cli",
+      "general",
     );
   });
 

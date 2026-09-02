@@ -4,7 +4,10 @@ import { ArrowDownIcon } from "lucide-react";
 import type { AIMessage, Message, ToolMessage } from "@/core/api/types";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
-import { useStreamingTextBuffer } from "@/hooks/use-streaming-text-buffer";
+import {
+  STREAMING_TYPE_PRESETS,
+  useStreamingTextBuffer,
+} from "@/hooks/use-streaming-text-buffer";
 
 import type { AgentTile } from "../agent-workbench-utils";
 import { repairMojibakeText } from "../agent-workbench-utils";
@@ -16,36 +19,58 @@ import { ComputerScopeSwitch } from "./computer-scope-switch";
 
 function publicBlockOutput(block: WorkBlock): string {
   const observation = block.event.observation?.trim();
-  if (observation) return repairMojibakeText(observation);
+  if (observation) return repairMojibakeText(readableResultText(observation));
   if (block.event.error?.trim()) return repairMojibakeText(block.event.error);
   // Prefer a readable text channel inside an object payload over a raw
   // JSON.stringify dump — same contract as subagentResultText. Fall back to
   // the stringified snapshot only when the payload carries no text field.
   const rawOutput = block.event.output;
   if (rawOutput && typeof rawOutput === "object" && !Array.isArray(rawOutput)) {
-    const readable = firstRecordText(rawOutput, [
-      "output",
-      "summary",
-      "result",
-      "message",
-      "text",
-      "content",
-      "stdout",
-      "content_text",
-    ]);
+    const readable = readableResultText(rawOutput);
     if (readable) return repairMojibakeText(readable);
   }
   const output = block.outputText.trim();
-  if (output) return repairMojibakeText(output);
+  if (output) return repairMojibakeText(readableResultText(output));
   return "";
 }
 
-function firstRecordText(value: unknown, keys: string[]): string {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+const RESULT_TEXT_KEYS = [
+  "output",
+  "summary",
+  "result",
+  "reason",
+  "message",
+  "text",
+  "content",
+  "output_preview",
+  "stdout",
+  "content_text",
+];
+
+/** Turn a structured result — including legacy JSON-in-a-string envelopes —
+ * into the sentence a person is meant to read. Metadata-only envelopes stay
+ * blank instead of leaking implementation details into the conversation. */
+function readableResultText(value: unknown, depth = 0): string {
+  if (depth > 2 || value === null || value === undefined) return "";
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed) as unknown;
+        const readable = readableResultText(parsed, depth + 1);
+        if (readable) return readable;
+      } catch {
+        // It only looked like JSON; preserve the original public text.
+      }
+    }
+    return trimmed;
+  }
+  if (typeof value !== "object" || Array.isArray(value)) return "";
   const record = value as Record<string, unknown>;
-  for (const key of keys) {
-    const entry = record[key];
-    if (typeof entry === "string" && entry.trim()) return entry.trim();
+  for (const key of RESULT_TEXT_KEYS) {
+    const readable = readableResultText(record[key], depth + 1);
+    if (readable) return readable;
   }
   return "";
 }
@@ -59,18 +84,9 @@ function firstRecordText(value: unknown, keys: string[]): string {
  * were the agent's verdict. */
 function subagentResultText(event: LiveToolEvent): string {
   const observation = event.observation?.trim();
-  if (observation) return observation;
+  if (observation) return readableResultText(observation);
   for (const bag of [event.input, event.output]) {
-    if (!bag || typeof bag !== "object" || Array.isArray(bag)) continue;
-    const text = firstRecordText(bag, [
-      "output",
-      "summary",
-      "output_preview",
-      "result",
-      "message",
-      "text",
-      "content",
-    ]);
+    const text = readableResultText(bag);
     if (text) return text;
   }
   return event.error?.trim() ?? "";
@@ -169,7 +185,9 @@ function subagentMessages(
   }
 
   if (!answerText) {
-    answerText = repairMojibakeText(agent.resultSummary ?? agent.error ?? "");
+    answerText = repairMojibakeText(
+      readableResultText(agent.resultSummary ?? agent.error ?? ""),
+    );
   }
   const answer: Message | null = answerText
     ? {
@@ -238,13 +256,14 @@ export function SubagentProcessView({
 
   const handleScrollToBottom = () => {
     setAutoScroll(true);
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "end",
+    });
   };
   const isRunning = agent.status === "running";
   const answerText =
-    typeof messages.answer?.content === "string"
-      ? messages.answer.content
-      : "";
+    typeof messages.answer?.content === "string" ? messages.answer.content : "";
   // Reveal the final answer with the same typewriter buffer the main
   // conversation uses. The sub-agent's verdict only materialises at the
   // terminal finished marker (it isn't streamed token-by-token), so once the
@@ -255,12 +274,7 @@ export function SubagentProcessView({
     targetText: answerText,
     enabled: isRunning,
     resetKey: agent.id,
-    targetIntervalMs: 32,
-    minCharsPerTick: 2,
-    maxCharsPerTick: 12,
-    backlogDivisor: 8,
-    fastDrainThreshold: 4,
-    maxFinishDelayMs: 420,
+    ...STREAMING_TYPE_PRESETS.burstDrain,
   });
   const hasConversation = Boolean(
     messages.task || messages.process.length > 0 || messages.answer,
@@ -274,7 +288,7 @@ export function SubagentProcessView({
       >
         <div className="mx-auto flex w-full max-w-2xl flex-col">
           <ComputerScopeSwitch
-            subLabel={`${t.agentWorkbench.kindAgent} ${agent.label}`}
+            subLabel={`${agent.codename ?? agent.name} · ${t.agentWorkbench.kindAgent} ${agent.label}`}
             onOpenMain={onOpenMain}
           />
           {!hasConversation ? (
@@ -287,7 +301,10 @@ export function SubagentProcessView({
               data-testid="subagent-main-conversation"
             >
               {messages.task ? (
-                <MessageListItem message={messages.task} isLastMessage={false} />
+                <MessageListItem
+                  message={messages.task}
+                  isLastMessage={false}
+                />
               ) : null}
               {messages.process.length > 0 ? (
                 <MessageGroup
@@ -322,7 +339,9 @@ export function SubagentProcessView({
           aria-label={t.agentWorkbenchPanel?.scrollToBottom ?? "滚动到底部"}
         >
           <ArrowDownIcon className="size-4" />
-          <span>{t.agentWorkbenchPanel?.viewLatestProgress ?? "查看最新进展"}</span>
+          <span>
+            {t.agentWorkbenchPanel?.viewLatestProgress ?? "查看最新进展"}
+          </span>
         </button>
       )}
     </div>

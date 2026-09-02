@@ -30,16 +30,19 @@ const LazyCodeMirror = lazy(() => import("./codemirror-host"));
 async function saveFile(
   path: string,
   content: string,
+  expectedContent: string,
   threadId?: string,
   workspacePath?: string,
 ) {
   const baseURL = getBackendBaseURL();
+  const expectedSha256 = await sha256Text(expectedContent);
   const response = await fetch(`${baseURL}/api/fs/write`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       path,
       content,
+      expected_sha256: expectedSha256,
       thread_id: threadId,
       workspace_path: workspacePath,
     }),
@@ -48,9 +51,25 @@ async function saveFile(
     const error = await response
       .json()
       .catch(() => ({ detail: "Save failed" }));
-    throw new Error(error.detail ?? "Save failed");
+    const detail = error.detail;
+    throw new Error(
+      typeof detail === "string"
+        ? detail
+        : typeof detail?.message === "string"
+          ? detail.message
+          : "Save failed",
+    );
   }
   return response.json();
+}
+
+async function sha256Text(content: string): Promise<string | undefined> {
+  if (!globalThis.crypto?.subtle) return undefined;
+  const bytes = new TextEncoder().encode(content);
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 async function runDiagnostics(path: string, workspacePath?: string) {
@@ -224,7 +243,13 @@ export function CodeEditor({
     if (!filePath || localValue === null) return;
     setIsSaving(true);
     try {
-      await saveFile(filePath, localValue, threadId, workspacePath);
+      await saveFile(
+        filePath,
+        localValue,
+        initialValue,
+        threadId,
+        workspacePath,
+      );
       setIsSaved(true);
       onSave?.(localValue);
       toast.success(t.codeEditor.fileSaved);
@@ -236,7 +261,15 @@ export function CodeEditor({
     } finally {
       setIsSaving(false);
     }
-  }, [filePath, localValue, onSave, threadId, workspacePath, t.codeEditor]);
+  }, [
+    filePath,
+    initialValue,
+    localValue,
+    onSave,
+    threadId,
+    workspacePath,
+    t.codeEditor,
+  ]);
 
   const handleReset = useCallback(() => {
     setLocalValue(null);

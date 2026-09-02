@@ -32,6 +32,12 @@ vi.mock("@/components/workspace/model-cookbook", () => ({
   ModelCookbook: () => null,
 }));
 
+vi.mock("@/providers/AuthProvider", () => ({
+  useAuth: () => ({
+    user: { user_id: "actor-a", actor_id: "actor-a", username: "Alice" },
+  }),
+}));
+
 // MixSettingsSection fetches its own /api/mix-config + model list on mount.
 // That's unrelated to the custom-model list under test here and would perturb
 // the ordered fetch mocks below — stub it out.
@@ -113,11 +119,56 @@ function mockModelSettingsFetch({
   });
 }
 
+describe("ModelSettingsPage · optional local vision service", () => {
+  it("does not request models when octopus-storage is not installed", async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/local-brain/storage/start")) {
+        return jsonOk({
+          ok: false,
+          status: "not_found",
+          base_url: "/api/storage",
+          auth_token: null,
+        });
+      }
+      if (url.includes("/api/config/custom-models/compat-diagnostics")) {
+        return jsonOk({
+          schema: "octopus.openai_compat_diagnostics.v1",
+          diagnostics: [],
+        });
+      }
+      if (url.includes("/api/config/openai-compat-profiles")) {
+        return jsonOk({
+          schema: "octopus.openai_compat_profile_catalog.v1",
+          diagnostics: [],
+        });
+      }
+      return jsonOk({ default: "", models: [] });
+    });
+
+    renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
+
+    expect(
+      await screen.findByText(/本地图片理解服务尚未安装/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新检查" })).toBeEnabled();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("/api/storage/v1/models"),
+      ),
+    ).toBe(false);
+  });
+});
+
 describe("custom model selection identity", () => {
   const model = {
     id: "provider-entry",
     name: "provider-alias",
     models: ["provider-model-fast", "provider-model-strong"],
+    selection_ids: [
+      "selection-provider-fast-default",
+      "selection-provider-fast-1m",
+    ],
   };
 
   it("recognizes entry ids, aliases, and concrete upstream model ids", () => {
@@ -126,11 +177,23 @@ describe("custom model selection identity", () => {
     expect(customModelMatchesSelection(model, "provider-model-fast")).toBe(
       true,
     );
+    expect(
+      customModelMatchesSelection(model, "selection-provider-fast-1m"),
+    ).toBe(true);
     expect(customModelMatchesSelection(model, "unrelated-model")).toBe(false);
   });
 
-  it("uses the first concrete model as the default selection", () => {
-    expect(customModelPreferredSelection(model)).toBe("provider-model-fast");
+  it("prefers the exact default row selection and falls back for old catalogs", () => {
+    expect(customModelPreferredSelection(model)).toBe(
+      "selection-provider-fast-default",
+    );
+    expect(
+      customModelPreferredSelection({
+        id: "legacy-entry",
+        name: "legacy-alias",
+        models: ["legacy-model"],
+      }),
+    ).toBe("legacy-model");
     expect(
       customModelPreferredSelection({
         id: "empty-entry",
@@ -176,14 +239,14 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
     expect(screen.getByText("高性能档")).toBeInTheDocument();
     expect(screen.getByText("1 个连接 · 3 个模型")).toBeInTheDocument();
     expect(
-      screen.getByText(/不管理 Codex、Claude、Trae 等外部 CLI/),
+      screen.getByText(/新的服务可通过 API 连接或本地扫描接入/),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "API 模型连接", level: 3 }),
     ).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "接入 API 模型" })).toHaveLength(
-      1,
-    );
+    expect(
+      screen.getAllByRole("button", { name: "接入 API 模型" }),
+    ).toHaveLength(1);
   });
 
   it("does not repeat an entry name and explains a single model's two roles", async () => {
@@ -211,6 +274,72 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
 
     expect(screen.getAllByText("Same Name")).toHaveLength(1);
     expect(screen.getByText("默认 · 高性能")).toBeInTheDocument();
+  });
+
+  it("expands the editor inside the selected connection row", async () => {
+    const user = userEvent.setup();
+    mockModelSettingsFetch({
+      models: [
+        {
+          id: "first-entry",
+          name: "first-entry",
+          display_name: "First connection",
+          models: ["first-model"],
+          provider: "openai",
+          base_url: "https://first.example.test/v1",
+          has_api_key: true,
+        },
+        {
+          id: "second-entry",
+          name: "second-entry",
+          display_name: "Second connection",
+          models: ["second-model"],
+          provider: "openai",
+          base_url: "https://second.example.test/v1",
+          has_api_key: true,
+        },
+      ],
+    });
+
+    renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
+
+    const firstEdit = await screen.findByRole("button", {
+      name: "编辑: First connection",
+    });
+    const secondEdit = screen.getByRole("button", {
+      name: "编辑: Second connection",
+    });
+    const firstRow = firstEdit.closest("li");
+    const secondRow = secondEdit.closest("li");
+
+    expect(firstRow).not.toBeNull();
+    expect(secondRow).not.toBeNull();
+    expect(firstEdit).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(firstEdit);
+
+    await waitFor(() => {
+      expect(
+        within(firstRow as HTMLLIElement).getByLabelText("显示名称"),
+      ).toHaveValue("First connection");
+    });
+    expect(firstEdit).toHaveAttribute("aria-expanded", "true");
+    expect(
+      within(secondRow as HTMLLIElement).queryByLabelText("显示名称"),
+    ).not.toBeInTheDocument();
+
+    await user.click(secondEdit);
+
+    await waitFor(() => {
+      expect(
+        within(secondRow as HTMLLIElement).getByLabelText("显示名称"),
+      ).toHaveValue("Second connection");
+    });
+    expect(firstEdit).toHaveAttribute("aria-expanded", "false");
+    expect(secondEdit).toHaveAttribute("aria-expanded", "true");
+    expect(
+      within(firstRow as HTMLLIElement).queryByLabelText("显示名称"),
+    ).not.toBeInTheDocument();
   });
 
   it("allows changing and saving a connection display name", async () => {
@@ -287,7 +416,13 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
     const options = Array.from(select.querySelectorAll("option")).map(
       (o) => o.textContent,
     );
-    expect(options).toEqual(["跟随内置默认", "关闭", "高", "最高", "不注入默认"]);
+    expect(options).toEqual([
+      "跟随内置默认",
+      "关闭",
+      "高",
+      "最高",
+      "不注入默认",
+    ]);
   });
 
   it("hides the default-effort dropdown when the model has no tiers", async () => {
@@ -763,7 +898,9 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
     );
 
     renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
-    await screen.findByText("Disposable");
+    expect((await screen.findAllByText("Disposable")).length).toBeGreaterThan(
+      0,
+    );
     expect(screen.getByText("系统默认")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "删除: Disposable" }));
@@ -862,9 +999,9 @@ describe("ModelSettingsPage · add-model form · open-ended list", () => {
     expect(screen.getAllByRole("button", { name: "取消" })).toHaveLength(1);
     const addForm = apiKeyInput.closest("form");
     expect(addForm).not.toBeNull();
-    expect(within(addForm as HTMLFormElement).getByRole("status")).toHaveTextContent(
-      "尚未测试连接",
-    );
+    expect(
+      within(addForm as HTMLFormElement).getByRole("status"),
+    ).toHaveTextContent("尚未测试连接");
     expect(screen.getByRole("switch", { name: "思考" })).not.toBeChecked();
     expect(screen.getByRole("switch", { name: "视觉" })).not.toBeChecked();
 

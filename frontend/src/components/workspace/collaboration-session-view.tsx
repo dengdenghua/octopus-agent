@@ -45,8 +45,7 @@ export function CollaborationSessionView({
   t: T;
 }) {
   const teamModeMeta = getTeamModeMeta(t);
-  const modeMeta =
-    teamModeMeta[session.mode as TeamMode] ?? teamModeMeta.chat;
+  const modeMeta = teamModeMeta[session.mode as TeamMode] ?? teamModeMeta.chat;
   const ModeIcon = modeMeta.icon;
   const hasTasks = session.tasks.length > 0;
   const hasOnlinePresence = session.presence.some((m) => m.online);
@@ -131,7 +130,7 @@ export function CollaborationSessionPanel({
   onlyWhenRoomLinked?: boolean;
 }) {
   const { t } = useI18n();
-  const { data: session } = useCollabSession(threadId);
+  const { data: session } = useCollabSession(threadId, { live: true });
   if (!session) return null;
   if (onlyWhenRoomLinked && !session.room_id) return null;
   return (

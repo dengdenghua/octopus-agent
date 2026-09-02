@@ -1,0 +1,39 @@
+{
+  "id": "twin_lawyer",
+  "templateId": "octopus:digital-twin:lawyer",
+  "templateVersion": "1.0.0",
+  "source_kind": "digital-twin-human-role",
+  "source_plugin": "twin-lawyer",
+  "expertType": "agent",
+  "name": "律师分身",
+  "icon": "⚖️",
+  "description": "代表律师的数位分身:案件资料/法律检索/文书草稿等文档侧闭环,出庭签字与执业责任必须真人律师,AI 不能替代执业责任。",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "digital-twin:human-role",
+  "category": "specialist",
+  "tags": [
+    "数字分身",
+    "真人岗位",
+    "真身协同",
+    "律师",
+    "法律",
+    "案件"
+  ],
+  "profession": "律师",
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true,
+    "includeUserMd": true,
+    "includeMemoryMd": true
+  },
+  "capabilities": {
+    "digital_twin": true,
+    "human_collab": true,
+    "authorization_boundary": true,
+    "handoff_pack": true
+  }
+}

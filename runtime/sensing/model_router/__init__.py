@@ -34,6 +34,7 @@ from .prompt_cache import (
     prepare_cached_tools,
 )
 from .provider import Provider, ProviderCapabilities
+from .selector import DefaultModelSelector
 
 __all__ = [
     "AllKeysExhausted",
@@ -61,6 +62,7 @@ __all__ = [
     "OpenAIRouterError",
     "PooledModelRouter",
     "PoolReport",
+    "DefaultModelSelector",
     "Provider",
     "ProviderCapabilities",
     "RouteAttempt",

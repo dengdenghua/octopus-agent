@@ -193,11 +193,7 @@ def get_bus(root_thread_id: str | None) -> SubAgentEventBus | None:
 
 def _evict_expired_locked() -> None:
     now = time.monotonic()
-    expired = [
-        k
-        for k, v in _BUSES.items()
-        if (now - v.last_touched) > _TTL_SECONDS
-    ]
+    expired = [k for k, v in _BUSES.items() if (now - v.last_touched) > _TTL_SECONDS]
     for k in expired:
         _BUSES.pop(k, None)
     while len(_BUSES) > _MAX_BUSES:
@@ -249,11 +245,7 @@ def publish_subagent_event(
         root = root_thread_id
     else:
         meta, sess_thread = _resolve_session_meta()
-        root = (
-            (meta or {}).get("root_thread_id")
-            or (meta or {}).get("thread_id")
-            or sess_thread
-        )
+        root = (meta or {}).get("root_thread_id") or (meta or {}).get("thread_id") or sess_thread
     if not root:
         return None
     if not thread_id:

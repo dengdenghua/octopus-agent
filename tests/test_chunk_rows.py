@@ -57,9 +57,7 @@ class TestClassify:
     def test_sub_text_delta_is_packable(self) -> None:
         from runtime.memory.journal import SubTextDeltaEvent
 
-        entry = classify_chunk(
-            SubTextDeltaEvent(role_id="r", round=1, delta="chunk")
-        )
+        entry = classify_chunk(SubTextDeltaEvent(role_id="r", round=1, delta="chunk"))
         assert entry is not None
         assert entry["event_type"] == "sub_text_delta"
         assert entry["extra"] == {
@@ -218,10 +216,17 @@ class TestJSONLIntegration:
 
         restored = journal.read_all()
         assert [e.delta for e in restored if e.event_type == "assistant/chunk"] == [
-            "a", "b", "c", "d", "e", "f",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
         ]
 
-    def test_env_knob_disables_packing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_env_knob_disables_packing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("OCTOPUS_JOURNAL_CHUNK_PACKING", "0")
         journal = JSONLJournal(tmp_path / "j.jsonl")
         for delta in ("a", "b", "c"):
@@ -292,6 +297,10 @@ class TestReasoningLanePacking:
         assert len(lines) == 3  # reasoning row + text row + flush
         restored = journal.read_all()
         assert [e.kind for e in restored[:-1]] == [
-            "reasoning-delta", "reasoning-delta", "reasoning-delta",
-            "text-delta", "text-delta", "text-delta",
+            "reasoning-delta",
+            "reasoning-delta",
+            "reasoning-delta",
+            "text-delta",
+            "text-delta",
+            "text-delta",
         ]

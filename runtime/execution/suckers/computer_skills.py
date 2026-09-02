@@ -270,8 +270,13 @@ def register_computer_skills(
     *,
     verify_tests: bool = True,
 ) -> int:
+    # The local computer API and UIA status/query tools degrade gracefully
+    # when native desktop dependencies are unavailable. Keep those tools
+    # registered so capability toggles can be applied without a restart on
+    # headless servers and non-Windows hosts. Only the six direct pyautogui
+    # controls are conditional on the optional dependency.
     if not PYAUTOGUI_AVAILABLE:
-        return 0
+        return register_computer_api_skills(registry) + register_computer_uia_skills(registry)
 
     registry.register(
         Skill(

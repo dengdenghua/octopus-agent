@@ -600,19 +600,32 @@ def _build_parser() -> argparse.ArgumentParser:
         "-o",
         type=Path,
         default=None,
-        help="output tar.gz path (default: ~/.octopus/backup-<timestamp>.tar.gz)",
+        help=(
+            "output tar.gz path (default: backup-<timestamp>.tar.gz below the active Octopus home)"
+        ),
     )
     backupp.add_argument(
         "--base-dir",
         type=str,
-        default="~/.octopus",
-        help="Octopus data root (default: ~/.octopus)",
+        default=None,
+        help=(
+            "Octopus data root (default: runtime environment; "
+            "OCTOPUS_DATA_DIR/OCTOPUS_HOME or ~/.octopus)"
+        ),
     )
     backupp.add_argument(
         "--components",
         nargs="*",
         default=None,
-        choices=["journal", "kg", "config", "hot_cache", "skills", "agents"],
+        choices=[
+            "journal",
+            "kg",
+            "config",
+            "hot_cache",
+            "skills",
+            "agents",
+            "narrative_studio",
+        ],
         help="components to include (default: all)",
     )
 
@@ -625,14 +638,25 @@ def _build_parser() -> argparse.ArgumentParser:
     restorep.add_argument(
         "--base-dir",
         type=str,
-        default="~/.octopus",
-        help="Octopus data root (default: ~/.octopus)",
+        default=None,
+        help=(
+            "Octopus data root (default: runtime environment; "
+            "OCTOPUS_DATA_DIR/OCTOPUS_HOME or ~/.octopus)"
+        ),
     )
     restorep.add_argument(
         "--components",
         nargs="*",
         default=None,
-        choices=["journal", "kg", "config", "hot_cache", "skills", "agents"],
+        choices=[
+            "journal",
+            "kg",
+            "config",
+            "hot_cache",
+            "skills",
+            "agents",
+            "narrative_studio",
+        ],
         help="components to restore (default: all)",
     )
     restorep.add_argument(
@@ -652,14 +676,25 @@ def _build_parser() -> argparse.ArgumentParser:
     exportp.add_argument(
         "--base-dir",
         type=str,
-        default="~/.octopus",
-        help="Octopus data root (default: ~/.octopus)",
+        default=None,
+        help=(
+            "Octopus data root (default: runtime environment; "
+            "OCTOPUS_DATA_DIR/OCTOPUS_HOME or ~/.octopus)"
+        ),
     )
     exportp.add_argument(
         "--components",
         nargs="*",
         default=None,
-        choices=["journal", "kg", "config", "hot_cache", "skills", "agents"],
+        choices=[
+            "journal",
+            "kg",
+            "config",
+            "hot_cache",
+            "skills",
+            "agents",
+            "narrative_studio",
+        ],
         help="components to export (default: all)",
     )
 

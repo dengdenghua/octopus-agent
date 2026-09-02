@@ -77,6 +77,8 @@ def mount_parallel(
     app.include_router(
         create_subagents_router(
             registry=ctx.subagent_registry,
+            thread_store=ctx.thread_store,
+            workspace_root=ctx.thread_workspace_root,
             identity_store=ctx.identity_store,
             require_auth=ctx.require_auth,
             jwt_secret=ctx.jwt_secret,

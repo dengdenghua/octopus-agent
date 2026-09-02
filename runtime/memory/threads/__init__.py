@@ -5,11 +5,17 @@ client SDKs that expect that shape.
 """
 
 from .session_index import IndexEntry, SessionIndex, entry_from_thread
-from .store import ThreadStateStore
+from .store import (
+    ThreadPermanentDeleteLease,
+    ThreadPermanentlyDeletedError,
+    ThreadStateStore,
+)
 
 __all__ = [
     "IndexEntry",
     "SessionIndex",
     "ThreadStateStore",
+    "ThreadPermanentDeleteLease",
+    "ThreadPermanentlyDeletedError",
     "entry_from_thread",
 ]

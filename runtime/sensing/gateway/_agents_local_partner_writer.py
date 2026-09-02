@@ -181,7 +181,9 @@ Before using the local partner command, understand the user's task and current w
                 )
             ),
         )
-        atomic_write_text(agent_dir / "avatar.svg", _partner_brand_logo(str(spec["id"])), newline=None)
+        atomic_write_text(
+            agent_dir / "avatar.svg", _partner_brand_logo(str(spec["id"])), newline=None
+        )
     except OSError:
         _cleanup_created_agent_dir(agent_dir, created=created_agent_dir)
         raise

@@ -59,10 +59,11 @@ def verify_plugin_publisher_provenance(
     content_provenance: dict[str, Any],
     *,
     trust_store_path: str | Path | None = None,
+    signature_relative_path: Path = SIGNATURE_RELATIVE_PATH,
 ) -> dict[str, Any]:
     """Verify a plugin envelope against an operator-controlled publisher store."""
 
-    signature_path = plugin_dir / SIGNATURE_RELATIVE_PATH
+    signature_path = plugin_dir / signature_relative_path
     base = {
         "schema": "octopus.plugin_publisher_provenance.v1",
         "envelope_schema": _ENVELOPE_SCHEMA,
@@ -172,6 +173,7 @@ def resolve_publisher_trust_store_path(
     candidates = (
         root / ".octopus" / "plugin-publishers.json",
         Path.home() / ".octopus" / "plugin-publishers.json",
+        Path(__file__).resolve().with_name("builtin-publishers.json"),
     )
     existing = next((candidate for candidate in candidates if candidate.is_file()), None)
     if existing is not None or existing_only:

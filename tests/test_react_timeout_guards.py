@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from runtime.core.cerebrum.react_timeout_guards import (
     _consecutive_timeout_guard,
+    _extract_timeout_events,
     _timeout_policy_guard,
 )
 
@@ -101,6 +102,56 @@ class TestTimeoutPolicyGuard:
         assert result is not None
         assert "compile_project" in result
         assert "2 times" in result
+
+    def test_internal_recovery_note_does_not_fabricate_timeout(self):
+        observation = (
+            "(tool failed) No module named pytest\n\n"
+            "[red-verification-recovery]\n"
+            "For a concurrency-test timeout, audit lock ownership before retrying."
+        )
+        steps = [
+            {"action": "exec_shell(pytest)", "observation": observation},
+            {"action": "exec_shell(ruff)", "observation": observation},
+        ]
+
+        assert _timeout_policy_guard(steps, None, threshold=2) is None
+        assert _consecutive_timeout_guard(steps, None, threshold=2) is None
+
+    def test_non_timeout_execution_metadata_does_not_fabricate_timeout(self):
+        observation = (
+            '(tool failed) {"execution_policy": {"timeout_s": 60.0, '
+            '"result": {"timed_out": false, "error_type": "file_not_found"}}}'
+        )
+        steps = [
+            {"action": "exec_shell(pytest)", "observation": observation},
+            {"action": "exec_shell(ruff)", "observation": observation},
+        ]
+
+        assert _timeout_policy_guard(steps, None, threshold=2) is None
+        assert _consecutive_timeout_guard(steps, None, threshold=2) is None
+
+    def test_parallel_timeout_is_scoped_to_its_own_lane_receipt(self):
+        steps = [
+            {
+                "action": 'read_file({"path":"a"})',
+                "actions": [
+                    'read_file({"path":"a"})',
+                    'read_file({"path":"b"})',
+                ],
+                "observation": "[1/2] timed out\n\n[2/2] success",
+                "action_results": [
+                    {"ok": False, "observation": "timed out"},
+                    {"ok": True, "observation": "success"},
+                ],
+            }
+        ]
+
+        assert _extract_timeout_events(steps) == [
+            ("read_file", True),
+            ("read_file", False),
+        ]
+        assert _timeout_policy_guard(steps, None, threshold=2) is None
+        assert _consecutive_timeout_guard(steps, None, threshold=2) is None
 
 
 class TestConsecutiveTimeoutGuard:

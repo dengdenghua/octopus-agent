@@ -49,15 +49,14 @@ def create_app(
     journal: Journal | None = None,
     registry: SkillRegistry | None = None,
     stack: Any = None,
+    kernel: Any = None,
     cocoloop_install_dir: Path | None = None,
     cocoloop_identity_store: Any = None,
     cocoloop_require_auth: bool = False,
+    allow_local_workspace_access: bool = False,
     agent_registry: Any = None,
     group_registry: Any = None,
     channel_manager: Any = None,
-    molili_config: Any = None,
-    molili_link_store: Any = None,
-    molili_jwt_secret: str | None = None,
     oct_config: Any = None,
     oct_link_store: Any = None,
     oct_jwt_secret: str | None = None,
@@ -85,6 +84,21 @@ def create_app(
             "fastapi not installed · `pip install 'fastapi[standard]'` 或 `pip install fastapi uvicorn`"
         )
 
+    # Kernel-first hosts do not need to reach into ``BuiltStack``.  Keep the
+    # explicit ``stack`` argument for existing callers while allowing a new
+    # host to pass only the embeddable kernel facade.
+    if stack is None and kernel is not None:
+        stack = kernel.stack
+    if kernel is not None:
+        # Keep the kernel-only path genuinely self-contained.  These are the
+        # same shared objects exposed by BuiltStack, but a new host should not
+        # have to unpack the compatibility escape hatch just to create the
+        # standard UI transport.
+        if journal is None:
+            journal = kernel.journal
+        if registry is None:
+            registry = kernel.registry
+
     from runtime.platform.ui._app_agents import mount_agents
     from runtime.platform.ui._app_auth_routers import mount_auth_routers
     from runtime.platform.ui._app_collab import mount_collaboration
@@ -96,17 +110,20 @@ def create_app(
     from runtime.platform.ui._app_routers import mount_routers_a
     from runtime.platform.ui._app_routers_extra import mount_routers_b
     from runtime.platform.ui._app_setup import setup_app
-    from runtime.platform.ui._app_stack import wire_stack
+    from runtime.platform.ui._app_stack import (
+        wire_persistent_subagent_runner,
+        wire_stack,
+    )
 
     ctx = setup_app(
         journal_path=journal_path,
         journal=journal,
         registry=registry,
         stack=stack,
+        kernel=kernel,
         cocoloop_identity_store=cocoloop_identity_store,
         cocoloop_require_auth=cocoloop_require_auth,
-        molili_config=molili_config,
-        molili_jwt_secret=molili_jwt_secret,
+        allow_local_workspace_access=allow_local_workspace_access,
         oct_config=oct_config,
         oct_jwt_secret=oct_jwt_secret,
         local_auth_config=local_auth_config,
@@ -126,7 +143,12 @@ def create_app(
             "external hooks registration skipped",
             exc_info=True,
         )
-    wire_stack(ctx, journal_path=journal_path, subagent_registry=subagent_registry)
+    wire_stack(
+        ctx,
+        journal_path=journal_path,
+        subagent_registry=subagent_registry,
+        agent_registry=agent_registry,
+    )
     mount_health(
         ctx,
         agent_registry=agent_registry,
@@ -139,6 +161,7 @@ def create_app(
         frontend_proxy_target=frontend_proxy_target,
     )
     mount_agents(ctx, agent_registry=agent_registry, group_registry=group_registry)
+    wire_persistent_subagent_runner(ctx)
     mount_parallel(ctx, parallel_agent_orchestrator=parallel_agent_orchestrator)
     mount_collaboration(
         ctx,
@@ -149,13 +172,11 @@ def create_app(
     mount_reflex(ctx, default_arm=default_arm, prompt_optimizer=prompt_optimizer)
     mount_auth_routers(
         ctx,
-        molili_config=molili_config,
-        molili_link_store=molili_link_store,
         oct_config=oct_config,
         oct_link_store=oct_link_store,
     )
     mount_pages(ctx)
-    mount_meta(ctx, molili_config=molili_config, oct_config=oct_config)
+    mount_meta(ctx, oct_config=oct_config)
     mount_routers_a(ctx, journal_path=journal_path)
     mount_routers_b(ctx, journal_path=journal_path)
     return ctx.app

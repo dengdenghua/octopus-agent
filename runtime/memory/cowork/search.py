@@ -206,19 +206,34 @@ def _search_room_messages(
     out: list[SearchHit] = []
     for m in seen.values():
         text = _as_text(m.get("text"))
-        score = _field_score(text, terms, 1.5)
+        metadata = m.get("metadata") if isinstance(m.get("metadata"), dict) else {}
+        metadata_text = _as_text(metadata)
+        score = _field_score(text, terms, 1.5) + _field_score(metadata_text, terms, 1.0)
         if score <= 0:
             continue
         author = m.get("display_name") or m.get("participant_id") or ""
+        card = metadata.get("system_card") if isinstance(metadata.get("system_card"), dict) else {}
+        title = str(card.get("title") or author)
+        snippet_source = text
+        if not any(term in text.lower() for term in terms):
+            snippet_source = str(card.get("summary") or card.get("title") or metadata_text)
         out.append(
             SearchHit(
                 kind="room_message",
-                title=author,
-                snippet=_snippet(text, terms),
+                title=title,
+                snippet=_snippet(snippet_source, terms),
                 score=score,
                 actor=author,
                 ts=m.get("ts"),
-                ref={"room_id": room_id, "seq": m.get("seq")},
+                ref={
+                    "room_id": room_id,
+                    "seq": m.get("seq"),
+                    **(
+                        {"entity_refs": metadata.get("entity_refs")}
+                        if metadata.get("entity_refs")
+                        else {}
+                    ),
+                },
             )
         )
     return out

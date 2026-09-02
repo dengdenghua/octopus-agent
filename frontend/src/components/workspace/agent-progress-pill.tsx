@@ -22,7 +22,12 @@ import {
   workBlockTitle,
 } from "./work-blocks";
 import { useI18n } from "@/core/i18n/hooks";
-import type { StreamVitals } from "@/core/realtime";
+import { getBackendBaseURL } from "@/core/config";
+import {
+  FIRST_RESPONSE_DELAY_NOTICE_MS,
+  formatStreamElapsed,
+  type StreamVitals,
+} from "@/core/realtime";
 import { cn } from "@/lib/utils";
 import { agentRunBeadTone } from "./agent-run-status";
 
@@ -69,19 +74,23 @@ function fallbackStatusLabel({
   const s = t.publicThinkingStatus;
   if (vitals?.phase === "disconnected") return s.reconnecting;
   if (vitals?.phase === "slow") {
-    const elapsedS = Math.floor(vitals.elapsedMs / 1000);
-    return `${s.slowResponse}${elapsedS >= 3 ? ` · ${elapsedS}s` : ""}`;
+    return `${s.slowResponse}${vitals.elapsedMs >= 3_000 ? ` · ${formatStreamElapsed(vitals.elapsedMs)}` : ""}`;
   }
   if (vitals?.phase === "waiting") {
-    const elapsedS = Math.floor(vitals.elapsedMs / 1000);
-    return `${s.waitingForModel}${elapsedS >= 3 ? ` · ${elapsedS}s` : ""}`;
+    const label =
+      vitals.elapsedMs >= FIRST_RESPONSE_DELAY_NOTICE_MS
+        ? s.firstResponseSlow
+        : s.waitingForModel;
+    return `${label}${vitals.elapsedMs >= 3_000 ? ` · ${formatStreamElapsed(vitals.elapsedMs)}` : ""}`;
   }
   if (runSettled && !runFailed) return s.thinkingCompleted;
   if (vitals && vitals.phase !== "idle") {
     // Mid-task liveness is "processing", not "thinking": the 思考中 label
     // is reserved for the pre-first-response window (handled above).
-    const elapsedS = Math.floor(vitals.elapsedMs / 1000);
-    const suffix = elapsedS >= 3 ? ` · ${elapsedS}s` : "";
+    const suffix =
+      vitals.elapsedMs >= 3_000
+        ? ` · ${formatStreamElapsed(vitals.elapsedMs)}`
+        : "";
     return `${s.processing}${suffix}`;
   }
   if (hasStreamingAnswer) return s.processing;
@@ -209,11 +218,14 @@ export function AgentProgressPill({
     if (!capabilityDisabledInfo || enablingCapability) return;
     setEnablingCapability(true);
     try {
-      const resp = await fetch("/api/capabilities/enable", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ group: capabilityDisabledInfo.group }),
-      });
+      const resp = await fetch(
+        `${getBackendBaseURL()}/api/capabilities/enable`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ group: capabilityDisabledInfo.group }),
+        },
+      );
       if (resp.ok) {
         window.location.reload();
       }
@@ -243,6 +255,11 @@ export function AgentProgressPill({
         "data-stream-since-activity-ms": Number.isFinite(vitals.sinceActivityMs)
           ? Math.round(vitals.sinceActivityMs)
           : undefined,
+        "data-stream-first-response-delayed":
+          vitals.phase === "waiting" &&
+          vitals.elapsedMs >= FIRST_RESPONSE_DELAY_NOTICE_MS
+            ? "true"
+            : "false",
       }
     : {};
 
@@ -307,7 +324,11 @@ export function AgentProgressPill({
     // "slow" is the one genuinely ambiguous state — the model may still be
     // working or the turn may be wedged. Tint it so it reads as "taking a
     // while", distinct from the calm blue of normal progress.
-    const stalled = Boolean(vitals?.stalled);
+    const stalled = Boolean(
+      vitals?.stalled ||
+      (vitals?.phase === "waiting" &&
+        vitals.elapsedMs >= FIRST_RESPONSE_DELAY_NOTICE_MS),
+    );
     const disconnected = vitals?.phase === "disconnected";
     return (
       <div

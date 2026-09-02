@@ -1,7 +1,18 @@
-import { screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  BROWSER_OPEN_URL_ACK_EVENT,
+  BROWSER_OPEN_URL_REQUEST_EVENT,
+  type BrowserOpenUrlAck,
+  type BrowserOpenUrlRequest,
+} from "@/components/browser/browser-store";
 import { renderWithProviders } from "@/test/harness";
+import { setLinkOpenTarget } from "@/core/settings/automation-preferences";
+import {
+  OPEN_ARTIFACT_EVENT,
+  type OpenArtifactDetail,
+} from "@/core/artifacts/open-artifact";
 
 import {
   MarkdownContent,
@@ -23,6 +34,10 @@ vi.mock("@/components/ai-elements/message", async () => {
     children: string;
     className?: string;
     components: {
+      a?: (props: {
+        children?: React.ReactNode;
+        href?: string;
+      }) => React.ReactNode;
       pre?: (props: { children?: React.ReactNode }) => React.ReactNode;
     };
     isAnimating?: boolean;
@@ -36,6 +51,14 @@ vi.mock("@/components/ai-elements/message", async () => {
       isAnimating,
       "aria-busy": ariaBusy,
     }: MockMessageResponseProps) => {
+      const link = /^\[([^\]]+)]\(([^)]+)\)$/.exec(children.trim());
+      if (link && components.a) {
+        return React.createElement(
+          React.Fragment,
+          null,
+          components.a({ href: link[2], children: link[1] }),
+        );
+      }
       const match = /^```([\w-]+)\n([\s\S]*?)\n?```$/.exec(children.trim());
       if (match && components.pre) {
         const language = match[1] ?? "text";
@@ -62,9 +85,12 @@ vi.mock("@/components/ai-elements/message", async () => {
         children,
       );
     },
-    // Streamdown memoizes parsed blocks by content. This reproduces the
-    // completion edge where only the streaming state changes.
-    (previous, next) => previous.children === next.children,
+    // Mirrors the real Streamdown top-level memo, which compares children
+    // AND isAnimating (only parsed *blocks* are memoized by content alone).
+    // The settle transition therefore re-renders the root without remount.
+    (previous, next) =>
+      previous.children === next.children &&
+      previous.isAnimating === next.isAnimating,
   );
   return {
     MessageResponse,
@@ -81,6 +107,65 @@ function renderMarkdown(content: string, isLoading = false) {
     />,
   );
 }
+
+/**
+ * Settled code blocks render shiki output, which splits the code text
+ * across colored token <span>s — no single text node carries the whole
+ * snippet. Match against the <code> element's full textContent instead.
+ */
+function settledCodeMatches(match: RegExp) {
+  return (_content: string, element: Element | null) =>
+    element?.tagName === "CODE" &&
+    !!element.textContent &&
+    match.test(element.textContent);
+}
+
+describe("<MarkdownContent /> web links", () => {
+  let acknowledge: (event: Event) => void;
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    window.location.hash = "#/workspace";
+    setLinkOpenTarget("in_app");
+    acknowledge = (event) => {
+      const request = (event as CustomEvent<BrowserOpenUrlRequest>).detail;
+      window.dispatchEvent(
+        new CustomEvent<BrowserOpenUrlAck>(BROWSER_OPEN_URL_ACK_EVENT, {
+          detail: { requestId: request.requestId!, accepted: true },
+        }),
+      );
+    };
+    window.addEventListener(BROWSER_OPEN_URL_REQUEST_EVENT, acknowledge);
+  });
+
+  afterEach(() => {
+    window.removeEventListener(BROWSER_OPEN_URL_REQUEST_EVENT, acknowledge);
+  });
+
+  it("routes ordinary markdown links through the saved browser preference", () => {
+    renderMarkdown("[Open docs](https://example.com/docs)");
+
+    fireEvent.click(screen.getByRole("link", { name: "Open docs" }));
+
+    expect(window.location.hash).toBe("#/browser");
+  });
+
+  it("opens generated office links in the artifact workbench", () => {
+    let opened: OpenArtifactDetail | null = null;
+    const openArtifact = (event: Event) => {
+      opened = (event as CustomEvent<OpenArtifactDetail>).detail;
+      event.preventDefault();
+    };
+    window.addEventListener(OPEN_ARTIFACT_EVENT, openArtifact);
+    renderMarkdown("[下载 PPT](out/deck.pptx)");
+
+    fireEvent.click(screen.getByRole("link", { name: "下载 PPT" }));
+
+    expect(opened).toEqual({ path: "workspace-output:final:out/deck.pptx" });
+    expect(window.location.hash).toBe("#/workspace");
+    window.removeEventListener(OPEN_ARTIFACT_EVENT, openArtifact);
+  });
+});
 
 describe("<MarkdownContent /> Mermaid", () => {
   beforeEach(() => {
@@ -111,7 +196,7 @@ describe("<MarkdownContent /> Mermaid", () => {
     expect(await screen.findByText("Rendered Mermaid")).toBeInTheDocument();
   });
 
-  it("remounts stable blocks once so streaming visuals can settle", async () => {
+  it("settles streaming blocks once without remounting the tree", async () => {
     const content = "```mermaid\ngraph TD\nA-->B\n```";
     const view = renderMarkdown(content, true);
 
@@ -161,6 +246,40 @@ describe("<MarkdownContent /> streaming state", () => {
     expect(screen.getByText("A compact answer")).toHaveClass("chat-markdown");
   });
 
+  it("preserves intentional soft line breaks in compact answers", () => {
+    const view = renderMarkdown(
+      "schema=octopus.regression.v1\nfinal=output/final",
+    );
+
+    const markdown = view.container.querySelector(".chat-markdown");
+    // Soft breaks are preserved by pre-wrap on the prose blocks, not on the
+    // container: the container must stay `normal` so Streamdown's inter-block
+    // separator newlines don't render as blank lines.
+    expect(markdown).toHaveClass("whitespace-normal");
+    expect(markdown?.className).toContain("[&_p]:whitespace-pre-wrap");
+    expect(markdown?.textContent).toContain("v1\nfinal=");
+  });
+
+  it("does not let inter-block newlines render as blank lines", () => {
+    // A heading followed by a table is the shape that broke: Streamdown emits
+    // the table as a sibling block and leaves the row separator newlines as a
+    // bare text node on the container. Under pre-wrap those became ~89 blank
+    // lines of dead space above the table.
+    const view = renderMarkdown(
+      [
+        "## 二、中危发现",
+        "",
+        "| # | 位置 |",
+        "|---|---|",
+        "| M1 | a.yaml |",
+      ].join("\n"),
+    );
+
+    const markdown = view.container.querySelector(".chat-markdown");
+    expect(markdown).not.toHaveClass("whitespace-pre-wrap");
+    expect(markdown).toHaveClass("whitespace-normal");
+  });
+
   it("hides leaked read-only control tags but preserves the answer", () => {
     renderMarkdown(
       "<read_only>\n</read_only>\n\nPython 与 TypeScript 定义一致。",
@@ -188,10 +307,17 @@ describe("<MarkdownContent /> streaming state", () => {
     expect(screen.queryByText(/code-mode guard/)).not.toBeInTheDocument();
   });
 
-  it("hides inline leaked read-only control tags without dropping nearby prose", () => {
+  it("localizes an unlabelled legacy completeness diagnostic", () => {
     renderMarkdown(
-      "我先核对实现。<read_only> </read_only> 现在信息已经足够。",
+      "这轮任务没有完成。我已停止重复尝试，并保留了当前进度。\n\n原因：The proposed Final Answer only announces a future inspection or search. It is not a completed answer. Execute the stated read/search action.",
     );
+
+    expect(screen.getByText(/尚未形成可交付结果/)).toBeInTheDocument();
+    expect(screen.queryByText(/The proposed Final Answer/)).not.toBeInTheDocument();
+  });
+
+  it("hides inline leaked read-only control tags without dropping nearby prose", () => {
+    renderMarkdown("我先核对实现。<read_only> </read_only> 现在信息已经足够。");
 
     expect(screen.queryByText(/read_only/)).not.toBeInTheDocument();
     expect(
@@ -200,9 +326,7 @@ describe("<MarkdownContent /> streaming state", () => {
   });
 
   it("hides leaked internal renderer component tags outside code fences", () => {
-    renderMarkdown(
-      "摘要应该在最终回答前展示为 `<TextBlock>`，不是阶段分析。",
-    );
+    renderMarkdown("摘要应该在最终回答前展示为 `<TextBlock>`，不是阶段分析。");
 
     expect(screen.queryByText(/TextBlock/)).not.toBeInTheDocument();
     expect(
@@ -210,16 +334,22 @@ describe("<MarkdownContent /> streaming state", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps read-only tags when they are shown as a code example", () => {
+  it("keeps read-only tags when they are shown as a code example", async () => {
     renderMarkdown("```xml\n<read_only>\n</read_only>\n```");
 
-    expect(screen.getByText(/<read_only>/)).toBeInTheDocument();
+    // Settled blocks render through shiki asynchronously — the code text
+    // only appears once the highlight is ready (no raw-text flash).
+    expect(
+      await screen.findByText(settledCodeMatches(/<read_only>/)),
+    ).toBeInTheDocument();
   });
 
-  it("keeps internal component tags when they are shown as a fenced code example", () => {
+  it("keeps internal component tags when they are shown as a fenced code example", async () => {
     renderMarkdown("```tsx\n<TextBlock>hello</TextBlock>\n```");
 
-    expect(screen.getByText(/<TextBlock>/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(settledCodeMatches(/<TextBlock>/)),
+    ).toBeInTheDocument();
   });
 
   it("keeps markdown controls and assistive technology in the streaming state", () => {
@@ -243,7 +373,10 @@ describe("<MarkdownContent /> streaming state", () => {
     const view = renderMarkdown(content, true);
 
     expect(screen.getByText(content)).toBeInTheDocument();
-    expect(screen.getByText(content)).toHaveAttribute("data-is-animating", "true");
+    expect(screen.getByText(content)).toHaveAttribute(
+      "data-is-animating",
+      "true",
+    );
 
     view.rerender(
       <MarkdownContent
@@ -255,7 +388,10 @@ describe("<MarkdownContent /> streaming state", () => {
     );
 
     expect(screen.getByText(content)).toBeInTheDocument();
-    expect(screen.getByText(content)).toHaveAttribute("data-is-animating", "false");
+    expect(screen.getByText(content)).toHaveAttribute(
+      "data-is-animating",
+      "false",
+    );
     expect(screen.getByText(content)).not.toHaveAttribute("aria-busy");
   });
 
@@ -306,7 +442,10 @@ describe("<MarkdownContent /> streaming state", () => {
       />,
     );
     expect(screen.getByText("Hello world")).toBeInTheDocument();
-    expect(screen.getByText("Hello world")).toHaveAttribute("data-is-animating", "false");
+    expect(screen.getByText("Hello world")).toHaveAttribute(
+      "data-is-animating",
+      "false",
+    );
   });
 });
 
@@ -316,9 +455,11 @@ describe("<MarkdownContent /> code block streaming", () => {
     expect(screen.getByText(/print\('hello'\)/)).toBeInTheDocument();
   });
 
-  it("renders code language correctly", () => {
+  it("renders code language correctly", async () => {
     renderMarkdown("```typescript\nconst x = 1;\n```", false);
-    expect(screen.getByText(/const x = 1/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(settledCodeMatches(/const x = 1/)),
+    ).toBeInTheDocument();
   });
 
   it("handles incomplete code fence during streaming", () => {
@@ -353,7 +494,7 @@ describe("<MarkdownContent /> code block streaming", () => {
     expect(screen.getByText(/const y = 2/)).toBeInTheDocument();
   });
 
-  it("preserves code block from streaming to completion without remount flicker", () => {
+  it("preserves code block from streaming to completion without remount flicker", async () => {
     const content = "```python\ndef hello():\n    print('world')\n```";
     const view = renderMarkdown(content, true);
     const firstCode = screen.getByText(/print\('world'\)/);
@@ -367,7 +508,11 @@ describe("<MarkdownContent /> code block streaming", () => {
         rehypePlugins={[]}
       />,
     );
-    expect(screen.getByText(/print\('world'\)/)).toBeInTheDocument();
+    // After settling, the block re-renders through shiki; the content
+    // reappears once the settled highlight resolves.
+    expect(
+      await screen.findByText(settledCodeMatches(/print\('world'\)/)),
+    ).toBeInTheDocument();
   });
 });
 

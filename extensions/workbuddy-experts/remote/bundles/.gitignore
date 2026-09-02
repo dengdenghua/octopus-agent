@@ -1,0 +1,5 @@
+# WorkBuddy 专家全量 bundle(421 个,解压后 ~1.3G,含 RAG 语料/数据库/二进制)
+# 体积过大,整体不进 git —— 用 scripts/pull-remote-catalog.py --bundles 可随时重新拉取。
+# 仓库只跟踪轻量目录: remote/expert_center.json + remote/INDEX.md + remote/agents/
+*
+!.gitignore

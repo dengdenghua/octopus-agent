@@ -1,0 +1,25 @@
+{
+  "id": "seo_content_team_lead",
+  "templateId": "workbuddy:seo-content-team",
+  "templateVersion": "1.0.0",
+  "source_kind": "workbuddy-expert-fork",
+  "source_plugin": "seo-content-team",
+  "expertType": "team",
+  "name": "SEO 内容营销团队",
+  "icon": "🤖",
+  "description": "7位专业角色分5阶段协作：关键词研究、SEO长文创作、技术优化、内容编辑、链接策略、转化率分析，全流程自动化产出高质量SEO内容",
+  "avatar": "avatar.png",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "workbuddy-fork:seo-content-team",
+  "category": "marketing",
+  "tags": [
+    "SEO内容",
+    "关键词研究",
+    "转化率优化"
+  ],
+  "profession": "SEO 内容营销团队"
+}

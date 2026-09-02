@@ -1,0 +1,40 @@
+{
+  "id": "twin_supply_chain",
+  "templateId": "octopus:digital-twin:supply_chain",
+  "templateVersion": "1.0.0",
+  "source_kind": "digital-twin-human-role",
+  "source_plugin": "twin-supply_chain",
+  "expertType": "agent",
+  "name": "供应链与采购分身",
+  "icon": "🚚",
+  "description": "代表供应链/采购经理的数位分身:负责 RFQ/比价/风险台账/催交单等文档侧闭环,议价成交与供应商关系必须真人,AI 替代不了真实商务。",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "digital-twin:human-role",
+  "category": "specialist",
+  "tags": [
+    "数字分身",
+    "真人岗位",
+    "真身协同",
+    "供应链",
+    "采购",
+    "议价",
+    "交期"
+  ],
+  "profession": "供应链与采购经理",
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true,
+    "includeUserMd": true,
+    "includeMemoryMd": true
+  },
+  "capabilities": {
+    "digital_twin": true,
+    "human_collab": true,
+    "authorization_boundary": true,
+    "handoff_pack": true
+  }
+}

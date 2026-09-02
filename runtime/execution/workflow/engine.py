@@ -64,10 +64,14 @@ class WorkflowObserver:
     def on_log(self, info: WorkflowRunInfo, message: str) -> None:  # pragma: no cover
         pass
 
-    def on_agent_start(self, info: WorkflowRunInfo, agent: WorkflowAgentInfo) -> None:  # pragma: no cover
+    def on_agent_start(
+        self, info: WorkflowRunInfo, agent: WorkflowAgentInfo
+    ) -> None:  # pragma: no cover
         pass
 
-    def on_agent_end(self, info: WorkflowRunInfo, agent: WorkflowAgentEndInfo) -> None:  # pragma: no cover
+    def on_agent_end(
+        self, info: WorkflowRunInfo, agent: WorkflowAgentEndInfo
+    ) -> None:  # pragma: no cover
         pass
 
     def on_end(self, info: WorkflowRunInfo, result: WorkflowResultInfo) -> None:  # pragma: no cover
@@ -194,7 +198,11 @@ class WorkflowEngine:
         ceiling = self._max_total_agents
         requested_cap = request.get("maxTotalAgents")
         if requested_cap is not None:
-            if not isinstance(requested_cap, int) or isinstance(requested_cap, bool) or requested_cap < 1:
+            if (
+                not isinstance(requested_cap, int)
+                or isinstance(requested_cap, bool)
+                or requested_cap < 1
+            ):
                 raise WorkflowError(
                     "workflow maxTotalAgents must be a positive integer",
                     "INVALID_ARGUMENT",

@@ -54,7 +54,7 @@
     el.__octopusTimer = window.setTimeout(() => el.remove(), 2400);
   }
 
-  function openInOctopus(task, options = {}) {
+  function openInEchoAI(task, options = {}) {
     const agent = options.agent || "general";
     const memory = options.memory || "ephemeral";
     const memoryLabel =
@@ -73,7 +73,7 @@
         : memory === "agent"
           ? "可以读取所选角色的记忆，但不要自动写入长期记忆。"
           : "用户允许将有价值的总结沉淀到所选角色记忆中；写入前仍需明确说明。",
-      "请结合这个网页内容和 Octopus Page Agent 连接状态继续协助我。",
+      "请结合这个网页内容和 EchoAI 网页助手连接状态继续协助我。",
     ]
       .filter(Boolean)
       .join("\n");
@@ -121,7 +121,7 @@
     const dot = document.createElement("span");
     dot.style.cssText = "width:8px;height:8px;border-radius:999px;background:#86efac;box-shadow:0 0 0 4px rgba(134,239,172,.18);";
     const title = document.createElement("span");
-    title.textContent = "Octopus Page Agent";
+    title.textContent = "EchoAI 网页助手";
     title.style.cssText = "flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
     const mini = document.createElement("button");
     mini.type = "button";
@@ -136,7 +136,7 @@
     const body = document.createElement("div");
     body.style.cssText = "padding:12px;background:rgba(255,255,255,.9);";
     const status = document.createElement("div");
-    status.textContent = "准备就绪，当前网页已连接 Octopus";
+    status.textContent = "准备就绪，当前网页已连接 EchoAI";
     status.style.cssText = "margin-bottom:8px;color:#6b7280;font-size:12px;";
     const controls = document.createElement("div");
     controls.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;";
@@ -219,8 +219,8 @@
       } catch {
         // best effort
       }
-      status.textContent = "已发送到 Octopus 聊天";
-      openInOctopus(task, {
+      status.textContent = "已发送到 EchoAI 对话";
+      openInEchoAI(task, {
         agent: roleSelect.value,
         memory: memorySelect.value,
       });
@@ -410,11 +410,11 @@
     window.clearInterval(state.timer);
     delete window[marker];
     document.getElementById("octopus-page-agent-panel")?.remove();
-    notice("Octopus Page Agent 已断开");
+    notice("EchoAI 网页助手已断开");
   };
   window[marker] = state;
   state.timer = window.setInterval(poll, 500);
   poll();
   mountAssistant();
-  notice("Octopus Page Agent 已连接");
+  notice("EchoAI 网页助手已连接");
 })();

@@ -289,9 +289,9 @@ export class IncrementalSnapshotCalculator {
   private _buildSnapshotFromMerged(
     events: LiveToolEvent[],
     options: AgentWorkbenchSnapshotOptions,
-    agentTiles: AgentTile[],
-    blocks: WorkBlock[],
-    phases: AgentPhase[],
+    _agentTiles: AgentTile[],
+    _blocks: WorkBlock[],
+    _phases: AgentPhase[],
   ): AgentWorkbenchSnapshot {
     // 某些字段必须全量重新计算
     // 这里为了简化，回退到全量计算

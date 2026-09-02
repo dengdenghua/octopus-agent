@@ -168,6 +168,109 @@ def test_research_prefetcher_records_search_logs():
     assert result.logs[0].evidence_count == 1
 
 
+def test_research_prefetcher_runs_queries_concurrently_in_order():
+    """并发搜索:多个 query 并行执行,但返回结果保持提交顺序。"""
+
+    import threading
+
+    active = 0
+    peak = 0
+    lock = threading.Lock()
+    seen_queries: list[str] = []
+
+    def search_handler(**kwargs):
+        nonlocal active, peak
+        query = kwargs["query"]
+        with lock:
+            active += 1
+            peak = max(peak, active)
+            seen_queries.append(query)
+        import time
+
+        time.sleep(0.05)  # 模拟网络延迟,给并发留出重叠窗口
+        with lock:
+            active -= 1
+        return {
+            "backend": "test-search",
+            "results": [
+                {
+                    "title": f"result for {query}",
+                    "url": f"https://example.com/{query}",
+                    "snippet": f"snippet {query}",
+                }
+            ],
+        }
+
+    planner = DeepResearchPlanner()
+    job = planner.build_plan(
+        DeepResearchRequest(
+            topic="concurrent prefetch test",
+            source_kinds=["web"],
+            max_subagents=1,
+        )
+    )
+    # 强制多 query:同一个 source 提供多个 query_templates
+    source = job.sources[0]
+    # type: ignore[attr-defined] — dataclass 可写
+    source.query_templates = ["alpha", "beta", "gamma", "delta", "epsilon"]
+    result = ResearchPrefetcher(
+        search_handler=search_handler,
+        max_queries=5,
+    ).prefetch(job)
+
+    # 5 个 query 全部执行
+    assert len(result.evidence) == 5
+    assert len(seen_queries) == 5
+    # 并发窗口确实重叠过(而不是退化成串行)
+    assert peak >= 2
+    # 结果顺序与提交顺序一致(证据按 query 顺序排列)
+    titles = [e.title for e in result.evidence]
+    assert titles == [
+        "result for alpha",
+        "result for beta",
+        "result for gamma",
+        "result for delta",
+        "result for epsilon",
+    ]
+
+
+def test_research_prefetcher_budget_respected_across_sources():
+    """max_queries 预算对多个 query 生效,超出部分不执行。"""
+
+    calls: list[str] = []
+
+    def search_handler(**kwargs):
+        calls.append(kwargs["query"])
+        return {
+            "backend": "test-search",
+            "results": [
+                {
+                    "title": f"result for {kwargs['query']}",
+                    "url": "https://example.com",
+                    "snippet": "s",
+                }
+            ],
+        }
+
+    planner = DeepResearchPlanner()
+    job = planner.build_plan(
+        DeepResearchRequest(
+            topic="budget test",
+            source_kinds=["web"],
+            max_subagents=2,
+        )
+    )
+    # 单个 source 提供 6 个 template → 6 个 query,但预算只有 4
+    job.sources[0].query_templates = [f"q{n}" for n in range(6)]
+    result = ResearchPrefetcher(
+        search_handler=search_handler,
+        max_queries=4,
+    ).prefetch(job)
+
+    assert len(calls) == 4
+    assert len(result.evidence) == 4
+
+
 def test_plan_endpoint_includes_thread_uploads(tmp_path):
     upload_root = tmp_path / "uploads"
     thread_dir = upload_root / "t1"

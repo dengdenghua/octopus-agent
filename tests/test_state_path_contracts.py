@@ -19,7 +19,7 @@ def test_pause_control_defaults_to_app_data_dir(monkeypatch, tmp_path: Path) -> 
 
 
 def test_capabilities_store_defaults_to_app_data_dir(monkeypatch, tmp_path: Path) -> None:
-    from runtime.platform import capabilities
+    from runtime.platform.runtime_policy import capabilities
 
     monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "runtime-data"))
     monkeypatch.delenv("OCTOPUS_HOME", raising=False)

@@ -304,6 +304,10 @@ export function saveThreadLocalSettings(
   threadId: string,
   settings: LocalSettings,
 ) {
-  saveLocalSettings(settings);
+  // Persist the per-thread override before broadcasting the global settings
+  // change. Subscribers synchronously re-read both stores when
+  // saveLocalSettings emits; the old order made them observe the previous
+  // thread model and immediately roll the picker back.
   saveThreadModelName(threadId, settings.context.model_name);
+  saveLocalSettings(settings);
 }

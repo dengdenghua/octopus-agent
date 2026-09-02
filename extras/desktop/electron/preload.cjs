@@ -77,6 +77,16 @@ const api = {
       ipcRenderer.invoke("browser:get-current-url", { webContentsId }),
     clearSiteData: (webContentsId) =>
       ipcRenderer.invoke("browser:clear-site-data", { webContentsId }),
+    clearBrowsingData: () =>
+      ipcRenderer.invoke("browser:clear-browsing-data"),
+    listPasswords: (origin) =>
+      ipcRenderer.invoke("browser:list-passwords", { origin }),
+    savePassword: (entry) =>
+      ipcRenderer.invoke("browser:save-password", entry),
+    deletePassword: (id) =>
+      ipcRenderer.invoke("browser:delete-password", { id }),
+    fillPassword: (webContentsId, id) =>
+      ipcRenderer.invoke("browser:fill-password", { webContentsId, id }),
     showDownloadInFolder: (id) =>
       ipcRenderer.invoke("browser:show-download-in-folder", { id }),
     openDownload: (id) => ipcRenderer.invoke("browser:open-download", { id }),

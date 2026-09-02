@@ -66,6 +66,7 @@ export interface ActionDisplay {
     | "update_plan"
     | "use_capability"
     | "delegate_task"
+    | "submit_result"
     | "delete_file"
     | "move_file"
     | "start_preview"
@@ -122,6 +123,28 @@ const CAPABILITY_TOOL_NAMES = new Set([
 const MAX_OBJECT_LENGTH = 50;
 const MAX_COMMAND_LENGTH = 35;
 const MAX_QUERY_LENGTH = 40;
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+/**
+ * Runtime MCP events keep transport metadata at the top level and the actual
+ * tool arguments under ``arguments.input``. Restored events and direct calls
+ * can instead use ``arguments`` or ``input``. Presenters should see one stable
+ * argument object regardless of which transport produced the event.
+ */
+export function effectiveToolInput(
+  input: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const root = input ?? {};
+  const args = recordValue(root.arguments);
+  const directInput = recordValue(root.input);
+  const nestedInput = recordValue(args.input);
+  return { ...root, ...args, ...directInput, ...nestedInput };
+}
 
 function truncate(value: string, max: number): string {
   if (value.length <= max) return value;
@@ -344,7 +367,7 @@ export function getActionDisplay(
   input: Record<string, unknown> | undefined,
 ): ActionDisplay {
   const name = toolName.toLowerCase();
-  const args = input ?? {};
+  const args = effectiveToolInput(input);
 
   if (WRITE_TOOL_NAMES.has(name) || name.includes("create_file")) {
     const path = extractPath(args);
@@ -509,6 +532,17 @@ export function getActionDisplay(
       iconName: "users",
       workbenchTab: "agent",
       aggregateKind: "teammate",
+    };
+  }
+
+  if (name === "report" || name.endsWith(":report")) {
+    return {
+      labelKey: "submit_result",
+      verb: "提交结果",
+      object: "",
+      iconName: "check-circle",
+      workbenchTab: "agent",
+      aggregateKind: "other",
     };
   }
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import os
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +49,50 @@ def _insecure_bind_error(*, host: str, uds: str | None, require_auth: bool) -> s
         f"non-loopback host ({host}); enable 'oct' or 'local_auth', or bind "
         "127.0.0.1 before starting a network-accessible server"
     )
+
+
+def _port_held(host: str, port: int) -> bool:
+    """Return whether the requested TCP address is already bound."""
+    import socket
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind((host, port))
+        return False
+    except OSError:
+        return True
+
+
+def _holder_is_octopus(port: int) -> bool:
+    """Best-effort detection for a sibling ``runtime serve`` process."""
+    import subprocess
+
+    try:
+        output = (
+            subprocess.run(
+                ["lsof", "-ti", f":{port}", "-sTCP:LISTEN"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            ).stdout
+            or ""
+        )
+        pids = [pid for pid in output.split() if pid.strip().isdigit()]
+        if not pids:
+            return False
+        command = (
+            subprocess.run(
+                ["ps", "-o", "command=", "-p", ",".join(pids)],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            ).stdout
+            or ""
+        )
+        return any("runtime serve" in line for line in command.splitlines())
+    except Exception:
+        return False
 
 
 def _prepare_execution_security(cfg: Any) -> tuple[str | None, dict[str, str | None]]:
@@ -281,7 +326,11 @@ def register_memory_distill_task(runner: Any, stack: Any) -> int:
     return 1
 
 
-def register_cron_executor_task(runner: Any, channel_manager_holder: list | None = None) -> int:
+def register_cron_executor_task(
+    runner: Any,
+    channel_manager_holder: list | None = None,
+    shutdown_callbacks: list[Callable[[], None]] | None = None,
+) -> int:
     """Fire persisted cron jobs (settings-UI shell jobs + schedule_task prompts).
 
     The store/router/skill only *register* jobs — without this periodic
@@ -354,30 +403,60 @@ def register_cron_executor_task(runner: Any, channel_manager_holder: list | None
     # (audit T-02) plus the flock already prevent double-firing, so the
     # scheduler thread only ever does a fast submit.
     import threading as _threading
-    from concurrent.futures import ThreadPoolExecutor as _TPE
+    from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
 
-    _cron_pool = _TPE(max_workers=2, thread_name_prefix="cron-exec")
+    _cron_pool = _ThreadPoolExecutor(max_workers=2, thread_name_prefix="cron-exec")
     _tick_in_flight = _threading.Event()
+    _tick_drained = _threading.Event()
+    _tick_drained.set()
+    _stopping = _threading.Event()
+    _shutdown_lock = _threading.Lock()
+    _shutdown_started = False
+
+    def _shutdown() -> None:
+        """Stop dispatch and cooperatively terminate an active cron process."""
+        nonlocal _shutdown_started
+        with _shutdown_lock:
+            if _shutdown_started:
+                return
+            _shutdown_started = True
+            _stopping.set()
+            _cron_pool.shutdown(wait=False, cancel_futures=True)
+        if _tick_in_flight.is_set() and not _tick_drained.wait(timeout=5.0):
+            logging.getLogger(__name__).warning(
+                "cron executor did not drain within 5s during service shutdown"
+            )
+
+    if shutdown_callbacks is not None:
+        shutdown_callbacks.append(_shutdown)
 
     def _tick() -> None:
-        if _tick_in_flight.is_set():
+        if _stopping.is_set() or _tick_in_flight.is_set():
             return  # previous tick still draining; the next poll retries
         from runtime.execution.cron_executor import run_due_cron_jobs
 
         def _run() -> None:
             try:
-                run_due_cron_jobs(deliver=_deliver)
+                run_due_cron_jobs(
+                    deliver=_deliver,
+                    stop_event=_stopping,
+                )
             except Exception:  # noqa: BLE001 — a tick fault must not kill the cron pool
                 logging.getLogger(__name__).exception("cron tick failed")
-            finally:
-                _tick_in_flight.clear()
+
+        def _done(_future: Any) -> None:
+            _tick_in_flight.clear()
+            _tick_drained.set()
 
         _tick_in_flight.set()
+        _tick_drained.clear()
         try:
-            _cron_pool.submit(_run)
+            future = _cron_pool.submit(_run)
+            future.add_done_callback(_done)
         except RuntimeError:
             # Pool shut down while serve is stopping — drop this tick.
             _tick_in_flight.clear()
+            _tick_drained.set()
 
     runner.add_periodic(
         "cron_job_executor",
@@ -457,9 +536,13 @@ def register_reflection_tasks(
         count += 1
 
     def _forge() -> None:
-        from runtime.safety.recovery import SkillForge
+        from runtime.safety.recovery import ForgeConfig, SkillForge
 
-        SkillForge(journal=stack.journal, registry=stack.registry).run()
+        SkillForge(
+            journal=stack.journal,
+            registry=stack.registry,
+            config=ForgeConfig(governed_rollout=True),
+        ).run()
 
     runner.add_periodic(
         "reflect_skill_forge",
@@ -488,7 +571,8 @@ def run_serve(
 
     from runtime.adapters.scheduler import BackgroundRunner
     from runtime.cli_core import _Colors
-    from runtime.platform.config import ConfigLoadError, build_from_config, load_from_yaml
+    from runtime.kernel import AgentKernel
+    from runtime.platform.config import ConfigLoadError, load_from_yaml
     from runtime.platform.i18n import _
 
     c = _Colors(color)
@@ -502,6 +586,11 @@ def run_serve(
         getattr(getattr(cfg, "oct", None), "enabled", False)
         or getattr(getattr(cfg, "local_auth", None), "enabled", False)
     )
+    deployment_mode = (
+        str(getattr(getattr(cfg, "execution", None), "deployment_mode", "local") or "local")
+        .strip()
+        .lower()
+    )
     bind_error = _insecure_bind_error(
         host=host,
         uds=uds,
@@ -511,10 +600,39 @@ def run_serve(
         print(c.red(f"security error: {bind_error}"), file=sys.stderr)
         return 2
 
+    # Debounce a duplicate desktop/launchd instance before initializing any
+    # execution environment, scheduler, watcher, or app-global runner.  The
+    # old late check returned after those side effects and leaked workers.
+    if not uds and host:
+        try:
+            if _port_held(host, port):
+                sibling = _holder_is_octopus(port)
+                print(
+                    c.red(
+                        f"port {host}:{port} is already in use"
+                        + (
+                            " by another octopus instance; standing down — "
+                            "launchd KeepAlive will retry once the stale holder exits"
+                            if sibling
+                            else "; refusing to start over a foreign service"
+                        )
+                    ),
+                    file=sys.stderr,
+                )
+                # Preserve the launchd contract: a clean exit lets KeepAlive
+                # retry after the existing holder goes away.
+                return 0
+        except Exception as exc:  # noqa: BLE001 - probe failure must not block startup
+            logging.getLogger(__name__).debug("port guard failed: %s", exc)
+
     execution_error, execution_env_previous = _prepare_execution_security(cfg)
     if execution_error is not None:
         print(c.red(f"security error: {execution_error}"), file=sys.stderr)
         return 2
+    effective_deployment_mode = (
+        str(os.environ.get("OCTOPUS_DEPLOYMENT_MODE") or deployment_mode).strip().lower()
+    )
+    allow_local_workspace_access = effective_deployment_mode == "local" and _is_loopback_host(host)
 
     # Startup execution-health canary: probe whether a sandboxed command can
     # run in THIS process environment. When the backend cannot apply its
@@ -529,16 +647,19 @@ def run_serve(
         logging.getLogger(__name__).debug("startup canary failed", exc_info=True)
 
     try:
-        import uvicorn
+        import uvicorn  # noqa: F401 - fail early when the optional UI extra is absent
 
         from runtime.platform.ui import create_app
+        from runtime.platform.ui.server_options import run_uvicorn
     except ImportError:
         _restore_execution_security(execution_env_previous)
         print(_("cli.ui.not_installed"), file=sys.stderr)
         return 2
 
+    kernel: AgentKernel | None = None
     try:
-        stack = build_from_config(cfg)
+        kernel = AgentKernel.from_config(cfg)
+        stack = kernel.stack
     except Exception:
         _restore_execution_security(execution_env_previous)
         raise
@@ -554,8 +675,7 @@ def run_serve(
         closed_jobs = sweep_interrupted_jobs(getattr(stack, "journal", None))
         if closed_jobs:
             logging.getLogger(__name__).warning(
-                "jobs: closed %d background job(s) left running by a previous "
-                "process: %s",
+                "jobs: closed %d background job(s) left running by a previous process: %s",
                 len(closed_jobs),
                 ", ".join(item["job_id"] for item in closed_jobs),
             )
@@ -616,7 +736,12 @@ def run_serve(
     # this function, so hand over a one-element holder and populate it
     # once the manager exists (see below).
     _cron_channel_holder: list = []
-    register_cron_executor_task(runner, _cron_channel_holder)
+    _cron_shutdown_callbacks: list[Callable[[], None]] = []
+    register_cron_executor_task(
+        runner,
+        _cron_channel_holder,
+        shutdown_callbacks=_cron_shutdown_callbacks,
+    )
 
     register_memory_distill_task(runner, stack)
 
@@ -702,12 +827,14 @@ def run_serve(
         journal=stack.journal,
         registry=stack.registry,
         stack=stack,
+        kernel=kernel,
         agent_registry=agent_registry,
         group_registry=group_registry,
         channel_manager=channel_manager,
         oct_config=cfg.oct,
         local_auth_config=cfg.local_auth,
         cocoloop_require_auth=require_ui_auth,
+        allow_local_workspace_access=allow_local_workspace_access,
         default_arm=cfg.default_arm_id,
         prompt_optimizer=optimizer,
         server_host=host,
@@ -715,6 +842,11 @@ def run_serve(
         tentacle_enabled=cfg.tentacle.enabled,
         tentacle_ws_port=cfg.tentacle.ws_port,
     )
+    for _shutdown_cron in _cron_shutdown_callbacks:
+        # Uvicorn drives this hook on normal SIGTERM. The CLI finally block
+        # invokes it again (idempotently) for startup failures/test runners that
+        # return without entering ASGI lifespan.
+        app.router.add_event_handler("shutdown", _shutdown_cron)
 
     # For a single-machine setup, let the regular ``octopus serve`` path own
     # the optional File Agent service too.  This deliberately lives next to
@@ -802,22 +934,28 @@ def run_serve(
     try:
         if uds:
             import contextlib
-            import os
 
             with contextlib.suppress(FileNotFoundError):
                 os.unlink(uds)
-            uvicorn.run(app, uds=uds, log_level="info")
+            run_uvicorn(app, uds=uds, log_level="info")
         else:
-            uvicorn.run(app, host=host, port=port, log_level="info")
+            run_uvicorn(app, host=host, port=port, log_level="info")
     finally:
-        _restore_execution_security(execution_env_previous)
         runner.stop()
+        for _shutdown_cron in _cron_shutdown_callbacks:
+            _shutdown_cron()
+        _restore_execution_security(execution_env_previous)
         try:
             from runtime.adapters.mcp_client import close_all_persistent_clients
 
             close_all_persistent_clients()
         except Exception as exc:
             logging.getLogger(__name__).debug("mcp client shutdown failed: %s", exc)
+        if kernel is not None:
+            try:
+                kernel.close()
+            except Exception as exc:
+                logging.getLogger(__name__).debug("agent kernel shutdown failed: %s", exc)
         print(c.dim(_("cli.serve.stopped")))
         for name, st in runner.stats().items():
             print(

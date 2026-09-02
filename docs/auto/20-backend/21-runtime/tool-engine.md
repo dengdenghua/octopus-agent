@@ -45,10 +45,12 @@ tier: "core"
 | `effect_receipts.py` | Crash-safe tool effect receipts for durable agent turns. |
 | `effect_store.py` | Transactional cross-process coordination for tool side effects. |
 | `executor.py` | — |
+| `native_tool_execution.py` | Execute a model-native tool call through the Octopus executor boundary. |
 | `redis_effect_store.py` | Redis-backed, cross-host tool-effect receipts. |
+| `session_metadata.py` | Project caller context into the metadata trusted by tool sessions. |
 | `session_projection.py` | Byte-bounded projection of a session's conversation surface. |
 | `session_reference.py` | Cross-session reference resolver — dsh ``@dsh-session-reference`` service. |
-| `session_reference_uri.py` | Canonical session URI and inline mention encoding (dsh ``uri.ts``). |
+| `session_reference_uri.py` | Canonical Octopus session URI and inline mention encoding. |
 | `skill_gate.py` | Shared pre-execution safety gate for direct skill dispatch. |
 | `tool_output_pruner.py` | Deterministic head/middle/tail pruning for over-budget tool results. |
 | `tool_output_spill.py` | Session-scoped spill storage for oversized plain-text tool results. |
@@ -94,11 +96,23 @@ tier: "core"
 | --- | --- | --- |
 | class | `class ToolExecutor` | Skill-step executor with read-before-write + diff/rollback wiring. |
 
+### `native_tool_execution.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def execute_native_tool_call(stack, call, max_chars, prune_middle, spill_oversized)` | Run one native tool request through the normal executor chokepoint. |
+
 ### `redis_effect_store.py`
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | class | `class RedisEffectStore` |  |
+
+### `session_metadata.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def project_tool_session_metadata(user_context)` | Return the allowlisted context that may survive tool-thread hops. |
 
 ### `session_projection.py`
 
@@ -134,8 +148,8 @@ tier: "core"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | class | `class ParsedSessionReferenceText` | Result of extracting canonical mentions from plain text. |
-| func | `def encode_session_reference_uri(session_id)` | Encode any session-id string as a canonical lossless ``dsh-session:`` URI. |
-| func | `def decode_session_reference_uri(uri)` | Decode and canonicalize one session-reference URI (dsh strict). |
+| func | `def encode_session_reference_uri(session_id)` | Encode any session id as a canonical lossless Octopus session URI. |
+| func | `def decode_session_reference_uri(uri)` | Decode a current or legacy session URI with strict payload checks. |
 | func | `def format_session_reference_mention(session_id, label)` | Render a host-neutral Markdown mention carrying the canonical URI. |
 | func | `def parse_session_reference_text(text)` | Extract Markdown mentions and bare canonical URIs from one text value. |
 
@@ -214,18 +228,20 @@ tier: "core"
 
 ## Who imports this
 
-**18** file(s) reference this package:
+**21** file(s) reference this package:
 
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
 - **`runtime/cli_run.py/`** · 1 file(s)
   - `runtime/cli_run.py`
-- **`runtime/core/`** · 4 file(s)
+- **`runtime/core/`** · 5 file(s)
   - `runtime/core/cerebrum/_react_execution_dispatch.py`
   - `runtime/core/cerebrum/_react_execution_phase6d.py`
+  - `runtime/core/cerebrum/_react_execution_results.py`
   - `runtime/core/cerebrum/react_parallel_dispatch.py`
   - `runtime/core/graph_runtime/runtime.py`
-- **`runtime/execution/`** · 5 file(s)
+- **`runtime/execution/`** · 6 file(s)
+  - `runtime/execution/codex_backend/dynamic_tools.py`
   - `runtime/execution/subagents/sessions.py`
   - `runtime/execution/suckers/_ephemeral_tool_exec.py`
   - `runtime/execution/suckers/agent_meta_skills.py`
@@ -235,10 +251,11 @@ tier: "core"
   - `runtime/platform/config/builder.py`
 - **`runtime/safety/`** · 1 file(s)
   - `runtime/safety/recovery/skill_forge.py`
-- **`runtime/sensing/`** · 5 file(s)
+- **`runtime/sensing/`** · 6 file(s)
   - `runtime/sensing/gateway/_observability_rollback_panels.py`
   - `runtime/sensing/gateway/_realtime_react_stream_helpers.py`
   - `runtime/sensing/gateway/_tool_bridge_exec.py`
   - `runtime/sensing/gateway/realtime_react_policy.py`
+  - `runtime/sensing/gateway/realtime_turn_lifecycle.py`
   - `runtime/sensing/gateway/realtime_turn_outcome.py`
 

@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from runtime.execution.suckers import code_intelligence_skills as cis
-
 
 # ── _code_analyze ────────────────────────────────────────────
 
@@ -54,7 +51,9 @@ def test_code_edit_diff_search_replace(tmp_path: Path) -> None:
     assert "y = 3" in f.read_text(encoding="utf-8")
     assert "missing path" in cis._code_edit_diff("")["error"]
     assert "file not found" in cis._code_edit_diff(str(tmp_path / "nope"))["error"]
-    assert "search text not found" in cis._code_edit_diff(str(f), search="zzz", replace="q")["error"]
+    assert (
+        "search text not found" in cis._code_edit_diff(str(f), search="zzz", replace="q")["error"]
+    )
 
 
 def test_code_edit_diff_missing_and_bad_args(tmp_path: Path) -> None:
@@ -70,21 +69,33 @@ def test_code_edit_diff_missing_and_bad_args(tmp_path: Path) -> None:
 
 def test_ast_search_validation(tmp_path: Path) -> None:
     invalid = cis._ast_search(
-        query_type="bogus", target_name="x", root=str(tmp_path), glob="*.py",
-        sandbox_dir=None, max_matches=10,
+        query_type="bogus",
+        target_name="x",
+        root=str(tmp_path),
+        glob="*.py",
+        sandbox_dir=None,
+        max_matches=10,
     )
     assert "invalid query_type" in invalid["error"]
     missing = cis._ast_search(
-        query_type="function_calls", target_name="", root=str(tmp_path), glob="*.py",
-        sandbox_dir=None, max_matches=10,
+        query_type="function_calls",
+        target_name="",
+        root=str(tmp_path),
+        glob="*.py",
+        sandbox_dir=None,
+        max_matches=10,
     )
     assert "missing target_name" in missing["error"]
     no_root = cis._ast_search(
-        query_type="function_calls", target_name="x", root=str(tmp_path / "nope"),
-        glob="*.py", sandbox_dir=None, max_matches=10,
+        query_type="function_calls",
+        target_name="x",
+        root=str(tmp_path / "nope"),
+        glob="*.py",
+        sandbox_dir=None,
+        max_matches=10,
     )
     # tree-sitter is absent in CI, so the dependency check reports first.
-    assert no_root["error"] in {"root not found", "ast_unavailable"}
+    assert no_root["error"] == "ast_unavailable" or no_root["error"].startswith("root not found")
 
 
 # ── _code_find_symbol ────────────────────────────────────────
@@ -92,7 +103,10 @@ def test_ast_search_validation(tmp_path: Path) -> None:
 
 def test_code_find_symbol(tmp_path: Path) -> None:
     assert "missing symbol" in cis._code_find_symbol("")["error"]
-    assert "directory not found" in cis._code_find_symbol("add", directory=str(tmp_path / "nope"))["error"]
+    assert (
+        "directory not found"
+        in cis._code_find_symbol("add", directory=str(tmp_path / "nope"))["error"]
+    )
     (tmp_path / "mod.py").write_text("def target_fn():\n    pass\n", encoding="utf-8")
     out = cis._code_find_symbol("target_fn", directory=str(tmp_path))
     assert out["count"] >= 1
@@ -128,12 +142,28 @@ def test_code_search_embedding_backend(monkeypatch, tmp_path: Path) -> None:
     out = _cis._code_search("target", directory=str(tmp_path), extensions=".py", top_k=5)
     assert out.get("backend") in ("embedding", "text_fallback")
     assert "missing query" in _cis._code_search("", directory=str(tmp_path))["error"]
-    ast_out = _cis._code_search("x", mode="ast", query_type="function_calls", target_name="", root=str(tmp_path), glob="*.py", sandbox_dir=None)
+    ast_out = _cis._code_search(
+        "x",
+        mode="ast",
+        query_type="function_calls",
+        target_name="",
+        root=str(tmp_path),
+        glob="*.py",
+        sandbox_dir=None,
+    )
     assert "error" in ast_out  # missing target_name validation from _ast_search
 
 
 def test_code_search_ast_mode_validation(tmp_path: Path) -> None:
     from runtime.execution.suckers import code_intelligence_skills as _cis
 
-    out = _cis._code_search("x", mode="ast", query_type="bogus", target_name="f", root=str(tmp_path), glob="*.py", sandbox_dir=None)
+    out = _cis._code_search(
+        "x",
+        mode="ast",
+        query_type="bogus",
+        target_name="f",
+        root=str(tmp_path),
+        glob="*.py",
+        sandbox_dir=None,
+    )
     assert "invalid query_type" in out["error"]

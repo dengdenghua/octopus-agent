@@ -11,6 +11,45 @@ import type {
   TraceSummary,
 } from "./types";
 
+/**
+ * Process-global observability is intentionally separate from tenant-scoped
+ * journal/progress/budget views.  The server requires both this explicit
+ * opt-in and a principal with cross-tenant admin permission; keeping URL
+ * construction here prevents individual panels from silently falling back to
+ * an unscoped request that will always be rejected in shared deployments.
+ */
+export const GLOBAL_CONTROL_PLANE_ACCESS_CODE =
+  "cross_tenant_admin_required" as const;
+
+export class GlobalControlPlaneAccessError extends Error {
+  readonly status = 403;
+  readonly code = GLOBAL_CONTROL_PLANE_ACCESS_CODE;
+
+  constructor() {
+    super(GLOBAL_CONTROL_PLANE_ACCESS_CODE);
+    this.name = "GlobalControlPlaneAccessError";
+  }
+}
+
+export function globalControlPlaneUrl(path: string): string {
+  const separator = path.includes("?") ? "&" : "?";
+  return `${getBackendBaseURL()}${path}${separator}cross_tenant=true`;
+}
+
+export async function requireGlobalControlPlaneResponse(
+  response: Response,
+  fallback: string,
+): Promise<void> {
+  if (response.ok) return;
+  if (response.status === 403) {
+    throw new GlobalControlPlaneAccessError();
+  }
+  const payload = (await response.json().catch(() => ({}))) as {
+    detail?: string;
+  };
+  throw new Error(payload.detail ?? `${fallback}: ${response.status}`);
+}
+
 export async function getMetrics(): Promise<Record<string, unknown>> {
   const res = await fetch(`${getBackendBaseURL()}/api/metrics`, {
     headers: authHeaders(),
@@ -160,12 +199,10 @@ export async function getToolEffectsSnapshot({
 } = {}): Promise<ToolEffectsSnapshot> {
   const safeLimit = Math.max(1, Math.min(Math.trunc(limit), 500));
   const res = await fetch(
-    `${getBackendBaseURL()}/api/tool-effects?limit=${safeLimit}`,
+    globalControlPlaneUrl(`/api/tool-effects?limit=${safeLimit}`),
     { headers: authHeaders(), signal },
   );
-  if (!res.ok) {
-    throw new Error(`Failed to load tool effects: ${res.status}`);
-  }
+  await requireGlobalControlPlaneResponse(res, "Failed to load tool effects");
   return (await res.json()) as ToolEffectsSnapshot;
 }
 
@@ -175,7 +212,7 @@ export async function authorizeToolEffectRetry(
 ): Promise<ToolEffectAuthorizationResponse> {
   const path = encodeURIComponent(receipt.effect_key);
   const res = await fetch(
-    `${getBackendBaseURL()}/api/tool-effects/${path}/authorize-retry`,
+    globalControlPlaneUrl(`/api/tool-effects/${path}/authorize-retry`),
     {
       method: "POST",
       headers: jsonAuthHeaders(),
@@ -187,6 +224,9 @@ export async function authorizeToolEffectRetry(
     },
   );
   if (!res.ok) {
+    if (res.status === 403) {
+      throw new GlobalControlPlaneAccessError();
+    }
     const error = (await res.json().catch(() => ({}))) as { detail?: string };
     throw new Error(error.detail ?? `Failed to authorize retry: ${res.status}`);
   }
@@ -227,13 +267,14 @@ export interface ReActVariantStat {
 export async function getEvolutionStatus(
   signal?: AbortSignal,
 ): Promise<EvolutionStatus> {
-  const res = await fetch(`${getBackendBaseURL()}/api/evolution/status`, {
+  const res = await fetch(globalControlPlaneUrl("/api/evolution/status"), {
     headers: authHeaders(),
     signal,
   });
-  if (!res.ok) {
-    throw new Error(`Failed to get evolution status: ${res.statusText}`);
-  }
+  await requireGlobalControlPlaneResponse(
+    res,
+    "Failed to get evolution status",
+  );
   return (await res.json()) as EvolutionStatus;
 }
 
@@ -262,10 +303,10 @@ export async function forgetRule(
   index: number,
 ): Promise<{ dropped: string; remaining: number }> {
   const res = await fetch(
-    `${getBackendBaseURL()}/api/evolution/rules/${index}`,
+    globalControlPlaneUrl(`/api/evolution/rules/${index}`),
     { method: "DELETE", headers: authHeaders() },
   );
-  if (!res.ok) throw new Error(`Failed to delete rule: ${res.statusText}`);
+  await requireGlobalControlPlaneResponse(res, "Failed to delete rule");
   return (await res.json()) as { dropped: string; remaining: number };
 }
 
@@ -273,10 +314,10 @@ export async function forgetMemory(
   index: number,
 ): Promise<{ dropped: string; remaining: number }> {
   const res = await fetch(
-    `${getBackendBaseURL()}/api/evolution/memories/${index}`,
+    globalControlPlaneUrl(`/api/evolution/memories/${index}`),
     { method: "DELETE", headers: authHeaders() },
   );
-  if (!res.ok) throw new Error(`Failed to delete memory: ${res.statusText}`);
+  await requireGlobalControlPlaneResponse(res, "Failed to delete memory");
   return (await res.json()) as { dropped: string; remaining: number };
 }
 

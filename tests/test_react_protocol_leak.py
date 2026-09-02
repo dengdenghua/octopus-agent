@@ -148,7 +148,11 @@ def test_completeness_repair_keeps_evidence_request_when_tool_failed():
     original = "Execute the stated read/search action."
 
     assert _trajectory_has_successful_tool_evidence(steps) is False
-    assert _guard_repair_feedback("final-answer completeness guard", original, steps) == original
+    feedback = _guard_repair_feedback("final-answer completeness guard", original, steps)
+    # The guard's own repair instruction is preserved; an anti-echo directive
+    # is appended so the model never quotes loop machinery in the answer.
+    assert original in feedback
+    assert "internal loop machinery" in feedback
 
 
 def test_non_completeness_guard_feedback_is_unchanged_with_evidence():
@@ -162,7 +166,10 @@ def test_non_completeness_guard_feedback_is_unchanged_with_evidence():
     ]
     original = "Run the requested verification."
 
-    assert _guard_repair_feedback("verification guard", original, steps) == original
+    feedback = _guard_repair_feedback("verification guard", original, steps)
+    assert original in feedback
+    assert "internal loop machinery" in feedback
+    assert "user-facing Final Answer" in feedback
 
 
 _FENCED_ACTION_EXAMPLE = (

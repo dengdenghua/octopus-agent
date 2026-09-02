@@ -9,6 +9,13 @@ from pathlib import Path
 from typing import Any
 
 from benchmarks.eval_harness import CaseResult, EvalCase, SuiteReport, Trajectory, Verdict
+from runtime.safety.evolution.behavioral_surpass_evidence import (
+    behavioral_system_provenance_digest,
+    validate_behavioral_system_provenance,
+)
+
+SYSTEM_RUN_SCHEMA = "octopus.behavioral_system_run.v2"
+TRAJECTORY_SCHEMA = "octopus.behavioral_trajectory.v2"
 
 
 def load_system_run_seed(
@@ -20,6 +27,7 @@ def load_system_run_seed(
     expected_suite_id: str,
     expected_k: int,
     cases: Sequence[EvalCase],
+    expected_provenance: dict[str, Any] | None = None,
 ) -> SuiteReport:
     """Load digest-addressed completed cases from a prior system run.
 
@@ -36,11 +44,7 @@ def load_system_run_seed(
         raise ValueError(f"seed run is unreadable: {source}") from exc
     if not isinstance(payload, dict):
         raise ValueError(f"seed run must be an object: {source}")
-    expected_identity = {
-        "schema": "octopus.behavioral_system_run.v1",
-        "suite_id": expected_suite_id,
-        "system_id": expected_system,
-    }
+    expected_identity = {"suite_id": expected_suite_id, "system_id": expected_system}
     for field, value in expected_identity.items():
         if payload.get(field) != value:
             raise ValueError(f"seed run {field} does not match this run: {source}")
@@ -50,6 +54,29 @@ def load_system_run_seed(
         raise ValueError(f"seed run system payload is missing: {source}")
     if system.get("version") != expected_version:
         raise ValueError(f"seed run system version does not match this run: {source}")
+    expected_provenance_digest: str | None = None
+    if expected_provenance is not None:
+        if payload.get("schema") != SYSTEM_RUN_SCHEMA:
+            raise ValueError(f"seed run schema does not carry release provenance: {source}")
+        normalized_expected = validate_behavioral_system_provenance(
+            expected_provenance,
+            system_id=expected_system,
+        )
+        normalized_seed = validate_behavioral_system_provenance(
+            system.get("provenance"),
+            system_id=expected_system,
+        )
+        expected_provenance_digest = behavioral_system_provenance_digest(normalized_expected)
+        if (
+            normalized_seed != normalized_expected
+            or system.get("provenance_sha256") != expected_provenance_digest
+        ):
+            raise ValueError(f"seed run system provenance does not match this run: {source}")
+    elif payload.get("schema") not in {
+        "octopus.behavioral_system_run.v1",
+        SYSTEM_RUN_SCHEMA,
+    }:
+        raise ValueError(f"seed run schema does not match this run: {source}")
     rows = system.get("cases")
     if not isinstance(rows, list) or not rows:
         raise ValueError(f"seed run contains no completed cases: {source}")
@@ -82,6 +109,7 @@ def load_system_run_seed(
                 expected_system=expected_system,
                 expected_version=expected_version,
                 expected_case=case,
+                expected_provenance_sha256=expected_provenance_digest,
             )
             for raw_artifact in artifacts
         ]
@@ -160,6 +188,7 @@ def _load_artifact(
     expected_system: str,
     expected_version: str,
     expected_case: EvalCase,
+    expected_provenance_sha256: str | None,
 ) -> tuple[int, Trajectory, Verdict]:
     if not isinstance(raw, dict):
         raise ValueError(f"seed artifact for {expected_case.id} must be an object")
@@ -184,8 +213,14 @@ def _load_artifact(
         raise ValueError(f"seed artifact is invalid JSON: {relative_path}") from exc
     if not isinstance(artifact, dict):
         raise ValueError(f"seed artifact must be an object: {relative_path}")
+    allowed_schemas = (
+        {TRAJECTORY_SCHEMA}
+        if expected_provenance_sha256 is not None
+        else {"octopus.behavioral_trajectory.v1", TRAJECTORY_SCHEMA}
+    )
+    if artifact.get("schema") not in allowed_schemas:
+        raise ValueError(f"seed artifact schema mismatch: {relative_path}")
     expected_identity = {
-        "schema": "octopus.behavioral_trajectory.v1",
         "system_id": expected_system,
         "system_version": expected_version,
         "case_id": expected_case.id,
@@ -194,6 +229,11 @@ def _load_artifact(
     for field, value in expected_identity.items():
         if artifact.get(field) != value:
             raise ValueError(f"seed artifact {field} mismatch: {relative_path}")
+    if (
+        expected_provenance_sha256 is not None
+        and artifact.get("system_provenance_sha256") != expected_provenance_sha256
+    ):
+        raise ValueError(f"seed artifact provenance mismatch: {relative_path}")
     trial_index = artifact.get("trial_index")
     if not isinstance(trial_index, int) or isinstance(trial_index, bool):
         raise ValueError(f"seed artifact trial_index is invalid: {relative_path}")

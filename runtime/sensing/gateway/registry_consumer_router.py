@@ -19,6 +19,7 @@ import re
 import shutil
 import tarfile
 import tempfile
+import time as _time
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -44,6 +45,29 @@ from runtime.sensing._fastapi_guard import require_fastapi
 # 插件目录和显式权限审核。
 _ROLE_ASSET_TYPES = ("role", "twin-role")
 _MAX_PLUGIN_UNCOMPRESSED_BYTES = 200 * 1024 * 1024
+
+
+# registry 全量列表查询是 5 秒级慢请求(公网),列表端点加进程内 TTL 缓存:
+# 同一批资产在 TTL 内命中内存,search/category/分页都在缓存之上做;``refresh=1`` 强制穿透拉新。
+# 只缓存成功结果(loader 抛异常时不写入,下次仍会重试),零第三方依赖。
+_REGISTRY_CACHE_TTL_SECONDS = 60.0
+_REGISTRY_CACHE: dict[str, tuple[float, list[Any]]] = {}
+
+
+def _registry_list_cached(
+    key: str,
+    loader: Any,
+    *,
+    refresh: bool = False,
+) -> list[Any]:
+    now = _time.monotonic()
+    if not refresh:
+        hit = _REGISTRY_CACHE.get(key)
+        if hit is not None and (now - hit[0]) < _REGISTRY_CACHE_TTL_SECONDS:
+            return hit[1]
+    assets = loader()
+    _REGISTRY_CACHE[key] = (now, assets)
+    return assets
 
 
 def _ensure_safe_dir(path: Path) -> None:
@@ -271,9 +295,16 @@ def _install_registry_plugin_bundle(
     bundle = getattr(asset, "bundle", None)
     if bundle is None or not getattr(bundle, "ref", None):
         raise ValueError("registry plugin has no installable bundle")
-    data = client.fetch_bundle(str(asset.id))
-    expected = str(getattr(bundle, "checksum", "") or "").removeprefix("sha256:").lower()
-    if expected and hashlib.sha256(data).hexdigest() != expected:
+    raw_checksum = str(getattr(bundle, "checksum", "") or "").strip()
+    checksum_match = re.fullmatch(r"sha256:([0-9a-fA-F]{64})", raw_checksum)
+    if checksum_match is None:
+        raise ValueError("registry plugin bundle requires a valid sha256 checksum")
+    expected = checksum_match.group(1).lower()
+    data = client.fetch_bundle(
+        str(asset.id),
+        expected_size=getattr(bundle, "size", None),
+    )
+    if hashlib.sha256(data).hexdigest() != expected:
         raise ValueError("registry plugin bundle checksum mismatch")
     declared_size = getattr(bundle, "size", None)
     if declared_size is not None and len(data) != int(declared_size):
@@ -329,13 +360,16 @@ def _install_registry_plugin_bundle(
             plugin_root=plugin_root,
             publisher_trust_store_path=publisher_trust_store_path,
             confirm_install=True,
+            require_trusted_publisher=True,
         )
 
 
 def _register_runtime(skill_registry: Any, skills_root: Path) -> int:
     """把 skills_root 下的 prompt-skill 注册进**活 registry**(无需重启)。
     已注册的同名会被 register_market_skills 自身跳过,故只净增新装的。"""
-    if skill_registry is None or not skills_root.is_dir():
+    from runtime.execution.suckers.market_skills import immutable_prompt_catalog_required
+
+    if skill_registry is None or not skills_root.is_dir() or immutable_prompt_catalog_required():
         return 0
     try:
         from runtime.execution.suckers.market_skills import register_market_skills
@@ -381,17 +415,27 @@ def create_registry_consumer_router(
             skills_root = Path("skills/public")
     skills_root = Path(skills_root)
     if plugin_root is None:
-        plugin_root = Path(__file__).resolve().parents[3] / ".octopus" / "plugins" / "codex"
+        from runtime.platform.process.paths import app_paths
+
+        plugin_root = app_paths().codex_plugins_path
     plugin_root = Path(plugin_root)
     publisher_trust_store_path = (
         Path(publisher_trust_store_path) if publisher_trust_store_path is not None else None
     )
 
+    _branding_cache: dict[str, tuple[float, dict[str, dict[str, Any]]]] = {}
+    _branding_key = f"{plugin_root}|{publisher_trust_store_path}"
+
     def _current_plugin_branding() -> dict[str, dict[str, Any]]:
-        # Re-scan on registry reads so a newly installed bundle gets its logo
-        # without requiring a runtime restart.  Discovery is local-only and
-        # cheap compared with the registry request itself.
-        return _plugin_branding_index(plugin_root, publisher_trust_store_path)
+        # 本地发现开销 ~0.4s/次(扫插件目录),加 5s TTL:安装新 bundle 后最迟 5s
+        # 就能刷出新 logo,又避免每次读 registry 都重复扫盘。
+        now = _time.monotonic()
+        hit = _branding_cache.get(_branding_key)
+        if hit is not None and (now - hit[0]) < 5.0:
+            return hit[1]
+        idx = _plugin_branding_index(plugin_root, publisher_trust_store_path)
+        _branding_cache[_branding_key] = (now, idx)
+        return idx
 
     def _auth_dep(request: Request) -> None:
         from runtime.adapters.web_auth import _resolve_actor
@@ -405,6 +449,19 @@ def create_registry_consumer_router(
             jwt_audience=jwt_audience,
         )
 
+    def _admin_dep(request: Request) -> None:
+        from runtime.safety.auth.principal import require_roles
+
+        require_roles(
+            request,
+            identity_store,
+            require_auth,
+            ("admin",),
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     router = APIRouter(tags=["registry"], dependencies=[Depends(_auth_dep)])
 
     @router.get("/api/registry/skills")
@@ -413,11 +470,16 @@ def create_registry_consumer_router(
         category: str | None = None,
         offset: int = Query(default=0, ge=0),
         limit: int = Query(default=50, ge=1, le=500),
+        refresh: bool = Query(default=False),
     ) -> dict[str, Any]:
         from octopus_runtime import RegistryClient
 
         try:
-            assets = RegistryClient(base).list_skills()
+            assets = _registry_list_cached(
+                f"skills|{base}",
+                lambda: RegistryClient(base).list_skills(),
+                refresh=refresh,
+            )
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(502, f"registry unreachable: {exc}") from exc
         if category:
@@ -455,8 +517,19 @@ def create_registry_consumer_router(
         d["installed"] = (skills_root / p.slug / "SKILL.md").is_file()
         return d
 
-    @router.post("/api/registry/skills/{slug}/install")
+    @router.post(
+        "/api/registry/skills/{slug}/install",
+        dependencies=[Depends(_admin_dep)],
+    )
     def install_registry_skill(slug: str) -> dict[str, Any]:
+        from runtime.execution.suckers.market_skills import immutable_prompt_catalog_required
+
+        if immutable_prompt_catalog_required():
+            raise HTTPException(
+                403,
+                "remote prompt installation is disabled in shared/commercial deployments; "
+                "ship prompt changes in a reviewed release artifact",
+            )
         from octopus_runtime import sync_skills
 
         try:
@@ -479,13 +552,17 @@ def create_registry_consumer_router(
         role_type: str | None = Query(default=None, alias="type"),
         offset: int = Query(default=0, ge=0),
         limit: int = Query(default=50, ge=1, le=500),
+        refresh: bool = Query(default=False),
     ) -> dict[str, Any]:
         from octopus_runtime import RegistryClient
 
         types = (role_type,) if role_type in _ROLE_ASSET_TYPES else _ROLE_ASSET_TYPES
         try:
-            client = RegistryClient(base)
-            assets = [a for t in types for a in client.list_assets(type_=t)]
+            assets = _registry_list_cached(
+                f"roles|{base}|{','.join(types)}",
+                lambda: [a for t in types for a in RegistryClient(base).list_assets(type_=t)],
+                refresh=refresh,
+            )
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(502, f"registry unreachable: {exc}") from exc
         if category:
@@ -523,8 +600,19 @@ def create_registry_consumer_router(
         d["body_chars"] = len(body)
         return d
 
-    @router.post("/api/registry/roles/{asset_id:path}/install")
+    @router.post(
+        "/api/registry/roles/{asset_id:path}/install",
+        dependencies=[Depends(_admin_dep)],
+    )
     def install_registry_role(asset_id: str) -> dict[str, Any]:
+        from runtime.execution.suckers.market_skills import immutable_prompt_catalog_required
+
+        if immutable_prompt_catalog_required():
+            raise HTTPException(
+                403,
+                "remote role installation is disabled in shared/commercial deployments; "
+                "ship role prompts in a reviewed release artifact",
+            )
         from octopus_runtime import RegistryClient
 
         if "/" not in asset_id:
@@ -556,11 +644,16 @@ def create_registry_consumer_router(
         category: str | None = None,
         offset: int = Query(default=0, ge=0),
         limit: int = Query(default=50, ge=1, le=500),
+        refresh: bool = Query(default=False),
     ) -> dict[str, Any]:
         from octopus_runtime import RegistryClient
 
         try:
-            assets = RegistryClient(base).list_assets(type_="plugin")
+            assets = _registry_list_cached(
+                f"plugins|{base}",
+                lambda: RegistryClient(base).list_assets(type_="plugin"),
+                refresh=refresh,
+            )
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(502, f"registry unreachable: {exc}") from exc
         if category:
@@ -616,7 +709,10 @@ def create_registry_consumer_router(
         d["install_mode"] = "plugin-bundle" if p.bundle and p.bundle.ref else "prompt-only"
         return d
 
-    @router.post("/api/registry/plugins/{slug}/install")
+    @router.post(
+        "/api/registry/plugins/{slug}/install",
+        dependencies=[Depends(_admin_dep)],
+    )
     def install_registry_plugin(slug: str) -> dict[str, Any]:
         from octopus_runtime import RegistryClient
 
@@ -634,7 +730,19 @@ def create_registry_consumer_router(
                     publisher_trust_store_path=publisher_trust_store_path,
                 )
                 return {"installed": asset_id, "install_mode": "plugin-bundle", **result}
+            from runtime.execution.suckers.market_skills import (
+                immutable_prompt_catalog_required,
+            )
+
+            if immutable_prompt_catalog_required():
+                raise HTTPException(
+                    403,
+                    "unsigned remote plugin prompts are disabled in shared/commercial "
+                    "deployments; install a trusted signed plugin bundle instead",
+                )
             installed_name, path = _materialize_registry_plugin_prompt(asset, skills_root)
+        except HTTPException:
+            raise
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         except Exception as exc:  # noqa: BLE001 - normalize registry/install failures

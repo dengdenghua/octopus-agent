@@ -29,9 +29,45 @@ describe("SettingsDialog", () => {
     expect(normalizeSettingsSection("mcp")).toBe("tools");
     expect(normalizeSettingsSection("personalSpace")).toBe("privacy");
     expect(normalizeSettingsSection("session")).toBe("privacy");
-    expect(normalizeSettingsSection("automation")).toBe("automationSecurity");
+    expect(normalizeSettingsSection("conversation")).toBe("conversation");
+    expect(normalizeSettingsSection("automation")).toBe("browserAutomation");
     expect(normalizeSettingsSection("sandbox")).toBe("automationSecurity");
     expect(normalizeSettingsSection("unknown")).toBe("appearance");
+  });
+
+  it("exposes browser and desktop automation as independent destinations", () => {
+    renderWithProviders(
+      <SettingsDialog
+        open
+        defaultSection="browserAutomation"
+        onOpenChange={vi.fn()}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(
+      screen.getByRole("button", { name: "浏览器自动化" }),
+    ).toHaveAttribute("aria-current", "page");
+    expect(
+      screen.getByRole("button", { name: "桌面自动化" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "执行与安全" }),
+    ).toBeInTheDocument();
+
+    const destinations = screen
+      .getAllByRole("button")
+      .map((button) => button.textContent?.trim())
+      .filter(Boolean);
+    expect(destinations.indexOf("通用")).toBeLessThan(
+      destinations.indexOf("对话"),
+    );
+    expect(destinations.indexOf("对话")).toBeLessThan(
+      destinations.indexOf("浏览器自动化"),
+    );
+    expect(destinations.indexOf("浏览器自动化")).toBeLessThan(
+      destinations.indexOf("桌面自动化"),
+    );
   });
 
   it("names merged categories after the personal-space features they contain", () => {
@@ -59,10 +95,11 @@ describe("SettingsDialog", () => {
       { locale: "zh-CN" },
     );
 
-    expect(screen.getByRole("button", { name: "外观" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "通用" })).toHaveAttribute(
       "aria-current",
       "page",
     );
+    expect(screen.getByRole("button", { name: "对话" })).toBeInTheDocument();
 
     const viewport = document.querySelector<HTMLElement>(
       '[data-slot="scroll-area-viewport"]',
@@ -78,7 +115,7 @@ describe("SettingsDialog", () => {
       "aria-current",
       "page",
     );
-    expect(screen.getByRole("button", { name: "外观" })).not.toHaveAttribute(
+    expect(screen.getByRole("button", { name: "通用" })).not.toHaveAttribute(
       "aria-current",
     );
   });

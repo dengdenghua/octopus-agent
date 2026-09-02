@@ -10,14 +10,14 @@ import { checkCodeFile } from "@/core/utils/files";
 import { cn } from "@/lib/utils";
 
 import { ArtifactFileDetail } from "./artifact-file-detail";
-import {
-  ArtifactFileList,
-  ArtifactInlinePreview,
-} from "./artifact-file-list";
+import { ArtifactFileList, ArtifactInlinePreview } from "./artifact-file-list";
 import { useArtifacts } from "./context";
+import { officeArtifactKind } from "./office-edit";
 
 // 产物面板将产物按「全部 / 变更 / 预览」分类展示：变更指 Agent 通过
-// write-file 写入的改动，预览指可渲染的 HTML / Markdown 产物。
+// write-file 写入的改动，预览包含可渲染的 HTML / Markdown
+// 以及文档、表格、演示文稿和 PDF。不要把 Office 产物埋在“全部”里：
+// 用户应该能从“预览”直接进入人机共改闭环。
 export function ArtifactPanel({
   className,
   showHeader = true,
@@ -41,8 +41,15 @@ export function ArtifactPanel({
     const previews: string[] = [];
     for (const file of artifacts ?? []) {
       if (file.startsWith("write-file:")) changes.push(file);
-      const language = checkCodeFile(artifactDisplayPath(file)).language;
-      if (language === "html" || language === "markdown") previews.push(file);
+      const displayPath = artifactDisplayPath(file);
+      const language = checkCodeFile(displayPath).language;
+      if (
+        language === "html" ||
+        language === "markdown" ||
+        officeArtifactKind(displayPath)
+      ) {
+        previews.push(file);
+      }
     }
     return { changeArtifacts: changes, previewArtifacts: previews };
   }, [artifacts]);

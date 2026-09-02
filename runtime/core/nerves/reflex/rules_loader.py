@@ -278,13 +278,15 @@ def load_rules_from_file(path: str | Path) -> list[Reflex]:
         )
 
         if isinstance(data, dict):
-            slm_cfg = data.get("slm") if isinstance(data.get("slm"), dict) else {}
+            raw_slm_cfg = data.get("slm")
+            slm_cfg: dict[Any, Any] = raw_slm_cfg if isinstance(raw_slm_cfg, dict) else {}
             configure_slm(
                 endpoint=slm_cfg.get("endpoint"),
                 model=slm_cfg.get("model"),
                 timeout_ms=slm_cfg.get("timeout_ms"),
             )
-            fc_cfg = data.get("fuzzy_cache") if isinstance(data.get("fuzzy_cache"), dict) else {}
+            raw_fc_cfg = data.get("fuzzy_cache")
+            fc_cfg: dict[Any, Any] = raw_fc_cfg if isinstance(raw_fc_cfg, dict) else {}
             if fc_cfg:
                 fc = get_default_fuzzy_cache()
                 if "similarity" in fc_cfg:

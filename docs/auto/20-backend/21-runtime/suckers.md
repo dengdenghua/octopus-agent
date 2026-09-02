@@ -85,6 +85,7 @@ Suckers = skill pool.
 | `code_navigation.py` | Cross-file symbol lookup and Python import-graph analysis. |
 | `codex_plugin_skills.py` | — |
 | `computer_api_skills.py` | Agent-facing computer automation skills. |
+| `computer_macos.py` | — |
 | `computer_skills.py` | — |
 | `computer_uia_skills.py` | — |
 | `computer_use_loop.py` | — |
@@ -120,7 +121,9 @@ Suckers = skill pool.
 | `notebook_skills.py` | — |
 | `plan_mode.py` | — |
 | `rate_limit.py` | Per-skill rate limiter — runaway-loop protection for LLM agents. |
+| `reach_skills.py` | — |
 | `registry.py` | — |
+| `role_delegation_guidance.py` | Role-specific delegation guidance for hierarchical orchestration. |
 | `search.py` | Semantic skill search — TF-IDF-based skill discovery. |
 | `skill_library_skills.py` | skill_library_skills · expose Kimi-style "learned skills" as 3 skills. |
 | `storage_skills.py` | File Agent document search via the octopus-storage sibling service. |
@@ -306,6 +309,21 @@ Suckers = skill pool.
 | --- | --- | --- |
 | func | `def register_computer_api_skills(registry)` |  |
 
+### `computer_macos.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def screen_info()` |  |
+| func | `def capture_screen(path, region)` |  |
+| func | `def move_mouse(x, y)` |  |
+| func | `def click_mouse(x, y, button, clicks)` |  |
+| func | `def type_text(text)` |  |
+| func | `def press_keys(keys)` |  |
+| func | `def list_apps()` |  |
+| func | `def activate_window_target(app_id, app_name, window_id, window_title)` | Bring one operator-selected macOS window to the foreground. |
+| func | `def accessibility_snapshot(max_nodes)` |  |
+| func | `def perform_accessibility_action(target, action)` | Re-ground a snapshotted AX element and invoke its native action. |
+
 ### `computer_skills.py`
 
 | Kind | Symbol | Doc |
@@ -380,6 +398,7 @@ Suckers = skill pool.
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def register_delegation_skills(registry)` | Register `call_agent` for sub-agent delegation. Returns count. |
+| func | `def register_call_agent_parallel(registry, max_spawns, depth)` | Register `call_agent_parallel` for hierarchical sub-delegation. |
 
 ### `desktop_grounding.py`
 
@@ -537,6 +556,8 @@ Suckers = skill pool.
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | func | `def register_market_skills(registry, all_skills_dir, respect_enabled_flag, verify_tests)` |  |
+| func | `def immutable_prompt_catalog_required()` | Whether startup must use only the catalog shipped in this build. |
+| func | `def register_prompt_market_skills(registry, resource_dir, bundled_dir, refresh_deadline_s)` | Bootstrap and register the external prompt catalog with a bundled fallback. |
 | func | `def load_single_market_skill(registry, skill_id, all_skills_dir, ignore_frontmatter_enabled, verify_tests)` |  |
 
 ### `memory_file_ops.py`
@@ -564,6 +585,12 @@ Suckers = skill pool.
 | --- | --- | --- |
 | class | `class SkillRateLimiter` | Per-(skill, caller) token bucket rate limiter. |
 
+### `reach_skills.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def register_reach_skills(registry)` |  |
+
 ### `registry.py`
 
 | Kind | Symbol | Doc |
@@ -571,6 +598,12 @@ Suckers = skill pool.
 | class | `class Skill(BaseModel)` |  |
 | class | `class SkillNotFound(KeyError)` |  |
 | class | `class SkillRegistry` |  |
+
+### `role_delegation_guidance.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def get_delegation_guidance(role_id)` | Get delegation guidance for a role, if available. |
 
 ### `search.py`
 
@@ -663,7 +696,7 @@ Suckers = skill pool.
 
 ## Who imports this
 
-**66** file(s) reference this package:
+**88** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
@@ -677,48 +710,48 @@ Suckers = skill pool.
   - `runtime/cli_reflect.py`
 - **`runtime/cli_run.py/`** · 1 file(s)
   - `runtime/cli_run.py`
-- **`runtime/core/`** · 7 file(s)
+- **`runtime/core/`** · 8 file(s)
   - `runtime/core/cerebrum/_react_context_helpers.py`
   - `runtime/core/cerebrum/_react_context_project.py`
   - `runtime/core/cerebrum/_react_execution_dispatch.py`
   - `runtime/core/cerebrum/_react_prompt_assembly_guidance.py`
   - `runtime/core/cerebrum/capability_router.py`
-  - _… and 2 more_
-- **`runtime/execution/`** · 11 file(s)
+  - _… and 3 more_
+- **`runtime/execution/`** · 13 file(s)
   - `runtime/execution/all_skills/__init__.py`
   - `runtime/execution/arms/base.py`
+  - `runtime/execution/codex_backend/dynamic_tools.py`
+  - `runtime/execution/codex_backend/role_context.py`
   - `runtime/execution/loops/verifiers.py`
-  - `runtime/execution/misc/skill_policy.py`
-  - `runtime/execution/subagents/_bridge_trace.py`
-  - _… and 6 more_
+  - _… and 8 more_
 - **`runtime/memory/`** · 3 file(s)
   - `runtime/memory/cowork/runtime.py`
   - `runtime/memory/hemolymph/composer.py`
   - `runtime/memory/learning/deep_evolution.py`
-- **`runtime/platform/`** · 8 file(s)
+- **`runtime/platform/`** · 23 file(s)
   - `runtime/platform/config/builder.py`
   - `runtime/platform/lifecycle/demo.py`
-  - `runtime/platform/plugins/bundled/whale_eye/__init__.py`
-  - `runtime/platform/ui/_app_stack.py`
-  - `runtime/platform/ui/_browser_artifact_path.py`
-  - _… and 3 more_
+  - `runtime/platform/plugins/bundled/clip_studio/__init__.py`
+  - `runtime/platform/plugins/bundled/comfyui_bridge/__init__.py`
+  - `runtime/platform/plugins/bundled/director_stage/__init__.py`
+  - _… and 18 more_
 - **`runtime/research/`** · 2 file(s)
   - `runtime/research/pipeline.py`
   - `runtime/research/prefetch.py`
-- **`runtime/safety/`** · 6 file(s)
+- **`runtime/safety/`** · 8 file(s)
   - `runtime/safety/evolution/_recipes_evidence.py`
   - `runtime/safety/evolution/auto_trigger.py`
+  - `runtime/safety/evolution/auto_verifier.py`
   - `runtime/safety/evolution/browser_desktop_quality.py`
-  - `runtime/safety/hooks/tool_edge_hooks.py`
-  - `runtime/safety/recovery/intel_collector.py`
-  - `runtime/safety/recovery/skill_forge.py`
-- **`runtime/sensing/`** · 22 file(s)
+  - `runtime/safety/evolution/runtime_deployment.py`
+  - _… and 3 more_
+- **`runtime/sensing/`** · 24 file(s)
   - `runtime/sensing/gateway/_agent_world_helpers.py`
+  - `runtime/sensing/gateway/_computer_appshot_routes.py`
   - `runtime/sensing/gateway/_meta_mentions.py`
   - `runtime/sensing/gateway/_realtime_react_stream_drive.py`
   - `runtime/sensing/gateway/_realtime_react_stream_helpers.py`
-  - `runtime/sensing/gateway/_team_stream_group_fanout.py`
-  - _… and 17 more_
+  - _… and 19 more_
 - **`runtime/tour.py/`** · 1 file(s)
   - `runtime/tour.py`
 

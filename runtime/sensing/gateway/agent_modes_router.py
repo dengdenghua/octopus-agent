@@ -15,15 +15,17 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from fastapi import APIRouter, HTTPException, Query
+    from fastapi import APIRouter, Depends, HTTPException, Query, Request
     from pydantic import BaseModel, Field
 
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment, misc]
+    Depends = None  # type: ignore[assignment, misc]
     HTTPException = None  # type: ignore[assignment, misc]
     Query = None  # type: ignore[assignment, misc]
+    Request = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
     Field = None  # type: ignore[assignment, misc]
 
@@ -81,6 +83,20 @@ ARCHITECTURE_DIR_HINTS = {
     "rfcs",
 }
 
+# Detection keeps the original project-kind vocabulary; the interactive
+# selector uses task strategies.  The current-mode endpoint accepts both so a
+# frontend choice never fails merely because it came from the newer UX.
+CURRENT_AGENT_MODES = frozenset(
+    {
+        "builder",
+        "coder",
+        "architect",
+        "develop",
+        "audit",
+        "uxui",
+    }
+)
+
 
 if FASTAPI_AVAILABLE:
 
@@ -135,11 +151,42 @@ if FASTAPI_AVAILABLE:
         session_id: str | None = None
 
 
-def create_agent_modes_router() -> Any:
+def create_agent_modes_router(
+    *,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> Any:
     if not FASTAPI_AVAILABLE:  # pragma: no cover
         return None
 
-    router = APIRouter(tags=["agent-modes"])
+    def _auth_dep(request: Request) -> None:
+        from runtime.safety.auth.principal import resolve_principal
+
+        resolve_principal(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    def _operator_dep(request: Request) -> None:
+        from runtime.safety.auth.principal import require_operator
+
+        require_operator(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(tags=["agent-modes"], dependencies=[Depends(_auth_dep)])
 
     @router.get("/api/agent-modes", response_model=ModesResponse)
     def list_agent_modes() -> ModesResponse:
@@ -186,7 +233,11 @@ def create_agent_modes_router() -> Any:
             ],
         )
 
-    @router.get("/api/agent-modes/detect", response_model=DetectResponse)
+    @router.get(
+        "/api/agent-modes/detect",
+        response_model=DetectResponse,
+        dependencies=[Depends(_operator_dep)],
+    )
     def detect_agent_mode(
         workspace_path: str = Query(..., min_length=1),
     ) -> DetectResponse:
@@ -218,8 +269,13 @@ def create_agent_modes_router() -> Any:
     @router.put("/api/agent-modes/current", response_model=CurrentModeResponse)
     def set_current_mode(body: CurrentModeBody) -> CurrentModeResponse:
         mode = body.mode.strip().lower()
-        if mode not in {"builder", "coder", "architect"}:
-            raise HTTPException(status_code=400, detail="unknown agent mode")
+        if mode not in CURRENT_AGENT_MODES:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "unknown agent mode; expected develop/audit/uxui or builder/coder/architect"
+                ),
+            )
         return CurrentModeResponse(ok=True, mode=mode, session_id=body.session_id)
 
     return router

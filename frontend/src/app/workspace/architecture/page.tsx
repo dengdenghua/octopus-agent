@@ -87,7 +87,7 @@ export default function ArchitecturePage() {
     (async () => {
       try {
         const r = await fetch(
-          `/api/architecture/docs/${encodeURIComponent(activeId)}`,
+          `${getBackendBaseURL()}/api/architecture/docs/${encodeURIComponent(activeId)}`,
         );
         if (!r.ok) throw new Error(`${r.status}: ${r.statusText}`);
         const data = (await r.json()) as { content: string };

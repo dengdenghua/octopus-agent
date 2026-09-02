@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 from pathlib import Path
 
 import pytest
@@ -42,7 +43,7 @@ class TestBugfixDemoSnapshot:
         snapshot.match(
             "journal",
             events,
-            rebase_map={str(tmp_path): "{workdir}"},
+            rebase_map={str(tmp_path): "{workdir}", sys.executable: "{python}"},
             scrub_keys=_VOLATILE_KEYS,
         )
 

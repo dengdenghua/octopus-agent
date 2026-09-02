@@ -85,9 +85,7 @@ class _ProgressObserver(WorkflowObserver):
         )
 
     def on_agent_start(self, info: Any, agent: Any) -> None:
-        _emit_orchestration_progress(
-            f"[workflow] agent {agent.seq} {agent.label} started"
-        )
+        _emit_orchestration_progress(f"[workflow] agent {agent.seq} {agent.label} started")
         from runtime.memory.journal.activity import write_workflow_progress
 
         write_workflow_progress(
@@ -99,9 +97,7 @@ class _ProgressObserver(WorkflowObserver):
         )
 
     def on_agent_end(self, info: Any, agent: Any) -> None:
-        _emit_orchestration_progress(
-            f"[workflow] agent {agent.seq} {agent.label}: {agent.outcome}"
-        )
+        _emit_orchestration_progress(f"[workflow] agent {agent.seq} {agent.label}: {agent.outcome}")
         from runtime.memory.journal.activity import write_workflow_progress
 
         write_workflow_progress(
@@ -155,11 +151,7 @@ async def _run_workflow(
                 "script": script,
                 "meta": meta,
                 **({"args": args} if args is not None else {}),
-                **(
-                    {"maxTotalAgents": max_total_agents}
-                    if max_total_agents is not None
-                    else {}
-                ),
+                **({"maxTotalAgents": max_total_agents} if max_total_agents is not None else {}),
             },
             observer=_ProgressObserver(),
         )
@@ -175,8 +167,7 @@ async def _run_workflow(
                 "success": False,
                 "runId": run.id,
                 "agentsStarted": result.agents_started,
-                "error": result.error
-                or f"workflow run {result.stop_reason}",
+                "error": result.error or f"workflow run {result.stop_reason}",
             }
         return {
             "success": True,

@@ -153,6 +153,7 @@ def test_setup_failure_recorded() -> None:
     result = run_case(case, runner=_mock_runner_echo, k=1)
     assert result.passes == 0
     assert "setup failed" in (result.trajectories[0].error or "")
+    assert result.trajectories[0].failure_category == "infrastructure"
 
 
 def test_grader_observes_state_before_teardown() -> None:
@@ -184,6 +185,7 @@ def test_grader_exception_becomes_failed_trajectory() -> None:
     assert result.passes == 0
     assert result.verdicts[0].reason == "grader raised: verifier unavailable"
     assert result.trajectories[0].error == "grader raised: verifier unavailable"
+    assert result.trajectories[0].failure_category == "infrastructure"
 
 
 def test_runner_exception_captured() -> None:
@@ -196,6 +198,27 @@ def test_runner_exception_captured() -> None:
     assert result.passes == 0
     assert "blew up" in (result.trajectories[0].error or "")
     assert "blew up" in result.verdicts[0].reason
+    assert result.trajectories[0].failure_category == "infrastructure"
+
+
+def test_teardown_exception_is_infrastructure_failure() -> None:
+    def bad_teardown() -> None:
+        raise RuntimeError("cleanup unavailable")
+
+    result = run_case(
+        EvalCase(
+            id="teardown-error",
+            prompt="x",
+            grader=lambda _trajectory: True,
+            teardown=bad_teardown,
+        ),
+        runner=_mock_runner_echo,
+        k=1,
+    )
+
+    assert result.passes == 0
+    assert result.trajectories[0].failure_category == "infrastructure"
+    assert "teardown failed: cleanup unavailable" in result.verdicts[0].reason
 
 
 def test_runner_error_event_fails_with_structured_reason() -> None:
@@ -212,6 +235,7 @@ def test_runner_error_event_fails_with_structured_reason() -> None:
     assert result.passes == 0
     assert result.trajectories[0].error is not None
     assert '"type": "timeout"' in result.verdicts[0].reason
+    assert result.trajectories[0].failure_category is None
 
 
 def test_infrastructure_error_is_not_eligible_for_behavioral_evidence(tmp_path) -> None:
@@ -389,6 +413,12 @@ def test_writes_digest_verified_behavioral_system_evidence(tmp_path) -> None:
         },
     )
     report = run_suite([case], runner=_mock_runner_echo, k=3)
+    provenance = {
+        "schema": "octopus.behavioral_system_provenance.v1",
+        "system_id": "octopus",
+        "model": {"expected": "approved-model", "requested": "approved-model"},
+        "config": {"expected_sha256": "a" * 64, "observed_sha256": "a" * 64},
+    }
 
     system = write_behavioral_system_evidence(
         report,
@@ -396,9 +426,12 @@ def test_writes_digest_verified_behavioral_system_evidence(tmp_path) -> None:
         root=tmp_path,
         system_id="octopus",
         version="test-version",
+        provenance=provenance,
     )
 
     assert system["version"] == "test-version"
+    assert system["provenance"] == provenance
+    assert len(system["provenance_sha256"]) == 64
     assert system["cases"][0]["passes"] == 3
     assert system["cases"][0]["trajectory_count"] == 3
     assert system["cases"][0]["prompt_digest"] == hashlib.sha256(b"hello").hexdigest()
@@ -407,6 +440,7 @@ def test_writes_digest_verified_behavioral_system_evidence(tmp_path) -> None:
     for artifact in artifacts:
         content = (tmp_path / artifact["path"]).read_bytes()
         assert hashlib.sha256(content).hexdigest() == artifact["sha256"]
+        assert json.loads(content)["system_provenance_sha256"] == system["provenance_sha256"]
 
     bundle_path = tmp_path / "benchmarks" / "results" / "bundle.json"
     manifest_path = tmp_path / "benchmarks" / "behavioral-surpass-suite.json"
@@ -424,7 +458,7 @@ def test_writes_digest_verified_behavioral_system_evidence(tmp_path) -> None:
         systems={"octopus": system, "codex": system},
     )
     bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
-    assert bundle["schema"] == "octopus.behavioral_surpass_bundle.v1"
+    assert bundle["schema"] == "octopus.behavioral_surpass_bundle.v2"
     assert bundle["suite_manifest_sha256"] == hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     assert bundle["systems"]["octopus"]["cases"][0]["rubric_digest"] == rubric_digest
 

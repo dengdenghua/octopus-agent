@@ -38,6 +38,7 @@ import asyncio
 import logging
 import os
 import threading
+from collections import deque
 from pathlib import Path
 from queue import SimpleQueue
 from typing import Any
@@ -78,6 +79,7 @@ from runtime.sensing.gateway._realtime_cerebrum_steering import (
     _publish_discovered_steering,
     _register_active_turn,
     _remove_active_turn_lease,
+    _restore_turn_steering,
     _set_turn_steering_accepting,
     _sync_persisted_turn_steering,
     _unregister_active_turn,
@@ -208,11 +210,14 @@ class CerebrumRuntime:
         summary_router: Any = None,
         thread_store: Any = None,
         allow_client_auto_approve: bool = False,
+        allow_local_workspace_access: bool = False,
         reflex_router: Any = None,
         trace_store: Any = None,
         cowork_group_store: Any = None,
+        collaboration_store: Any = None,
         project_store: Any = None,
         project_os_hooks: dict[str, Any] | None = None,
+        subagent_runner: Any = None,
         task_supervisor: Any = None,
         session_titles: Any = None,
     ) -> None:
@@ -269,14 +274,17 @@ class CerebrumRuntime:
         self._trace_store = trace_store
         self._task_supervisor = task_supervisor
         self._cowork_group_store = cowork_group_store
+        self._collaboration_store = collaboration_store
         self._project_store = project_store
         self._project_os_hooks = dict(project_os_hooks or {})
+        self._subagent_runner = subagent_runner
         # Server-side authority over auto-approval. When False (default),
         # a client setting ``approvalPolicy="never"`` is downgraded to
         # ``"on-request"`` server-side — the client never gets to silently
         # disable approval gates. Operators who genuinely want headless
         # batches must opt in at config time.
         self._allow_client_auto_approve = bool(allow_client_auto_approve)
+        self._allow_local_workspace_access = bool(allow_local_workspace_access)
         from pathlib import Path
 
         Path(logs_root).mkdir(parents=True, exist_ok=True)
@@ -300,6 +308,7 @@ class CerebrumRuntime:
         # boundary between them.
         self._active_turns: dict[str, tuple[Turn, EventLog]] = {}
         self._turn_steering: dict[str, SimpleQueue[tuple[str, str]]] = {}
+        self._turn_steering_restored: dict[str, deque[str]] = {}
         self._turn_steering_seen: dict[str, set[str]] = {}
         self._turn_steering_notified: dict[str, set[str]] = {}
         self._turn_steering_last_sync: dict[str, float] = {}
@@ -325,6 +334,15 @@ class CerebrumRuntime:
         # streaming after the LLM finalises) but they CAN bleed into
         # a brand-new conversation when the user reuses the thread.
         self._thread_background_tasks: dict[str, list[asyncio.Task[None]]] = {}
+        # Cold durable subagent-session scans get only a bounded place in the
+        # foreground startup path.  Keep deferred tasks strongly referenced
+        # and one-per-thread so a later turn reuses the same claim attempt
+        # instead of racing it and injecting one parked report twice.
+        self._pending_subagent_report_tasks: dict[
+            str,
+            asyncio.Task[tuple[int, int]],
+        ] = {}
+        self._pending_subagent_refill_tasks: dict[str, asyncio.Task[None]] = {}
 
     def _make_bridge_state(
         self,
@@ -405,6 +423,9 @@ class CerebrumRuntime:
 
     def _drain_turn_steering(self, turn_id: str) -> list[str]:
         return _drain_turn_steering(self, turn_id)
+
+    def _restore_turn_steering(self, turn_id: str, messages: list[str]) -> None:
+        _restore_turn_steering(self, turn_id, messages)
 
     # ── Turn telemetry records (bodies in realtime_turn_outcome) ──
 
@@ -515,8 +536,9 @@ class CerebrumRuntime:
         actor_id: str | None,
         *,
         turns: list[Turn] | None = None,
+        access: str = "owner",
     ) -> None:
-        _require_thread_owner(self, log, actor_id, turns=turns)
+        _require_thread_owner(self, log, actor_id, turns=turns, access=access)
 
     def _resume_turns(
         self,
@@ -799,7 +821,7 @@ class CerebrumRuntime:
         thread_id: str,
         text: str,
     ) -> None:
-        """Run Project OS directly from a cowork thread in project mode."""
+        """Handle an explicit ``/project`` command for a cowork thread."""
         await _drive_project_os(
             self,
             turn,
@@ -810,15 +832,15 @@ class CerebrumRuntime:
             text=text,
         )
 
-    def _is_local_partner(self, agent: Any) -> bool:
-        """True when this agent should be driven by spawning its registered
-        coding-agent CLI directly (Claude Code / Codex / Trae / Qoder) instead of the LLM
-        loop — i.e. its profile carries drivable ``local_partner`` capabilities."""
-        from runtime.sensing.gateway.realtime_local_partner import agent_is_local_partner
+    def _is_codex_app_server_partner(self, agent: Any) -> bool:
+        """Return whether the selected role uses embedded Codex App Server."""
+        from runtime.sensing.gateway.realtime_codex_backend import (
+            agent_is_codex_app_server_partner,
+        )
 
-        return agent_is_local_partner(agent)
+        return agent_is_codex_app_server_partner(agent)
 
-    async def _drive_local_partner(
+    async def _drive_codex_app_server(
         self,
         turn: Turn,
         log: EventLog,
@@ -828,13 +850,28 @@ class CerebrumRuntime:
         provider: ApprovalProvider,
         *,
         text: str,
-    ) -> None:
-        """Drive the agent's registered external coding-agent CLI directly —
-        the missing execution half of LocalPartner. Delegates to the free
-        function so the dispatch/fallback logic stays unit-testable."""
-        from runtime.sensing.gateway.realtime_local_partner import drive_local_partner
+    ) -> bool:
+        """Drive one outer turn through an isolated Codex App Server.
 
-        await drive_local_partner(self, turn, log, emitter, intent, agent, provider, text=text)
+        Returns ``True`` when App Server owned the inner turn. ``False`` is
+        reserved for a pre-turn compatibility fallback to hardened
+        ``codex exec``; the lifecycle uses it to keep later steering on the
+        same execution engine.
+        """
+        from runtime.sensing.gateway.realtime_codex_backend import (
+            drive_codex_app_server,
+        )
+
+        return await drive_codex_app_server(
+            self,
+            turn,
+            log,
+            emitter,
+            intent,
+            agent,
+            provider,
+            text=text,
+        )
 
 
 # Static check: this class fulfills the realtime contract.

@@ -1,9 +1,9 @@
 """Thread-group API: WeChat-style membership + mode + shared blackboard.
 
 A thread *is* the group (1:1 = the N=2 case), so these endpoints hang off the
-thread id. Reads (the folded roster + blackboard) are public; mutations (pull
-someone in / out, switch mode, write the shared board) are auth-gated and
-attributed to the resolved actor — the same actor model the other routers use.
+thread id. In shared/authenticated deployments every read and write is bound to
+the server-owned thread principal; local no-auth mode keeps the original
+single-user behaviour. Mutations are attributed to the resolved actor.
 
 Path is ``/api/cowork/*`` to avoid colliding with ``/api/groups/*`` (which is the
 static AgentGroupRegistry of agent-team *templates*, a different concept).
@@ -17,96 +17,39 @@ from contextlib import suppress
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
 
 from runtime.memory.cowork.group import (
+    LEGACY_PROJECT_MODE,
     ContextGrant,
     MemberEvent,
+    MemberKind,
     responders,
 )
 from runtime.memory.cowork.group_store import GroupStore
 from runtime.memory.threads.event_log import validate_thread_id
 
-
-class GrantBody(BaseModel):
-    scope: str = "all"  # all | from_join | range | summary
-    from_msg: int | None = None
-    to_msg: int | None = None
-
-
-class InviteBody(BaseModel):
-    target_id: str = Field(min_length=1)
-    kind: str = "agent"  # agent | human
-    role: str = "participant"  # participant | observer
-    grant: GrantBody = Field(default_factory=GrantBody)
-    at_message: int | None = None
-
-
-class ModeBody(BaseModel):
-    mode: str  # chat | cluster | swarm | project
-
-
-class BoardBody(BaseModel):
-    key: str = Field(min_length=1)
-    value: Any = None
-
-
-class AssignBody(BaseModel):
-    assignee: str = Field(min_length=1)
-    prompt: str = Field(min_length=1)
-
-
-class CompleteBody(BaseModel):
-    result: str = ""
-    blackboard_key: str | None = None
-
-
-class BreakoutBody(BaseModel):
-    child_thread: str = Field(min_length=1)
-    members: list[dict] = Field(default_factory=list)
-    grant: dict | None = None
-    at_message: int | None = None
-
-
-class MergeBody(BaseModel):
-    summary: str = ""
-
-
-class ReadBody(BaseModel):
-    member_id: str = Field(min_length=1)
-    seq: int | None = None  # default: mark read up to the current event head
-
-
-class HeartbeatBody(BaseModel):
-    member_id: str = Field(min_length=1)
-
-
-class LinkRoomBody(BaseModel):
-    room_id: str = Field(min_length=1)
-
-
-class RoomMessageBody(BaseModel):
-    text: str = Field(min_length=1)
-    participant_id: str = ""
-    display_name: str = ""
-
-
-class EnsureRoomBody(BaseModel):
-    id: str | None = None
-    name: str = ""
-    members: list[dict[str, Any]] = Field(default_factory=list)
-    leaderId: str | None = None  # noqa: N815 - team room wire uses camelCase
-    mode: str | None = None
-
-
-class CollabTaskBody(BaseModel):
-    title: str = Field(min_length=1)
-    description: str = ""
-    sop_template: str = ""
-    assignees: list[dict[str, Any]] = Field(default_factory=list)
-    metadata: dict[str, Any] = Field(default_factory=dict)
-    run: bool = False
-    room: EnsureRoomBody | None = None
+from ._cowork_group_access import CoworkGroupAccess
+from ._cowork_group_models import (
+    AssignBody,
+    BoardBody,
+    BreakoutBody,
+    CollabTaskBody,
+    CompleteBody,
+    EnsureRoomBody,
+    HeartbeatBody,
+    InviteBody,
+    LinkRoomBody,
+    MergeBody,
+    MessageProjectActionBody,
+    ModeBody,
+    ReadBody,
+    RoomMessageBody,
+    RosterBody,
+    response_mode,
+)
+from ._cowork_group_models import GrantBody as GrantBody
+from ._cowork_group_session import CoworkGroupSessionView
+from .thread_access import ThreadAccessResolver
 
 
 def create_cowork_group_router(
@@ -120,6 +63,7 @@ def create_cowork_group_router(
     team_rooms_router: Any = None,
     team_tasks_router: Any = None,
     runtime: Any = None,
+    project_store: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
     jwt_secret: str | None = None,
@@ -128,6 +72,64 @@ def create_cowork_group_router(
 ) -> APIRouter:
     """Create the ``/api/cowork/*`` thread-group router."""
     group_store = store or GroupStore()
+    bind_team_group_store = getattr(team_rooms_router, "bind_group_store", None)
+    if callable(bind_team_group_store):
+        bind_team_group_store(group_store)
+
+    def _ensure_project_for_thread(thread_id: str, request: Request) -> str | None:
+        """Bind a Project OS project to the thread if none exists yet.
+
+        This compatibility path lets an old client that still submits
+        ``mode=project`` attach project state without turning project into a
+        response strategy or running any project work. It fails soft when
+        planning is unavailable."""
+        try:
+            from runtime.projectos.cowork_bridge import ensure_project_for_thread
+
+            name = ""
+            thread_store = getattr(runtime, "thread_store", None)
+            get_state = getattr(thread_store, "get_state", None)
+            if callable(get_state):
+                try:
+                    st = get_state(thread_id)
+                    values = st.get("values") if isinstance(st, dict) else None
+                    title = values.get("title") if isinstance(values, dict) else None
+                    if isinstance(title, str) and title.strip():
+                        name = title.strip()
+                except Exception:  # noqa: BLE001
+                    name = ""
+            principal = _principal(request)
+            scoped_project_store = _project_store()
+            owner_id = ""
+            tenant_id = ""
+            if principal is not None:
+                from runtime.safety.auth.scope import scope_from_principal
+
+                scope = scope_from_principal(
+                    principal,
+                    allow_cross_tenant=bool(principal.roles.intersection({"admin", "operator"})),
+                )
+                with_scope = getattr(scoped_project_store, "with_scope", None)
+                if not callable(with_scope):
+                    raise RuntimeError("scoped project store is unavailable")
+                scoped_project_store = with_scope(scope)
+                owner_id = principal.actor_id
+                tenant_id = principal.tenant_id
+            elif require_auth:
+                raise RuntimeError("authenticated project principal is unavailable")
+            return ensure_project_for_thread(
+                scoped_project_store,
+                group_store,
+                thread_id,
+                name=name,
+                goal=name,
+                owner_id=owner_id,
+                tenant_id=tenant_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _logger = __import__("logging").getLogger("octopus.cowork")
+            _logger.warning("legacy project attach failed for %s: %s", thread_id, exc)
+            return None
 
     def _require_thread_path(thread_id: str) -> None:
         try:
@@ -141,6 +143,21 @@ def create_cowork_group_router(
         from runtime.memory.cowork.collaboration_store import CollaborationStore
 
         return CollaborationStore(base_dir=group_store.base_dir)
+
+    def _project_store():
+        if project_store is not None:
+            return project_store
+        from runtime.projectos.store import ProjectStore
+
+        return ProjectStore()
+
+    thread_access = ThreadAccessResolver(
+        thread_store=getattr(runtime, "thread_store", None),
+        group_store=group_store,
+        collaboration_store=collaboration_store,
+        team_rooms_router=team_rooms_router,
+        identity_store=identity_store,
+    )
 
     def _async_store():
         if async_store is not None:
@@ -175,182 +192,128 @@ def create_cowork_group_router(
             _room_msg_holder["v"] = store
         return store
 
-    def _room_participants(room_id: str) -> list[dict[str, Any]]:
-        """Read a linked room's participant config from the team_rooms store
-        (read-only bridge — the team_rooms router owns the file)."""
-        canonical = _collaboration_store().room_by_id(room_id)
-        if canonical is not None:
-            participants = canonical.get("participants")
-            return participants if isinstance(participants, list) else []
-
-        from pathlib import Path
-
-        from runtime.platform.process.paths import app_paths
-        from runtime.sensing.gateway.team_rooms_router import _load_state
-
-        path = team_rooms_state_path or (app_paths().data_dir / "team_rooms.json")
-        room = _load_state(Path(path)).get(room_id)
-        if room is None:
-            return []
-        return [p.model_dump() for p in room.participants]
-
-    def _room_tasks(room_id: str) -> list[dict[str, Any]]:
-        """Read a linked room's team tasks from the team_tasks store (read-only
-        bridge — the team_tasks router owns the file). This is the third source
-        of truth Codex flagged; folding it in makes the session view cover the
-        room's *work*, not just its roster + transcript."""
-        canonical = _collaboration_store().tasks_for_room(room_id)
-        if canonical:
-            return canonical
-
-        from pathlib import Path
-
-        from runtime.platform.process.paths import app_paths
-        from runtime.sensing.gateway.team_tasks_router import _load_state as _load_tasks
-
-        path = team_tasks_state_path or (app_paths().data_dir / "team_tasks.json")
-        tasks = _load_tasks(Path(path))
-        return [t.model_dump() for t in tasks.values() if t.room_id == room_id]
-
-    def _room_messages(thread_id: str, room_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
-        canonical = _collaboration_store().messages_for_session(thread_id, limit=limit)
-        if canonical:
-            return canonical
-        try:
-            return _room_message_store().history(room_id, limit=limit)
-        except Exception:  # noqa: BLE001 — linked-room transcript is best-effort
-            return []
-
-    class _SessionMessageSearch:
-        def __init__(self, thread_id: str) -> None:
-            self.thread_id = thread_id
-
-        def search(self, room_id: str, query: str, *, limit: int = 50) -> list[dict[str, Any]]:
-            canonical = _collaboration_store().search_messages(self.thread_id, query, limit=limit)
-            if canonical:
-                return canonical
-            return _room_message_store().search(room_id, query, limit=limit)
-
-    def _room_snapshot(room_id: str) -> dict[str, Any] | None:
-        canonical = _collaboration_store().room_by_id(room_id)
-        if canonical is not None:
-            return canonical
-
-        from pathlib import Path
-
-        from runtime.platform.process.paths import app_paths
-        from runtime.sensing.gateway.team_rooms_router import _load_state
-
-        path = team_rooms_state_path or (app_paths().data_dir / "team_rooms.json")
-        room = _load_state(Path(path)).get(room_id)
-        return room.model_dump() if room is not None else None
-
-    def _session_payload(thread_id: str) -> dict[str, Any]:
-        from runtime.memory.cowork.session import resolve_session
-
-        session = resolve_session(
-            group_store,
-            thread_id,
-            async_store=_async_store(),
-            presence_store=_presence_store(),
-            room_message_store=None,
-            room_messages_provider=lambda room_id: _room_messages(thread_id, room_id),
-            room_participants_provider=_room_participants,
-            room_tasks_provider=_room_tasks,
-        )
-        return session.to_dict()
-
-    def _room_members_from_group(thread_id: str) -> list[dict[str, Any]]:
-        state = group_store.state(thread_id)
-        return [
-            {
-                "name": member.id,
-                "display_name": member.id,
-                "description": "",
-            }
-            for member in state.roster
-            if member.kind == "agent" and member.role == "participant" and not member.muted
-        ]
+    session_view = CoworkGroupSessionView(
+        group_store=group_store,
+        collaboration_store=_collaboration_store,
+        async_store=_async_store,
+        presence_store=_presence_store,
+        room_message_store=_room_message_store,
+        team_rooms_state_path=team_rooms_state_path,
+        team_tasks_state_path=team_tasks_state_path,
+    )
+    _room_participants = session_view.room_participants
+    _room_tasks = session_view.room_tasks
+    _room_messages = session_view.room_messages
+    _room_snapshot = session_view.room_snapshot
+    _session_payload = session_view.session_payload
+    _room_members_from_group = session_view.room_members_from_group
+    _room_members_for_projection = session_view.room_members_for_projection
 
     async def _maybe_await(value: Any) -> Any:
         if inspect.isawaitable(value):
             return await value
         return value
 
+    access = CoworkGroupAccess(
+        runtime=runtime,
+        identity_store=identity_store,
+        require_auth=require_auth,
+        jwt_secret=jwt_secret,
+        jwt_issuer=jwt_issuer,
+        jwt_audience=jwt_audience,
+        thread_access=thread_access,
+        team_rooms_router=team_rooms_router,
+        room_snapshot=_room_snapshot,
+    )
+    _principal = access.principal
+    _require_owned_thread = access.require_owned_thread
+    _require_collaborative_thread = access.require_collaborative_thread
+    _require_room_member = access.require_room_member
+
     async def _ensure_room(
         thread_id: str,
         body: EnsureRoomBody,
         request: Request,
     ) -> tuple[dict[str, Any], bool]:
-        """Ensure the collaboration session has one persistent room.
-
-        This is the write-side half of the unified path: a thread remains the
-        canonical session, while the former Team Room becomes the session's
-        persistent surface for humans, invite links, room tasks, and WS.
-        """
-        from runtime.memory.cowork.session import link_room
-
-        state = group_store.state(thread_id)
-        if state.room_id:
-            room = (await asyncio.to_thread(_room_snapshot, state.room_id)) or {"id": state.room_id}
-            await asyncio.to_thread(_collaboration_store().upsert_room, thread_id, dict(room))
-            return room, False
-
-        creator = getattr(team_rooms_router, "create_team_from_payload", None)
-        if not callable(creator):
-            raise HTTPException(501, "collab room creation is not wired")
-
-        members = [m for m in body.members if str(m.get("name") or "").strip()]
-        if not members:
-            members = await asyncio.to_thread(_room_members_from_group, thread_id)
-        if not members:
-            raise HTTPException(
-                400,
-                "collab room needs at least one agent member; invite a collaborator first",
-            )
-
-        leader_id = body.leaderId or str(members[0].get("name") or "")
-        if leader_id not in {str(m.get("name") or "") for m in members}:
-            leader_id = str(members[0].get("name") or "")
-        payload = {
-            "id": body.id or f"collab-{thread_id}",
-            "name": body.name.strip() or f"Collaboration · {thread_id}",
-            "members": members,
-            "leaderId": leader_id,
-        }
-        room = await _maybe_await(creator(request, payload))
-        room_id = str((room or {}).get("id") or "")
-        if not room_id:
-            raise HTTPException(502, "team room creator returned no id")
-        room = await asyncio.to_thread(_collaboration_store().upsert_room, thread_id, dict(room))
-        await asyncio.to_thread(link_room, group_store, thread_id, room_id, actor=_actor(request))
-        if body.mode:
-            if body.mode not in ("chat", "cluster", "swarm", "project"):
-                raise HTTPException(400, "mode must be chat | cluster | swarm | project")
-            await asyncio.to_thread(
-                group_store.append,
-                thread_id,
-                MemberEvent(action="mode", actor=_actor(request), mode=body.mode),  # type: ignore[arg-type]
-            )
-        return room, True
-
-    def _actor(request: Request) -> str:
-        from runtime.adapters.web_auth import _resolve_actor
-
-        actor = _resolve_actor(
-            request,
-            identity_store,
-            require_auth,
-            jwt_secret=jwt_secret,
-            jwt_issuer=jwt_issuer,
-            jwt_audience=jwt_audience,
+        from runtime.sensing.gateway._cowork_group_room_ensure import (
+            ensure_session_room_fail_safe,
         )
-        return actor or "user"
+
+        return await ensure_session_room_fail_safe(
+            thread_id=thread_id,
+            body=body,
+            request=request,
+            group_store=group_store,
+            team_rooms_router=team_rooms_router,
+            room_snapshot=_room_snapshot,
+            require_room_member=_require_room_member,
+            require_owned_thread=_require_owned_thread,
+            room_members_for_projection=_room_members_for_projection,
+            room_members_from_group=_room_members_from_group,
+            collaboration_store=_collaboration_store,
+            actor=_actor,
+            ensure_project_for_thread=_ensure_project_for_thread,
+        )
+
+    _actor = access.actor
+
+    def _project_linked_room_roster(
+        thread_id: str,
+        request: Request,
+        state: Any,
+    ) -> dict[str, Any] | None:
+        """Keep the optional Team Room read model aligned with GroupStore."""
+
+        room_id = str(getattr(state, "room_id", None) or "").strip()
+        if not room_id:
+            return None
+        roster_projector = getattr(team_rooms_router, "replace_team_agent_members", None)
+        if not callable(roster_projector):
+            return {"ok": False, "room_id": room_id}
+        try:
+            projection_state = state
+            for _attempt in range(5):
+                current_room = _room_snapshot(room_id) or {}
+                projected_room = roster_projector(
+                    request,
+                    room_id,
+                    _room_members_for_projection(
+                        thread_id,
+                        existing=current_room.get("members") or [],
+                        state=projection_state,
+                    ),
+                    current_room.get("leaderId"),
+                )
+                _collaboration_store().upsert_room(thread_id, dict(projected_room))
+                latest_state = group_store.state(thread_id)
+                if latest_state.event_count == projection_state.event_count:
+                    return {"ok": True, "room_id": room_id}
+                # Another membership transaction committed while this
+                # projection was writing. Re-project the newer generation so
+                # a delayed response cannot overwrite the canonical roster.
+                projection_state = latest_state
+            return {"ok": False, "room_id": room_id, "stale": True}
+        except Exception as exc:  # noqa: BLE001 - canonical GroupStore mutation already committed
+            __import__("logging").getLogger("octopus.cowork").warning(
+                "linked room roster projection failed for %s: %s",
+                thread_id,
+                exc,
+            )
+            return {"ok": False, "room_id": room_id}
 
     def _auth_dep(request: Request) -> None:
-        _actor(request)  # enforces 401 when require_auth and no/invalid token
+        thread_id = str(getattr(request, "path_params", {}).get("thread_id") or "")
+        _require_collaborative_thread(thread_id, request, write=True)
 
-    router = APIRouter(tags=["cowork"], dependencies=[Depends(_require_thread_path)])
+    def _owner_dep(request: Request) -> None:
+        thread_id = str(getattr(request, "path_params", {}).get("thread_id") or "")
+        _require_owned_thread(thread_id, request)
+
+    def _thread_access_dep(thread_id: str, request: Request) -> None:
+        _require_thread_path(thread_id)
+        _require_collaborative_thread(thread_id, request)
+
+    router = APIRouter(tags=["cowork"], dependencies=[Depends(_thread_access_dep)])
 
     @router.get("/api/cowork/{thread_id}")
     def get_group(thread_id: str, until_seq: int | None = None) -> dict[str, Any]:
@@ -367,14 +330,17 @@ def create_cowork_group_router(
         }
 
     @router.get("/api/collab/{thread_id}")
-    def get_session(thread_id: str) -> dict[str, Any]:
+    def get_session(thread_id: str, request: Request) -> dict[str, Any]:
         """Unified collaboration session — one read over roster/mode/room link,
         shared blackboard, async tasks, and presence (instead of stitching the
         per-surface endpoints). The cowork thread is the canonical session; a
         Team Room is its optional linked surface."""
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
         return _session_payload(thread_id)
 
-    @router.post("/api/collab/{thread_id}/room", dependencies=[Depends(_auth_dep)])
+    @router.post("/api/collab/{thread_id}/room", dependencies=[Depends(_owner_dep)])
     async def ensure_session_room(
         thread_id: str,
         body: EnsureRoomBody,
@@ -395,9 +361,11 @@ def create_cowork_group_router(
         }
 
     @router.get("/api/collab/{thread_id}/tasks")
-    def list_session_tasks(thread_id: str) -> dict[str, Any]:
+    def list_session_tasks(thread_id: str, request: Request) -> dict[str, Any]:
         """List heavyweight room tasks through the canonical session path."""
         room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
         tasks = _collaboration_store().tasks_for_session(thread_id)
         if not tasks and room_id:
             tasks = _room_tasks(room_id)
@@ -457,19 +425,54 @@ def create_cowork_group_router(
             "session": await asyncio.to_thread(_session_payload, thread_id),
         }
 
-    @router.post("/api/collab/{thread_id}/link-room", dependencies=[Depends(_auth_dep)])
-    def link_session_room(thread_id: str, body: LinkRoomBody) -> dict[str, Any]:
+    @router.post("/api/collab/{thread_id}/link-room", dependencies=[Depends(_owner_dep)])
+    async def link_session_room(
+        thread_id: str,
+        body: LinkRoomBody,
+        request: Request,
+    ) -> dict[str, Any]:
         """Link a Team Room to this session (event-sourced) so the two surfaces
         stop drifting as separate sources of truth."""
-        from runtime.memory.cowork.session import link_room
+        from runtime.sensing.gateway._cowork_group_room_link import (
+            link_session_room_fail_safe,
+        )
 
-        state = link_room(group_store, thread_id, body.room_id)
-        room = _room_snapshot(body.room_id) or {"id": body.room_id}
-        _collaboration_store().upsert_room(thread_id, room)
-        return {"ok": True, "state": state.to_dict(), "session": _session_payload(thread_id)}
+        _require_room_member(body.room_id, request)
+        current_state = group_store.state(thread_id)
+        if current_state.room_id and current_state.room_id != body.room_id:
+            current_room = _room_snapshot(current_state.room_id)
+            current_room_thread = str((current_room or {}).get("thread_id") or "").strip()
+            if current_room_thread == thread_id:
+                raise HTTPException(409, "collaboration thread is already linked to another room")
+
+        collaboration = _collaboration_store()
+        prior_room = _room_snapshot(body.room_id)
+        prior_thread_id = str((prior_room or {}).get("thread_id") or "").strip()
+        if prior_thread_id and prior_thread_id != thread_id:
+            raise HTTPException(409, "team room is already bound to another thread")
+        state = await link_session_room_fail_safe(
+            thread_id=thread_id,
+            room_id=body.room_id,
+            request=request,
+            actor=_actor(request),
+            prior_room=prior_room,
+            room_snapshot=_room_snapshot,
+            group_store=group_store,
+            collaboration=collaboration,
+            team_rooms_router=team_rooms_router,
+        )
+        return {
+            "ok": True,
+            "state": state.to_dict(),
+            "session": await asyncio.to_thread(_session_payload, thread_id),
+        }
 
     @router.post("/api/collab/{thread_id}/room-message", dependencies=[Depends(_auth_dep)])
-    def post_room_message(thread_id: str, body: RoomMessageBody) -> dict[str, Any]:
+    def post_room_message(
+        thread_id: str,
+        body: RoomMessageBody,
+        request: Request,
+    ) -> dict[str, Any]:
         """Write a line into the session's linked Team Room transcript.
 
         The write side of the unified session: where ``get_session`` /search read
@@ -480,21 +483,122 @@ def create_cowork_group_router(
         room_id = getattr(group_store.state(thread_id), "room_id", None)
         if not room_id:
             raise HTTPException(409, "no room linked to this session — link one first")
-        seq = _collaboration_store().append_message(
-            thread_id,
-            room_id=room_id,
-            text=body.text,
-            participant_id=body.participant_id,
-            display_name=body.display_name,
-        )
-        with suppress(Exception):  # legacy transcript projection is best-effort
-            _room_message_store().append(
-                room_id,
+        _require_room_member(room_id, request)
+        metadata = dict(body.metadata)
+        if body.source_message_id:
+            metadata["source_message_id"] = body.source_message_id
+        if body.message_type:
+            metadata["message_type"] = body.message_type
+        if body.entity_refs:
+            metadata["entity_refs"] = body.entity_refs
+        if body.system_card is not None:
+            metadata["system_card"] = body.system_card
+        try:
+            canonical_store = _collaboration_store()
+            source_message_id = str(metadata.get("source_message_id") or "")
+            existing_source = (
+                canonical_store.message_by_source_id(thread_id, source_message_id)
+                if source_message_id
+                else None
+            )
+            seq = canonical_store.append_message(
+                thread_id,
+                room_id=room_id,
                 text=body.text,
                 participant_id=body.participant_id,
                 display_name=body.display_name,
+                metadata=metadata,
             )
-        return {"ok": True, "room_id": room_id, "seq": seq}
+            message = canonical_store.message_for_session(thread_id, seq)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if existing_source is None:
+            with suppress(Exception):  # legacy transcript projection is best-effort
+                _room_message_store().append(
+                    room_id,
+                    text=body.text,
+                    participant_id=body.participant_id,
+                    display_name=body.display_name,
+                )
+        return {"ok": True, "room_id": room_id, "seq": seq, "message": message}
+
+    @router.post(
+        "/api/collab/{thread_id}/room-messages/{message_seq}/project-actions",
+        dependencies=[Depends(_owner_dep)],
+    )
+    async def message_project_action(
+        thread_id: str,
+        message_seq: int,
+        body: MessageProjectActionBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        """Promote a room message into Project OS without a second task truth.
+
+        Supported actions are ``link_milestone``, ``create_item``,
+        ``record_decision``, and ``publish_artifact``.  The source message is
+        enriched with entity references and an idempotent system-card message
+        is appended to the room.  ``create_item`` writes Project OS first and
+        only then projects the task into collaboration storage.
+        """
+
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if not room_id:
+            raise HTTPException(409, "no room linked to this session — link one first")
+        _require_room_member(room_id, request)
+        canonical_store = _collaboration_store()
+        try:
+            message = canonical_store.message_for_session(thread_id, message_seq)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if message is None or str(message.get("room_id") or "") != str(room_id):
+            raise HTTPException(404, "room message not found in the linked room")
+        from runtime.projectos.message_actions import (
+            MessageProjectActionError,
+            apply_message_project_action,
+        )
+
+        try:
+            result = await asyncio.to_thread(
+                apply_message_project_action,
+                _project_store(),
+                canonical_store,
+                thread_id=thread_id,
+                room_id=str(room_id),
+                message=message,
+                body=body.model_dump(),
+                actor=_actor(request),
+            )
+        except MessageProjectActionError as exc:
+            raise HTTPException(exc.status_code, exc.detail) from exc
+        except PermissionError as exc:
+            raise HTTPException(404, "project not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        card = result.get("system_card_message")
+        broadcaster = getattr(team_rooms_router, "broadcast", None)
+        if callable(broadcaster) and isinstance(card, dict) and not result.get("replayed"):
+            with suppress(Exception):  # persistence succeeded; live fan-out is best-effort
+                await _maybe_await(
+                    broadcaster(
+                        str(room_id),
+                        {
+                            "type": "message",
+                            "team_id": str(room_id),
+                            "thread_id": thread_id,
+                            "message_id": str(
+                                (card.get("metadata") or {}).get("source_message_id")
+                                if isinstance(card.get("metadata"), dict)
+                                else f"room-msg-{card.get('seq')}"
+                            ),
+                            "participant_id": card.get("participant_id") or "project-os",
+                            "display_name": card.get("display_name") or "Project OS",
+                            "text": card.get("text") or "",
+                            "created_at": card.get("ts"),
+                            "metadata": card.get("metadata") or {},
+                        },
+                    )
+                )
+        return result
 
     @router.get("/api/cowork/{thread_id}/nominate")
     def nominate_turn(thread_id: str, text: str = "", threshold: float = 0.5) -> dict[str, Any]:
@@ -513,6 +617,7 @@ def create_cowork_group_router(
     @router.get("/api/cowork/{thread_id}/search")
     def search(
         thread_id: str,
+        request: Request,
         q: str = "",
         limit: int = 20,
         kinds: str = "",
@@ -525,6 +630,9 @@ def create_cowork_group_router(
         ``until_seq`` bounds the event scan to a past point (time-travel)."""
         from runtime.memory.cowork.search import search_group
 
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
         kind_filter = tuple(k.strip() for k in kinds.split(",") if k.strip()) or None
         hits = search_group(
             group_store,
@@ -534,7 +642,7 @@ def create_cowork_group_router(
             kinds=kind_filter,
             until_seq=until_seq,
             async_store=_async_store(),
-            room_message_store=_SessionMessageSearch(thread_id),
+            room_message_store=session_view.message_search(thread_id),
             room_task_provider=_room_tasks,
         )
         return {"thread_id": thread_id, "query": q, "hits": [h.to_dict() for h in hits]}
@@ -672,12 +780,17 @@ def create_cowork_group_router(
             raise HTTPException(409, "task is not claimable")
         return {"ok": True, "blackboard": group_store.blackboard_snapshot(thread_id)}
 
-    @router.post("/api/cowork/{thread_id}/breakout", dependencies=[Depends(_auth_dep)])
+    @router.post("/api/cowork/{thread_id}/breakout", dependencies=[Depends(_owner_dep)])
     def breakout_fork(thread_id: str, body: BreakoutBody, request: Request) -> dict[str, Any]:
         """Spin off a focused side-thread with a subset of members + a grant."""
         from runtime.memory.cowork.breakout import fork
         from runtime.memory.cowork.group import ContextGrant
 
+        _require_thread_path(body.child_thread)
+        # Authenticated child threads must already have been created through
+        # the canonical thread/realtime flow, which provisions server-owned
+        # workspace metadata. Cowork must not mint an unmanaged parallel id.
+        _require_owned_thread(body.child_thread, request)
         res = fork(
             group_store,
             thread_id,
@@ -690,7 +803,8 @@ def create_cowork_group_router(
         return {"ok": True, **res}
 
     @router.post(
-        "/api/cowork/{thread_id}/breakout/{child_thread}/merge", dependencies=[Depends(_auth_dep)]
+        "/api/cowork/{thread_id}/breakout/{child_thread}/merge",
+        dependencies=[Depends(_owner_dep)],
     )
     def breakout_merge(
         thread_id: str, child_thread: str, body: MergeBody, request: Request
@@ -698,6 +812,8 @@ def create_cowork_group_router(
         """Merge a breakout's conclusion back onto the parent's blackboard."""
         from runtime.memory.cowork.breakout import merge_back
 
+        _require_thread_path(child_thread)
+        _require_owned_thread(child_thread, request)
         res = merge_back(
             group_store, child_thread, thread_id, actor=_actor(request), summary=body.summary
         )
@@ -724,42 +840,114 @@ def create_cowork_group_router(
             raise HTTPException(404, "member not in group")
         return view.to_dict()
 
-    @router.post("/api/cowork/{thread_id}/members", dependencies=[Depends(_auth_dep)])
+    @router.post("/api/cowork/{thread_id}/members", dependencies=[Depends(_owner_dep)])
     def invite_member(thread_id: str, body: InviteBody, request: Request) -> dict[str, Any]:
-        """Pull a member (agent or human) into the thread, with a context grant."""
+        """Reference a canonical agent (or human) from this thread.
+
+        Retrying the same add is a successful no-op.  The group stores only the
+        canonical id; it does not clone a role, home, memory, or owner lane.
+        """
+        target_kind: MemberKind = "human" if body.kind == "human" else "agent"
         ev = MemberEvent(
             action="invite",
             actor=_actor(request),
             target_id=body.target_id,
-            target_kind="human" if body.kind == "human" else "agent",
+            target_kind=target_kind,
             role="observer" if body.role == "observer" else "participant",
             grant=ContextGrant.from_dict(body.grant.model_dump()),
             at_message=body.at_message,
         )
-        group_store.append(thread_id, ev)
-        return {"ok": True, "state": group_store.state(thread_id).to_dict()}
+        try:
+            changed, state = group_store.ensure_member(thread_id, ev)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        result: dict[str, Any] = {
+            "ok": True,
+            "added": changed is not None,
+            "state": state.to_dict(),
+        }
+        projection = _project_linked_room_roster(thread_id, request, state)
+        if projection is not None:
+            result["room_projection"] = projection
+        return result
 
-    @router.delete("/api/cowork/{thread_id}/members/{member_id}", dependencies=[Depends(_auth_dep)])
+    @router.delete(
+        "/api/cowork/{thread_id}/members/{member_id}", dependencies=[Depends(_owner_dep)]
+    )
     def remove_member(thread_id: str, member_id: str, request: Request) -> dict[str, Any]:
-        """Remove a member. Their past blackboard writes stay (attributed)."""
-        group_store.append(
-            thread_id,
-            MemberEvent(action="leave", actor=_actor(request), target_id=member_id),
-        )
-        return {"ok": True, "state": group_store.state(thread_id).to_dict()}
+        """Remove a session reference idempotently; attributed history stays."""
+        try:
+            changed, state = group_store.remove_member_if_present(
+                thread_id,
+                actor=_actor(request),
+                member_id=member_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        result: dict[str, Any] = {
+            "ok": True,
+            "removed": changed is not None,
+            "state": state.to_dict(),
+        }
+        projection = _project_linked_room_roster(thread_id, request, state)
+        if projection is not None:
+            result["room_projection"] = projection
+        return result
 
-    @router.post("/api/cowork/{thread_id}/mode", dependencies=[Depends(_auth_dep)])
+    @router.post("/api/cowork/{thread_id}/mode", dependencies=[Depends(_owner_dep)])
     def set_mode(thread_id: str, body: ModeBody, request: Request) -> dict[str, Any]:
-        """Switch the collaboration mode (chat/cluster/swarm/project) —
-        non-destructive. 'project' runs the milestone-driven Project OS over the
-        group; there is no separate project entity."""
-        if body.mode not in ("chat", "cluster", "swarm", "project"):
-            raise HTTPException(400, "mode must be chat | cluster | swarm | project")
+        """Switch how AI participants respond: chat, cluster, or swarm.
+
+        ``project`` is accepted only as a deprecated client wire value. It is
+        projected to ``chat`` and may attach an idle Project for continuity;
+        it is never stored as a fourth response mode and never starts work.
+        """
+        canonical_mode = response_mode(body.mode)
         group_store.append(
             thread_id,
-            MemberEvent(action="mode", actor=_actor(request), mode=body.mode),  # type: ignore[arg-type]
+            MemberEvent(action="mode", actor=_actor(request), mode=canonical_mode),
         )
-        return {"ok": True, "state": group_store.state(thread_id).to_dict()}
+        bound_project_id: str | None = None
+        if body.mode == LEGACY_PROJECT_MODE:
+            bound_project_id = _ensure_project_for_thread(thread_id, request)
+        state = group_store.state(thread_id).to_dict()
+        if bound_project_id is not None:
+            state["bound_project_id"] = bound_project_id
+        return {"ok": True, "state": state}
+
+    @router.put("/api/cowork/{thread_id}/roster", dependencies=[Depends(_owner_dep)])
+    def replace_roster(thread_id: str, body: RosterBody, request: Request) -> dict[str, Any]:
+        """Replace the desired agent roster and mode as one atomic mutation.
+
+        Human participants are intentionally untouched. The store calculates
+        the diff against its own transactional snapshot, appends only the
+        necessary leave/invite/mode events, and returns the canonical fold.
+        """
+
+        canonical_mode = response_mode(body.mode)
+        try:
+            changed, state = group_store.replace_agent_roster(
+                thread_id,
+                actor=_actor(request),
+                agent_ids=body.agent_ids,
+                mode=canonical_mode,
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        payload = state.to_dict()
+        room_projection = _project_linked_room_roster(thread_id, request, state)
+        if body.mode == LEGACY_PROJECT_MODE:
+            bound_project_id = _ensure_project_for_thread(thread_id, request)
+            if bound_project_id is not None:
+                payload["bound_project_id"] = bound_project_id
+        result = {
+            "ok": True,
+            "state": payload,
+            "events": [event.to_dict() for event in changed],
+        }
+        if room_projection is not None:
+            result["room_projection"] = room_projection
+        return result
 
     @router.post("/api/cowork/{thread_id}/blackboard", dependencies=[Depends(_auth_dep)])
     def write_board(thread_id: str, body: BoardBody, request: Request) -> dict[str, Any]:

@@ -140,9 +140,7 @@ class TestFullTextSearch:
     def test_search_with_date_range(self, setup):
         """Test search with date range filters."""
         client, _ = setup
-        response = client.get(
-            "/api/threads/fts?q=authentication&after=2020-01-01T00:00:00Z"
-        )
+        response = client.get("/api/threads/fts?q=authentication&after=2020-01-01T00:00:00Z")
         assert response.status_code == 200
         data = response.json()
         assert "results" in data
@@ -335,9 +333,7 @@ class TestGetFeedback:
             json={"message_index": 1, "feedback_type": "thumbs_up"},
         )
 
-        response = client.get(
-            f"/api/threads/{sample_thread}/feedback?message_index=1"
-        )
+        response = client.get(f"/api/threads/{sample_thread}/feedback?message_index=1")
         assert response.status_code == 200
         data = response.json()
         assert len(data["feedbacks"]) >= 1

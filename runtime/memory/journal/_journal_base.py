@@ -63,6 +63,11 @@ class Journal:
     def write(self, event: JournalEvent) -> None:
         raise NotImplementedError
 
+    def canonicalize_event(self, event: JournalEvent) -> JournalEvent:
+        """Return the representation this backend accepts for persistence."""
+
+        return self._apply_context(event)
+
     def read_all(self, *, scope: TenantScope | None = None) -> list[JournalEvent]:
         raise NotImplementedError
 

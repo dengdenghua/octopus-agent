@@ -35,6 +35,7 @@ import {
 } from "../agent-run-status";
 import { LiveToolTimeline, type LiveToolEvent } from "../live-tool-timeline";
 import { getProcessTraceEvents } from "../process-trace-events";
+import { effectiveToolInput } from "./action-display";
 
 import {
   type ProcessTraceMode,
@@ -68,6 +69,14 @@ type TraceSection = {
   events: LiveToolEvent[];
   openByDefault: boolean;
 };
+
+type TraceDisplayItem =
+  | { kind: "event"; event: LiveToolEvent }
+  | {
+      kind: "delegation-summary";
+      events: LiveToolEvent[];
+      target: string;
+    };
 
 export function ProcessTrace({
   events,
@@ -243,7 +252,11 @@ export function ProcessTrace({
           </button>
           {rawDetailsOpen && (
             <div className="pt-2">
-              <LiveToolTimeline events={visibleEvents} showAll />
+              <LiveToolTimeline
+                events={visibleEvents}
+                showAll
+                compactDelegations
+              />
             </div>
           )}
         </div>
@@ -325,9 +338,9 @@ function AgentClusterRow({
             {agent.role &&
               agent.role.trim().toLowerCase() !==
                 agent.name.trim().toLowerCase() && (
-              <span className="hidden truncate text-xs text-muted-foreground sm:inline">
-                {agent.role}
-              </span>
+                <span className="hidden truncate text-xs text-muted-foreground sm:inline">
+                  {agent.role}
+                </span>
               )}
             <DotProgress
               progress={progress}
@@ -359,13 +372,13 @@ function AgentClusterRow({
                 // Show the cause in place of the task once a lane fails: the
                 // task was already stated at dispatch, while the reason is the
                 // only thing that tells the user what to do next.
-                agent.error
-                  ? "text-destructive"
-                  : "text-muted-foreground",
+                agent.error ? "text-destructive" : "text-muted-foreground",
               )}
               title={agent.error ?? undefined}
             >
-              {expanded && agent.error ? agent.task : (agent.error ?? agent.task)}
+              {expanded && agent.error
+                ? agent.task
+                : (agent.error ?? agent.task)}
             </span>
           </div>
           {agent.error ? (
@@ -380,67 +393,6 @@ function AgentClusterRow({
           ) : null}
         </div>
       </button>
-    </div>
-  );
-}
-
-function AgentHoverPreview({
-  agent,
-  statusLabel,
-}: {
-  agent: MessageAgentRow;
-  statusLabel: string;
-}) {
-  const { t } = useI18n();
-  const body = agent.prompt || agent.task || t.message.noTaskDescription;
-  return (
-    <div
-      className="pointer-events-none absolute left-8 top-[calc(100%+0.5rem)] z-40 hidden w-[min(42rem,calc(100vw-5rem))] rounded-lg border border-border-default bg-background p-4 text-left shadow-sm group-hover/agent-row:block"
-      role="tooltip"
-    >
-      <div className="flex items-start gap-3">
-        <span className="flex size-14 shrink-0 items-center justify-center rounded-full border border-border-default bg-muted/35 text-2xl">
-          {agent.avatar || <BotIcon className="size-7 text-muted-foreground" />}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-lg font-semibold text-foreground">
-                {agent.name}
-              </div>
-              <div className="truncate text-sm text-muted-foreground">
-                {agent.role || t.message.assistant}
-              </div>
-            </div>
-            <span className="font-mono text-sm text-foreground">
-              {agent.label}
-            </span>
-          </div>
-          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-            <span>{statusLabel}</span>
-            <span>·</span>
-            <span>{t.message.processRecords(agent.eventCount)}</span>
-            {agent.currentTool && (
-              <>
-                <span>·</span>
-                <span className="truncate">
-                  {t.message.latestTool}: {agent.currentTool}
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-      {agent.error && (
-        // The row truncates to one line, so the full cause lives here. An SSL
-        // trace or a round-cap message is routinely longer than the row.
-        <div className="mt-4 whitespace-pre-wrap break-words rounded-lg border border-destructive/35 bg-destructive/10 p-3 text-sm leading-6 text-destructive">
-          {agent.error}
-        </div>
-      )}
-      <div className="mt-4 max-h-80 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-muted/35 p-3 text-sm leading-6 text-foreground">
-        {body}
-      </div>
     </div>
   );
 }
@@ -465,7 +417,11 @@ function TraceSectionCard({ section }: { section: TraceSection }) {
       ? "waiting"
       : section.events.some((event) => event.status === "running")
         ? "running"
-        : "done";
+      : "done";
+  const displayItems = useMemo(
+    () => compactTraceEvents(section.events),
+    [section.events],
+  );
 
   return (
     <div className="px-1 py-1.5">
@@ -512,11 +468,112 @@ function TraceSectionCard({ section }: { section: TraceSection }) {
       </button>
       {open && (
         <div className="mt-2 space-y-1.5 pl-1">
-          {section.events.map((event) => (
-            <TraceEventLine key={event.id} event={event} />
+          {displayItems.map((item) => (
+            <TraceDisplayLine key={traceDisplayItemKey(item)} item={item} />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function traceDisplayItemKey(item: TraceDisplayItem): string {
+  if (item.kind === "event") return item.event.id;
+  return `delegation-summary:${item.target}`;
+}
+
+function compactTraceEvents(events: LiveToolEvent[]): TraceDisplayItem[] {
+  const items: TraceDisplayItem[] = [];
+  const delegationBuckets = new Map<
+    string,
+    Extract<TraceDisplayItem, { kind: "delegation-summary" }>
+  >();
+
+  for (const event of events) {
+    if (!isDelegationEvent(event)) {
+      items.push({ kind: "event", event });
+      continue;
+    }
+
+    const target = delegationTarget(event);
+    const existing = delegationBuckets.get(target);
+    if (existing) {
+      existing.events.push(event);
+      continue;
+    }
+
+    const summary = { kind: "delegation-summary" as const, events: [event], target };
+    delegationBuckets.set(target, summary);
+    items.push(summary);
+  }
+
+  return items.flatMap((item) => {
+    if (item.kind === "event" || item.events.length > 1) return [item];
+    return [{ kind: "event" as const, event: item.events[0]! }];
+  });
+}
+
+function isDelegationEvent(event: LiveToolEvent): boolean {
+  if (event.lifecycle) return false;
+  return /agent|delegate|orchestrat/i.test(event.name);
+}
+
+function delegationTarget(event: LiveToolEvent): string {
+  const input = effectiveToolInput(event.input);
+  return (
+    firstString(input, [
+      "agent_id",
+      "subagent_id",
+      "subagent_name",
+      "role",
+      "agent",
+      "name",
+    ]) ||
+    event.subAgentRole ||
+    event.agentName ||
+    "other"
+  );
+}
+
+function TraceDisplayLine({ item }: { item: TraceDisplayItem }) {
+  if (item.kind === "event") return <TraceEventLine event={item.event} />;
+  return <DelegationSummaryLine events={item.events} target={item.target} />;
+}
+
+function DelegationSummaryLine({
+  events,
+  target,
+}: {
+  events: LiveToolEvent[];
+  target: string;
+}) {
+  const { t } = useI18n();
+  const hasRunning = events.some((event) => event.status === "running");
+  const hasError = events.some((event) => event.status === "error");
+  const status = hasRunning ? "running" : hasError ? "error" : "done";
+  const statusLabel =
+    status === "running"
+      ? t.message.statusViewing
+      : status === "error"
+        ? t.message.statusError
+        : t.message.statusCompleted;
+
+  return (
+    <div className="flex items-center gap-2 py-1.5 text-xs text-muted-foreground">
+      {status === "running" ? (
+        <Loader2Icon className="size-3.5 shrink-0 animate-spin text-success" />
+      ) : status === "error" ? (
+        <XCircleIcon className="size-3.5 shrink-0 text-destructive" />
+      ) : (
+        <CheckCircle2Icon className="size-3.5 shrink-0 text-success" />
+      )}
+      <NetworkIcon className="size-3.5 shrink-0 text-chart-6" />
+      <span className="min-w-0 truncate text-sm font-medium text-foreground">
+        {t.messageGrouping.callTeammate} · {target}
+      </span>
+      <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+        {events.length}× · {statusLabel}
+      </span>
     </div>
   );
 }
@@ -529,7 +586,7 @@ function TraceEventLine({ event }: { event: LiveToolEvent }) {
       : event.name === "shell_command" || event.name === "exec_shell"
         ? TerminalIcon
         : event.name === "web_search"
-      ? GlobeIcon
+          ? GlobeIcon
           : MonitorIcon;
   const { label, detail } = publicTraceEventLabel(event, {
     callTeammate: t.messageGrouping.callTeammate,
@@ -637,17 +694,23 @@ export function publicTraceEventLabel(
   if (narrative) return { label: narrative, detail: "" };
 
   const name = event.name.toLowerCase();
-  const target = firstSafeTarget(event.input);
+  const target = firstSafeTarget(effectiveToolInput(event.input));
   const label =
     name.includes("search") || name.includes("grep") || name.includes("glob")
       ? labels.searchSources
-      : name.includes("web") || name.includes("fetch") || name.includes("browser")
+      : name.includes("web") ||
+          name.includes("fetch") ||
+          name.includes("browser")
         ? labels.readWebpage
         : name.includes("read") || name === "ls" || name === "list_cwd"
           ? labels.readFile
-          : name.includes("write") || name.includes("edit") || name.includes("patch")
+          : name.includes("write") ||
+              name.includes("edit") ||
+              name.includes("patch")
             ? labels.updateFile
-            : name.includes("shell") || name.includes("exec") || name.includes("command")
+            : name.includes("shell") ||
+                name.includes("exec") ||
+                name.includes("command")
               ? labels.executeCommand
               : name.includes("agent") || name.includes("delegate")
                 ? labels.callTeammate
@@ -771,7 +834,12 @@ function deriveMessageAgentRows(events: LiveToolEvent[]): MessageAgentRow[] {
               ? "running"
               : "pending";
     const prompt =
-      firstString(event.input, ["prompt", "task", "description", "query"]) ||
+      firstString(effectiveToolInput(event.input), [
+        "prompt",
+        "task",
+        "description",
+        "query",
+      ]) ||
       event.thought ||
       existing?.prompt ||
       "";
@@ -797,12 +865,11 @@ function deriveMessageAgentRows(events: LiveToolEvent[]): MessageAgentRow[] {
         event.subAgentRole ??
         id,
       label: existing?.label ?? String(byId.size + 1).padStart(2, "0"),
-      status:
-        terminalStatus
-          ? status
-          : existing?.status === "done" || existing?.status === "error"
-            ? existing.status
-            : status,
+      status: terminalStatus
+        ? status
+        : existing?.status === "done" || existing?.status === "error"
+          ? existing.status
+          : status,
       task: existing?.task || prompt || event.name.replace(/[_-]+/g, " "),
       prompt: prompt || existing?.prompt,
       role: event.subAgentRole ?? existing?.role,

@@ -64,12 +64,19 @@ export function busEventToLiveEvent(
   // grouped timeline shows each sub-agent as its own lane. Falling back to
   // role keeps same-role children visually distinct only when no codename is
   // present (a coordination root usually has one codename per child).
-  const agentId = (str(payload.codename) ?? role) || undefined;
+  const agentId =
+    (str(payload.requested_agent_id) ??
+      str(payload.agent_id) ??
+      str(payload.codename) ??
+      role) ||
+    undefined;
   const common = {
     agentId,
     subAgentRole: role || undefined,
     subagentCodename: str(payload.codename),
     iteration: num(payload.iteration) ?? 0,
+    parentToolUseId:
+      str(payload.parent_tool_use_id) ?? str(payload.parentToolUseId),
   };
 
   switch (type) {
@@ -82,28 +89,42 @@ export function busEventToLiveEvent(
         startedAt,
         lifecycle: "spawned",
         subagentAvatar: avatar,
+        input: {
+          prompt_preview: str(payload.prompt_preview),
+        },
         ...common,
       };
     }
     case SUB_TOOL_START: {
+      const toolCallId = str(payload.tool_call_id);
       return {
-        id: baseId,
+        id: toolCallId
+          ? `subagent-tool:${agentId ?? "agent"}:${toolCallId}`
+          : baseId,
         name: str(payload.tool) ?? "tool",
         status: "running",
         startedAt,
+        input:
+          payload.input && typeof payload.input === "object"
+            ? (payload.input as Record<string, unknown>)
+            : undefined,
         ...common,
       };
     }
     case SUB_TOOL_END: {
+      const toolCallId = str(payload.tool_call_id);
       const isError =
         str(payload.status) === "error" || payload.status === "failed";
       return {
-        id: baseId,
+        id: toolCallId
+          ? `subagent-tool:${agentId ?? "agent"}:${toolCallId}`
+          : baseId,
         name: str(payload.tool) ?? "tool",
         status: isError ? "error" : "done",
         startedAt,
         durationMs: num(payload.duration_ms),
-        output: isError ? undefined : undefined,
+        error: isError ? str(payload.error) : undefined,
+        output: payload.output_preview,
         ...common,
       };
     }
@@ -115,7 +136,12 @@ export function busEventToLiveEvent(
         startedAt,
         lifecycle: "finished",
         iterationCount: num(payload.iteration_count),
-        filesTouched: undefined,
+        filesTouched: Array.isArray(payload.files_touched)
+          ? payload.files_touched.filter(
+              (path): path is string => typeof path === "string",
+            )
+          : undefined,
+        observation: str(payload.output),
         ...common,
       };
     }

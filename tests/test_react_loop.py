@@ -1179,11 +1179,12 @@ def test_audit_ultracode_does_not_force_orchestration() -> None:
     # No runtime-injected orchestration: the model answered directly, with
     # the orchestration skill available for it to choose.
     assert not any(
-        event.get("type") == "tool_start"
-        and event.get("tool_name") == "run_orchestration"
+        event.get("type") == "tool_start" and event.get("tool_name") == "run_orchestration"
         for event in events
     )
     assert router.calls == 1
+
+
 def test_personal_agent_mode_prompt_steers_build_mode() -> None:
     prompt = _build_personal_agent_mode_prompt("build")
 
@@ -4572,6 +4573,52 @@ def test_execute_action_via_beak_success() -> None:
     assert step is not None  # Implementation note.
 
 
+def test_execute_action_binds_parent_tool_use_id_for_nested_handlers() -> None:
+    captured: dict[str, str | None] = {}
+    registry = SkillRegistry()
+
+    def nested_handler(**_kwargs):
+        from runtime.platform.process.session import (
+            current_parent_tool_use_id,
+            current_session,
+        )
+
+        captured["context"] = current_parent_tool_use_id()
+        session = current_session()
+        captured["metadata"] = (
+            (session.metadata or {}).get("_active_parent_tool_use_id")
+            if session is not None
+            else None
+        )
+        return "ok"
+
+    registry.register(
+        Skill(
+            name="nested_handler",
+            description="Capture parent call scope.",
+            trusted_source="skill://public/nested_handler",
+            handler=nested_handler,
+        ),
+        verify_tests=False,
+    )
+    stack = _FakeStack(None)
+    stack.executor = ToolExecutor(registry, TrustEngine())
+    session = Session(thread_id="parent-thread", metadata={})
+
+    with session_scope(session):
+        observation, step = _execute_action_via_beak(
+            stack,
+            "nested_handler({})",
+            react_task_id=TaskId(uuid4()),
+            react_step_counter=7,
+        )
+
+    assert step is not None
+    assert observation is not None
+    assert captured == {"context": "react:7", "metadata": "react:7"}
+    assert "_active_parent_tool_use_id" not in session.metadata
+
+
 def test_identical_failed_tool_call_is_not_executed_a_third_time() -> None:
     router = _ScriptedRouter(
         [
@@ -6580,7 +6627,12 @@ def test_stream_no_events_when_skill_unknown() -> None:
             ]
         )
     )
-    gen = stream_react_loop(stack, _intent("?"), agent=None, max_iterations=3)
+    gen = stream_react_loop(
+        stack,
+        _intent("请调用不存在的工具"),
+        agent=None,
+        max_iterations=3,
+    )
     events, result = _drain(gen)
     assert not any(e["type"] in ("tool_start", "tool_end") for e in events)
     assert result is not None
@@ -7168,6 +7220,8 @@ def test_react_default_checkpoint_captures_each_iteration_and_final_state(
     final = stack.journal.checkpoints[1]["kwargs"]
     assert periodic["iteration_completed"] == 1
     assert periodic["has_final_answer"] is False
+    assert "actions" in periodic["steps_snapshot"][0]
+    assert "action_results" in periodic["steps_snapshot"][0]
     assert final["iteration_completed"] == 2
     assert final["has_final_answer"] is True
 
@@ -7240,6 +7294,127 @@ def test_react_resume_rehydrates_observation_history(
     )
     assert 'Action: echo({"text": "first evidence"})' in resumed_messages
     assert "Observation: echoed: first evidence" in resumed_messages
+
+
+def test_react_resume_restores_receipts_and_starts_in_sticky_terminal_lane(
+    monkeypatch,
+) -> None:
+    from runtime.core.cerebrum import react_native
+    from runtime.platform.models.llm import ToolSpec
+
+    monkeypatch.delenv("OCTOPUS_CHECKPOINT_EVERY_N", raising=False)
+    monkeypatch.setattr(react_native, "native_tool_use_active", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        react_native,
+        "build_loop_tool_specs",
+        lambda *_args, **_kwargs: [ToolSpec(name="exec_shell", description="Execute")],
+    )
+    task_id = TaskId(uuid4())
+    stack = _build_stack_with_journal()
+    durable_steps = [
+        {
+            "iteration": 1,
+            "action": 'write_text_file({"path":"runtime/foo.py","content":"x = 1"})',
+            "actions": ['write_text_file({"path":"runtime/foo.py","content":"x = 1"})'],
+            "observation": "bytes_written=5",
+            "action_results": [
+                {
+                    "tool_name": "write_text_file",
+                    "ok": True,
+                    "observation": "bytes_written=5",
+                    "trusted_execution": False,
+                    "execution_source": "registered_noncanonical",
+                }
+            ],
+        },
+        {
+            "iteration": 2,
+            "action": 'exec_shell({"command":"pytest-octopus-missing --version"})',
+            "actions": ['exec_shell({"command":"pytest-octopus-missing --version"})'],
+            "observation": "command not found: pytest-octopus-missing",
+            "action_results": [
+                {
+                    "tool_name": "exec_shell",
+                    "ok": False,
+                    "observation": "command not found: pytest-octopus-missing",
+                    "trusted_execution": True,
+                    "execution_source": "canonical_builtin",
+                }
+            ],
+        },
+        {
+            "iteration": 3,
+            "action": 'exec_shell({"command":"ruff-octopus-missing check runtime/foo.py"})',
+            "actions": ['exec_shell({"command":"ruff-octopus-missing check runtime/foo.py"})'],
+            "observation": "command not found: ruff-octopus-missing",
+            "action_results": [
+                {
+                    "tool_name": "exec_shell",
+                    "ok": False,
+                    "observation": "command not found: ruff-octopus-missing",
+                    "trusted_execution": True,
+                    "execution_source": "canonical_builtin",
+                }
+            ],
+        },
+    ]
+    stack.journal.write_react_checkpoint(
+        task_id=task_id,
+        iteration_completed=3,
+        max_iterations=6,
+        messages_snapshot=[
+            {"role": "system", "content": "ReAct system"},
+            {"role": "user", "content": "continue implementation"},
+        ],
+        steps_snapshot=durable_steps,
+        has_final_answer=False,
+    )
+    router = _CapturingRouter(["Final Answer: 代码已写入；pytest 与 ruff 因命令缺失未能运行。"])
+    stack.planner.router = router
+    intent = _intent("修改 runtime/foo.py 并验证")
+    intent.user_context["mode"] = "code"
+
+    _events, result = _drain(
+        stream_react_loop(
+            stack,
+            intent,
+            agent=None,
+            max_iterations=6,
+            resume_task_id=task_id,
+        )
+    )
+
+    assert result is not None and result.success
+    assert router.requests[0].tools == []
+    assert router.requests[0].require_tool_use is False
+    assert result.steps[:3][1].actions == durable_steps[1]["actions"]
+    assert result.steps[:3][1].action_results == durable_steps[1]["action_results"]
+
+
+def test_legacy_checkpoint_without_receipts_fails_closed_for_terminal_convergence() -> None:
+    from runtime.core.cerebrum.react_in_flight_nudges import (
+        _should_terminal_environment_convergence,
+    )
+
+    legacy_steps = [
+        ReActStep(
+            iteration=1,
+            action='write_text_file({"path":"runtime/foo.py","content":"x"})',
+            observation="bytes_written=1",
+        ),
+        ReActStep(
+            iteration=2,
+            action='exec_shell({"command":"pytest"})',
+            observation="command not found: pytest",
+        ),
+        ReActStep(
+            iteration=3,
+            action='exec_shell({"command":"ruff"})',
+            observation="command not found: ruff",
+        ),
+    ]
+
+    assert not _should_terminal_environment_convergence(legacy_steps, is_code_mode=True)
 
 
 def test_react_resume_falls_back_to_trace_store_checkpoint(
@@ -7340,6 +7515,10 @@ def test_react_resume_from_generated_periodic_checkpoint(
     assert len(stack.journal.checkpoints) == 1
     checkpoint = stack.journal.checkpoints[0]["kwargs"]
     assert checkpoint["has_final_answer"] is False
+    saved_step = checkpoint["steps_snapshot"][0]
+    assert saved_step["actions"] == ['echo({"text": "first evidence"})']
+    assert len(saved_step["action_results"]) == 1
+    assert saved_step["action_results"][0]["tool_name"] == "echo"
     task_id = checkpoint["task_id"]
 
     resumed_router = _CapturingRouter(["Final Answer: resumed with evidence"])
@@ -7363,6 +7542,8 @@ def test_react_resume_from_generated_periodic_checkpoint(
     resume_event = next(event for event in _events if event["type"] == "react_resumed")
     assert resume_event["resume_from_iteration"] == 1
     assert resume_event["restored_step_count"] == 1
+    assert resumed.steps[0].actions == saved_step["actions"]
+    assert resumed.steps[0].action_results == saved_step["action_results"]
     assert 'Action: echo({"text": "first evidence"})' in request_text
     assert "Observation: (real tool execution succeeded) echo" in request_text
 
@@ -7953,9 +8134,36 @@ def test_parallel_react_reads_keep_selected_workspace_scope(tmp_path) -> None:
 
     observation, results = dispatched
     assert len(results) == 2
+    assert all(result["ok"] is True for result in results)
     assert str((tmp_path / "a.txt").resolve()) in observation
     assert str((tmp_path / "b.txt").resolve()) in observation
     assert "not found" not in observation
+    # ``react`` describes the model protocol, not the filesystem permission
+    # tier. Tool dispatch must neither mutate nor demote the bound code scope.
+    assert intent.user_context["mode"] == "react"
+    assert session.metadata["mode"] == "code"
+    assert session.metadata["workspace_path"] == str(tmp_path)
+
+    # The compatibility rule belongs to the shared execution path, so retain
+    # the same selected-workspace behavior when dispatch falls back to its
+    # one-action serial lane.
+    with session_scope(session):
+        _serial_events, serial_dispatched = _drain(
+            _dispatch_parallel_actions(
+                ['read_file({"path": "a.txt"})'],
+                stack=stack,
+                executor=stack.executor,
+                iteration=2,
+                react_task_id=TaskId(uuid4()),
+                agent=None,
+                intent=intent,
+            )
+        )
+    serial_observation, serial_results = serial_dispatched
+    assert len(serial_results) == 1
+    assert serial_results[0]["ok"] is True
+    assert str((tmp_path / "a.txt").resolve()) in serial_observation
+    assert session.metadata["mode"] == "code"
 
 
 def test_write_tool_in_parallel_block_forces_serial_dispatch(tmp_path) -> None:
@@ -9169,8 +9377,6 @@ def test_react_action_block_leaked_into_answer_is_rejected() -> None:
     assert not _looks_like_observation_echo("The Action field in the ReAct schema is required.")
 
 
-
-
 # ─── dsh repeat-tool-reminder integration ──────────────────────
 
 
@@ -9186,16 +9392,12 @@ def test_repeat_guard_injects_gentle_reminder_mid_turn() -> None:
     stack = _build_stack_with_executor(router)
     intent = _intent("ping then list")
     intent.user_context["repeat_tool_reminder"] = {"thresholds": [2, 4]}
-    events, result = _drain(
-        stream_react_loop(stack, intent, agent=None, max_iterations=6)
-    )
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=6))
 
     assert result is not None and result.success
     # The gentle reminder rides the third model request — right after the
     # second echo observation, before the next model call.
-    third_request = "\n".join(
-        str(message.content) for message in router.requests[2].messages
-    )
+    third_request = "\n".join(str(message.content) for message in router.requests[2].messages)
     assert "REPEAT-CALL REMINDER" in third_request
     assert "You are repeating the exact same tool call" in third_request
     # A different tool resets the chain — no detailed/escalated tier. The
@@ -9235,9 +9437,7 @@ def test_repeat_guard_detailed_escalation_never_blocks(
     stack = _build_stack_with_executor(router)
     intent = _intent("ping four times")
     intent.user_context["repeat_tool_reminder"] = {"thresholds": [2, 4]}
-    events, result = _drain(
-        stream_react_loop(stack, intent, agent=None, max_iterations=6)
-    )
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=6))
 
     assert result is not None and result.success
     echo_starts = [
@@ -9247,13 +9447,9 @@ def test_repeat_guard_detailed_escalation_never_blocks(
     ]
     assert len(echo_starts) == 4
     # Detailed tier (4th consecutive call) names the tool and the run length.
-    fourth_request = "\n".join(
-        str(message.content) for message in router.requests[3].messages
-    )
+    fourth_request = "\n".join(str(message.content) for message in router.requests[3].messages)
     assert "REPEAT-CALL REMINDER" in fourth_request
-    fifth_request = "\n".join(
-        str(message.content) for message in router.requests[4].messages
-    )
+    fifth_request = "\n".join(str(message.content) for message in router.requests[4].messages)
     assert "Repeated tool call detected:" in fifth_request
     assert "tool: echo" in fifth_request
     assert "consecutive_calls: 4" in fifth_request
@@ -9284,9 +9480,7 @@ def test_repeat_guard_coexists_with_final_answer_loop_guards() -> None:
     ]
     assert len(echo_starts) == 3
     # The mid-turn gentle reminder landed before the model tried to finish…
-    fourth_request = "\n".join(
-        str(message.content) for message in router.requests[3].messages
-    )
+    fourth_request = "\n".join(str(message.content) for message in router.requests[3].messages)
     assert "REPEAT-CALL REMINDER" in fourth_request
     # …and the pre-existing hard guard still blocked the final answer.
     assert result is not None
@@ -9308,9 +9502,7 @@ def test_repeat_guard_config_through_user_context() -> None:
         "thresholds": [2, 4],
         "exclude": ["echo"],
     }
-    events, result = _drain(
-        stream_react_loop(stack, intent, agent=None, max_iterations=6)
-    )
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=6))
 
     assert result is not None and result.success
     for request in router.requests:
@@ -9333,9 +9525,7 @@ def test_repeat_guard_disabled_through_user_context() -> None:
         "thresholds": [2, 4],
         "enabled": False,
     }
-    events, result = _drain(
-        stream_react_loop(stack, intent, agent=None, max_iterations=6)
-    )
+    events, result = _drain(stream_react_loop(stack, intent, agent=None, max_iterations=6))
 
     assert result is not None and result.success
     for request in router.requests:

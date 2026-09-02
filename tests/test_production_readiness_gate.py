@@ -1,14 +1,71 @@
 from __future__ import annotations
 
 import json
+import re
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
+import yaml
 
 from runtime.memory.learning.review_queue import ReviewQueue
 from scripts import production_readiness_gate as gate
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+ACTIONS_SETUP_PYTHON = "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065"
+ACTIONS_DOWNLOAD_ARTIFACT = "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093"
+ACTIONS_UPLOAD_ARTIFACT = "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+ASTRAL_SETUP_UV = "astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86"
+PYPA_PUBLISH = "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33"
+SIGSTORE_COSIGN_INSTALLER = "sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5"
+
+
+def test_all_github_actions_are_pinned_to_full_commit_shas() -> None:
+    """A mutable major tag must never control a privileged release build."""
+
+    unpinned: list[str] = []
+    action_ref = re.compile(r"^[^@\s]+@[0-9a-f]{40}$")
+    for path in sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml")):
+        workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for job_name, job in workflow.get("jobs", {}).items():
+            for index, step in enumerate(job.get("steps", [])):
+                uses = step.get("uses")
+                if uses is not None and not action_ref.fullmatch(uses):
+                    unpinned.append(f"{path.name}:{job_name}:steps[{index}]={uses}")
+
+    assert not unpinned, "GitHub Actions must use immutable full SHAs: " + ", ".join(unpinned)
+
+
+def test_ci_python_jobs_use_exact_runners_and_locked_dependencies() -> None:
+    path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+    workflow_text = path.read_text(encoding="utf-8")
+    workflow = yaml.safe_load(workflow_text)
+
+    assert "-latest" not in workflow_text
+    assert "pip install" not in workflow_text
+    assert workflow["jobs"]["lint-and-test"]["strategy"]["matrix"]["python-version"] == [
+        "3.11.9",
+        "3.12.11",
+    ]
+    assert workflow["jobs"]["pytest-cross-platform"]["strategy"]["matrix"]["os"] == [
+        "windows-2025",
+        "macos-15",
+    ]
+
+    missing_lock_install: list[str] = []
+    for name, job in workflow["jobs"].items():
+        steps = job.get("steps", [])
+        if not any(step.get("uses") == ACTIONS_SETUP_PYTHON for step in steps):
+            continue
+        if not any(step.get("uses") == ASTRAL_SETUP_UV for step in steps):
+            missing_lock_install.append(f"{name}:setup-uv")
+        if not any("uv sync --locked" in str(step.get("run", "")) for step in steps):
+            missing_lock_install.append(f"{name}:uv-sync")
+
+    assert not missing_lock_install, "every Python CI job must install from uv.lock: " + ", ".join(
+        missing_lock_install
+    )
 
 
 @pytest.fixture
@@ -58,6 +115,127 @@ def test_production_readiness_gate_requires_behavioral_release_evidence(
     assert "octopus.product_experience_quality.v1" in result.quality_summary
     assert "octopus.agent_loop_quality.v1" in result.quality_summary
     assert "octopus.digital_employee_quality.v1" in result.quality_summary
+
+
+def test_static_only_gate_passes_without_claiming_release_proof(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+    review_queue_path: Path,
+) -> None:
+    monkeypatch.setenv(
+        "OCTOPUS_BEHAVIORAL_INFRASTRUCTURE_STATUS",
+        str(tmp_path / "no-infrastructure-receipt.json"),
+    )
+    monkeypatch.setenv(
+        "OCTOPUS_BEHAVIORAL_EVAL_BUNDLE",
+        str(tmp_path / "no-behavioral-bundle.json"),
+    )
+
+    code = gate.main(
+        [
+            "--review-queue-path",
+            str(review_queue_path),
+            "--static-only",
+            "--json",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    assert code == 0
+    assert data["mode"] == "static_only"
+    assert data["gate_passed"] is True
+    assert data["ready"] is False
+    assert data["release_proof"] is False
+    assert data["proof_scope"] == "static_only_non_release"
+    assert data["notice"].startswith("NON-RELEASE PROOF")
+    assert data["failures"] == []
+    assert data["scorecard_calibration"]["ready"] is True
+    assert data["scorecard_calibration"]["context"]["as_of"] == "2026-08-04"
+    assert data["e2e"]["ready"] is False
+    assert "behavioral:bundle_present" in data["e2e"]["failed_checks"]
+
+
+def test_static_only_gate_still_blocks_static_score_regressions(
+    monkeypatch,
+    review_queue_path: Path,
+) -> None:
+    real_scorecard = gate.compute_agent_competitor_scorecard
+
+    def degraded_scorecard(*, target_score: int):
+        report = real_scorecard(target_score=target_score)
+        report["evidence_adjusted_overall"]["octopus"] = target_score - 1
+        return report
+
+    monkeypatch.setattr(gate, "compute_agent_competitor_scorecard", degraded_scorecard)
+
+    result = gate.run_gate(
+        min_score=95,
+        review_queue_path=review_queue_path,
+        static_only=True,
+    )
+
+    assert any(
+        "agent scorecard octopus evidence-adjusted overall is 94" in item
+        for item in result.failures
+    )
+    assert result.to_dict()["gate_passed"] is False
+
+
+@pytest.mark.parametrize("static_only", [False, True])
+def test_readiness_gate_blocks_stale_scorecard_calibration_in_every_mode(
+    monkeypatch,
+    review_queue_path: Path,
+    static_only: bool,
+) -> None:
+    stale_day = date.fromisoformat(gate.SCORECARD_CALIBRATION_AS_OF) + timedelta(
+        days=gate.SCORECARD_CALIBRATION_MAX_AGE_DAYS + 1,
+    )
+    monkeypatch.setattr(gate, "_utc_today", lambda: stale_day)
+
+    result = gate.run_gate(
+        review_queue_path=review_queue_path,
+        static_only=static_only,
+    )
+
+    assert any("agent scorecard calibration is stale" in item for item in result.failures)
+    report = result.to_dict()
+    assert report["gate_passed"] is False
+    assert report["scorecard_calibration"]["ready"] is False
+    assert report["scorecard_calibration"]["age_days"] == (
+        gate.SCORECARD_CALIBRATION_MAX_AGE_DAYS + 1
+    )
+
+
+def test_static_readiness_gate_rejects_untrusted_scorecard_calibration_source(
+    monkeypatch,
+    review_queue_path: Path,
+) -> None:
+    real_scorecard = gate.compute_agent_competitor_scorecard
+
+    def untrusted_scorecard(*, target_score: int):
+        report = real_scorecard(target_score=target_score)
+        report["baseline_context"] = {
+            **report["baseline_context"],
+            "source_revision": "",
+        }
+        return report
+
+    monkeypatch.setattr(gate, "compute_agent_competitor_scorecard", untrusted_scorecard)
+
+    result = gate.run_gate(
+        review_queue_path=review_queue_path,
+        static_only=True,
+    )
+
+    assert any(
+        "calibration metadata does not match the version-controlled policy" in item
+        for item in result.failures
+    )
+    report = result.to_dict()
+    assert report["gate_passed"] is False
+    assert report["scorecard_calibration"]["ready"] is False
 
 
 def test_production_readiness_gate_passes_verified_behavioral_evidence(
@@ -525,27 +703,91 @@ def test_ci_runs_production_readiness_gate_with_isolated_state() -> None:
         encoding="utf-8",
     )
 
-    assert "Production readiness gate" in workflow
-    assert "run: make production-readiness" in workflow
+    assert "Static-only readiness checks (not release proof)" in workflow
+    assert "run: make production-readiness-static" in workflow
     assert "runner.temp" in workflow
     assert "OCTOPUS_READINESS_DATA_DIR" in workflow
     assert "OCTOPUS_READINESS_REPORT" in workflow
-    assert "Upload production readiness proof" in workflow
-    assert "production-readiness-proof" in workflow
-    assert "readiness_gate.json" in workflow
+    assert "Upload static readiness report (not release proof)" in workflow
+    assert "production-readiness-static-report" in workflow
+    assert "readiness_static.json" in workflow
     assert "if-no-files-found: error" in workflow
     assert "Upload full-stack smoke proof" in workflow
-    assert "full-stack-smoke-proof" in workflow
-    assert "full_stack_smoke_proof.json" in workflow
-    assert "Upload E2E release proof" in workflow
-    assert "e2e-release-proof" in workflow
-    assert "e2e_release_proof.json" in workflow
+    assert "full-stack-smoke-proof-${{ github.sha }}" in workflow
+    assert "path: test-results/local-verify-state" in workflow
+    assert 'OCTOPUS_VERIFY_SKIP_PRODUCTION_GATE: "1"' in workflow
+    assert "Upload E2E release proof" not in workflow
+    assert "e2e-release-proof" not in workflow
+
+
+def test_ci_uploads_coverage_data_fail_closed_including_hidden_file() -> None:
+    path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+    workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["lint-and-test"]["steps"]
+    named = {step.get("name"): step for step in steps if step.get("name")}
+
+    upload = named["Upload coverage"]
+    assert upload["uses"] == ACTIONS_UPLOAD_ARTIFACT
+    assert upload["with"]["name"] == "coverage-report"
+    assert upload["with"]["path"] == ".coverage"
+    assert upload["with"]["include-hidden-files"] is True
+    assert upload["with"]["if-no-files-found"] == "error"
+
+
+def test_pr_scale_release_train_exception_is_exact_sha_and_same_repo_only() -> None:
+    path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+    workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["pr-scale-guard"]["steps"]
+    check = next(step for step in steps if step.get("name") == "Check PR size against base")
+
+    assert check["env"]["OCTOPUS_RELEASE_TRAIN_APPROVED_SHA"] == (
+        "${{ vars.OCTOPUS_RELEASE_TRAIN_APPROVED_SHA }}"
+    )
+    script = check["with"]["script"]
+    assert "approvedHead.length === 40" in script
+    assert "approvedHead === head" in script
+    assert "pr.base.ref === 'main'" in script
+    assert "pr.head.ref === 'codex/production-hardening'" in script
+    assert "pr.head.repo.full_name === pr.base.repo.full_name" in script
+    assert "if (releaseTrainApproved)" in script
+
+
+def test_ci_grants_gitleaks_read_only_pr_metadata_access() -> None:
+    path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+    workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+    assert workflow["permissions"] == {
+        "contents": "read",
+        "pull-requests": "read",
+    }
+    secret_scan = workflow["jobs"]["secret-scan"]
+    assert "permissions" not in secret_scan
+
+
+def test_ci_audits_frontend_production_dependencies_fail_closed() -> None:
+    path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+    workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["frontend"]["steps"]
+    named = {step.get("name"): step for step in steps if step.get("name")}
+
+    audit = named["Frontend production dependency audit"]
+    assert audit["working-directory"] == "frontend"
+    assert audit["run"] == "pnpm audit --prod"
+    assert audit.get("continue-on-error") is not True
+    assert next(
+        i for i, step in enumerate(steps) if step.get("name") == "Install dependencies"
+    ) < next(
+        i
+        for i, step in enumerate(steps)
+        if step.get("name") == "Frontend production dependency audit"
+    )
 
 
 def test_makefile_exposes_isolated_production_readiness_target() -> None:
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
 
     assert "production-readiness:" in makefile
+    assert "production-readiness-static:" in makefile
     assert "OCTOPUS_READINESS_HOME" in makefile
     assert "OCTOPUS_READINESS_DATA_DIR" in makefile
     assert "OCTOPUS_READINESS_REVIEW_QUEUE" in makefile
@@ -555,6 +797,365 @@ def test_makefile_exposes_isolated_production_readiness_target() -> None:
     assert "-m scripts.production_readiness_gate" in makefile
     assert "--review-queue-path" in makefile
     assert "--json-output" in makefile
+    assert "--static-only" in makefile
+
+
+def test_tag_release_requires_same_sha_evidence_before_build_and_push() -> None:
+    path = REPO_ROOT / ".github" / "workflows" / "release.yml"
+    workflow_text = path.read_text(encoding="utf-8")
+    workflow = yaml.safe_load(workflow_text)
+    jobs = workflow["jobs"]
+
+    assert jobs["build-and-push-image"]["needs"] == [
+        "build-python-distribution",
+        "windows-release-proof",
+    ]
+    assert all(
+        job["runs-on"] == "ubuntu-24.04"
+        for name, job in jobs.items()
+        if name != "windows-release-proof"
+    )
+    gate_job = jobs["release-readiness"]
+    assert workflow["permissions"] == {"contents": "read"}
+    assert gate_job["permissions"] == {"actions": "read", "contents": "read"}
+    assert jobs["build-and-push-image"]["permissions"] == {
+        "contents": "read",
+        "id-token": "write",
+        "packages": "write",
+    }
+    assert jobs["create-release"]["permissions"] == {
+        "actions": "read",
+        "contents": "write",
+    }
+    assert jobs["create-release"]["needs"] == [
+        "build-and-push-image",
+        "publish-python-distribution",
+        "windows-release-proof",
+    ]
+    assert gate_job["env"]["OCTOPUS_BEHAVIORAL_EXPECTED_REVISION"] == "${{ github.sha }}"
+    assert gate_job["env"]["OCTOPUS_BEHAVIORAL_EVAL_BUNDLE"] == (
+        "benchmarks/results/behavioral-surpass-latest.json"
+    )
+    assert gate_job["env"]["PYTHON"] == ".venv/bin/python"
+    assert gate_job["env"]["UV_PYTHON_DOWNLOADS"] == "never"
+    assert all("runner.temp" not in str(value) for value in gate_job["env"].values())
+    steps = {step.get("name"): step for step in gate_job["steps"] if step.get("name")}
+    readiness_paths = steps["Configure isolated release readiness paths"]["run"]
+    assert "${RUNNER_TEMP}/octopus-release-readiness" in readiness_paths
+    assert "${GITHUB_ENV}" in readiness_paths
+    python_setup = next(
+        step for step in gate_job["steps"] if step.get("uses") == ACTIONS_SETUP_PYTHON
+    )
+    assert python_setup["with"]["python-version"] == "3.11.9"
+    uv_setup = steps["Set up pinned uv"]
+    assert uv_setup["uses"] == ASTRAL_SETUP_UV
+    assert uv_setup["with"]["version"] == "0.11.25"
+    sync = steps["Sync locked release-gate dependencies"]["run"]
+    assert "uv sync --locked --python 3.11.9" in sync
+    assert "--extra dev --extra serve --extra web" in sync
+    assert "python -m pip install" not in workflow_text
+    assert "pip install -e" not in workflow_text
+    version_check = steps["Verify release tag matches package versions"]
+    assert version_check["env"]["RELEASE_TAG"] == "${{ github.ref_name }}"
+    assert 'root / "pyproject.toml"' in version_check["run"]
+    assert 'root / "frontend" / "package.json"' in version_check["run"]
+    assert 'expected_tag = f"v{python_version}"' in version_check["run"]
+    lookup = steps["Find successful same-SHA prerequisite runs"]["run"]
+    assert "actions/workflows/behavioral-evidence.yml/runs" in lookup
+    assert "actions/workflows/ci.yml/runs" in lookup
+    assert "actions/workflows/build-win.yml/runs" in lookup
+    assert 'head_sha="${GITHUB_SHA}"' in lookup
+    assert ".head_sha == $sha" in lookup
+    assert '[[ -z "${run_id}" ]]' in lookup
+    assert '[[ -z "${ci_run_id}" ]]' in lookup
+    assert '[[ -z "${windows_run_id}" ]]' in lookup
+    assert "windows_run_id=${windows_run_id}" in lookup
+    assert "exit 1" in lookup
+    assert gate_job["outputs"]["windows-run-id"] == (
+        "${{ steps.evidence-run.outputs.windows_run_id }}"
+    )
+    download = steps["Download same-SHA behavioral evidence"]
+    assert download["uses"] == ACTIONS_DOWNLOAD_ARTIFACT
+    assert download["with"]["name"] == "behavioral-surpass-evidence-${{ github.sha }}"
+    assert download["with"]["run-id"] == "${{ steps.evidence-run.outputs.run_id }}"
+    smoke_download = steps["Download same-SHA full-stack smoke evidence"]
+    assert smoke_download["uses"] == ACTIONS_DOWNLOAD_ARTIFACT
+    assert smoke_download["with"]["name"] == "full-stack-smoke-proof-${{ github.sha }}"
+    assert smoke_download["with"]["run-id"] == "${{ steps.evidence-run.outputs.ci_run_id }}"
+    full_gate = steps["Run full commit-bound production readiness gate"]["run"]
+    assert "make production-readiness" in full_gate
+    assert "--static-only" not in full_gate
+    certificate = steps["Build release certificate from readiness and browser evidence"]["run"]
+    assert ".venv/bin/python scripts/e2e_release_proof.py" in certificate
+    assert "--required-suite full-stack-desktop" in certificate
+    assert "--required-suite full-stack-mobile" in certificate
+    windows_job = jobs["windows-release-proof"]
+    assert windows_job["needs"] == "release-readiness"
+    assert windows_job["runs-on"] == "windows-2025"
+    assert windows_job["permissions"] == {"actions": "read", "contents": "read"}
+    assert set(windows_job["env"]) == {"WINDOWS_BUILD_RUN_ID"}
+    assert windows_job["env"]["WINDOWS_BUILD_RUN_ID"] == (
+        "${{ needs.release-readiness.outputs.windows-run-id }}"
+    )
+    windows_steps = {step.get("name"): step for step in windows_job["steps"] if step.get("name")}
+    installer_download = windows_steps["Download same-SHA signed installer"]
+    assert installer_download["uses"] == ACTIONS_DOWNLOAD_ARTIFACT
+    assert installer_download["with"]["name"] == ("Octopus-Setup-Windows-${{ github.sha }}")
+    assert installer_download["with"]["run-id"] == "${{ env.WINDOWS_BUILD_RUN_ID }}"
+    portable_download = windows_steps["Download same-SHA signed unpacked application"]
+    assert portable_download["with"]["name"] == ("Octopus-Portable-Windows-${{ github.sha }}")
+    assert portable_download["with"]["run-id"] == "${{ env.WINDOWS_BUILD_RUN_ID }}"
+    windows_verify = windows_steps[
+        "Verify checksums, Authenticode, timestamps, and source revision"
+    ]["run"]
+    assert "SHA256SUMS" in windows_verify
+    assert "Get-FileHash" in windows_verify
+    assert "Get-AuthenticodeSignature" in windows_verify
+    assert "SignatureStatus]::Valid" in windows_verify
+    assert "TimeStamperCertificate" in windows_verify
+    assert "$buildProof.sourceRevision -ne $env:GITHUB_SHA" in windows_verify
+    assert "windows-release-verification.json" in windows_verify
+    verified_upload = windows_steps["Upload verified Windows release assets"]
+    assert verified_upload["with"]["name"] == ("Octopus-Windows-Release-${{ github.sha }}")
+    changelog = {
+        step.get("name"): step for step in jobs["create-release"]["steps"] if step.get("name")
+    }["Extract changelog section for ${{ steps.tag.outputs.version }}"]
+    assert changelog["env"]["RELEASE_VERSION"] == "${{ steps.tag.outputs.version }}"
+    assert "${{ steps.tag.outputs.version }}" not in changelog["run"]
+    release_steps = {
+        step.get("name"): step for step in jobs["create-release"]["steps"] if step.get("name")
+    }
+    release_download = release_steps["Download verified Windows release assets"]
+    assert release_download["uses"] == ACTIONS_DOWNLOAD_ARTIFACT
+    assert release_download["with"]["name"] == ("Octopus-Windows-Release-${{ github.sha }}")
+    draft = release_steps["Create draft GitHub Release"]
+    assert draft["with"]["draft"] is True
+    assert "release-assets/Octopus-Setup-*.exe" in draft["with"]["files"]
+    assert "release-assets/SHA256SUMS" in draft["with"]["files"]
+    assert draft["with"]["fail_on_unmatched_files"] is True
+    assert "win-unpacked" not in draft["with"]["files"]
+    image_steps = {
+        step.get("name"): step for step in jobs["build-and-push-image"]["steps"] if step.get("name")
+    }
+    image_build = image_steps["Build and push image"]
+    assert image_build["with"]["push"] is True
+    assert image_build["with"]["platforms"] == "linux/amd64,linux/arm64"
+    assert image_build["with"]["provenance"] == "mode=max"
+    assert image_build["with"]["sbom"] is True
+    assert image_build["with"]["tags"] == (
+        "ghcr.io/${{ steps.repo.outputs.name }}:${{ steps.tag.outputs.name }}"
+    )
+    assert ":latest" not in str(image_build["with"]["tags"])
+    cosign_install = image_steps["Install pinned cosign"]
+    assert cosign_install["uses"] == SIGSTORE_COSIGN_INSTALLER
+    assert cosign_install["with"] == {"cosign-release": "v2.6.1"}
+    signature = image_steps["Sign and verify immutable image manifest"]
+    assert signature["env"]["IMAGE_DIGEST"] == "${{ steps.image-build.outputs.digest }}"
+    assert signature["env"]["CERTIFICATE_IDENTITY"] == (
+        "https://github.com/${{ github.workflow_ref }}"
+    )
+    assert 'cosign sign --yes "${image}"' in signature["run"]
+    assert "cosign verify" in signature["run"]
+    assert '--certificate-identity "${CERTIFICATE_IDENTITY}"' in signature["run"]
+    assert "https://token.actions.githubusercontent.com" in signature["run"]
+    assert '--certificate-github-workflow-sha "${GITHUB_SHA}"' in signature["run"]
+    assert 'docker-manifest-digest"] == $digest' in signature["run"]
+
+
+def test_tag_release_builds_and_publishes_commit_bound_python_distribution() -> None:
+    path = REPO_ROOT / ".github" / "workflows" / "release.yml"
+    workflow_text = path.read_text(encoding="utf-8")
+    jobs = yaml.safe_load(workflow_text)["jobs"]
+
+    build = jobs["build-python-distribution"]
+    assert build["needs"] == ["release-readiness", "windows-release-proof"]
+    assert build["permissions"] == {"contents": "read"}
+    build_steps = {step.get("name"): step for step in build["steps"] if step.get("name")}
+    assert build_steps["Sync locked release validation tools"]["run"] == (
+        "uv sync --locked --python 3.11.9 --extra release"
+    )
+    assert build_steps["Build wheel and source distribution"]["run"] == (
+        "uv build --no-sources --out-dir dist"
+    )
+    validation = build_steps["Validate metadata and isolated wheel imports"]["run"]
+    assert "twine check --strict dist/*" in validation
+    assert 'metadata["Name"] != "octopus-agent-runtime"' in validation
+    assert 'tomllib.load(handle)["project"]["version"]' in validation
+    assert "uv pip install" in validation
+    assert "--no-deps" in validation
+    assert ".venv/bin/python -P" in validation
+    assert "module escaped isolated wheel" in validation
+    upload = build_steps["Upload commit-bound Python distribution"]
+    assert upload["uses"] == ACTIONS_UPLOAD_ARTIFACT
+    assert upload["with"]["name"] == "python-distribution-${{ github.sha }}"
+    assert upload["with"]["if-no-files-found"] == "error"
+
+    publish = jobs["publish-python-distribution"]
+    assert publish["needs"] == [
+        "build-python-distribution",
+        "build-and-push-image",
+        "windows-release-proof",
+    ]
+    assert publish["environment"] == {
+        "name": "pypi",
+        "url": "https://pypi.org/p/octopus-agent-runtime",
+    }
+    assert publish["permissions"] == {"contents": "read", "id-token": "write"}
+    publish_steps = {step.get("name"): step for step in publish["steps"] if step.get("name")}
+    download = publish_steps["Download commit-bound Python distribution"]
+    assert download["uses"] == ACTIONS_DOWNLOAD_ARTIFACT
+    assert download["with"] == {
+        "name": "python-distribution-${{ github.sha }}",
+        "path": "dist",
+    }
+    publisher = publish_steps["Publish signed attestations to PyPI"]
+    assert publisher["uses"] == PYPA_PUBLISH
+    assert publisher["with"] == {
+        "packages-dir": "dist/",
+        "verify-metadata": True,
+        "attestations": True,
+        "print-hash": True,
+    }
+    assert "password" not in publisher.get("with", {})
+
+
+def test_windows_artifact_workflow_is_signed_and_commit_bound() -> None:
+    workflow_path = REPO_ROOT / ".github" / "workflows" / "build-win.yml"
+    workflow_text = workflow_path.read_text(encoding="utf-8")
+    workflow = yaml.safe_load(workflow_text)
+
+    assert workflow["permissions"] == {"contents": "read"}
+    assert "secrets.GITHUB_TOKEN" not in workflow_text
+    job = workflow["jobs"]["build-win"]
+    assert job["runs-on"] == "windows-2025"
+    assert job["environment"] == "windows-code-signing"
+    assert "CSC_LINK" not in job["env"]
+    assert "CSC_KEY_PASSWORD" not in job["env"]
+    steps = {step.get("name"): step for step in job["steps"] if step.get("name")}
+
+    identity = steps["Validate protected Windows signing identity"]
+    assert identity["env"]["CSC_LINK"] == ("${{ secrets.WINDOWS_CODE_SIGNING_CERTIFICATE_BASE64 }}")
+    assert identity["env"]["CSC_KEY_PASSWORD"] == (
+        "${{ secrets.WINDOWS_CODE_SIGNING_CERTIFICATE_PASSWORD }}"
+    )
+    assert "IsNullOrWhiteSpace" in identity["run"]
+    assert "HasPrivateKey" in identity["run"]
+    assert "1.3.6.1.5.5.7.3.3" in identity["run"]
+
+    electron_build = steps["Build canonical Electron EXE"]
+    assert electron_build["env"] == identity["env"]
+    signature_check = steps["Verify Authenticode signatures and create commit-bound checksums"][
+        "run"
+    ]
+    assert "win-unpacked/Octopus.exe" in signature_check
+    assert "win-unpacked/resources/backend/octopus-backend.exe" in signature_check
+    assert "win-unpacked/resources/codex/bin/codex.exe" in signature_check
+    assert "Get-AuthenticodeSignature" in signature_check
+    assert "SignatureStatus]::Valid" in signature_check
+    assert "TimeStamperCertificate" in signature_check
+    assert "Get-FileHash" in signature_check
+    assert "SHA256SUMS" in signature_check
+    assert "windows-signing-proof.json" in signature_check
+    assert "$env:GITHUB_SHA" in signature_check
+
+    installer_upload = steps["Upload EXE installer"]
+    assert installer_upload["with"]["name"] == ("Octopus-Setup-Windows-${{ github.sha }}")
+    assert "frontend/release/SHA256SUMS" in installer_upload["with"]["path"]
+    assert "frontend/release/windows-signing-proof.json" in installer_upload["with"]["path"]
+    portable_upload = steps["Upload portable (unpacked)"]
+    assert portable_upload["with"]["name"] == ("Octopus-Portable-Windows-${{ github.sha }}")
+
+    build_config = yaml.safe_load(
+        (REPO_ROOT / "packaging" / "desktop" / "build.yml").read_text(encoding="utf-8")
+    )
+    assert build_config["win"]["forceCodeSigning"] is True
+    assert build_config["win"]["signExts"] == [".exe"]
+    assert build_config["win"]["artifactName"] == (
+        "${productName}-Setup-${version}-${env.GITHUB_SHA}.${ext}"
+    )
+    assert build_config["win"]["signtoolOptions"] == {
+        "signingHashAlgorithms": ["sha256"],
+        "rfc3161TimeStampServer": "http://timestamp.digicert.com",
+    }
+
+
+def test_manual_behavioral_workflow_produces_commit_bound_release_artifact() -> None:
+    path = REPO_ROOT / ".github" / "workflows" / "behavioral-evidence.yml"
+    workflow_text = path.read_text(encoding="utf-8")
+    workflow = yaml.safe_load(workflow_text)
+    job = workflow["jobs"]["behavioral-evidence"]
+
+    assert "workflow_dispatch:" in workflow_text
+    assert "inputs:" not in workflow_text
+    assert job["runs-on"] == ["self-hosted", "macOS", "behavioral-evidence"]
+    assert job["environment"] == "behavioral-evidence"
+    assert job["env"]["OCTOPUS_BEHAVIORAL_EXPECTED_REVISION"] == "${{ github.sha }}"
+    assert job["env"]["OCTOPUS_CODEX_EXECUTABLE"] == (
+        "/Applications/ChatGPT.app/Contents/Resources/codex"
+    )
+    assert "OCTOPUS_API_TOKEN" not in job["env"]
+    assert "OCTOPUS_EVAL_LOCAL_PASSWORD" not in job["env"]
+    for name in (
+        "OCTOPUS_EVAL_CONFIG",
+        "OCTOPUS_EVAL_OCTOPUS_MODEL",
+        "OCTOPUS_EVAL_CODEX_MODEL",
+        "OCTOPUS_EVAL_EXPECTED_CONFIG_SHA256",
+        "OCTOPUS_EVAL_EXPECTED_CODEX_SHA256",
+        "OCTOPUS_EVAL_EXPECTED_CODEX_TEAM_ID",
+        "OCTOPUS_EVAL_EXPECTED_CODEX_IDENTIFIER",
+    ):
+        assert "${{ vars." in job["env"][name]
+    steps = {step.get("name"): step for step in job["steps"] if step.get("name")}
+    python_setup = next(step for step in job["steps"] if step.get("uses") == ACTIONS_SETUP_PYTHON)
+    assert python_setup["with"]["python-version"] == "3.11.9"
+    uv_setup = steps["Set up pinned uv"]
+    assert uv_setup["uses"] == ASTRAL_SETUP_UV
+    assert uv_setup["with"]["version"] == "0.11.25"
+    sync = steps["Sync locked evaluation dependencies"]["run"]
+    assert "uv sync --locked --python 3.11.9" in sync
+    assert "--extra dev --extra serve --extra web" in sync
+    assert job["env"]["UV_PYTHON_DOWNLOADS"] == "never"
+    assert "pip install" not in workflow_text
+    identity = steps["Verify protected behavioral identities"]["run"]
+    assert "codesign --verify --strict" in identity
+    assert "TeamIdentifier=" in identity
+    assert "Identifier=" in identity
+    assert "shasum -a 256" in identity
+    assert 'f"benchmarks/results/{name}-provenance.json"' in identity
+    startup = steps["Start isolated Octopus evaluation server"]["run"]
+    assert "/readyz" in startup
+    assert "/api/health" not in startup
+    assert ".venv/bin/python -m runtime serve" in startup
+    octopus_run = steps["Run fixed suite against Octopus"]["run"]
+    codex_run = steps["Run identical fixed suite against Codex Desktop"]["run"]
+    assert ".venv/bin/python -m benchmarks.run_behavioral_suite" in octopus_run
+    assert ".venv/bin/python -m benchmarks.run_behavioral_suite" in codex_run
+    assert "--system octopus" in octopus_run
+    assert "--system codex" in codex_run
+    assert '--model "${OCTOPUS_EVAL_OCTOPUS_MODEL}"' in octopus_run
+    assert '--model "${OCTOPUS_EVAL_CODEX_MODEL}"' in codex_run
+    assert "--provenance-file benchmarks/results/octopus-provenance.json" in octopus_run
+    assert "--provenance-file benchmarks/results/codex-provenance.json" in codex_run
+    assert '--octopus-config-path "${OCTOPUS_EVAL_CONFIG}"' in octopus_run
+    assert "--codex-surface desktop" in codex_run
+    assert "--k 3" in octopus_run and "--k 3" in codex_run
+    assert "status > 1" in octopus_run and "status > 1" in codex_run
+    assert steps["Run fixed suite against Octopus"]["env"] == {
+        "OCTOPUS_API_TOKEN": "${{ secrets.OCTOPUS_API_TOKEN }}",
+        "OCTOPUS_EVAL_LOCAL_PASSWORD": "${{ secrets.OCTOPUS_EVAL_LOCAL_PASSWORD }}",
+    }
+    assert "env" not in steps["Run identical fixed suite against Codex Desktop"]
+    assemble = steps["Assemble and validate commit-bound evidence"]["run"]
+    assert ".venv/bin/python -m benchmarks.assemble_behavioral_bundle" in assemble
+    assert '--source-revision "${GITHUB_SHA}"' in assemble
+    assert steps["Run full production readiness gate"]["run"] == ("make production-readiness")
+    assert steps["Run full production readiness gate"]["env"]["PYTHON"] == ".venv/bin/python"
+    upload = steps["Upload commit-bound behavioral evidence"]
+    assert upload["uses"] == ACTIONS_UPLOAD_ARTIFACT
+    assert upload["with"]["name"] == "behavioral-surpass-evidence-${{ github.sha }}"
+    assert "benchmarks/results/behavioral-artifacts" in upload["with"]["path"]
+    assert "benchmarks/results/octopus-provenance.json" in upload["with"]["path"]
+    assert "benchmarks/results/codex-provenance.json" in upload["with"]["path"]
 
 
 def test_verify_local_persists_production_readiness_report() -> None:
@@ -580,10 +1181,10 @@ def test_verify_local_persists_production_readiness_report() -> None:
     assert "e2e release proof: $VERIFY_E2E_RELEASE_PROOF" in script
 
 
-def test_pr_template_points_reviewers_to_make_production_readiness() -> None:
+def test_pr_template_points_reviewers_to_static_readiness() -> None:
     template = (REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md").read_text(
         encoding="utf-8",
     )
 
-    assert "make production-readiness" in template
+    assert "make production-readiness-static" in template
     assert "python scripts/production_readiness_gate.py" not in template

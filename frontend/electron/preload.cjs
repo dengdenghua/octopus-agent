@@ -22,6 +22,7 @@ const EVENT_CHANNELS = [
   "desktop:organize-now",
   "desktop:items-changed",
   "backend:bootstrap-progress",
+  "window:fullscreen-changed",
 ];
 
 const api = {
@@ -47,8 +48,19 @@ const api = {
     getAriaTree: invoke("browser:getAriaTree"),
     getCurrentUrl: invoke("browser:getCurrentUrl"),
     clearSiteData: invoke("browser:clearSiteData"),
+    clearBrowsingData: invoke("browser:clearBrowsingData"),
+    listPasswords: invoke("browser:listPasswords"),
+    savePassword: invoke("browser:savePassword"),
+    deletePassword: invoke("browser:deletePassword"),
+    fillPassword: invoke("browser:fillPassword"),
+    listSitePermissions: invoke("browser:listSitePermissions"),
+    setSitePermission: invoke("browser:setSitePermission"),
     showDownloadInFolder: invoke("browser:showDownloadInFolder"),
     openDownload: invoke("browser:openDownload"),
+    pauseDownload: invoke("browser:pauseDownload"),
+    resumeDownload: invoke("browser:resumeDownload"),
+    cancelDownload: invoke("browser:cancelDownload"),
+    retryDownload: invoke("browser:retryDownload"),
   },
 
   dialog: {
@@ -73,6 +85,8 @@ const api = {
   },
 
   desktop: {
+    getAutomationPermissions: invoke("desktop:getAutomationPermissions"),
+    openAutomationPermission: invoke("desktop:openAutomationPermission"),
     listItems: invoke("desktop:listItems"),
     openItem: invoke("desktop:openItem"),
     trashItem: invoke("desktop:trashItem"),
@@ -95,6 +109,7 @@ const api = {
     setTitleBarOverlay: invoke("window:setTitleBarOverlay"),
     setMousePassthrough: invoke("window:setMousePassthrough"),
     openDevTools: invoke("window:openDevTools"),
+    isFullScreen: invoke("window:isFullScreen"),
   },
 
   pet: {

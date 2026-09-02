@@ -35,7 +35,23 @@ def create_searxng_router(
             jwt_audience=jwt_audience,
         )
 
-    router = APIRouter(tags=["searxng"], dependencies=[Depends(_auth_dep)])
+    def _operator_dep(request: Request) -> None:
+        from runtime.safety.auth.principal import require_roles
+
+        require_roles(
+            request,
+            identity_store,
+            require_auth,
+            ("admin", "operator"),
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(
+        tags=["searxng"],
+        dependencies=[Depends(_auth_dep), Depends(_operator_dep)],
+    )
 
     @router.post("/api/searxng/enable")
     def enable() -> dict[str, Any]:

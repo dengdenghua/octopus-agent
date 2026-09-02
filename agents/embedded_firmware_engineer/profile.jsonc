@@ -1,0 +1,25 @@
+{
+  "id": "embedded_firmware_engineer",
+  "templateId": "workbuddy:embedded-firmware-engineer",
+  "templateVersion": "1.0.1",
+  "source_kind": "workbuddy-expert-fork",
+  "source_plugin": "embedded-firmware-engineer",
+  "expertType": "agent",
+  "name": "固件通",
+  "icon": "🤖",
+  "description": "精通微控制器编程，在资源受限的硬件上编写高效可靠的固件代码",
+  "avatar": "avatar.png",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "workbuddy-fork:embedded-firmware-engineer",
+  "category": "engineering",
+  "tags": [
+    "嵌入式固件",
+    "RTOS开发",
+    "物联网硬件"
+  ],
+  "profession": "嵌入式固件工程师"
+}

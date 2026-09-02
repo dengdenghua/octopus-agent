@@ -237,6 +237,11 @@ oct:
 # enabled:              是否启用
 # allow_any_username:   允许任意用户名（false 时需配合 allowed_usernames 白名单）
 # allowed_usernames:    用户名白名单（仅 allow_any_username=false 时生效）
+# login_max_failures:   同一直连 IP + 规范化用户名在窗口内的失败阈值
+# login_ip_max_failures: 同一直连 IP 跨用户名的总失败阈值（防 username spray）
+# login_failure_window_seconds: 失败计数滑动窗口（秒）
+# login_lockout_seconds: 达到阈值后的短期锁定（秒）
+# login_rate_limit_max_entries: 单进程限速状态内存上限
 # jwt_secret:           JWT 签名密钥 ⚠️ 32+ 字符强随机值
 # jwt_expire_seconds:   JWT 过期时间（秒），604800 = 7 天
 # jwt_issuer:           JWT 签发者标识
@@ -246,6 +251,11 @@ local_auth:
   enabled: false
   allow_any_username: false
   allowed_usernames: []
+  login_max_failures: 5
+  login_ip_max_failures: 20
+  login_failure_window_seconds: 300
+  login_lockout_seconds: 60
+  login_rate_limit_max_entries: 10000
   jwt_secret: null
   jwt_expire_seconds: 604800
   jwt_issuer: octopus-agent

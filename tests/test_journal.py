@@ -8,12 +8,12 @@ from pathlib import Path
 import pytest
 
 from runtime.memory.journal import (
-    JournalEvent,
     BudgetBreakerResetEvent,
     BudgetEvent,
     CurriculumGoalDecisionEvent,
     ImmuneEvent,
     InMemoryJournal,
+    JournalEvent,
     JSONLJournal,
     McpProposalDecisionEvent,
     ProtocolDriftDecisionEvent,
@@ -260,7 +260,7 @@ class TestSessionIndex:
     """Audit P-04: read_by_session consumes only a session's rows and
     refreshes incrementally (O(new events) after the first scan)."""
 
-    def _session_event(self, session_id: str, seq: int) -> "JournalEvent":
+    def _session_event(self, session_id: str, seq: int) -> JournalEvent:
         from uuid import uuid4
 
         from runtime.memory.journal._journal_models import SubTextDeltaEvent

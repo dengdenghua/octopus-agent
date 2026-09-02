@@ -52,11 +52,7 @@ export function WorkspaceHeader({ className }: { className?: string }) {
   // SidebarTrigger. Both keep the same toggle behavior.
   const logoItem = collapsed ? (
     <SidebarMenuItem className="group-data-[collapsible=icon]:px-0 px-2">
-      <SidebarMenuButton
-        asChild
-        className={iconTileClass}
-        tooltip="Octopus"
-      >
+      <SidebarMenuButton asChild className={iconTileClass} tooltip="EchoAI">
         <button
           type="button"
           onClick={() => toggleSidebar()}
@@ -99,7 +95,9 @@ export function WorkspaceHeader({ className }: { className?: string }) {
   // whether the tooltip is attached.
   const newChatItem = (
     <SidebarMenuItem
-      className={collapsed ? "group-data-[collapsible=icon]:px-0 px-2" : "px-1.5"}
+      className={
+        collapsed ? "group-data-[collapsible=icon]:px-0 px-2" : "px-1.5"
+      }
     >
       <SidebarMenuButton
         isActive={pathname?.endsWith("/new")}

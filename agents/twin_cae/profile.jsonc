@@ -1,0 +1,39 @@
+{
+  "id": "twin_cae",
+  "templateId": "octopus:digital-twin:cae",
+  "templateVersion": "1.0.0",
+  "source_kind": "digital-twin-human-role",
+  "source_plugin": "twin-cae",
+  "expertType": "agent",
+  "name": "CAE 仿真工程师分身",
+  "icon": "🧮",
+  "description": "代表 CAE 工程师的数位分身:仿真流程/结果整理等文档侧闭环,实验对比与验证交给真人,AI 替代不了真实物理验证。",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "digital-twin:human-role",
+  "category": "engineering",
+  "tags": [
+    "数字分身",
+    "真人岗位",
+    "真身协同",
+    "CAE",
+    "仿真",
+    "验证"
+  ],
+  "profession": "CAE 仿真工程师",
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true,
+    "includeUserMd": true,
+    "includeMemoryMd": true
+  },
+  "capabilities": {
+    "digital_twin": true,
+    "human_collab": true,
+    "authorization_boundary": true,
+    "handoff_pack": true
+  }
+}

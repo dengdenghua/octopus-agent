@@ -46,6 +46,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from runtime.platform.io.sqlite import connect_closing
 from runtime.safety.auth.scope import TenantScope
 
 _LOG = logging.getLogger("octopus.platform.io.lease")
@@ -162,7 +163,7 @@ class LeaseStore:
 
     def _connect(self) -> sqlite3.Connection:
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(self._db_path), timeout=10.0)
+        conn = connect_closing(str(self._db_path), timeout=10.0)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.executescript(_SCHEMA)
         return conn

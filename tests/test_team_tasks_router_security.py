@@ -129,9 +129,12 @@ def _build_app(
     """
     store = IdentityStore()
     keys: dict[str, str] = {}
-    for actor in ("alice", "bob"):
+    for actor in ("alice", "bob", "carol"):
         api_key = f"sk-test-{actor}"
-        store.add(Identity(actor_id=actor), api_key_plaintext=api_key)
+        store.add(
+            Identity(actor_id=actor, metadata={"tenant_id": "tenant-acme"}),
+            api_key_plaintext=api_key,
+        )
         keys[actor] = api_key
 
     app = FastAPI()
@@ -152,6 +155,7 @@ def _build_app(
         runner_factory=runner_factory,
         team_event_broadcaster=_broadcaster,
         room_membership_resolver=rooms_router.list_room_members,
+        room_participant_resolver=rooms_router.get_room_participant,
         max_concurrent_runs=max_concurrent_runs,
     )
     app.include_router(tasks_router)
@@ -182,6 +186,29 @@ def _create_room(
     )
     assert resp.status_code == 200, resp.json()
     return resp.json()
+
+
+def _join_room(
+    client: TestClient,
+    keys: dict[str, str],
+    room_id: str,
+    actor: str,
+    *,
+    role: str,
+) -> dict[str, Any]:
+    invite = client.post(
+        f"/api/teams/{room_id}/invites",
+        json={"role": role, "expires_in_seconds": 3600},
+        headers=_auth_header(keys["alice"]),
+    )
+    assert invite.status_code == 200, invite.json()
+    joined = client.post(
+        f"/api/team-invites/{invite.json()['invite_token']}/join",
+        json={"display_name": actor},
+        headers=_auth_header(keys[actor]),
+    )
+    assert joined.status_code == 200, joined.json()
+    return joined.json()["participant"]
 
 
 def test_membership_blocks_non_member_create(tmp_path: Path) -> None:
@@ -274,6 +301,146 @@ def test_membership_blocks_non_member_delete(tmp_path: Path) -> None:
     )
 
     assert resp.status_code == 403
+
+
+def test_viewer_reads_tasks_but_cannot_mutate_or_run(tmp_path: Path) -> None:
+    client, _, keys = _build_app(tmp_path, _SlowRunner)
+    _create_room(client, keys, "room-alpha", owner="alice")
+    participant = _join_room(
+        client,
+        keys,
+        "room-alpha",
+        "carol",
+        role="viewer",
+    )
+    created = client.post(
+        "/api/team-tasks",
+        json={"room_id": "room-alpha", "title": "owner task"},
+        headers=_auth_header(keys["alice"]),
+    )
+    assert created.status_code == 200, created.json()
+    task_id = created.json()["id"]
+
+    assert (
+        client.get(
+            "/api/team-tasks?room_id=room-alpha",
+            headers=_auth_header(keys["carol"]),
+        ).status_code
+        == 200
+    )
+    assert (
+        client.get(
+            f"/api/team-tasks/{task_id}",
+            headers=_auth_header(keys["carol"]),
+        ).status_code
+        == 200
+    )
+    assert (
+        client.get(
+            f"/api/team-tasks/{task_id}/process-timeline",
+            headers=_auth_header(keys["carol"]),
+        ).status_code
+        == 200
+    )
+
+    denied = [
+        client.post(
+            "/api/team-tasks",
+            json={"room_id": "room-alpha", "title": "viewer task"},
+            headers=_auth_header(keys["carol"]),
+        ),
+        client.post(
+            f"/api/team-tasks/{task_id}/run",
+            headers=_auth_header(keys["carol"]),
+        ),
+        client.patch(
+            f"/api/team-tasks/{task_id}",
+            json={"title": "viewer edit"},
+            headers=_auth_header(keys["carol"]),
+        ),
+        client.delete(
+            f"/api/team-tasks/{task_id}",
+            headers=_auth_header(keys["carol"]),
+        ),
+    ]
+    assert [response.status_code for response in denied] == [403, 403, 403, 403]
+    assert all("viewers" in response.json()["detail"] for response in denied)
+
+    # Presence changes are not membership changes: offline viewers still read.
+    offline = client.patch(
+        f"/api/teams/room-alpha/participants/{participant['id']}",
+        json={"status": "offline"},
+        headers=_auth_header(keys["alice"]),
+    )
+    assert offline.status_code == 200, offline.json()
+    assert (
+        client.get(
+            f"/api/team-tasks/{task_id}",
+            headers=_auth_header(keys["carol"]),
+        ).status_code
+        == 200
+    )
+
+    removed = client.patch(
+        f"/api/teams/room-alpha/participants/{participant['id']}",
+        json={"status": "removed"},
+        headers=_auth_header(keys["alice"]),
+    )
+    assert removed.status_code == 200, removed.json()
+    assert (
+        client.get(
+            f"/api/team-tasks/{task_id}",
+            headers=_auth_header(keys["carol"]),
+        ).status_code
+        == 403
+    )
+
+
+def test_plain_member_can_create_and_update_tasks(tmp_path: Path) -> None:
+    client, _, keys = _build_app(tmp_path)
+    _create_room(client, keys, "room-alpha", owner="alice")
+    _join_room(client, keys, "room-alpha", "bob", role="member")
+
+    created = client.post(
+        "/api/team-tasks",
+        json={"room_id": "room-alpha", "title": "member task"},
+        headers=_auth_header(keys["bob"]),
+    )
+    assert created.status_code == 200, created.json()
+    updated = client.patch(
+        f"/api/team-tasks/{created.json()['id']}",
+        json={"title": "member update"},
+        headers=_auth_header(keys["bob"]),
+    )
+    assert updated.status_code == 200, updated.json()
+    assert updated.json()["title"] == "member update"
+
+
+def test_viewer_cannot_use_run_endpoint_when_task_is_already_running(tmp_path: Path) -> None:
+    _BlockingRunner.reset()
+    try:
+        client, _, keys = _build_app(tmp_path, _BlockingRunner)
+        _create_room(client, keys, "room-alpha", owner="alice")
+        _join_room(client, keys, "room-alpha", "carol", role="viewer")
+        created = client.post(
+            "/api/team-tasks",
+            json={"room_id": "room-alpha", "title": "running task"},
+            headers=_auth_header(keys["alice"]),
+        )
+        task_id = created.json()["id"]
+        started = client.post(
+            f"/api/team-tasks/{task_id}/run",
+            headers=_auth_header(keys["alice"]),
+        )
+        assert started.status_code == 200, started.json()
+        denied = client.post(
+            f"/api/team-tasks/{task_id}/run",
+            headers=_auth_header(keys["carol"]),
+        )
+        assert denied.status_code == 403
+        assert "viewers" in denied.json()["detail"]
+    finally:
+        _BlockingRunner.release()
 
 
 def test_sop_template_rejects_path_traversal(tmp_path: Path) -> None:
@@ -402,6 +569,52 @@ def test_list_tasks_room_scope_membership(tmp_path: Path) -> None:
     assert other.status_code == 403
 
 
+def test_unscoped_task_list_only_contains_member_rooms(tmp_path: Path) -> None:
+    client, _, keys = _build_app(tmp_path)
+    _create_room(client, keys, "room-alice", owner="alice")
+    _create_room(client, keys, "room-bob", owner="bob")
+    client.post(
+        "/api/team-tasks",
+        json={"room_id": "room-alice", "title": "alice task"},
+        headers=_auth_header(keys["alice"]),
+    )
+    client.post(
+        "/api/team-tasks",
+        json={"room_id": "room-bob", "title": "bob secret task"},
+        headers=_auth_header(keys["bob"]),
+    )
+
+    listed = client.get("/api/team-tasks", headers=_auth_header(keys["alice"]))
+
+    assert listed.status_code == 200
+    assert [item["title"] for item in listed.json()["tasks"]] == ["alice task"]
+
+
+def test_auth_on_without_membership_resolver_fails_closed(tmp_path: Path) -> None:
+    store = IdentityStore()
+    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    app = FastAPI()
+    app.include_router(
+        create_team_tasks_router(
+            state_path=tmp_path / "tasks.json",
+            identity_store=store,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+    headers = _auth_header("sk-alice")
+
+    assert client.get("/api/team-tasks", headers=headers).status_code == 503
+    assert (
+        client.post(
+            "/api/team-tasks",
+            headers=headers,
+            json={"room_id": "unverified-room", "title": "must fail"},
+        ).status_code
+        == 503
+    )
+
+
 def test_single_user_dev_mode_skips_membership_check(tmp_path: Path) -> None:
     """When require_auth=False (single-user dev mode), the membership
     resolver is a no-op so tests / local dev flows aren't broken."""
@@ -441,28 +654,33 @@ def test_concurrency_cap_lock_holds_under_burst(tmp_path: Path) -> None:
     running{} insert."""
     import concurrent.futures
 
-    client, _, keys = _build_app(tmp_path, _SlowRunner, max_concurrent_runs=2)
-    _create_room(client, keys, "room-alpha", owner="alice")
+    _BlockingRunner.reset()
+    try:
+        client, _, keys = _build_app(tmp_path, _BlockingRunner, max_concurrent_runs=2)
+        _create_room(client, keys, "room-alpha", owner="alice")
 
-    task_ids = []
-    for i in range(6):
-        create = client.post(
-            "/api/team-tasks",
-            json={"room_id": "room-alpha", "title": f"burst-{i}"},
-            headers=_auth_header(keys["alice"]),
-        )
-        task_ids.append(create.json()["id"])
+        task_ids = []
+        for i in range(6):
+            create = client.post(
+                "/api/team-tasks",
+                json={"room_id": "room-alpha", "title": f"burst-{i}"},
+                headers=_auth_header(keys["alice"]),
+            )
+            task_ids.append(create.json()["id"])
 
-    def _fire(tid: str) -> int:
-        return client.post(
-            f"/api/team-tasks/{tid}/run",
-            headers=_auth_header(keys["alice"]),
-        ).status_code
+        def _fire(tid: str) -> int:
+            return client.post(
+                f"/api/team-tasks/{tid}/run",
+                headers=_auth_header(keys["alice"]),
+            ).status_code
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
-        statuses = list(pool.map(_fire, task_ids))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+            statuses = list(pool.map(_fire, task_ids))
 
-    accepted = sum(1 for s in statuses if s == 200)
-    rejected = sum(1 for s in statuses if s == 429)
-    assert accepted == 2, f"expected exactly 2 accepted, got {accepted}: {statuses}"
+        accepted = sum(1 for s in statuses if s == 200)
+        rejected = sum(1 for s in statuses if s == 429)
+        assert accepted == 2, f"expected exactly 2 accepted, got {accepted}: {statuses}"
+        assert rejected == 4, f"expected exactly 4 rejected, got {rejected}: {statuses}"
+    finally:
+        _BlockingRunner.release()
     assert rejected == 4, f"expected exactly 4 rejected, got {rejected}: {statuses}"

@@ -8,6 +8,7 @@ import {
   PauseIcon,
   PlayIcon,
   PlusIcon,
+  RouteIcon,
   Trash2Icon,
   XCircleIcon,
 } from "lucide-react";
@@ -235,8 +236,18 @@ export function TeamTasksPanel({
       <div className="shrink-0 border-b border-border-subtle px-3 py-2">
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium text-foreground">
-              {t.agentWorkbenchPages.reference.plans}
+            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <span>{t.agentWorkbenchPages.reference.plans}</span>
+              {(team?.members.length ?? 0) > 1 ? (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full border border-success/25 bg-success/10 px-1.5 py-0.5 text-[10px] font-medium text-success"
+                  title="群主会根据实际结果动态调整成员分工、执行顺序与复核方式"
+                  data-testid="adaptive-orchestration-badge"
+                >
+                  <RouteIcon className="size-3" />
+                  动态编排
+                </span>
+              ) : null}
             </div>
             <div className="mt-0.5 text-xs text-muted-foreground">
               {t.teamTasksPanel.summary(tasks.length, runningCount, doneCount)}
@@ -348,7 +359,6 @@ export function TeamTasksPanel({
     const liveStatus = taskEvent
       ? formatTeamTaskEvent(taskEvent.event, roleLabel)
       : null;
-    const recoveryGroups = cliRecoveryGroups(task);
 
     return (
       <article className="rounded-lg border border-border-default bg-background/85 shadow-[var(--shadow-xs)]">
@@ -417,37 +427,6 @@ export function TeamTasksPanel({
                 </button>
               )}
             </div>
-            {recoveryGroups.length > 0 && (
-              <div className="mt-2 rounded-md border border-warning/30 bg-warning/5 px-2 py-1.5 text-xs text-warning">
-                <div className="font-medium">CLI 恢复分组</div>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {recoveryGroups.map((group) => (
-                    <span
-                      key={group.key}
-                      className="inline-flex max-w-full flex-col items-start gap-0.5 rounded border border-warning/30 bg-background/75 px-1.5 py-0.5"
-                      title={group.hints.join("；")}
-                    >
-                      <span className="flex max-w-full items-center gap-1">
-                        <span className="shrink-0 font-medium">
-                          {group.label}
-                        </span>
-                        <span className="min-w-0 truncate text-warning/80">
-                          {group.members.join("、")}
-                        </span>
-                        <span className="shrink-0 rounded bg-warning/10 px-1 font-mono text-xs">
-                          {group.count}
-                        </span>
-                      </span>
-                      {group.hints[0] && (
-                        <span className="max-w-full truncate text-warning/80">
-                          建议：{group.hints[0]}
-                        </span>
-                      )}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
@@ -673,55 +652,6 @@ function assigneeNames(task: TeamTask, team: Team | null): string[] {
     .map((assignee) => byRef.get(assignee.ref) ?? assignee.ref)
     .filter(Boolean)
     .slice(0, 3);
-}
-
-function cliRecoveryGroups(task: TeamTask): Array<{
-  key: string;
-  label: string;
-  count: number;
-  members: string[];
-  hints: string[];
-}> {
-  const metadata = task.metadata;
-  const runner =
-    metadata && typeof metadata.runner === "object" && metadata.runner !== null
-      ? (metadata.runner as Record<string, unknown>)
-      : null;
-  const groups = Array.isArray(runner?.recovery_groups)
-    ? runner.recovery_groups
-    : [];
-  return groups
-    .filter((group): group is Record<string, unknown> => {
-      return Boolean(group && typeof group === "object");
-    })
-    .map((group, index) => {
-      const members = Array.isArray(group.members)
-        ? group.members
-            .filter((member): member is Record<string, unknown> =>
-              Boolean(member && typeof member === "object"),
-            )
-            .map((member) =>
-              String(member.label || member.agent_id || member.partner_id || ""),
-            )
-            .filter(Boolean)
-        : [];
-      const hints = Array.isArray(group.fix_hints)
-        ? group.fix_hints.map((hint) => String(hint || "")).filter(Boolean)
-        : [];
-      const failureKind = String(group.failure_kind || `group-${index}`);
-      return {
-        key: failureKind,
-        label: String(group.label || failureKind),
-        count:
-          typeof group.count === "number"
-            ? group.count
-            : Math.max(1, members.length),
-        members,
-        hints,
-      };
-    })
-    .filter((group) => group.label && group.members.length > 0)
-    .slice(0, 4);
 }
 
 function taskProgressValue(

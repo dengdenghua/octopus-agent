@@ -1,8 +1,16 @@
 recursive-include runtime/sensing/gateway/agent_market_sources *
-# all_skills: package only the __init__.py catalog + config, not the 175 SKILL.md dirs.
-# File-backed domain skills are discovered at runtime from skills/public/ (project root),
-# which is NOT inside the wheel. This keeps wheel size <1 MB instead of +20 MB.
-include runtime/execution/all_skills/__init__.py
-include runtime/execution/all_skills/*.json
+include skills.lock.json
+# Ship the deterministic prompt-skill fallback inside wheels.  A clean checkout
+# keeps the registry-managed skills/public catalog out of git, so excluding this
+# package data makes an offline wheel silently register zero market skills.
+recursive-include runtime/execution/all_skills *
+# Bundled plugins are discovered from plugin.yaml at runtime.  Their prompts,
+# licences, pages, and static assets are therefore executable package data,
+# not repository-only documentation.
+recursive-include runtime/platform/plugins/bundled *
+include runtime/platform/plugins/builtin-publishers.json
+recursive-exclude runtime/platform/plugins/bundled/narrative_studio *
+recursive-exclude runtime/platform/plugins/bundled/paper_trading *
 recursive-exclude runtime/sensing/gateway/agent_market_sources __pycache__ *.py[cod]
 recursive-exclude runtime/execution/all_skills __pycache__ *.py[cod]
+recursive-exclude runtime/platform/plugins/bundled __pycache__ *.py[cod]

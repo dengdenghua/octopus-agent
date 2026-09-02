@@ -115,9 +115,7 @@ def forge_subagent_thread(
     parent_metadata: dict[str, Any] = {}
     if session is not None:
         parent_thread_id = str(
-            getattr(session, "thread_id", None)
-            or getattr(session, "conversation_id", None)
-            or ""
+            getattr(session, "thread_id", None) or getattr(session, "conversation_id", None) or ""
         ).strip()
         parent_turn_id = str(getattr(session, "turn_id", None) or "").strip()
         meta = getattr(session, "metadata", None)

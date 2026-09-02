@@ -8,7 +8,9 @@ import {
   WrenchIcon,
 } from "lucide-react";
 import {
+  useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -20,7 +22,10 @@ import {
 import { ChainOfThought } from "@/components/ai-elements/chain-of-thought";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { isApprovalRequest } from "@/components/workspace/tool-approval-card";
-import { useStreamingTextBuffer } from "@/hooks/use-streaming-text-buffer";
+import {
+  STREAMING_TYPE_PRESETS,
+  useStreamingTextBuffer,
+} from "@/hooks/use-streaming-text-buffer";
 import { useConversationDetailLevel } from "./use-conversation-detail-level";
 import {
   type AgentRunState,
@@ -70,7 +75,6 @@ import { stripTraceLabelPrefixes } from "./trace-labels";
 import {
   assignTimelineRoles,
   isAnswerContent,
-  type RoleAssignableStep,
   type TimelineRole,
 } from "./timeline-role";
 import {
@@ -81,9 +85,9 @@ import {
   type ActionAggregateKind,
 } from "./action-display";
 import {
-  aggregateSimilarToolCalls,
-  isAggregatedToolGroup,
-} from "./activity-aggregator";
+  buildCompactTimelineItems,
+  isExecutionTimelineItem,
+} from "./timeline-pipeline";
 import { projectToolNarrative } from "./narrative-block";
 
 const HIDDEN_TIMELINE_TOOL_NAMES = new Set([
@@ -100,6 +104,7 @@ const HIDDEN_TIMELINE_TOOL_NAMES = new Set([
   "deep-research-swarm",
   "recall",
 ]);
+const AUTO_COLLAPSE_PROCESS_STEP_COUNT = 8;
 const INTERNAL_PROCESS_BLOCK_RE =
   /`?<(?:(?:Reasoning|ToolCall|ToolResult|Thinking|Execution)Block)\b[^<>`]*>[\s\S]*?<\/(?:(?:Reasoning|ToolCall|ToolResult|Thinking|Execution)Block)>`?/g;
 const PROCESS_TEXT_SECRET_RE =
@@ -273,6 +278,11 @@ function publicActionTextFromTraceTool(
 }
 
 function normalizePublicTimelineChunk(chunk: string): string | null {
+  // Provider planning headings such as
+  // ``**Planning...****Inspecting...**`` are private implementation labels,
+  // not public progress. Public commentary is carried by message.content.
+  const compact = chunk.replace(/\s+/g, "").trim();
+  if (/^(?:\*\*[^*\n]{2,180}\*\*){1,6}$/.test(compact)) return null;
   const stripped = stripTraceLabelPrefixes(
     stripLeakedRendererMarkup(
       stripInternalToolProtocol(chunk.replace(INTERNAL_PROCESS_BLOCK_RE, "")),
@@ -312,9 +322,7 @@ function publicProcessText(value: string): string {
   return redactPublicProcessText(
     stripTraceLabelPrefixes(
       stripLeakedRendererMarkup(
-        stripInternalToolProtocol(
-          value.replace(INTERNAL_PROCESS_BLOCK_RE, ""),
-        ),
+        stripInternalToolProtocol(value.replace(INTERNAL_PROCESS_BLOCK_RE, "")),
       ),
     ).replace(/[^\S\n]+/g, " "),
   );
@@ -351,19 +359,11 @@ function formatDuration(ms: number): string {
 }
 
 /**
- * Fixed-height typewriter window for the latest in-flight thinking text.
- *
- * Scrolls normally (up to re-read history, down to catch up) and, while
- * streaming, auto-anchors to the newest text — unless the user has scrolled
- * up to read history, in which case follow-mode pauses until they return to
- * the bottom.
- */
-/**
  * Smoothly glide a live stream window to the newest content instead of
  * snapping. Each typewriter tick calls this with the latest display text;
  * the scroll animates in a few rAF steps so long streams read like a
- * sliding window (fixed height, newest line entering at the bottom) rather
- * than a jump. User scroll-away still pauses the stick.
+ * capped sliding window (newest line entering at the bottom) rather than a
+ * jump. User scroll-away still pauses the stick.
  */
 function useSmoothStickToBottom(
   ref: RefObject<HTMLDivElement | null>,
@@ -404,8 +404,12 @@ function useSmoothStickToBottom(
         animationRef.current = null;
         return;
       }
+      // Recompute both directions. A live block usually grows, but it can
+      // shrink when a provisional trace is replaced or normalised. Keeping
+      // the old larger target makes browsers clamp scrollTop while this loop
+      // continues chasing an unreachable position forever.
       targetRef.current = Math.max(
-        targetRef.current,
+        0,
         current.scrollHeight - current.clientHeight,
       );
       const distance = targetRef.current - current.scrollTop;
@@ -434,6 +438,68 @@ function useSmoothStickToBottom(
   return autoScrollingRef;
 }
 
+const LIVE_STREAM_WINDOW_MAX_HEIGHT_PX = 128;
+
+export function getLiveStreamWindowHeight(naturalHeight: number): number {
+  return Math.min(
+    LIVE_STREAM_WINDOW_MAX_HEIGHT_PX,
+    Math.max(0, Math.ceil(naturalHeight)),
+  );
+}
+
+/**
+ * Let short live output occupy only its real content height, then cap long
+ * output at the waterfall-window height. While the window is outside the
+ * viewport (the reader is browsing history), freeze the last measured outer
+ * height so new tokens cannot move historical content under the reader.
+ */
+function useViewportAwareLiveWindowHeight(
+  ref: RefObject<HTMLDivElement | null>,
+  contentRef: RefObject<HTMLDivElement | null>,
+  trigger: string,
+): number | undefined {
+  const isVisibleRef = useRef(true);
+  const [height, setHeight] = useState<number>();
+
+  const measure = useCallback(() => {
+    const content = contentRef.current;
+    if (!content || !isVisibleRef.current) return;
+    // Measure an unconstrained inner node, not the scroll viewport itself.
+    // Once the viewport has reached its cap, its own scrollHeight can never
+    // fall below clientHeight. Reading it made a later shorter update inherit
+    // the old 128px height and leave a visible empty block below the text.
+    const naturalHeight = Math.ceil(content.scrollHeight);
+    if (naturalHeight < 1) return;
+    const nextHeight = getLiveStreamWindowHeight(naturalHeight);
+    setHeight((current) => (current === nextHeight ? current : nextHeight));
+  }, [contentRef]);
+
+  useLayoutEffect(() => {
+    measure();
+  }, [measure, trigger]);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => {
+      isVisibleRef.current = entry?.isIntersecting ?? true;
+      if (isVisibleRef.current) measure();
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [measure, ref]);
+
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [contentRef, measure]);
+
+  return height;
+}
+
 /**
  * Live typewriter window for the in-flight extended thinking.
  *
@@ -445,24 +511,25 @@ function useSmoothStickToBottom(
  */
 function LiveThinkingWindow({ text }: { text: string }) {
   const ref = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
-  // Typewriter buffer: reveal the stream at a fixed tick rate (40ms, 1–4
-  // chars/frame, accel on backlog) instead of flashing every delta. Full
-  // text appears instantly for prefers-reduced-motion users.
+  // Typewriter buffer: reveal the stream at a fixed tick rate instead of
+  // flashing every delta. Full text appears instantly for
+  // prefers-reduced-motion users. See STREAMING_TYPE_PRESETS.liveThinking
+  // for the cadence rationale.
   const displayText = useStreamingTextBuffer({
     targetText: text,
-    // Private reasoning often arrives in larger bursts than the final answer.
-    // Keep a small readable delay, but allow the transcript to catch up
-    // instead of accumulating seconds of invisible backlog on fast providers.
-    targetIntervalMs: 32,
-    maxCharsPerTick: 10,
-    backlogDivisor: 12,
-    fastDrainThreshold: 2,
+    ...STREAMING_TYPE_PRESETS.liveThinking,
   });
 
   const autoScrollingRef = useSmoothStickToBottom(
     ref,
     stickToBottomRef,
+    displayText,
+  );
+  const windowHeight = useViewportAwareLiveWindowHeight(
+    ref,
+    contentRef,
     displayText,
   );
 
@@ -477,10 +544,18 @@ function LiveThinkingWindow({ text }: { text: string }) {
     <div
       ref={ref}
       onScroll={handleScroll}
-      className="live-thinking-window mt-1 ml-4 max-h-32 min-w-0 overflow-y-auto whitespace-pre-wrap border-l-2 border-foreground/15 bg-transparent px-1 py-1.5 pl-3 text-[13px] leading-6 text-muted-foreground"
+      className="live-thinking-window mt-1 ml-4 max-h-32 min-w-0 overflow-y-auto whitespace-pre-wrap border-l-2 border-foreground/15 bg-transparent px-1 pl-3 text-[13px] leading-6 text-muted-foreground"
+      data-height-policy="inner-content-capped-history-frozen"
       data-testid="live-thinking-stream"
+      style={{ height: windowHeight }}
     >
-      {displayText}
+      <div
+        ref={contentRef}
+        className="py-1.5"
+        data-testid="live-thinking-content"
+      >
+        {displayText}
+      </div>
     </div>
   );
 }
@@ -494,14 +569,21 @@ function LiveThinkingWindow({ text }: { text: string }) {
  */
 function LiveExecWindow({ text }: { text: string }) {
   const ref = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const displayText = useStreamingTextBuffer({
     targetText: text,
+    ...STREAMING_TYPE_PRESETS.finalAnswer,
   });
 
   const autoScrollingRef = useSmoothStickToBottom(
     ref,
     stickToBottomRef,
+    displayText,
+  );
+  const windowHeight = useViewportAwareLiveWindowHeight(
+    ref,
+    contentRef,
     displayText,
   );
 
@@ -516,10 +598,14 @@ function LiveExecWindow({ text }: { text: string }) {
     <div
       ref={ref}
       onScroll={handleScroll}
-      className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap border-l-2 border-foreground/15 bg-transparent px-1 py-1.5 pl-3 font-mono text-xs leading-6 text-muted-foreground/85"
+      className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap border-l-2 border-foreground/15 bg-transparent px-1 pl-3 font-mono text-xs leading-6 text-muted-foreground/85"
+      data-height-policy="inner-content-capped-history-frozen"
       data-testid="live-exec-stream"
+      style={{ height: windowHeight }}
     >
-      {displayText}
+      <div ref={contentRef} className="py-1.5" data-testid="live-exec-content">
+        {displayText}
+      </div>
     </div>
   );
 }
@@ -531,6 +617,7 @@ export function MessageGroup({
   isLoading = false,
   keepOpen = false,
   codeMode = false,
+  suppressSubagentRows = false,
 }: {
   className?: string;
   enableClarificationActions?: boolean;
@@ -540,6 +627,8 @@ export function MessageGroup({
   // Code mode auto-expands only while the turn is live. Once a turn is saved,
   // historical work logs fold behind a compact replay disclosure.
   codeMode?: boolean;
+  /** A turn-level Agent cluster card already owns delegation lifecycle UI. */
+  suppressSubagentRows?: boolean;
 }) {
   const { t } = useI18n();
   const { receiptsByCallId } = useToolEffects();
@@ -550,6 +639,22 @@ export function MessageGroup({
   // Keep the live turn focused on the current frame. Older steps move behind
   // a replay disclosure so streaming never becomes a long historical pile.
   const isLiveTimeline = isLoading || keepOpen;
+  const steps = useMemo(() => convertToSteps(messages), [messages]);
+  const shouldAutoCollapseProcess =
+    detailConfig.autoCollapseToolCalls &&
+    steps.length > AUTO_COLLAPSE_PROCESS_STEP_COUNT;
+  const [processReplayOpen, setProcessReplayOpen] = useState(
+    isLiveTimeline || !shouldAutoCollapseProcess,
+  );
+  const processWasLiveRef = useRef(isLiveTimeline);
+  useEffect(() => {
+    if (isLiveTimeline) {
+      setProcessReplayOpen(true);
+    } else if (processWasLiveRef.current) {
+      setProcessReplayOpen(!shouldAutoCollapseProcess);
+    }
+    processWasLiveRef.current = isLiveTimeline;
+  }, [isLiveTimeline, shouldAutoCollapseProcess]);
   const [expandedAggregatedGroups, setExpandedAggregatedGroups] = useState<
     Record<string, boolean>
   >({});
@@ -569,7 +674,6 @@ export function MessageGroup({
   >({});
   const thinkingStartTimeRef = useRef<number | null>(null);
   const [thinkingElapsedMs, setThinkingElapsedMs] = useState(0);
-  const steps = useMemo(() => convertToSteps(messages), [messages]);
   // Map parentItemId -> subagent identity so that child tool rows (searches,
   // reads, edits) spawned by a teammate can show the teammate's avatar.
   const subagentByParentItemId = useMemo(() => {
@@ -647,68 +751,10 @@ export function MessageGroup({
   // Keep process events on the same chronological lane as the answer while
   // letting the answer retain visual priority. The main transcript shows only
   // compact public summaries; complete event payloads live in the workbench.
-  const compactTimelineItems = useMemo(() => {
-    const selected = retainIndeterminateToolCalls(
-      timelineItems,
-      // The main conversation keeps the latest public thought and latest action.
-      // Earlier process events remain in the right workbench. This is structural
-      // and independent of model wording, language, or hard-coded phase names.
-      selectCompactTimelineItems(timelineItems),
-      receiptsByCallId,
-    );
-    // Build index for quick lookup of original ToolCallTimelineItem by step id
-    const toolItemById = new Map<string, ToolCallTimelineItem>();
-    for (const item of selected) {
-      if (item.type === "toolCall" && item.step.id) {
-        toolItemById.set(item.step.id, item);
-      }
-    }
-    // Apply activity aggregation: group consecutive similar tool calls
-    const aggregated = aggregateSimilarToolCalls(selected, {
-      groupMixedKinds: true,
-      groupAcrossPhases: true,
-    });
-    return aggregated.map((item): TimelineItem => {
-      if (isAggregatedToolGroup(item)) {
-        const mappedItems: ToolCallTimelineItem[] = [];
-        for (const toolLike of item.items) {
-          const stepId = toolLike.step.id;
-          if (stepId) {
-            const original = toolItemById.get(stepId);
-            if (original) {
-              mappedItems.push(original);
-              continue;
-            }
-          }
-          // Aggregation preserves the original object. Falling back by tool
-          // name maps repeated anonymous calls to the wrong evidence row.
-          if (isToolCallTimelineItem(toolLike)) {
-            mappedItems.push(toolLike);
-          }
-        }
-        return {
-          id: item.id,
-          type: "aggregatedToolGroup",
-          aggregateKind: item.aggregateKind,
-          count: item.count,
-          phaseId: item.phaseId,
-          items:
-            mappedItems.length > 0
-              ? mappedItems
-              : item.items.filter(isToolCallTimelineItem),
-          role: item.role as TimelineRole | undefined,
-          inferred: item.inferred,
-        };
-      }
-      if (isTimelineItem(item)) return item;
-      // The aggregator passes non-aggregated items through by reference, so
-      // every item here originates from the TimelineItem[] above. Reaching
-      // this branch means the input was corrupted upstream.
-      throw new TypeError(
-        "aggregateSimilarToolCalls returned an unknown timeline item",
-      );
-    });
-  }, [timelineItems, receiptsByCallId]);
+  const compactTimelineItems = useMemo(
+    () => buildCompactTimelineItems(timelineItems, receiptsByCallId),
+    [timelineItems, receiptsByCallId],
+  );
   const compactExecutionCoverage = useMemo(
     () => executionCoverageByVisibleItem(timelineItems, compactTimelineItems),
     [timelineItems, compactTimelineItems],
@@ -726,6 +772,15 @@ export function MessageGroup({
   useEffect(() => {
     const highlightedId = timelineLinkage.highlightedTimelineItemId;
     if (!highlightedId || timelineLinkage.activeSource !== "sidebar") return;
+    const highlightedItem = compactTimelineItems.find(
+      (item) =>
+        timelineItemLinkageId(item) === highlightedId ||
+        (item.type === "aggregatedToolGroup" &&
+          item.items.some(
+            (child) => timelineItemLinkageId(child) === highlightedId,
+          )),
+    );
+    if (highlightedItem) setProcessReplayOpen(true);
     for (const item of compactTimelineItems) {
       if (item.type !== "aggregatedToolGroup") continue;
       const hitsGroup = timelineItemLinkageId(item) === highlightedId;
@@ -781,6 +836,11 @@ export function MessageGroup({
       : compactTimelineItems;
   const compactItemsAfterAnswer =
     answerSplitIndex >= 0 ? compactTimelineItems.slice(answerSplitIndex) : [];
+  const hasVisibleProcessReplay =
+    detailConfig.level !== "low" && compactTimelineItems.length > 0;
+  const processReplayExpanded = isLiveTimeline || processReplayOpen;
+  const showProcessReplayDisclosure =
+    !isLiveTimeline && shouldAutoCollapseProcess && hasVisibleProcessReplay;
   // 最终回答视觉分层：流式结束后，在过程段落与最终回答正文之间加分界。
   // 判定口径与 groupMessages 一致（tool_calls + isLikelyFinalAnswerContent 的
   // 消息会以独立 assistant 组在下方渲染正文），且必须是同组最后一条可见正文，
@@ -880,6 +940,8 @@ export function MessageGroup({
       }
     }
 
+    const delegationSummaryById = buildDelegationSummary(items);
+
     return items.map((item) => {
       // Conversation detail level "low": hide intermediate activity rows
       // (thinking / tool execution / process narration) so the transcript
@@ -895,6 +957,10 @@ export function MessageGroup({
         return null;
       }
       const step = lastTimelineStep(item);
+      const delegationSummary = delegationSummaryById.get(item.id);
+      if (delegationSummary && delegationSummary.firstId !== item.id) {
+        return null;
+      }
       const phaseItems = step.phaseId
         ? historicalPhaseItems.get(step.phaseId)
         : undefined;
@@ -1056,7 +1122,8 @@ export function MessageGroup({
       const isAggregatedGroup = item.type === "aggregatedToolGroup";
       const aggregatedExpanded =
         isAggregatedGroup &&
-        (expandedAggregatedGroups[item.id] ?? detailConfig.level === "high");
+        (expandedAggregatedGroups[item.id] ??
+          (detailConfig.level === "high" && item.count <= 8));
       const coveredItems =
         compactExecutionCoverage.get(item.id) ?? ([item] as TimelineItem[]);
       const groupedTargetSummary =
@@ -1213,6 +1280,7 @@ export function MessageGroup({
         !isThinking &&
         ((item.type === "toolCall" && isTeamCallToolName(item.step.name)) ||
           (isAggregatedGroup && item.aggregateKind === "teammate"));
+
       const subagentIdentity = isSubagentRow
         ? subagentIdentityFromArgs(
             isAggregatedGroup
@@ -1240,6 +1308,10 @@ export function MessageGroup({
         }
         return null;
       })();
+
+      // Hide both subagent tool calls AND their child operations
+      if (suppressSubagentRows && (isSubagentRow || owningSubagent))
+        return null;
 
       const summary =
         item.type === "reasoningGroup"
@@ -1336,9 +1408,8 @@ export function MessageGroup({
         // A single message's internal self-talk (all chunks share one
         // message id) is muted; a chain of distinct reasoning messages or
         // structured reasoning keeps its content summary.
-        new Set(
-          item.steps.map((step) => step.messageId).filter(Boolean),
-        ).size === 1 &&
+        new Set(item.steps.map((step) => step.messageId).filter(Boolean))
+          .size === 1 &&
         item.steps.every((step) => !step.phaseId) &&
         !timelineItems.some((tl) => tl.type === "commentary");
       const thinkingDisclosureLabel = isDeepThinking
@@ -1511,11 +1582,15 @@ export function MessageGroup({
                       )}
                     </span>
                   )}
-                {count > 1 && !isAggregatedGroup && !groupedTargetSummary && (
-                  <span className="shrink-0 tabular-nums whitespace-nowrap text-mini text-muted-foreground/50">
-                    {t.messageGrouping.countItems(count)}
-                  </span>
-                )}
+                {(count > 1 || (delegationSummary?.count ?? 0) > 1) &&
+                  !isAggregatedGroup &&
+                  !groupedTargetSummary && (
+                    <span className="shrink-0 tabular-nums whitespace-nowrap text-mini text-muted-foreground/50">
+                      {t.messageGrouping.countItems(
+                        delegationSummary?.count ?? count,
+                      )}
+                    </span>
+                  )}
                 {needsEffectReview && (
                   <span
                     className="shrink-0 rounded-full bg-warning/10 px-1.5 text-xs font-medium text-warning"
@@ -1661,43 +1736,67 @@ export function MessageGroup({
 
   return (
     <ChainOfThought
-      defaultOpen
       className={cn("w-full gap-0", className)}
-      open={true}
+      open={processReplayExpanded}
       data-process-mode={codeMode ? "code" : "chat"}
     >
-      {compactItemsBeforeAnswer.length > 0 && (
-        <div
-          className="narrative-process-flow"
-          data-testid="interleaved-process-timeline"
+      {showProcessReplayDisclosure && (
+        <button
+          type="button"
+          className="group/process-replay flex min-w-0 items-center gap-1.5 py-0.5 text-left text-xs leading-5 text-muted-foreground/65 transition-colors hover:text-muted-foreground"
+          aria-expanded={processReplayExpanded}
+          data-testid="process-replay-toggle"
+          onClick={() => setProcessReplayOpen((open) => !open)}
         >
-          {renderCompactTimelineItems(compactItemsBeforeAnswer, "before")}
+          <ChevronRightIcon
+            className={cn(
+              "size-3 shrink-0 transition-transform",
+              processReplayExpanded && "rotate-90",
+            )}
+          />
+          <span>
+            {processReplayExpanded
+              ? t.messageGrouping.hideProcessReplay
+              : t.messageGrouping.replayNSteps(steps.length)}
+          </span>
+        </button>
+      )}
+      {processReplayExpanded && (
+        <div data-testid="process-replay-content">
+          {compactItemsBeforeAnswer.length > 0 && (
+            <div
+              className="narrative-process-flow"
+              data-testid="interleaved-process-timeline"
+            >
+              {renderCompactTimelineItems(compactItemsBeforeAnswer, "before")}
+            </div>
+          )}
+          {streamingAnswerText && (
+            <MarkdownContent
+              content={streamingAnswerText}
+              isLoading={isLoading}
+              rehypePlugins={rehypePlugins}
+              className="kimi-streaming-tail"
+            />
+          )}
+          {compactItemsAfterAnswer.length > 0 && (
+            <div
+              className="narrative-process-flow mt-1"
+              data-testid="interleaved-process-timeline"
+            >
+              {renderCompactTimelineItems(compactItemsAfterAnswer, "after")}
+            </div>
+          )}
+          {showFinalAnswerBoundary && (
+            // Keep the transition conversational: whitespace separates the live
+            // process from the answer without turning the response into a card.
+            <div
+              aria-hidden="true"
+              data-testid="final-answer-boundary"
+              className="h-3"
+            />
+          )}
         </div>
-      )}
-      {streamingAnswerText && (
-        <MarkdownContent
-          content={streamingAnswerText}
-          isLoading={isLoading}
-          rehypePlugins={rehypePlugins}
-          className="kimi-streaming-tail"
-        />
-      )}
-      {compactItemsAfterAnswer.length > 0 && (
-        <div
-          className="narrative-process-flow mt-1"
-          data-testid="interleaved-process-timeline"
-        >
-          {renderCompactTimelineItems(compactItemsAfterAnswer, "after")}
-        </div>
-      )}
-      {showFinalAnswerBoundary && (
-        // Keep the transition conversational: whitespace separates the live
-        // process from the answer without turning the response into a card.
-        <div
-          aria-hidden="true"
-          data-testid="final-answer-boundary"
-          className="h-3"
-        />
       )}
       {clarificationContent && (
         <ClarificationChoiceCard
@@ -1875,7 +1974,7 @@ export type CoTStep =
   | CoTCommentaryStep
   | CoTToolCallStep;
 
-interface ReasoningStepGroupItem {
+export interface ReasoningStepGroupItem {
   id: string;
   type: "reasoningGroup";
   steps: CoTReasoningStep[];
@@ -1884,7 +1983,7 @@ interface ReasoningStepGroupItem {
   inferred?: boolean;
 }
 
-interface ToolCallTimelineItem {
+export interface ToolCallTimelineItem {
   id: string;
   type: "toolCall";
   step: CoTToolCallStep;
@@ -1892,7 +1991,7 @@ interface ToolCallTimelineItem {
   inferred?: boolean;
 }
 
-interface ActionCallbackGroupItem {
+export interface ActionCallbackGroupItem {
   id: string;
   type: "actionCallbackGroup";
   steps: CoTActionCallbackStep[];
@@ -1900,7 +1999,7 @@ interface ActionCallbackGroupItem {
   inferred?: boolean;
 }
 
-interface CommentaryTimelineItem {
+export interface CommentaryTimelineItem {
   id: string;
   type: "commentary";
   step: CoTCommentaryStep;
@@ -1908,7 +2007,7 @@ interface CommentaryTimelineItem {
   inferred?: boolean;
 }
 
-interface AggregatedToolGroupTimelineItem {
+export interface AggregatedToolGroupTimelineItem {
   id: string;
   type: "aggregatedToolGroup";
   aggregateKind: ActionAggregateKind;
@@ -1926,27 +2025,76 @@ export type TimelineItem =
   | ToolCallTimelineItem
   | AggregatedToolGroupTimelineItem;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
+type DelegationSummary = {
+  firstId: string;
+  count: number;
+  label: string;
+};
 
-// activity-aggregator describes timeline items with structural (duck) types
-// to avoid a circular import; the aggregator preserves input objects by
-// reference, so these guards can safely narrow its output back to the local
-// TimelineItem types at the boundary.
-function isToolCallTimelineItem(value: unknown): value is ToolCallTimelineItem {
-  if (!isRecord(value) || value.type !== "toolCall") return false;
-  if (typeof value.id !== "string" || !isRecord(value.step)) return false;
-  return typeof value.step.name === "string" && isRecord(value.step.args);
-}
-
-function isTimelineItem(value: unknown): value is TimelineItem {
-  if (isToolCallTimelineItem(value)) return true;
-  if (!isRecord(value)) return false;
-  if (value.type === "reasoningGroup" || value.type === "actionCallbackGroup") {
-    return Array.isArray(value.steps);
+function buildDelegationSummary(
+  items: TimelineItem[],
+): Map<string, DelegationSummary> {
+  const byTarget = new Map<string, DelegationSummary>();
+  const byId = new Map<string, DelegationSummary>();
+  for (const item of items) {
+    const label = delegationLabel(item);
+    if (!label) continue;
+    const existing = byTarget.get(label);
+    const summary = existing ?? { firstId: item.id, count: 0, label };
+    summary.count +=
+      item.type === "aggregatedToolGroup"
+        ? item.count
+        : item.type === "actionCallbackGroup"
+          ? item.steps.length
+          : 1;
+    byTarget.set(label, summary);
+    byId.set(item.id, summary);
   }
-  return value.type === "commentary" && isRecord(value.step);
+  return byId;
+}
+
+function delegationLabel(item: TimelineItem): string | null {
+  if (item.type === "aggregatedToolGroup") {
+    if (item.aggregateKind !== "teammate") return null;
+    return teammateLabelFromArgs(item.items[0]?.step.args ?? {});
+  }
+  if (item.type === "toolCall") {
+    if (
+      getActionDisplay(item.step.name, item.step.args).aggregateKind !==
+      "teammate"
+    ) {
+      return null;
+    }
+    return teammateLabelFromArgs(item.step.args);
+  }
+  if (item.type === "actionCallbackGroup") {
+    const text = item.steps.map((step) => step.actionText).join(" ");
+    if (!/委派任务|delegate|teammate|subagent|call_agent/i.test(text)) {
+      return null;
+    }
+    const match = text.match(/(?:给|to)\s+([^\n,，]+)/i);
+    return match?.[1]?.trim() || "other";
+  }
+  return null;
+}
+
+function teammateLabelFromArgs(args: Record<string, unknown>): string {
+  for (const key of [
+    "agent_name",
+    "display_name",
+    "role_display_name",
+    "codename",
+    "agent_id",
+    "subagent_type",
+    "name",
+    "role",
+  ]) {
+    const value = args[key];
+    if (typeof value === "string" && value.trim()) {
+      return friendlyRoleName(value.trim());
+    }
+  }
+  return "other";
 }
 
 export function hasVisibleMessageGroupContent(
@@ -1956,15 +2104,15 @@ export function hasVisibleMessageGroupContent(
   return convertToSteps(messages).length > 0;
 }
 
-function groupConsecutiveReasoningSteps(steps: CoTStep[]): TimelineItem[] {
+export function groupConsecutiveReasoningSteps(
+  steps: CoTStep[],
+): TimelineItem[] {
   const items: TimelineItem[] = [];
   let currentGroup: ReasoningStepGroupItem | null = null;
   let currentActionGroup: ActionCallbackGroupItem | null = null;
 
   const flushReasoningGroup = () => {
-    // A group merged from an earlier position (same-phase coalescing) may
-    // already be present in ``items`` — never push it twice.
-    if (currentGroup && !items.includes(currentGroup)) items.push(currentGroup);
+    if (currentGroup) items.push(currentGroup);
     currentGroup = null;
   };
   const flushActionGroup = () => {
@@ -1989,25 +2137,10 @@ function groupConsecutiveReasoningSteps(steps: CoTStep[]): TimelineItem[] {
     if (step.type === "reasoning") {
       flushActionGroup();
       if (!currentGroup) {
-        // Coalesce same-phase reasoning across intervening tool calls: a
-        // single structured phase's native + raw thinking disclosures merge
-        // into one row. The merged group keeps the earlier group's id so an
-        // expanded disclosure stays open when streamed reasoning joins.
-        const phaseId = step.phaseId;
-        if (phaseId) {
-          const prev = [...items]
-            .reverse()
-            .find(
-              (it): it is ReasoningStepGroupItem =>
-                it.type === "reasoningGroup" &&
-                it.steps[0]?.phaseId === phaseId,
-            );
-          if (prev) {
-            currentGroup = prev;
-            currentGroup.steps.push(step);
-            continue;
-          }
-        }
+        // Only genuinely consecutive reasoning belongs in one row. A tool or
+        // public checkpoint is a causal boundary even when it shares the same
+        // phase id; reaching backwards across that boundary moves later
+        // thinking above work that already happened.
         currentGroup = {
           id: `${step.id ?? "reasoning"}-group`,
           type: "reasoningGroup",
@@ -2067,205 +2200,9 @@ function groupConsecutiveReasoningSteps(steps: CoTStep[]): TimelineItem[] {
   return items;
 }
 
-const MAX_PUBLIC_PROGRESS_ANCHORS = 4;
-// 语义保底（每轮 intent + 最新 fact）超出基础额度时，commentary 总额放宽到的上限
-const MAX_SEMANTIC_PROGRESS_ANCHORS = 6;
-
-/** 条目所属轮次：缺失 iteration 的旧数据归第 1 轮。 */
-function timelineItemIteration(item: TimelineItem): number {
-  if (item.type === "reasoningGroup" || item.type === "actionCallbackGroup") {
-    return item.steps[0]?.iteration ?? 1;
-  }
-  if (item.type === "aggregatedToolGroup") {
-    return item.items[item.items.length - 1]?.step.iteration ?? 1;
-  }
-  return item.step.iteration ?? 1;
-}
-
-/** 条目在角色推断视角下的最小步骤形状（与 RoleAssignableStep 结构兼容）。 */
-function roleAssignableViewOf(item: TimelineItem): RoleAssignableStep {
-  if (item.type === "reasoningGroup" || item.type === "actionCallbackGroup") {
-    return (
-      item.steps[0] ?? {
-        type: item.type === "reasoningGroup" ? "reasoning" : "actionCallback",
-      }
-    );
-  }
-  if (item.type === "aggregatedToolGroup") {
-    return (
-      item.items[0]?.step ?? {
-        type: "toolCall" as const,
-        name: "",
-        args: {},
-      }
-    );
-  }
-  return item.step;
-}
-
-/**
- * 解析每个条目的语义角色。
- * 优先沿用条目自带 role；兼容 role 为 undefined 的旧数据时，用
- * assignTimelineRoles 在判定副本上补齐 —— 选择器返回的仍是原 item 引用，
- * 不破坏下游 React memo 的引用相等。
- */
-function resolveTimelineItemRoles(
-  items: TimelineItem[],
-): Map<TimelineItem, TimelineRole | undefined> {
-  const roles = new Map<TimelineItem, TimelineRole | undefined>();
-  if (!items.some((item) => item.role === undefined)) {
-    for (const item of items) roles.set(item, item.role);
-    return roles;
-  }
-  const assigned = assignTimelineRoles(items.map(roleAssignableViewOf));
-  items.forEach((item, index) => {
-    roles.set(item, item.role ?? assigned[index]?.role);
-  });
-  return roles;
-}
-
-/**
- * 语义感知采样（长任务）：
- * - 每个 iteration 必留 ≥1 个 intent 条目（该轮首个 intent 角色的
- *   commentary / reasoningGroup；该轮无 intent 角色条目则按位置取首个
- *   commentary）；
- * - 全部条目里最新一个 fact 条目必留（无 fact 角色条目时跳过）；
- * - 剩余 commentary 名额按原有均匀采样补足，保底超额时总额放宽到
- *   MAX_SEMANTIC_PROGRESS_ANCHORS。
- */
-function representativeNarrativeAnchors(
-  items: TimelineItem[],
-  commentary: CommentaryTimelineItem[],
-  roles: Map<TimelineItem, TimelineRole | undefined>,
-): {
-  anchors: Set<TimelineItem>;
-  visibleCommentary: CommentaryTimelineItem[];
-} {
-  const anchors = new Set<TimelineItem>();
-
-  // 按轮分组叙事条目，逐轮保底 intent 锚点
-  const narrativeByIteration = new Map<number, TimelineItem[]>();
-  for (const item of items) {
-    if (item.type !== "commentary" && item.type !== "reasoningGroup") continue;
-    const iteration = timelineItemIteration(item);
-    const group = narrativeByIteration.get(iteration);
-    if (group) {
-      group.push(item);
-    } else {
-      narrativeByIteration.set(iteration, [item]);
-    }
-  }
-  for (const group of narrativeByIteration.values()) {
-    const intentAnchor =
-      group.find((item) => roles.get(item) === "intent") ??
-      group.find((item) => item.type === "commentary");
-    if (intentAnchor) anchors.add(intentAnchor);
-  }
-
-  // 最新一个 fact 条目必留
-  const lastFact = [...items]
-    .reverse()
-    .find((item) => roles.get(item) === "fact");
-  if (lastFact) anchors.add(lastFact);
-
-  // 剩余 commentary 名额按均匀采样补足；保底超额时不再追加采样
-  const guaranteedCount = commentary.filter((item) => anchors.has(item)).length;
-  const budget = Math.min(
-    Math.max(MAX_PUBLIC_PROGRESS_ANCHORS, guaranteedCount),
-    MAX_SEMANTIC_PROGRESS_ANCHORS,
-  );
-  const remainingSlots = budget - guaranteedCount;
-  if (remainingSlots > 0) {
-    const candidates = commentary.filter((item) => !anchors.has(item));
-    if (candidates.length <= remainingSlots) {
-      candidates.forEach((item) => anchors.add(item));
-    } else {
-      const lastIndex = candidates.length - 1;
-      for (let slot = 0; slot < remainingSlots; slot += 1) {
-        const index = Math.round(
-          remainingSlots === 1
-            ? lastIndex / 2
-            : (slot * lastIndex) / (remainingSlots - 1),
-        );
-        anchors.add(candidates[index]!);
-      }
-    }
-  }
-  return {
-    anchors,
-    visibleCommentary: commentary.filter((item) => anchors.has(item)),
-  };
-}
-
-// 导出供单测直接触达（渲染层行为不变）
-export function selectCompactTimelineItems(
-  items: TimelineItem[],
-): TimelineItem[] {
-  const commentary = items.filter((item) => item.type === "commentary");
-  const executionCount = items.filter(isExecutionTimelineItem).length;
-  // Short tool runs are still a conversation, not a log archive. Keep their
-  // complete causal sequence so the aggregator can present one faithful
-  // summary row and the Workbench can recover every evidence reference.
-  if (commentary.length === 0 && executionCount > 0 && executionCount <= 12) {
-    return items;
-  }
-  const latestThinking = [...items]
-    .reverse()
-    .find((item) => item.type === "reasoningGroup");
-  const selected = new Set<TimelineItem>();
-  // Thinking is a timeline event, not a status widget. Earlier reasoning must
-  // stay on the lane at the position it happened, otherwise the transcript
-  // reads as one perpetually-latest thought window instead of
-  // "thought → did → said → thought".
-  let visibleCommentary: CommentaryTimelineItem[];
-  if (commentary.length <= MAX_PUBLIC_PROGRESS_ANCHORS) {
-    // 短对话：行为完全不变，commentary 全量保留
-    visibleCommentary = commentary;
-  } else {
-    // 长任务：语义保真采样，保证每轮意图与最新事实不被均匀采样裁掉。
-    // 采样基于语义角色与轮次位置，不依赖模型措辞或硬编码阶段名；
-    // 完整事件链仍可在工作台查看。
-    const result = representativeNarrativeAnchors(
-      items,
-      commentary,
-      resolveTimelineItemRoles(items),
-    );
-    result.anchors.forEach((item) => selected.add(item));
-    visibleCommentary = result.visibleCommentary;
-  }
-  visibleCommentary.forEach((item) => selected.add(item));
-  if (latestThinking) selected.add(latestThinking);
-  // Preserve every execution that falls inside a visible conversational
-  // interval. Consecutive same-kind calls are folded by the aggregator below,
-  // so the transcript still reads as "said → did → said → did" while the
-  // workbench can recover every evidence reference.
-  const visibleCommentaryIndexes = visibleCommentary
-    .map((item) => items.indexOf(item))
-    .filter(
-      (index, position, indexes) =>
-        index >= 0 && indexes.indexOf(index) === position,
-    )
-    .sort((a, b) => a - b);
-  const boundaries = [-1, ...visibleCommentaryIndexes, items.length];
-  for (
-    let boundaryIndex = 0;
-    boundaryIndex < boundaries.length - 1;
-    boundaryIndex += 1
-  ) {
-    const start = boundaries[boundaryIndex]! + 1;
-    const end = boundaries[boundaryIndex + 1]!;
-    const intervalItems = items
-      .slice(start, end)
-      .filter(
-        (item) =>
-          isExecutionTimelineItem(item) || item.type === "reasoningGroup",
-      );
-    for (const intervalItem of intervalItems) {
-      selected.add(intervalItem);
-    }
-  }
-  return items.filter((item) => selected.has(item));
-}
+// 时间线压缩管道（语义采样 / 保留不确定调用 / 聚合同类调用）已抽为
+// 纯函数模块 timeline-pipeline.ts。此处 re-export 维持既有测试导入路径。
+export { selectCompactTimelineItems } from "./timeline-pipeline";
 
 function executionCoverageByVisibleItem(
   allItems: TimelineItem[],
@@ -2321,19 +2258,6 @@ export function timelineItemMessageId(item: TimelineItem): string | undefined {
     return item.items[0]?.step.messageId;
   }
   return item.steps[0]?.messageId;
-}
-
-function isExecutionTimelineItem(
-  item: TimelineItem,
-): item is
-  | ToolCallTimelineItem
-  | ActionCallbackGroupItem
-  | AggregatedToolGroupTimelineItem {
-  return (
-    item.type === "toolCall" ||
-    item.type === "actionCallbackGroup" ||
-    item.type === "aggregatedToolGroup"
-  );
 }
 
 function compactToolTarget(step: CoTToolCallStep): string | null {
@@ -2411,6 +2335,8 @@ function localizedActionVerb(
       return labels.useCapability;
     case "delegate_task":
       return labels.delegateTask;
+    case "submit_result":
+      return labels.submitResult;
     case "delete_file":
       return labels.deleteFile;
     case "move_file":
@@ -2458,7 +2384,9 @@ function compactToolTargets(step: CoTToolCallStep): string[] {
     // One command can contain transport destinations or temporary copies.
     // The first concrete subject is the stable evidence anchor; every other
     // operand remains inspectable in the workbench.
-    if (targets.length > 0) return targets.slice(0, 1);
+    if (targets.length > 0) {
+      return targets.filter(isPublicCompactEvidenceTarget).slice(0, 1);
+    }
     return [];
   }
   const target = isReadToolName(step.name)
@@ -2470,9 +2398,23 @@ function compactToolTargets(step: CoTToolCallStep): string[] {
     isFileMutationToolName(step.name) ||
     isPathLikeEvidence(target)
   ) {
-    return [target.split(/[\\/]/).filter(Boolean).at(-1) ?? target];
+    const basename = target.split(/[\\/]/).filter(Boolean).at(-1) ?? target;
+    return isPublicCompactEvidenceTarget(basename) ? [basename] : [];
   }
-  return [compactReasoningSummary(target, 64)];
+  const summary = compactReasoningSummary(target, 64);
+  return isPublicCompactEvidenceTarget(summary) ? [summary] : [];
+}
+
+// Planning notes and crawler transport files are implementation evidence, not
+// user-facing deliverables. Keep them available in the workbench trace while
+// preventing their filenames from being promoted into the conversation lane.
+function isPublicCompactEvidenceTarget(target: string): boolean {
+  const basename = target.split(/[\\/]/).filter(Boolean).at(-1) ?? target;
+  return !(
+    /^(?:plan|todos?)\.md$/i.test(basename) ||
+    /-full\.jsonl$/i.test(basename) ||
+    /\.lock$/i.test(basename)
+  );
 }
 
 function extractReadEvidenceTarget(
@@ -2577,22 +2519,6 @@ function summarizeCompactExecutionTargets(
 
 function isFileArtifactEvidence(target: string): boolean {
   return /(?:^|[\\/])[\w@+%:,\-]+\.[a-z0-9]{1,12}$/i.test(target);
-}
-
-function retainIndeterminateToolCalls(
-  timelineItems: TimelineItem[],
-  compactItems: TimelineItem[],
-  receiptsByCallId: ReadonlyMap<string, { state: string }>,
-): TimelineItem[] {
-  const selected = new Set(compactItems);
-  return timelineItems.filter(
-    (item) =>
-      selected.has(item) ||
-      (item.type === "toolCall" &&
-        Boolean(item.step.id) &&
-        (item.step.effectReceipt?.state === "indeterminate" ||
-          receiptsByCallId.get(item.step.id!)?.state === "indeterminate")),
-  );
 }
 
 function lastTimelineStep(item: TimelineItem): CoTStep {

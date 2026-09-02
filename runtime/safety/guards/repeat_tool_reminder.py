@@ -86,16 +86,9 @@ class RepeatToolReminderConfig:
         """
         thresholds = raw.get("thresholds", (3, 5, 8))
         if not isinstance(thresholds, (list, tuple)):
-            raise ValueError(
-                "repeat_tool_reminder: `thresholds` must be a list of integers"
-            )
-        if not all(
-            isinstance(value, int) and not isinstance(value, bool)
-            for value in thresholds
-        ):
-            raise ValueError(
-                "repeat_tool_reminder: `thresholds` must be a list of integers"
-            )
+            raise ValueError("repeat_tool_reminder: `thresholds` must be a list of integers")
+        if not all(isinstance(value, int) and not isinstance(value, bool) for value in thresholds):
+            raise ValueError("repeat_tool_reminder: `thresholds` must be a list of integers")
         validated = validate_thresholds(list(thresholds))
 
         include = raw.get("include", ())
@@ -105,8 +98,7 @@ class RepeatToolReminderConfig:
                 isinstance(value, str) for value in values
             ):
                 raise ValueError(
-                    f"repeat_tool_reminder: `{field_name}` must be a list of "
-                    "wildcard strings"
+                    f"repeat_tool_reminder: `{field_name}` must be a list of wildcard strings"
                 )
 
         preview_chars = raw.get("arguments_preview_chars", 500)
@@ -143,9 +135,7 @@ def validate_thresholds(values: list[int]) -> list[int]:
                 "threshold must be an integer >= 2"
             )
     if len(set(values)) != len(values):
-        raise ValueError(
-            "repeat_tool_reminder: `thresholds` must not contain duplicates"
-        )
+        raise ValueError("repeat_tool_reminder: `thresholds` must not contain duplicates")
     return sorted(values)
 
 
@@ -288,8 +278,6 @@ def build_repeat_tool_reminder(
     try:
         config = RepeatToolReminderConfig.from_mapping(raw)
     except (TypeError, ValueError) as exc:
-        _logger.warning(
-            "repeat_tool_reminder config invalid (%s); using defaults", exc
-        )
+        _logger.warning("repeat_tool_reminder config invalid (%s); using defaults", exc)
         config = RepeatToolReminderConfig()
     return RepeatToolReminderGuard(config)

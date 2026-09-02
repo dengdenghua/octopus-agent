@@ -55,7 +55,7 @@ def create_cron_router(
 ) -> Any:
     """Create the ``/api/cron`` compatibility router."""
     if not FASTAPI_AVAILABLE:
-        raise RuntimeError("fastapi not installed (pip install 'octopus-agent[serve]')")
+        raise RuntimeError("fastapi not installed (pip install 'octopus-agent-runtime[serve]')")
 
     path = Path(jobs_path) if jobs_path is not None else app_paths().cron_jobs_path
     router = APIRouter()

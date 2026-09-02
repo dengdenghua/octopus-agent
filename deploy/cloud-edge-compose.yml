@@ -1,0 +1,49 @@
+# Lightweight cloud control plane for a small server. Put Caddy/Nginx in front
+# and expose it through HTTPS; the service itself binds loopback by default.
+services:
+  account-message-service:
+    build:
+      context: ..
+      dockerfile: deploy/cloud-service.Dockerfile
+    image: octopus-cloud-service:latest
+    container_name: octopus-cloud-service
+    restart: unless-stopped
+    entrypoint: ["python", "-m", "uvicorn"]
+    command:
+      - runtime.cloud_edge.app:create_cloud_edge_app_from_env
+      - --factory
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8090"
+      - --proxy-headers
+      - --forwarded-allow-ips=127.0.0.1
+    ports:
+      - "${OCTOPUS_CLOUD_EDGE_BIND_IP:-127.0.0.1}:${OCTOPUS_CLOUD_EDGE_PORT:-8090}:8090"
+    environment:
+      OCTOPUS_CLOUD_EDGE_TOKEN_SECRET: ${OCTOPUS_CLOUD_EDGE_TOKEN_SECRET:?set an independent 32+ character token secret}
+      OCTOPUS_CLOUD_EDGE_ADMIN_KEY: ${OCTOPUS_CLOUD_EDGE_ADMIN_KEY:?set an independent 32+ character admin key}
+      OCTOPUS_CLOUD_REGISTRATION_CODE: ${OCTOPUS_CLOUD_REGISTRATION_CODE:?set a 12+ character registration code}
+      OCTOPUS_CLOUD_EDGE_OWNER_ID: ${OCTOPUS_CLOUD_EDGE_OWNER_ID:-admin}
+      OCTOPUS_CLOUD_EDGE_TENANT_ID: ${OCTOPUS_CLOUD_EDGE_TENANT_ID:-default}
+      OCTOPUS_CLOUD_EDGE_DATA_DIR: /data
+    volumes:
+      - ../data/cloud-edge:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/readyz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+        reservations:
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"

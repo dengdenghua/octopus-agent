@@ -52,7 +52,7 @@ export function Header({ className, homeURL }: HeaderProps) {
               />
             </svg>
           </div>
-          <h1 className="text-xl font-bold text-white/90">Octopus</h1>
+          <h1 className="text-xl font-bold text-white/90">EchoAI</h1>
         </a>
       </div>
       <nav className="mr-8 ml-auto flex items-center gap-8 text-sm font-medium">

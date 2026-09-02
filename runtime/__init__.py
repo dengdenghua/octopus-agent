@@ -63,6 +63,8 @@ _LAZY_EXPORTS = {
     "models": "runtime.platform.models",
     "ui": "runtime.platform.ui",
     "i18n": "runtime.platform.i18n",
+    # embedding boundary
+    "kernel": "runtime.kernel",
 }
 
 
@@ -120,4 +122,5 @@ __all__ = [
     "models",
     "ui",
     "i18n",
+    "kernel",
 ]

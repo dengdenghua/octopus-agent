@@ -6,32 +6,63 @@ import { cn } from "@/lib/utils";
 import {
   ClockIcon,
   CopyIcon,
+  ExternalLinkIcon,
   GlobeIcon,
   MenuIcon,
+  MonitorIcon,
   PlusIcon,
+  RefreshCwIcon,
   SearchIcon,
+  ServerIcon,
+  SmartphoneIcon,
   StarIcon,
+  TabletIcon,
   XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-import { AssistantPanel } from "@/components/browser/assistant-panel";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { TabBar } from "@/components/browser/tab-bar";
 import { UrlBar } from "@/components/browser/url-bar";
 import {
   BROWSER_HOME_URL,
   BROWSER_OPEN_URL_REQUEST_KEY,
+  BROWSER_OPEN_URL_ACK_EVENT,
   BrowserStoreProvider,
+  SEARCH_ENGINE_URLS,
   setAppMode,
   useBrowserStore,
   type BrowserOpenUrlRequest,
+  type BrowserOpenUrlAck,
+  BROWSER_OPEN_URL_REQUEST_EVENT,
 } from "@/components/browser/browser-store";
-import {
-  WebviewTab,
-  type WebviewTabHandle,
-} from "@/components/browser/webview-tab";
+import type { WebviewTabHandle } from "@/components/browser/webview-tab";
 import { WorkspaceSurfaceHeader } from "@/components/workspace/workspace-surface-header";
+import { useActiveAgentId } from "@/core/agents/active";
+import {
+  isLocalPreviewUrl,
+  localPreviewPort,
+} from "@/core/browser/local-services";
+import { workspacePresetForAgent } from "@/core/workspace/workspace-presets";
+
+const AssistantPanel = lazy(() =>
+  import("@/components/browser/assistant-panel").then((module) => ({
+    default: module.AssistantPanel,
+  })),
+);
+const WebviewTab = lazy(() =>
+  import("@/components/browser/webview-tab").then((module) => ({
+    default: module.WebviewTab,
+  })),
+);
 
 const isWindows = (): boolean =>
   typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
@@ -70,12 +101,15 @@ const DEVICE_STAGE = {
 
 function BrowserShell() {
   const { t } = useI18n();
+  const activeAgentId = useActiveAgentId() ?? "general";
+  const personaThemeId = workspacePresetForAgent(activeAgentId).themeId;
   const {
     state,
     activeTab,
     patchTab,
     openTab,
     closeTab,
+    restoreClosedTab,
     activateTab,
     recordVisit,
   } = useBrowserStore();
@@ -96,6 +130,20 @@ function BrowserShell() {
   const activeTabTitle = activeTab?.title ?? "";
   const activeTabFavicon = activeTab?.favicon;
   const activeTabLoading = activeTab?.isLoading ?? false;
+  const localPreview = isLocalPreviewUrl(activeTabUrl);
+  const previewPort = localPreviewPort(activeTabUrl);
+
+  const acknowledgeOpenRequest = useCallback(
+    (request: BrowserOpenUrlRequest, accepted: boolean) => {
+      if (!request.requestId) return;
+      window.dispatchEvent(
+        new CustomEvent<BrowserOpenUrlAck>(BROWSER_OPEN_URL_ACK_EVENT, {
+          detail: { requestId: request.requestId, accepted },
+        }),
+      );
+    },
+    [],
+  );
 
   const openExtensionsStore = useCallback(() => {
     if (window.octopus?.app?.openExternal) {
@@ -113,6 +161,30 @@ function BrowserShell() {
 
   // Implementation note.
   // Implementation note.
+  useEffect(() => {
+    const openRequestedUrl = (event: Event) => {
+      const request = (event as CustomEvent<BrowserOpenUrlRequest>).detail;
+      if (!request?.url) return;
+      try {
+        localStorage.removeItem(BROWSER_OPEN_URL_REQUEST_KEY);
+        openTab(request.url, {
+          ...(request.title ? { title: request.title } : {}),
+          ...(request.device ? { device: request.device } : {}),
+        });
+        acknowledgeOpenRequest(request, true);
+      } catch (error) {
+        swallow(error, "browser-open-request");
+        acknowledgeOpenRequest(request, false);
+      }
+    };
+    window.addEventListener(BROWSER_OPEN_URL_REQUEST_EVENT, openRequestedUrl);
+    return () =>
+      window.removeEventListener(
+        BROWSER_OPEN_URL_REQUEST_EVENT,
+        openRequestedUrl,
+      );
+  }, [acknowledgeOpenRequest, openTab]);
+
   useEffect(() => {
     if (!activeTabId) {
       setActiveHandle(null);
@@ -142,6 +214,15 @@ function BrowserShell() {
           Math.max(0.2, (stageSize.width - 40) / activeStage.width),
           Math.max(0.2, (stageSize.height - 40) / activeStage.height),
         );
+
+  const openPreviewExternally = useCallback(() => {
+    if (!activeTabUrl) return;
+    if (window.octopus?.app?.openExternal) {
+      void window.octopus.app.openExternal(activeTabUrl);
+      return;
+    }
+    window.open(activeTabUrl, "_blank", "noopener,noreferrer");
+  }, [activeTabUrl]);
 
   useEffect(() => {
     const node = stageRef.current;
@@ -203,6 +284,10 @@ function BrowserShell() {
         if (typeof parsed.url === "string" && parsed.url.trim()) {
           request = {
             url: parsed.url,
+            requestId:
+              typeof parsed.requestId === "string"
+                ? parsed.requestId
+                : undefined,
             title: typeof parsed.title === "string" ? parsed.title : undefined,
             device: isBrowserDevice(parsed.device) ? parsed.device : undefined,
             source:
@@ -217,14 +302,20 @@ function BrowserShell() {
         request = { url: rawRequest };
       }
       if (!request?.url) return;
-      openTab(request.url, {
-        ...(request.title ? { title: request.title } : {}),
-        ...(request.device ? { device: request.device } : {}),
-      });
+      try {
+        openTab(request.url, {
+          ...(request.title ? { title: request.title } : {}),
+          ...(request.device ? { device: request.device } : {}),
+        });
+        acknowledgeOpenRequest(request, true);
+      } catch (error) {
+        swallow(error, "browser-open-request");
+        acknowledgeOpenRequest(request, false);
+      }
     } catch (e) {
       swallow(e);
     }
-  }, [openTab]);
+  }, [acknowledgeOpenRequest, openTab]);
 
   // Implementation note.
   // Implementation note.
@@ -240,6 +331,11 @@ function BrowserShell() {
       if (k === "t" && !e.shiftKey) {
         e.preventDefault();
         openTab();
+        return;
+      }
+      if (k === "t" && e.shiftKey) {
+        e.preventDefault();
+        restoreClosedTab();
         return;
       }
       // Implementation note.
@@ -313,7 +409,15 @@ function BrowserShell() {
       window.removeEventListener("keydown", onKey);
       offIpc?.();
     };
-  }, [openTab, closeTab, activateTab, activeTab, state.tabs, state.activeId]);
+  }, [
+    openTab,
+    closeTab,
+    restoreClosedTab,
+    activateTab,
+    activeTab,
+    state.tabs,
+    state.activeId,
+  ]);
 
   // Implementation note.
   // Implementation note.
@@ -367,7 +471,10 @@ function BrowserShell() {
   useEffect(() => clearSidePanelCloseTimer, [clearSidePanelCloseTimer]);
 
   return (
-    <div className="relative flex h-screen overflow-hidden bg-[linear-gradient(135deg,var(--muted)_0%,var(--background)_42%,var(--muted)_100%)] text-foreground">
+    <div
+      data-persona-theme={personaThemeId}
+      className="persona-shell browser-shell relative flex h-screen overflow-hidden bg-[linear-gradient(135deg,var(--muted)_0%,var(--background)_42%,var(--muted)_100%)] text-foreground"
+    >
       <BrowserSidePanel
         open={sidePanelOpen}
         pinned={sidePanelPinned}
@@ -378,7 +485,7 @@ function BrowserShell() {
       <div className="relative z-[1] flex min-w-0 flex-1 flex-col overflow-hidden">
         <div className="relative z-[80] shrink-0">
           <div
-            className="flex h-11 shrink-0 items-center gap-0.5 rounded-none border-x-0 border-t-0 border-border-subtle px-1.5"
+            className="flex h-10 shrink-0 items-center gap-0.5 rounded-none border-x-0 border-t-0 border-b border-border-subtle px-1.5"
             style={
               {
                 paddingLeft: 10,
@@ -445,9 +552,138 @@ function BrowserShell() {
 
         <div className="relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="flex min-h-0 flex-1 overflow-hidden">
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+              {localPreview && activeTab ? (
+                <div
+                  data-testid="local-preview-toolbar"
+                  className="flex h-10 shrink-0 items-center gap-2 border-b border-border-subtle bg-muted/35 px-3"
+                >
+                  <span className="grid size-6 place-items-center rounded-md bg-emerald-500/10 text-emerald-600">
+                    <ServerIcon className="size-3.5" />
+                  </span>
+                  <span className="text-[11px] font-semibold">
+                    {t.browserPreviewPanel.localPreviewMode}
+                  </span>
+                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <span className="size-1.5 rounded-full bg-emerald-500" />
+                    {t.browserPreviewPanel.localPreviewRunning(previewPort)}
+                  </span>
+                  <span className="mx-1 h-4 w-px bg-border-subtle" />
+                  <div className="flex rounded-lg bg-background/80 p-0.5 shadow-[var(--shadow-xs)]">
+                    {(
+                      [
+                        ["desktop", MonitorIcon, DEVICE_STAGE.desktop.label],
+                        ["tablet", TabletIcon, DEVICE_STAGE.tablet.label],
+                        ["mobile", SmartphoneIcon, DEVICE_STAGE.mobile.label],
+                      ] as const
+                    ).map(([device, Icon, label]) => (
+                      <button
+                        key={device}
+                        type="button"
+                        onClick={() => patchTab(activeTab.id, { device })}
+                        className={cn(
+                          "flex h-7 items-center gap-1.5 rounded-md px-2 text-[10px] text-muted-foreground transition-colors hover:text-foreground",
+                          activeDevice === device &&
+                            "bg-foreground text-background shadow-sm hover:text-background",
+                        )}
+                        title={DEVICE_STAGE[device].description}
+                      >
+                        <Icon className="size-3.5" />
+                        <span className="hidden xl:inline">{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <span className="flex-1" />
+                  <button
+                    type="button"
+                    onClick={() => activeHandle?.reload()}
+                    className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                    title={t.browserPreviewPanel.localPreviewRefresh}
+                    aria-label={t.browserPreviewPanel.localPreviewRefresh}
+                  >
+                    <RefreshCwIcon
+                      className={cn(
+                        "size-3.5",
+                        activeTabLoading && "animate-spin",
+                      )}
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openPreviewExternally}
+                    className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                    title={t.browserPreviewPanel.localPreviewOpenExternal}
+                    aria-label={t.browserPreviewPanel.localPreviewOpenExternal}
+                  >
+                    <ExternalLinkIcon className="size-3.5" />
+                  </button>
+                </div>
+              ) : null}
+              <div
+                ref={stageRef}
+                className={cn(
+                  "relative min-h-0 min-w-0 flex-1 overflow-hidden bg-background",
+                  renderDevice !== "desktop" &&
+                    "flex items-center justify-center bg-[radial-gradient(circle_at_top,var(--muted)_0%,var(--background)_58%)] p-5",
+                )}
+              >
+                <div
+                  className={cn(
+                    "relative overflow-hidden bg-background",
+                    renderDevice === "desktop"
+                      ? "h-full w-full"
+                      : "h-full max-h-full max-w-full rounded-4xl border-[6px] border-foreground/22 shadow-[0_22px_64px_rgba(15,23,42,0.18)]",
+                  )}
+                  style={
+                    renderDevice === "desktop"
+                      ? undefined
+                      : {
+                          width: activeStage.width,
+                          height: activeStage.height,
+                          flex: "0 0 auto",
+                          transform: `scale(${activeScale})`,
+                          transformOrigin: "center",
+                        }
+                  }
+                >
+                  <Suspense
+                    fallback={
+                      <div
+                        className="size-full animate-pulse bg-muted/25"
+                        role="status"
+                        aria-label="加载网页内容"
+                      />
+                    }
+                  >
+                    {state.tabs.map((tab) => (
+                      <WebviewTab
+                        key={tab.id}
+                        tab={tab}
+                        active={tab.id === state.activeId}
+                        renderDevice={
+                          tab.id === state.activeId ? renderDevice : tab.device
+                        }
+                        onPatch={(patch) => patchTab(tab.id, patch)}
+                        onClose={() => closeTab(tab.id)}
+                        ref={(handle) => {
+                          if (handle) {
+                            handlesRef.current.set(tab.id, handle);
+                            if (tab.id === state.activeId) {
+                              setActiveHandle((prev) => prev ?? handle);
+                            }
+                          } else {
+                            handlesRef.current.delete(tab.id);
+                          }
+                        }}
+                      />
+                    ))}
+                  </Suspense>
+                </div>
+              </div>
+            </div>
             {state.copilotOpen && (
               <div
-                className="flex min-h-0 border-r border-border-subtle bg-background"
+                className="flex min-h-0 border-l border-border-subtle bg-background"
                 style={{
                   flex:
                     renderDevice !== "desktop"
@@ -456,60 +692,19 @@ function BrowserShell() {
                   minWidth: renderDevice !== "desktop" ? 280 : undefined,
                 }}
               >
-                <AssistantPanel webviewHandle={activeHandle} />
+                <Suspense
+                  fallback={
+                    <div
+                      className="size-full min-w-72 animate-pulse bg-muted/25"
+                      role="status"
+                      aria-label="加载 AI 助手"
+                    />
+                  }
+                >
+                  <AssistantPanel webviewHandle={activeHandle} />
+                </Suspense>
               </div>
             )}
-            <div
-              ref={stageRef}
-              className={cn(
-                "relative min-w-0 overflow-hidden bg-background",
-                renderDevice === "desktop"
-                  ? "flex-1"
-                  : "flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_top,var(--muted)_0%,var(--background)_58%)] p-5",
-              )}
-            >
-              <div
-                className={cn(
-                  "relative overflow-hidden bg-background",
-                  renderDevice === "desktop"
-                    ? "h-full w-full"
-                    : "h-full max-h-full max-w-full rounded-4xl border-[6px] border-foreground/22 shadow-[0_22px_64px_rgba(15,23,42,0.18)]",
-                )}
-                style={
-                  renderDevice === "desktop"
-                    ? undefined
-                    : {
-                        width: activeStage.width,
-                        height: activeStage.height,
-                        flex: "0 0 auto",
-                        transform: `scale(${activeScale})`,
-                        transformOrigin: "center",
-                      }
-                }
-              >
-                {state.tabs.map((tab) => (
-                  <WebviewTab
-                    key={tab.id}
-                    tab={tab}
-                    active={tab.id === state.activeId}
-                    renderDevice={
-                      tab.id === state.activeId ? renderDevice : tab.device
-                    }
-                    onPatch={(patch) => patchTab(tab.id, patch)}
-                    ref={(handle) => {
-                      if (handle) {
-                        handlesRef.current.set(tab.id, handle);
-                        if (tab.id === state.activeId) {
-                          setActiveHandle((prev) => prev ?? handle);
-                        }
-                      } else {
-                        handlesRef.current.delete(tab.id);
-                      }
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -534,6 +729,7 @@ function BrowserSidePanel({
     activeTab,
     openTab,
     closeTab,
+    restoreClosedTab,
     activateTab,
     history,
     bookmarks,
@@ -558,6 +754,14 @@ function BrowserSidePanel({
       `${item.title} ${item.url}`.toLowerCase().includes(needle),
     );
   }, [history, query]);
+  const filteredClosedTabs = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    const items = state.closedTabs.slice(0, 10);
+    if (!needle) return items;
+    return items.filter((item) =>
+      `${item.title} ${item.url}`.toLowerCase().includes(needle),
+    );
+  }, [query, state.closedTabs]);
   const filteredBookmarks = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return bookmarks;
@@ -567,14 +771,14 @@ function BrowserSidePanel({
   }, [bookmarks, query]);
   const panelCounts = {
     tabs: state.tabs.length,
-    history: history.length,
+    history: history.length + state.closedTabs.length,
     bookmarks: bookmarks.length,
   };
   const visibleItems =
     panelMode === "tabs"
       ? filteredTabs.length
       : panelMode === "history"
-        ? filteredHistory.length
+        ? filteredHistory.length + filteredClosedTabs.length
         : filteredBookmarks.length;
   const emptyLabel =
     query.trim().length > 0
@@ -818,6 +1022,33 @@ function BrowserSidePanel({
               </div>
             );
           })}
+        {panelMode === "history" && filteredClosedTabs.length > 0 && (
+          <div className="mb-2 rounded-xl bg-muted/45 p-1.5">
+            <div className="flex items-center justify-between px-1.5 pb-1 text-micro font-semibold text-muted-foreground">
+              <span>最近关闭</span>
+              <span>{isWindows() ? "Ctrl+Shift+T" : "⌘⇧T"}</span>
+            </div>
+            {filteredClosedTabs.map((item) => (
+              <button
+                key={`closed-${item.id}-${item.closedAt}`}
+                type="button"
+                onClick={() => restoreClosedTab(item.id)}
+                className="flex h-10 w-full items-center gap-2 rounded-lg px-2 text-left transition-colors hover:bg-background/70"
+                title={`恢复 ${item.title || item.url}`}
+              >
+                <RefreshCwIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-medium text-foreground">
+                    {item.title || item.url}
+                  </span>
+                  <span className="block truncate text-micro text-muted-foreground">
+                    {item.url}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
         {panelMode === "history" &&
           filteredHistory.map((item) => (
             <button
@@ -895,6 +1126,25 @@ function BrowserSidePanel({
   );
 }
 
+function BrowserRouteQuery() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { openTab, settings } = useBrowserStore();
+  const query = searchParams.get("q")?.trim() ?? "";
+
+  useEffect(() => {
+    if (!query) return;
+    openTab(
+      `${SEARCH_ENGINE_URLS[settings.searchEngine]}${encodeURIComponent(query)}`,
+      { title: query },
+    );
+    const next = new URLSearchParams(searchParams);
+    next.delete("q");
+    setSearchParams(next, { replace: true });
+  }, [openTab, query, searchParams, setSearchParams, settings.searchEngine]);
+
+  return null;
+}
+
 export default function BrowserPage() {
   // Implementation note.
   useEffect(() => {
@@ -902,6 +1152,7 @@ export default function BrowserPage() {
   }, []);
   return (
     <BrowserStoreProvider>
+      <BrowserRouteQuery />
       <BrowserShell />
     </BrowserStoreProvider>
   );

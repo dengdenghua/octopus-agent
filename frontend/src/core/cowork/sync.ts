@@ -26,9 +26,7 @@ function currentParticipantAgentIds(state?: CoworkState | null): string[] {
   return (
     state?.roster
       .filter(
-        (member) =>
-          member.kind === "agent" &&
-          member.role === "participant",
+        (member) => member.kind === "agent" && member.role === "participant",
       )
       .map((member) => member.id)
       .filter(Boolean) ?? []
@@ -40,11 +38,14 @@ export function buildCoworkSelectionSyncPlan({
   collaboratorIds,
   mode,
   current,
+  keepLeader = false,
 }: {
   leaderId: string;
   collaboratorIds: string[];
   mode: CoworkMode;
   current?: CoworkState | null;
+  /** Project groups remain real groups even with only their lead agent. */
+  keepLeader?: boolean;
 }): CoworkSelectionSyncPlan {
   const leader = leaderId.trim();
   const collaborators = uniqueCleanIds(collaboratorIds, leader);
@@ -53,7 +54,7 @@ export function buildCoworkSelectionSyncPlan({
   const currentSet = new Set(currentIds);
   const desiredSet = new Set<string>();
 
-  if (leader && collaborators.length > 0) {
+  if (leader && (keepLeader || collaborators.length > 0)) {
     desiredSet.add(leader);
   }
   for (const id of collaborators) desiredSet.add(id);
@@ -66,12 +67,10 @@ export function buildCoworkSelectionSyncPlan({
       : currentIds.filter((id) => !desiredSet.has(id));
   const shouldSetMode =
     current === undefined || current === null
-      ? collaborators.length > 0
+      ? collaborators.length > 0 || keepLeader
       : current.mode !== nextMode;
   const hasWork =
-    inviteAgentIds.length > 0 ||
-    removeAgentIds.length > 0 ||
-    shouldSetMode;
+    inviteAgentIds.length > 0 || removeAgentIds.length > 0 || shouldSetMode;
 
   return {
     desiredAgentIds,
@@ -82,6 +81,7 @@ export function buildCoworkSelectionSyncPlan({
     hasWork,
     signature: [
       `leader=${leader}`,
+      `keepLeader=${keepLeader ? "1" : "0"}`,
       `mode=${nextMode}`,
       `desired=${desiredAgentIds.join(",")}`,
       `current=${current ? currentIds.join(",") : "unknown"}`,

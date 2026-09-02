@@ -41,7 +41,14 @@ export function useThreadChat() {
   // the old draft/thread id survives a "new task" click.
   const taskNonce =
     (location.state as { taskNonce?: string } | null)?.taskNonce ?? "";
-  const pathId = `${pathname}|${threadIdFromPath ?? ""}|${taskNonce}`;
+  // `/realtime/new?agent=…` is a persona-scoped draft. Switching persona on
+  // the same `/new` pathname must allocate a clean thread identity; otherwise
+  // the previous role's messages, failures and model selection leak into the
+  // new role even though the URL changed.
+  const routeAgentId = isNewPath
+    ? (searchParams.get("agent")?.trim() ?? "")
+    : "";
+  const pathId = `${pathname}|${threadIdFromPath ?? ""}|${taskNonce}|${routeAgentId}`;
 
   const [state, setState] = useState<ThreadChatState>(() =>
     resolveStateFromPath(threadIdFromPath, isNewPath),

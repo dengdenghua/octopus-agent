@@ -89,6 +89,24 @@ def create_task_runs_router(
     def _supervisor() -> TaskSupervisor:
         return supervisor or _default_supervisor()
 
+    def _is_admin(actor: str | None) -> bool:
+        if actor is None or identity_store is None:
+            return False
+        identity = identity_store.get(actor)
+        roles = getattr(identity, "roles", ()) or ()
+        return "admin" in {str(role).strip().lower() for role in roles}
+
+    def _require_task_access(task: Any, actor: str | None) -> None:
+        if not require_auth:
+            return
+        owner = str(task.owner_id or "").strip()
+        if not owner:
+            if not _is_admin(actor):
+                raise HTTPException(404, "task run not found")
+            return
+        if owner != actor:
+            raise HTTPException(404, "task run not found")
+
     @router.get("/api/task-runs")
     def api_task_runs(
         request: Request,
@@ -108,6 +126,7 @@ def create_task_runs_router(
             thread_id=thread_id,
             limit=limit,
             offset=offset,
+            include_unowned=not require_auth or _is_admin(actor),
         )
         tasks = page["items"]
         return {
@@ -134,7 +153,11 @@ def create_task_runs_router(
         actor = _auth(request)
         effective_owner = actor if require_auth else owner_id
         if effective_owner:
-            tasks = _store().list(owner_id=effective_owner, limit=1_000_000)
+            tasks = _store().list(
+                owner_id=effective_owner,
+                limit=1_000_000,
+                include_unowned=not require_auth or _is_admin(actor),
+            )
             overview = build_task_runs_overview(tasks)
         else:
             overview = _store().overview()
@@ -164,6 +187,7 @@ def create_task_runs_router(
             thread_id=thread_id,
             include_monitor=include_monitor,
             limit=limit,
+            include_unowned=not require_auth or _is_admin(actor),
         )
         return {
             **queue,
@@ -182,8 +206,7 @@ def create_task_runs_router(
         task = _store().get(task_id)
         if task is None:
             raise HTTPException(404, "task run not found")
-        if require_auth and task.owner_id not in {None, "", actor}:
-            raise HTTPException(404, "task run not found")
+        _require_task_access(task, actor)
         return {
             "schema": "octopus.task_run.v1",
             "task_run": task.model_dump(mode="json"),
@@ -200,8 +223,7 @@ def create_task_runs_router(
         task = _store().get(task_id)
         if task is None:
             raise HTTPException(404, "task run not found")
-        if require_auth and task.owner_id not in {None, "", actor}:
-            raise HTTPException(404, "task run not found")
+        _require_task_access(task, actor)
         try:
             updated = _supervisor().record_approval_decision(
                 task_id,
@@ -231,8 +253,7 @@ def create_task_runs_router(
         task = _store().get(task_id)
         if task is None:
             raise HTTPException(404, "task run not found")
-        if require_auth and task.owner_id not in {None, "", actor}:
-            raise HTTPException(404, "task run not found")
+        _require_task_access(task, actor)
         try:
             updated = _supervisor().takeover_task(
                 task_id,

@@ -1,4 +1,9 @@
-import type { AgentTraceReplayGate, AgentTraceReviewQueueItem, AgentTraceTaskRecoveryQueue, ReplayEvidenceHint } from "@/core/agent-trace/api";
+import type {
+  AgentTraceReplayGate,
+  AgentTraceReviewQueueItem,
+  AgentTraceTaskRecoveryQueue,
+  ReplayEvidenceHint,
+} from "@/core/agent-trace/api";
 import { AgentTraceRequestError } from "@/core/agent-trace/api";
 import type { ReplayGateOverridePrompt } from "./shared";
 
@@ -18,12 +23,17 @@ export function shortId(id: string | number) {
   return text.length > 16 ? `${text.slice(0, 16)}...` : text;
 }
 
-export function countRecovery(queue: AgentTraceTaskRecoveryQueue, needle: string) {
+export function countRecovery(
+  queue: AgentTraceTaskRecoveryQueue,
+  needle: string,
+) {
   return queue.items.filter((item) => item.recommended_action.includes(needle))
     .length;
 }
 
-export function taskRecoverySteps(item: AgentTraceTaskRecoveryQueue["items"][number]) {
+export function taskRecoverySteps(
+  item: AgentTraceTaskRecoveryQueue["items"][number],
+) {
   const raw = item.steps?.length ? item.steps : item.recovery_plan?.steps;
   if (!Array.isArray(raw)) return [];
   return raw.map((step) => step.trim()).filter(Boolean);
@@ -78,7 +88,7 @@ export function taskRecoveryHint(action: string) {
 
 export function competitorLabel(id: string) {
   if (id === "claude_code") return "Claude";
-  if (id === "octopus") return "Octopus";
+  if (id === "octopus") return "EchoAI";
   if (id === "codex") return "Codex";
   if (id === "openclaw") return "OpenClaw";
   if (id === "hermes") return "Hermes";
@@ -137,7 +147,9 @@ export function readRequestErrorMessage(err: unknown): string {
   return err.message;
 }
 
-export function replayEvidenceFromError(err: unknown): ReplayEvidenceHint | null {
+export function replayEvidenceFromError(
+  err: unknown,
+): ReplayEvidenceHint | null {
   if (!(err instanceof AgentTraceRequestError)) return null;
   const detail = err.detail;
   if (!detail || typeof detail !== "object") return null;

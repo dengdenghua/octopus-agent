@@ -292,17 +292,18 @@ class TestHttpMCPClientBearerInjection:
 
         captured: dict[str, object] = {}
 
-        def _fake_streamable(url, headers=None, timeout=None):
-            captured["headers"] = headers
+        def _fake_streamable(url, *, http_client=None, **kw):
+            captured["http_client"] = http_client
             raise RuntimeError("not actually connecting")
 
         monkeypatch.setattr(
-            "mcp.client.streamable_http.streamablehttp_client",
+            "mcp.client.streamable_http.streamable_http_client",
             _fake_streamable,
         )
         with pytest.raises(RuntimeError):
             client_obj._transport()
-        assert captured["headers"] == {"Authorization": "Bearer OAUTH-TOKEN"}
+        assert captured["http_client"] is not None
+        assert captured["http_client"].headers.get("Authorization") == "Bearer OAUTH-TOKEN"
 
     def test_explicit_authorization_header_wins_over_oauth(
         self,
@@ -328,17 +329,18 @@ class TestHttpMCPClientBearerInjection:
 
         captured: dict[str, object] = {}
 
-        def _fake_streamable(url, headers=None, timeout=None):
-            captured["headers"] = headers
+        def _fake_streamable(url, *, http_client=None, **kw):
+            captured["http_client"] = http_client
             raise RuntimeError("not actually connecting")
 
         monkeypatch.setattr(
-            "mcp.client.streamable_http.streamablehttp_client",
+            "mcp.client.streamable_http.streamable_http_client",
             _fake_streamable,
         )
         with pytest.raises(RuntimeError):
             client_obj._transport()
-        assert captured["headers"] == {"Authorization": "Bearer MANUAL-TOKEN"}
+        assert captured["http_client"] is not None
+        assert captured["http_client"].headers.get("Authorization") == "Bearer MANUAL-TOKEN"
 
     def test_no_header_when_server_never_authorized(
         self,
@@ -357,17 +359,20 @@ class TestHttpMCPClientBearerInjection:
 
         captured: dict[str, object] = {}
 
-        def _fake_streamable(url, headers=None, timeout=None):
-            captured["headers"] = headers
+        def _fake_streamable(url, *, http_client=None, **kw):
+            captured["http_client"] = http_client
             raise RuntimeError("not actually connecting")
 
         monkeypatch.setattr(
-            "mcp.client.streamable_http.streamablehttp_client",
+            "mcp.client.streamable_http.streamable_http_client",
             _fake_streamable,
         )
         with pytest.raises(RuntimeError):
             client_obj._transport()
-        assert captured["headers"] is None
+        # 服务器从未授权:即使 2.x 总是注入一个 httpx2 client,也不该带
+        # Authorization 头(也不该带任何认证编排层的头)。
+        assert captured["http_client"] is not None
+        assert captured["http_client"].headers.get("Authorization") is None
 
 
 class TestOAuthEndpointsRequireAuthWhenEnabled:

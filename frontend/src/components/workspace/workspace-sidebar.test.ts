@@ -3,6 +3,39 @@ import { describe, expect, test } from "vitest";
 import { __testing } from "./workspace-sidebar";
 
 describe("workspace sidebar route activation", () => {
+  test("projects thread searches down to sidebar-only state", () => {
+    expect(__testing.SIDEBAR_THREAD_QUERY_PARAMS).toEqual({
+      limit: 30,
+      sortBy: "updated_at",
+      sortOrder: "desc",
+      select: [
+        "thread_id",
+        "updated_at",
+        "metadata",
+        "values.title",
+        "values.sidebar_title_source",
+        "values.current_speaker",
+        "values.agent_name",
+        "values.agent_roster",
+        "values.team_members",
+        "values.mode",
+        "values.workspace_path",
+        "values.workspace_id",
+        "values.team_room_id",
+        "values.room_id",
+      ],
+    });
+    expect(__testing.SIDEBAR_THREAD_QUERY_PARAMS.select).not.toContain(
+      "values",
+    );
+    expect(__testing.SIDEBAR_THREAD_QUERY_PARAMS.select).not.toContain(
+      "values.messages",
+    );
+    expect(__testing.SIDEBAR_THREAD_QUERY_PARAMS.select).not.toContain(
+      "values.artifacts",
+    );
+  });
+
   test("uses a pending server route while a new realtime turn stays mounted", () => {
     expect(
       __testing.syncedSidebarPathname(
@@ -92,6 +125,34 @@ describe("workspace sidebar project grouping", () => {
     expect(__testing.isProjectThreadMode("chat")).toBe(false);
   });
 
+  test("distinguishes local-folder projects from milestone-only projects", () => {
+    expect(
+      __testing.projectHasBoundFolder([
+        {
+          id: "local",
+          title: "octopus-agent",
+          updatedAt: "2026-08-24T00:00:00Z",
+          mode: "code",
+          href: "/workspace/realtime/local",
+          workspacePath: "/Users/example/Public/octopus-agent",
+          agents: [],
+        },
+      ]),
+    ).toBe(true);
+    expect(
+      __testing.projectHasBoundFolder([
+        {
+          id: "milestone",
+          title: "PM 演示",
+          updatedAt: "2026-08-24T00:00:00Z",
+          mode: "team",
+          href: "/workspace/realtime/milestone",
+          agents: [],
+        },
+      ]),
+    ).toBe(false);
+  });
+
   test("queries team tasks only for actual team rooms", () => {
     const ordinaryThread = makeThread("chat-1", "chat");
     const teamThread = makeThread("team-1", "team", {
@@ -169,180 +230,13 @@ describe("workspace sidebar project grouping", () => {
     ).toEqual(["/workspace/realtime/agent-1", "/workspace/realtime/deep-1"]);
   });
 
-  test("promotes only active threads into the ongoing strip", () => {
-    const threads = [
-      {
-        id: "running-old",
-        title: "running-old",
-        updatedAt: "2026-06-29T00:00:00Z",
-        mode: "code",
-        href: "/workspace/realtime/running-old",
-        agents: ["eve"],
-      },
-      {
-        id: "idle",
-        title: "idle",
-        updatedAt: "2026-06-30T00:00:00Z",
-        mode: "code",
-        href: "/workspace/realtime/idle",
-        agents: ["eve"],
-      },
-      {
-        id: "waiting-new",
-        title: "waiting-new",
-        updatedAt: "2026-07-01T00:00:00Z",
-        mode: "chat",
-        href: "/workspace/realtime/waiting-new",
-        agents: ["eve"],
-      },
-      {
-        id: "running-old-dupe",
-        title: "running-old duplicate",
-        updatedAt: "2026-07-02T00:00:00Z",
-        mode: "code",
-        href: "/workspace/realtime/running-old",
-        agents: ["eve"],
-      },
-    ];
-
-    const ongoing = __testing.buildOngoingThreadSummaries({
-      threads,
-      runStatusByHref: new Map([
-        ["/workspace/realtime/running-old", "running"],
-        ["/workspace/realtime/waiting-new", "waiting"],
-      ]),
-    });
-
-    expect(ongoing.map((thread) => [thread.id, thread.runStatus])).toEqual([
-      ["waiting-new", "waiting"],
-      ["running-old", "running"],
-    ]);
-  });
-
   test("derives transient thread mode from the route prefix", () => {
-    expect(__testing.transientThreadModeFromHref("/workspace/team/room-1")).toBe(
-      "team",
-    );
+    expect(
+      __testing.transientThreadModeFromHref("/workspace/team/room-1"),
+    ).toBe("team");
     expect(
       __testing.transientThreadModeFromHref("/workspace/realtime/thread-1"),
     ).toBe("chat");
-  });
-
-  test("sorts timestamp-less transient threads first within the same status", () => {
-    const threads = [
-      {
-        id: "timed",
-        title: "timed",
-        updatedAt: "2026-07-05T00:00:00Z",
-        mode: "code",
-        href: "/workspace/realtime/timed",
-        agents: ["eve"],
-      },
-      {
-        id: "transient",
-        title: "transient",
-        updatedAt: "",
-        mode: "chat",
-        href: "/workspace/realtime/transient",
-        agents: ["eve"],
-      },
-    ];
-
-    const ongoing = __testing.buildOngoingThreadSummaries({
-      threads,
-      runStatusByHref: new Map([
-        ["/workspace/realtime/timed", "running"],
-        ["/workspace/realtime/transient", "running"],
-      ]),
-    });
-
-    expect(ongoing.map((thread) => thread.id)).toEqual([
-      "transient",
-      "timed",
-    ]);
-  });
-
-  test("orders failed work before waiting, running, and pending work", () => {
-    const threads = [
-      {
-        id: "pending",
-        title: "pending",
-        updatedAt: "2026-07-04T00:00:00Z",
-        mode: "code",
-        href: "/workspace/realtime/pending",
-        agents: ["eve"],
-      },
-      {
-        id: "running",
-        title: "running",
-        updatedAt: "2026-07-03T00:00:00Z",
-        mode: "code",
-        href: "/workspace/realtime/running",
-        agents: ["eve"],
-      },
-      {
-        id: "waiting",
-        title: "waiting",
-        updatedAt: "2026-07-02T00:00:00Z",
-        mode: "code",
-        href: "/workspace/realtime/waiting",
-        agents: ["eve"],
-      },
-      {
-        id: "error",
-        title: "error",
-        updatedAt: "2026-07-01T00:00:00Z",
-        mode: "code",
-        href: "/workspace/realtime/error",
-        agents: ["eve"],
-      },
-    ];
-
-    const ongoing = __testing.buildOngoingThreadSummaries({
-      threads,
-      runStatusByHref: new Map([
-        ["/workspace/realtime/pending", "pending"],
-        ["/workspace/realtime/running", "running"],
-        ["/workspace/realtime/waiting", "waiting"],
-        ["/workspace/realtime/error", "error"],
-      ]),
-    });
-
-    expect(ongoing.map((thread) => thread.runStatus)).toEqual([
-      "error",
-      "waiting",
-      "running",
-      "pending",
-    ]);
-  });
-
-  test("keeps the current task out of the background ongoing list", () => {
-    const threads = [
-      {
-        id: "current",
-        title: "current",
-        updatedAt: "2026-07-02T00:00:00Z",
-        mode: "code",
-        href: "/workspace/realtime/current",
-        agents: ["eve"],
-        runStatus: "running",
-      },
-      {
-        id: "background",
-        title: "background",
-        updatedAt: "2026-07-01T00:00:00Z",
-        mode: "code",
-        href: "/workspace/realtime/background",
-        agents: ["eve"],
-        runStatus: "waiting",
-      },
-    ] as never;
-
-    expect(
-      __testing
-        .excludeActiveThread(threads, "/workspace/realtime/current")
-        .map((thread) => thread.id),
-    ).toEqual(["background"]);
   });
 
   test("keeps the current task inside its natural project list and moves it to the top", () => {
@@ -374,9 +268,9 @@ describe("workspace sidebar project grouping", () => {
     }));
 
     expect(
-      __testing.projectThreadsForPreview(threads, false).map(
-        (thread) => thread.id,
-      ),
+      __testing
+        .projectThreadsForPreview(threads, false)
+        .map((thread) => thread.id),
     ).toEqual([
       "thread-1",
       "thread-2",
@@ -386,6 +280,70 @@ describe("workspace sidebar project grouping", () => {
       "thread-6",
     ]);
     expect(__testing.projectThreadsForPreview(threads, true)).toHaveLength(9);
+  });
+
+  test("restores a durable project-group entry from thread-map after reload", () => {
+    const index = __testing.buildProjectOsSidebarIndex(
+      [
+        {
+          id: "P-legacy",
+          name: "PM 演示",
+          execution_thread_id: "",
+          created_at: "2026-08-20T12:56:43Z",
+        },
+        {
+          id: "P-empty",
+          name: "刚创建的项目",
+        },
+      ],
+      { "thread-home": "P-legacy" },
+      [],
+    );
+
+    expect(index.projectNames).toEqual(["PM 演示", "刚创建的项目"]);
+    expect(index.projectNameByThreadId.get("thread-home")).toBe("PM 演示");
+    expect(index.threads).toEqual([
+      {
+        id: "thread-home",
+        title: "PM 演示",
+        updatedAt: "2026-08-20T12:56:43Z",
+        mode: "code",
+        href: "/workspace/realtime/thread-home",
+        agents: [],
+      },
+    ]);
+  });
+
+  test("pins the canonical project group ahead of the compact thread preview", () => {
+    const existingThreads = Array.from({ length: 7 }, (_, index) => ({
+      id: index === 6 ? "thread-home" : `thread-${index}`,
+      title: index === 6 ? "首轮消息覆盖的标题" : `任务 ${index}`,
+      updatedAt: "2026-08-20T12:56:43Z",
+      mode: "code",
+      href: `/workspace/realtime/${index === 6 ? "thread-home" : `thread-${index}`}`,
+      agents: [],
+    }));
+
+    const index = __testing.buildProjectOsSidebarIndex(
+      [
+        {
+          id: "P1",
+          name: "增长实验",
+          execution_thread_id: "thread-home",
+        },
+      ],
+      { "thread-home": "P1" },
+      existingThreads,
+    );
+
+    expect(index.threads).toHaveLength(existingThreads.length);
+    expect(index.threads[0]).toMatchObject({
+      id: "thread-home",
+      title: "增长实验",
+    });
+    expect(
+      __testing.projectThreadsForPreview(index.threads, false)[0]?.id,
+    ).toBe("thread-home");
   });
 
   test("groups team history by workspace folder before generated team label", () => {
@@ -484,6 +442,20 @@ describe("workspace sidebar project grouping", () => {
     } as never);
 
     expect(summary.title).toBe("thread/legacy");
+  });
+
+  test("keeps the first-user-message title from compact sidebar projections", () => {
+    const summary = __testing.summarizeThreadForSidebar({
+      thread_id: "legacy-compact-title",
+      updated_at: "2026-06-29T00:00:00Z",
+      metadata: { mode: "chat" },
+      values: {
+        title: "New chat",
+        sidebar_title_source: "来自旧会话的可读标题",
+      },
+    } as never);
+
+    expect(summary.title).toBe("来自旧会话的可读标题");
   });
 
   test("hides bare legacy team labels even when mode metadata was lost", () => {

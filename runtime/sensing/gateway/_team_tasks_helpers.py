@@ -39,6 +39,7 @@ TeamEventBroadcaster = Callable[[str, dict[str, Any]], Awaitable[None] | None]
 TaskProjection = Callable[[str, dict[str, Any]], None]
 RunnerFactory = Callable[..., Any]
 RoomMembershipResolver = Callable[[str], list[str]]
+RoomParticipantResolver = Callable[..., dict[str, Any] | None]
 
 # Bounds resource exhaustion via /run. Each running task spawns a
 # daemon thread with a 15-min timeout; without this cap a single

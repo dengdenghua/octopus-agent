@@ -1,28 +1,47 @@
 # Domain Skill Packs (SKILL.md templates)
 
-The `skills/public/` directory contains **file-backed SKILL.md packages** — domain-specific prompt templates and execution scripts. These are discovered at runtime by the skill loader and are **not** shipped in the Python wheel.
+The `skills/public/` directory is the writable, registry-managed prompt-skill
+catalog. A clean checkout deliberately tracks only its metadata plus the root
+`skills.lock.json`; startup materializes missing locked skills from the
+registry.
 
-## Why keep them outside the wheel?
+The Python wheel also ships `runtime/execution/all_skills/` as a deterministic
+offline fallback. This fallback is intentional: a registry outage, an
+unwritable resource directory, or an empty `skills/public/` must never leave a
+clean wheel or container with zero prompt/market skills.
 
-Before this split, `runtime/execution/all_skills/` contained 175 SKILL.md directories, bloating the wheel from ~3.5 MB to ~24 MB. File-backed skill packs (markdown prompts + reference docs + optional Python scripts) are better distributed via:
+## Distribution model
 
-1. **Git clone** (developer use — they're already here)
-2. **Separate skill pack releases** (production use — download only what you need)
-3. **Remote MCP servers** (the `/api/agent-market/` endpoints already fetch from remotes)
+Prompt skills have two distribution tiers:
 
-The Python wheel now contains only:
-- `runtime/execution/all_skills/__init__.py` (skill catalog and loader)
-- `runtime/execution/all_skills/*.json` (config)
-- Python `scripts/*.py` helpers (packaged via setuptools `runtime*`)
+1. **Local external catalog** — `skills.lock.json` names the desired registry
+   skills. In local development, startup may sync missing entries into
+   `/app/resources/skills/public`. The current slug-only lock is not a signed,
+   content-addressed release lock and is therefore never trusted by shared,
+   commercial, server, or production deployments.
+2. **Bundled fallback catalog** — `runtime/execution/all_skills/` is package
+   data inside the wheel and works without the repository, current working
+   directory, or network.
+
+Registry-managed skill directories under `skills/public/*/` remain ignored by
+git and the Docker build context. Do not rely on a developer machine's
+materialized cache when validating a release; build from a clean git archive.
 
 ## How discovery works
 
-At import time, `runtime.execution.all_skills._add_file_backed_skill_catalog()` iterates:
+At runtime, `runtime.execution.all_skills.register_all()` delegates prompt
+distribution to `register_prompt_market_skills()`, which:
 
-1. `runtime/execution/all_skills/<name>/SKILL.md` (in wheel — now empty after MANIFEST.in change)
-2. `project_root() / "skills" / "public"` (outside wheel — this directory)
+In local mode it reads `skills.lock.json`, performs a bounded best-effort sync,
+registers usable external entries, and fills missing names from the bundled
+fallback. In `shared`, `commercial`, `server`, and `production` modes it does
+not read or refresh mutable external skills at all: only the catalog embedded
+in the wheel/image is registered, and startup fails closed if that catalog is
+missing or empty. Production prompt changes therefore require a new reviewed
+and signed release artifact.
 
-So in **development** (git clone), both paths are populated and the loader sees 175+ skills. In **production** (pip install), only `skills/public/` matters.
+Bootstrap exceptions and per-skill sync failures are logged. A failed sync is
+therefore visible while the bundled fallback keeps the runtime usable.
 
 ## Adding a new skill pack
 
@@ -65,12 +84,11 @@ Only `SKILL.md` is required. The rest is opt-in.
 ## MANIFEST.in strategy
 
 ```
-# Old (bloated wheel)
+# Required deterministic fallback
 recursive-include runtime/execution/all_skills *
-
-# New (lean wheel)
-include runtime/execution/all_skills/__init__.py
-include runtime/execution/all_skills/*.json
 ```
 
-This keeps the wheel <5 MB while preserving full dev-mode functionality (all 175 skills still load from the git clone).
+The wheel is intentionally larger than a code-only build because the fallback
+catalog is part of the runtime availability contract. Packaging regression
+tests build from tracked files and assert that representative `SKILL.md`
+resources are present in the wheel.

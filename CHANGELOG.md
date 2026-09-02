@@ -6,6 +6,30 @@ Versions follow [SemVer](https://semver.org/), pre-1.0 so breaking changes are a
 
 ---
 
+## [Unreleased] — 2026-08 · UI refactor + composition layer
+
+Non-breaking cleanup pass across frontend and runtime composition.
+
+### UI refactor (P3)
+
+- Sidebar component extraction: `AvatarCell`,
+  `ThreadRunStatusLight`, `RightPanelMenu`, sidebar routing helpers
+  (+ tests).
+- `refactor(workbench)`: drop duplicate collapse button from tab
+  header.
+- Removed leftover `FileTextIcon` import.
+
+### Composition layer
+
+- `feat(composition)`: PluginHub consumes ServiceBus.
+- `feat(composition)`: reference arm loads memory skill family.
+
+### Guards
+
+- `fix(guards)`: reject control-tag leaks in final answers.
+
+---
+
 ## [Unreleased] — 2026-06 · repo hygiene + structural decoupling
 
 Non-breaking cleanup pass: skill system migration, frontend decoupling,

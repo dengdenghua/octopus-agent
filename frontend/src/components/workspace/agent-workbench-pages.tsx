@@ -1,6 +1,7 @@
 import {
   ArrowLeftIcon,
   BotIcon,
+  CheckCircle2Icon,
   ChevronDownIcon,
   ChevronRightIcon,
   BrainCircuitIcon,
@@ -48,6 +49,7 @@ import {
   emitAgentWorkbenchFocus,
 } from "./agent-workbench-events";
 import { useSubtask } from "@/core/tasks/context";
+import { RoutedWebLink } from "@/components/ui/routed-web-link";
 import { SubtaskHoverPreview } from "./messages/parallel-subtasks-grid";
 import {
   Tooltip,
@@ -932,6 +934,7 @@ export function AgentSummaryPage({
   onCompressContext,
   onSelectTab,
   onOpenArtifact,
+  resultPreviewUrl: _resultPreviewUrl,
 }: {
   phases: AgentPhase[];
   diffEntries: DiffEntry[];
@@ -950,13 +953,15 @@ export function AgentSummaryPage({
   groundingSources?: GroundingSource[];
   /** Ignore legacy tool-text inference once the server supplies evidence. */
   preferStructuredReferences?: boolean;
-  terminalState?: "interrupted" | "failed" | null;
+  terminalState?: "interrupted" | "failed" | "blocked" | null;
   contextTokens?: number;
   maxContextTokens?: number;
   isCompressingContext?: boolean;
   onCompressContext?: () => void | Promise<void>;
   onSelectTab?: (tabId: AgentWorkbenchTabId) => void;
   onOpenArtifact?: (path: string) => void;
+  /** A deployed or local result preview for the current completed case. */
+  resultPreviewUrl?: string | null;
 }) {
   const { t } = useI18n();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
@@ -995,7 +1000,11 @@ export function AgentSummaryPage({
     (phase) =>
       phase.status === "running" || phase.status === "waiting_approval",
   );
-  const runActive = Boolean(runningPhase);
+  const liveAgentCount = agentTiles.filter(
+    (agent) => agent.status === "running" || agent.status === "pending",
+  ).length;
+  const hasLiveAgents = liveAgentCount > 0;
+  const runActive = Boolean(runningPhase || hasLiveAgents);
   const hasTodoPlan =
     phases.length > 0 && blocks.some((block) => block.kind === "todo");
   const interruptedTaskIndex =
@@ -1118,10 +1127,17 @@ export function AgentSummaryPage({
     0,
   );
   useEffect(() => {
-    if (runActive) return;
-
     setExpandedSections((previous) => {
       const next = new Set(previous);
+      if (runActive && hasTodoPlan) {
+        // During a planned run, the current task is the primary surface.
+        // Outputs and context remain one click away without competing for the
+        // same vertical space.
+        next.delete("artifacts");
+        next.delete("references");
+      } else if (runActive) {
+        return previous;
+      }
       // Progress section stays always expanded when workbench is open
       next.add("progress");
       if (diffEntries.length > 0) {
@@ -1135,7 +1151,7 @@ export function AgentSummaryPage({
       }
       return next;
     });
-  }, [diffEntries.length, runActive]);
+  }, [diffEntries.length, hasTodoPlan, runActive]);
   const agentHealth = useMemo(() => {
     const total = agentTiles.length;
     const done = agentTiles.filter((agent) => agent.status === "done").length;
@@ -1153,6 +1169,26 @@ export function AgentSummaryPage({
       .map((agent) => agent.taskLabel ?? agent.name ?? agent.role ?? agent.id);
     return { done, failed, failedLabels, pending, running, total };
   }, [agentTiles]);
+
+  const recoveredCount = blocks.filter(
+    (block) => block.status === "warning",
+  ).length;
+  const latestRecovery = [...blocks]
+    .reverse()
+    .find((block) => block.status === "warning");
+  const latestAttention = [...blocks]
+    .reverse()
+    .find(
+      (block) =>
+        block.status === "error" || block.status === "waiting_approval",
+    );
+  const unresolvedCount =
+    errorPhaseCount +
+    phases.filter((phase) => phase.status === "waiting_approval").length;
+  // The plan and artifact sections already describe normal progress. Keep the
+  // receipt for the exceptional information users may need to act on or audit.
+  const showResultReceipt =
+    !runActive && (recoveredCount > 0 || unresolvedCount > 0);
 
   // 上下文容量估算
   const contextStats = useMemo(() => {
@@ -1278,7 +1314,7 @@ export function AgentSummaryPage({
 
   return (
     <div className="stable-scroll-viewport flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
-      <div className="mx-auto w-full max-w-2xl px-5 py-4">
+      <div className="mx-auto w-full max-w-2xl px-5 py-4 pb-8">
         {/* 思考/执行详情均在对话框内完整展示，右侧不再重复渲染。
             The task plan stays visible even when a transcript process event is
             focused: selecting evidence must not erase the user's todo list. */}
@@ -1298,25 +1334,28 @@ export function AgentSummaryPage({
                 {progressSectionLabel}
               </h3>
               <span className="ml-auto truncate text-xs text-muted-foreground">
-                {terminalState === "interrupted"
-                  ? phases.length > 0
-                    ? `${displayedDonePhaseCount}/${phases.length} ${t.agentWorkbenchPages.statusDone} · ${t.backgroundTasks.interrupted}`
-                    : t.backgroundTasks.interrupted
-                  : terminalState === "failed"
-                    ? t.agentWorkbench.statusError
-                    : phases.length > 0
-                      ? `${donePhaseCount}/${phases.length} ${phaseStatusText(
-                          runningPhase ? "running" : "done",
-                        )}`
-                      : t.agentWorkbenchPages.roundActivitySummary(
-                          outlineExecutionCount,
-                          outlineFactCount,
-                        )}
+                {terminalState === "blocked"
+                  ? t.streaming.blockedOnUser
+                  : terminalState === "interrupted"
+                    ? phases.length > 0
+                      ? `${displayedDonePhaseCount}/${phases.length} ${t.agentWorkbenchPages.statusDone} · ${t.backgroundTasks.interrupted}`
+                      : t.backgroundTasks.interrupted
+                    : terminalState === "failed"
+                      ? t.agentWorkbench.statusError
+                      : phases.length > 0
+                        ? `${donePhaseCount}/${phases.length} ${phaseStatusText(
+                            runningPhase ? "running" : "done",
+                          )}${
+                            hasLiveAgents
+                              ? ` · ${t.agentWorkbenchPages.subagentsRunning(liveAgentCount)}`
+                              : ""
+                          }`
+                        : t.agentWorkbenchPages.roundActivitySummary(
+                            outlineExecutionCount,
+                            outlineFactCount,
+                          )}
                 {phases.length > 0 && errorPhaseCount > 0
                   ? ` · ${errorPhaseCount} ${phaseStatusText("error")}`
-                  : ""}
-                {diffEntries.length > 0
-                  ? ` · ${t.agentWorkbenchPages.artifacts} ${diffEntries.length}`
                   : ""}
               </span>
               {expandedSections.has("progress") ? (
@@ -1425,6 +1464,55 @@ export function AgentSummaryPage({
           </section>
         )}
 
+        {showResultReceipt && (
+          <section
+            className="border-b border-border-subtle py-4"
+            data-testid="workbench-result-receipt"
+          >
+            <div className="flex items-start gap-3">
+              <CheckCircle2Icon
+                className={cn(
+                  "mt-0.5 size-4 shrink-0",
+                  unresolvedCount > 0 ? "text-warning" : "text-success",
+                )}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-medium text-foreground">
+                    {t.agentWorkbenchPages.resultReceipt}
+                  </h3>
+                  <span className="ml-auto text-micro text-muted-foreground">
+                    {runActive
+                      ? t.agentWorkbenchPages.statusRunning
+                      : unresolvedCount > 0
+                        ? t.agentWorkbenchPages.statusError
+                        : t.agentWorkbenchPages.statusDone}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  {t.agentWorkbenchPages.resultReceiptDescription}
+                </p>
+                {latestAttention?.subtitle && (
+                  <p className="mt-2 rounded-md border border-warning/20 bg-warning/5 px-2.5 py-2 text-xs leading-5 text-warning-foreground">
+                    <span className="font-medium">
+                      {t.agentWorkbenchPages.errorLabel}
+                    </span>{" "}
+                    {latestAttention.subtitle}
+                  </p>
+                )}
+                {!latestAttention && latestRecovery?.subtitle && (
+                  <p className="mt-2 rounded-md border border-success/15 bg-success/5 px-2.5 py-2 text-xs leading-5 text-muted-foreground">
+                    <span className="font-medium text-success">
+                      {t.agentWorkbenchPages.recoveredOperations(1)}
+                    </span>{" "}
+                    {latestRecovery.subtitle}
+                  </p>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* 产物 */}
         {diffEntries.length > 0 && (
           <section className="border-b border-border-subtle py-4">
@@ -1458,13 +1546,8 @@ export function AgentSummaryPage({
               <div className="mt-3">
                 {artifactDiffEntries.length > 0 && (
                   <>
-                    <div className="mb-1 flex items-center gap-1.5">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {t.agentWorkbenchPages.generatedArtifacts}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {artifactDiffEntries.length}
-                      </span>
+                    <div className="sr-only">
+                      {t.agentWorkbenchPages.generatedArtifacts}
                     </div>
                     <SummaryDiffEntryList
                       entries={artifactDiffEntries}
@@ -1777,15 +1860,14 @@ export function AgentSummaryPage({
                       return (
                         <li key={ref.id}>
                           {ref.url ? (
-                            <a
+                            <RoutedWebLink
                               href={ref.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                              openTargetSource="agent-reference"
                               title={ref.subtitle || ref.url}
                               className="group -mx-1 flex min-h-9 items-center gap-3 rounded-md px-1 py-1.5 transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                             >
                               {row}
-                            </a>
+                            </RoutedWebLink>
                           ) : (
                             <div className="-mx-1 flex min-h-9 items-center gap-3 px-1 py-1.5">
                               {row}

@@ -216,6 +216,7 @@ export async function logout(): Promise<void> {
   await fetch(`${getBackendBaseURL()}/api/auth/logout`, {
     method: "POST",
     headers: authHeaders(),
+    credentials: "include",
   });
   clearAuth();
 }

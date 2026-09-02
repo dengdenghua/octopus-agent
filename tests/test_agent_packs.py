@@ -267,6 +267,109 @@ description: Create a sourced research brief
     assert any("MCP server" in warning for warning in preview.warnings)
 
 
+def test_scan_agent_pack_discovers_codebuddy_plugin_shapes(tmp_path: Path) -> None:
+    """WorkBuddy/CodeBuddy expert packs (.codebuddy-plugin) are first-class.
+
+    WorkBuddy experts use the same agents/*.md + skills/**/SKILL.md shapes as
+    Claude/Codex packs but live under a `.codebuddy-plugin/` manifest dir, and
+    expert teams carry a `bin/` init-script layout. The scanner must discover
+    the marketplace, plugin, every team member agent, and the bundled skills.
+    """
+    write(
+        tmp_path / ".codebuddy-plugin" / "marketplace.json",
+        json.dumps(
+            {
+                "name": "experts",
+                "description": "workbuddy expert marketplace",
+                "plugins": [{"name": "stock-team", "source": "./plugins/stock-team"}],
+            }
+        ),
+    )
+    write(
+        tmp_path / "plugins" / "stock-team" / ".codebuddy-plugin" / "plugin.json",
+        json.dumps(
+            {
+                "name": "stock-team",
+                "version": "1.0.0",
+                "description": "6 analysts + lead roundtable",
+                "expertType": "team",
+                "agentName": "stock-team-lead",
+                "teamInfo": {
+                    "leadAgent": "stock-team-lead",
+                    "memberAgents": ["valuation-analyst", "signal-chief"],
+                },
+            }
+        ),
+    )
+    write(
+        tmp_path / "plugins" / "stock-team" / "agents" / "stock-team-lead.md",
+        """---
+name: stock-team-lead
+description: Roundtable orchestrator
+displayName:
+  en: Yuan
+  zh: 圆汇众
+profession:
+  en: Research Editor
+  zh: 投研主编
+maxTurns: 200
+---
+
+# Team lead
+""",
+    )
+    write(
+        tmp_path / "plugins" / "stock-team" / "agents" / "valuation-analyst.md",
+        """---
+name: valuation-analyst
+description: Prices via PE bands
+---
+
+# Valuation Analyst
+""",
+    )
+    write(
+        tmp_path / "plugins" / "stock-team" / "agents" / "signal-chief.md",
+        """---
+name: signal-chief
+description: Risk signal specialist
+---
+
+# Signal Chief
+""",
+    )
+    write(
+        tmp_path / "plugins" / "stock-team" / "skills" / "westock-data" / "SKILL.md",
+        """---
+name: westock-data
+description: Fetch quote data
+---
+
+# Westock Data
+""",
+    )
+    write(
+        tmp_path / "plugins" / "stock-team" / "bin" / "init_task",
+        "#!/bin/sh\necho init\n",
+    )
+
+    preview = scan_agent_pack(tmp_path)
+
+    assert preview.marketplace and preview.marketplace["_format"] == "codebuddy"
+    assert [plugin.name for plugin in preview.plugins] == ["stock-team"]
+    assert preview.plugins[0].metadata["format"] == "codebuddy"
+    assert "bin" in preview.plugins[0].metadata["layout"]
+    assert sorted(agent.name for agent in preview.agents) == [
+        "signal-chief",
+        "stock-team-lead",
+        "valuation-analyst",
+    ]
+    lead = next(a for a in preview.agents if a.name == "stock-team-lead")
+    assert lead.metadata["frontmatter"]["profession"]["zh"] == "投研主编"
+    assert lead.metadata["frontmatter"]["maxTurns"] == 200
+    assert [skill.name for skill in preview.skills] == ["westock-data"]
+
+
 def test_scan_agent_pack_discovers_octopus_app_jsonc(tmp_path: Path) -> None:
     write(
         tmp_path / ".codex-plugin" / "plugin.json",

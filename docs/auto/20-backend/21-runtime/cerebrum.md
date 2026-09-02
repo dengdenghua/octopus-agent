@@ -64,6 +64,7 @@ tier: "core"
 | `plugin_auto_load.py` | Auto-activate pinned plugins/skill-packs from user mentions. |
 | `prompt_persistence.py` | — |
 | `react_action_outcomes.py` | Action outcome bookkeeping for the ReAct loop. |
+| `react_auto_inspect.py` | Runtime-side salvage for announce-only project inspection turns. |
 | `react_auto_verify.py` | Runtime-side auto-verification salvage for final-answer guard deadlocks. |
 | `react_browser_guards.py` | Browser-interaction and mixed-mode completion guards. |
 | `react_browser_iteration.py` | Browser-surface gating and per-task iteration limits for the ReAct loop. |
@@ -74,6 +75,7 @@ tier: "core"
 | `react_context.py` | ReAct context assembly: token budget, compression, prompt building. |
 | `react_convergence.py` | Deterministic evidence-to-answer convergence for bounded ReAct turns. |
 | `react_execution.py` | Execution / tool-dispatch helpers for the ReAct loop. |
+| `react_execution_receipts.py` | Server-owned provenance for ReAct execution receipts. |
 | `react_explicit_reads.py` | Explicit-read goal predicates and bounded read recovery. |
 | `react_final_answer_content_guards.py` | Final-answer content guards (post-step / pre-Final-Answer gates). |
 | `react_final_answer_guards.py` | Final-answer guard plumbing for the ReAct loop. |
@@ -97,6 +99,7 @@ tier: "core"
 | `react_resume.py` | Resume/checkpoint-rebuild helpers for the ReAct loop. |
 | `react_security_detectors.py` | Security + quality detectors for ReAct trajectory steps. |
 | `react_security_guards.py` | Security + quality guards (post-step / pre-Final-Answer gates). |
+| `react_step_evaluator.py` | Deterministic, bounded repair hints for production ReAct turns. |
 | `react_terminal.py` | Post-loop terminal handling + finalization for the ReAct loop. |
 | `react_test_quality_guards.py` | Test-quality guards: cheats that satisfy coverage letter, not spirit. |
 | `react_timeout_guards.py` | Tool timeout detection and policy guards. |
@@ -268,8 +271,8 @@ tier: "core"
 | class | `class LeaderNotRunning(LeaderError)` | No leader process is reachable on the socket. |
 | class | `class LeaderAlreadyRunning(LeaderError)` | Another live leader owns the socket. |
 | class | `class LeaderState` | In-memory state the leader exposes to clients. |
-| class | `class LeaderProcess` | Single-owner supervisor serving JSON-RPC over UDS. |
-| class | `class LeaderClient` | Thin JSON-RPC client over UDS. |
+| class | `class LeaderProcess` | Single-owner supervisor serving JSON-RPC over local IPC. |
+| class | `class LeaderClient` | Thin JSON-RPC client over local IPC. |
 | func | `def ensure_leader(socket_path, pid_path)` | Connect to the running leader, starting it first if needed. |
 | func | `def main(argv)` | CLI entry: ``python -m runtime.core.cerebrum.leader serve``. |
 
@@ -391,6 +394,14 @@ tier: "core"
 | func | `def step_from_tool_calls(tool_calls, text, thinking, iteration, evidence_round)` | Synthesise a ``ReActStep`` from native ``tool_calls``. |
 | func | `def trim_text_protocol_for_native(system_prompt)` | Phase 1: drop the redundant text-protocol scaffolding for native mode. |
 
+### `react_step_evaluator.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class StepEvaluation` | One advisory repair decision; it never authorizes tool execution. |
+| class | `class RuntimeStepEvaluator` | Turn-local evaluator with bounded, digest-only deduplication. |
+| func | `def build_runtime_step_evaluator()` | Return fresh turn-local evaluator state for one ReAct invocation. |
+
 ### `react_types.py`
 
 | Kind | Symbol | Doc |
@@ -506,7 +517,7 @@ tier: "core"
 
 ## Who imports this
 
-**56** file(s) reference this package:
+**60** file(s) reference this package:
 
 - **`runtime/cli_code.py/`** · 1 file(s)
   - `runtime/cli_code.py`
@@ -522,13 +533,13 @@ tier: "core"
   - `runtime/cli_serve.py`
 - **`runtime/core/`** · 1 file(s)
   - `runtime/core/graph_runtime/runtime.py`
-- **`runtime/execution/`** · 7 file(s)
+- **`runtime/execution/`** · 9 file(s)
+  - `runtime/execution/codex_backend/dynamic_tools.py`
+  - `runtime/execution/codex_backend/role_context.py`
   - `runtime/execution/loops/_controller_attempt.py`
   - `runtime/execution/misc/parallel_runner.py`
   - `runtime/execution/parallel_agents/_orchestrator_models.py`
-  - `runtime/execution/parallel_agents/stack_runner.py`
-  - `runtime/execution/subagents/react_drive.py`
-  - _… and 2 more_
+  - _… and 4 more_
 - **`runtime/memory/`** · 4 file(s)
   - `runtime/memory/cowork/turn_plan.py`
   - `runtime/memory/diagnostics/_trace_store_recovery.py`
@@ -546,13 +557,13 @@ tier: "core"
   - `runtime/safety/recovery/gepa_bridge.py`
   - `runtime/safety/recovery/workflow_applier.py`
   - `runtime/safety/validation/trust_signal.py`
-- **`runtime/sensing/`** · 24 file(s)
+- **`runtime/sensing/`** · 26 file(s)
   - `runtime/sensing/gateway/_agents_endpoints.py`
   - `runtime/sensing/gateway/_agents_endpoints_conversations.py`
   - `runtime/sensing/gateway/_agents_endpoints_tasks.py`
   - `runtime/sensing/gateway/_config_endpoints_system.py`
   - `runtime/sensing/gateway/_observability_journal.py`
-  - _… and 19 more_
+  - _… and 21 more_
 - **`runtime/tentacle/`** · 2 file(s)
   - `runtime/tentacle/coordinator.py`
   - `runtime/tentacle/mobile/cerebrum_adapter.py`

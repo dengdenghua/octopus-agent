@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="OpenCode Zen">
+  <rect width="64" height="64" rx="15" fill="#fff"/>
+  <path d="M15 14h34v36H15z" fill="#0b0b0d"/>
+  <path d="M23 22h18v20H23z" fill="#fff"/>
+  <path d="M28 27h8v10h-8z" fill="#0b0b0d"/>
+</svg>

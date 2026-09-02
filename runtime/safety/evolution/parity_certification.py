@@ -465,7 +465,7 @@ REQUIREMENTS: tuple[CertificationRequirement, ...] = (
         required_terms=(
             "octopus.agent_loop_quality.v1",
             "agent-loop-quality",
-            "_drive_local_partner",
+            "_drive_codex_app_server",
             "_drive_group_fanout",
             "_drive_swarm_mesh",
             "octopus.process_timeline.v1",

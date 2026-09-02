@@ -1,7 +1,16 @@
-import { ClockIcon, SearchIcon, XIcon, PlusIcon } from "lucide-react";
+import {
+  ArrowRightIcon,
+  ClockIcon,
+  LayoutGridIcon,
+  PlusIcon,
+  SearchIcon,
+  XIcon,
+} from "lucide-react";
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { MarketGrid } from "@/components/workspace/market/market-feed";
 import { MarketDetail } from "@/components/workspace/market/market-detail";
+import { communityAssetURL } from "@/components/workspace/community/community-assets";
 import {
   MARKET_CATEGORIES,
   getMarketItems,
@@ -13,23 +22,36 @@ import { cn } from "@/lib/utils";
 
 /** 可选封面（复用社区已生成封面图）。 */
 const COVER_OPTIONS = [
-  "/community/price-watch(1).jpg",
-  "/community/weekly-report(1).jpg",
-  "/community/resume(1).jpg",
-  "/community/language-coach.jpg",
-  "/community/study-paper(1).jpg",
-  "/community/smart-home.jpg",
-  "/community/travel-plan(1).jpg",
-  "/community/game-auto-daily.jpg",
-  "/community/gacha.jpg",
-  "/community/meeting-notes.jpg",
-  "/community/plan-tomorrow.jpg",
-  "/community/coupon.jpg",
+  communityAssetURL("price-watch(1).jpg"),
+  communityAssetURL("weekly-report(1).jpg"),
+  communityAssetURL("resume(1).jpg"),
+  communityAssetURL("language-coach.jpg"),
+  communityAssetURL("study-paper(1).jpg"),
+  communityAssetURL("smart-home.jpg"),
+  communityAssetURL("travel-plan(1).jpg"),
+  communityAssetURL("game-auto-daily.jpg"),
+  communityAssetURL("gacha.jpg"),
+  communityAssetURL("meeting-notes.jpg"),
+  communityAssetURL("plan-tomorrow.jpg"),
+  communityAssetURL("coupon.jpg"),
 ] as const;
 
 /** 集市面板：嵌入社区页的二级视图，自带搜索/分类/余额/上架/购买。 */
+/** 资产引导横幅的 localStorage key(关闭后不再显示)。 */
+const ASSETS_BANNER_KEY = "octopus.market.assets-banner-dismissed.v1";
+
+function readBannerDismissed(): boolean {
+  try {
+    return window.localStorage.getItem(ASSETS_BANNER_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function MarketBoard() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("all");
+  const [bannerDismissed, setBannerDismissed] = useState(readBannerDismissed);
   const [query, setQuery] = useState("");
   const [version, setVersion] = useState(0);
   const [detail, setDetail] = useState<MarketItem | null>(null);
@@ -56,6 +78,48 @@ export function MarketBoard() {
 
   return (
     <>
+      {!bannerDismissed && (
+        <div className="mb-3 flex flex-col gap-2 rounded-lg border border-primary/20 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-2.5">
+            <LayoutGridIcon className="mt-0.5 size-4 shrink-0 text-primary" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">
+                这里是社区好物(积分交易),不是资产商店
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                插件 / 技能 / 角色(Codex + WorkBuddy +
+                本地)已统一到「统一资产」入口。
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => navigate("/workspace/agents?tab=assets")}
+              className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              前往统一资产
+              <ArrowRightIcon className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  window.localStorage.setItem(ASSETS_BANNER_KEY, "1");
+                } catch {
+                  /* ignore */
+                }
+                setBannerDismissed(true);
+              }}
+              aria-label="关闭提示"
+              className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+            >
+              <XIcon className="size-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-1 [mask-image:linear-gradient(to_right,#000_calc(100%-1.25rem),transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {MARKET_CATEGORIES.map((cat) => {

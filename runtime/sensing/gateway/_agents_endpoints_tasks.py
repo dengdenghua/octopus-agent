@@ -31,6 +31,7 @@ def _register_tasks(router: Any, ctx: _AgentsCtx, auth: _AuthActions) -> None:
     thread_store = ctx.thread_store
     journal = ctx.journal
     _auth = auth.auth
+    _resolve_identity = auth.resolve_identity
     _require_task_owner = auth.require_task_owner
 
     @router.get("/api/tasks")
@@ -48,30 +49,38 @@ def _register_tasks(router: Any, ctx: _AgentsCtx, auth: _AuthActions) -> None:
         # matching the legacy behavior so existing dashboards don't
         # silently empty out.
         owned_threads: set[str] | None = None
-        legacy_threads: set[str] = set()
-        if require_auth and actor and thread_store is not None:
-            owned_threads = ctrl.list_thread_ids_for_owner(thread_store, actor)
-            # Legacy threads (no owner_id) are visible to everyone — same
-            # backward-compat rule as the per-task / per-conversation
-            # checks. Compute once so legacy items are kept in the lists.
+        is_admin = False
+        if require_auth:
+            identity = _resolve_identity(request)
+            roles = {
+                str(role).strip().lower()
+                for role in (getattr(identity, "roles", ()) or ())
+                if str(role).strip()
+            }
+            is_admin = "admin" in roles
+            owned_threads = set()
+        if require_auth and actor and thread_store is not None and not is_admin:
             try:
                 all_threads = thread_store.search(limit=10000)
                 for thread in all_threads:
-                    if (thread.get("metadata") or {}).get("owner_id") is None:
+                    metadata = thread.get("metadata") or {}
+                    owner = metadata.get("owner_actor_id") or metadata.get("owner_id")
+                    if owner == actor:
                         tid = thread.get("thread_id")
-                        if tid:
-                            legacy_threads.add(tid)
+                        if tid and owned_threads is not None:
+                            owned_threads.add(str(tid))
             except (TypeError, AttributeError):  # noqa: BLE001 — thread_store may be None or missing search() in dev mode
                 pass
+        elif is_admin:
+            owned_threads = None
 
         def _is_owned(item: Any) -> bool:
             if owned_threads is None:
-                return True  # dev mode / no store: show all
+                return True  # dev mode or admin audit: show all
             tid = getattr(item, "thread_id", None) or ""
-            # Tasks with no thread_id (legacy/unscoped) are visible
             if not tid:
-                return True
-            return tid in owned_threads or tid in legacy_threads
+                return False
+            return tid in owned_threads
 
         def _to_dict(req: Any) -> dict[str, Any]:
             return req.to_dict()

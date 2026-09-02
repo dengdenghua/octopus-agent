@@ -1,23 +1,21 @@
 import { useEffect, useState } from "react";
 
-import { getOctopusBaseURL } from "@/core/config";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 
 /**
  * First-launch bootstrap gate for the packaged Electron app.
  *
- * The desktop app ships a lean core and uses `uv` to create a venv + install
- * deps on first run (see backend-runtime.cjs). While that happens the backend
- * is unreachable, so we show a full-screen overlay instead of a broken shell.
+ * The Windows desktop installer ships a fixed PyInstaller backend (see
+ * backend-runtime.cjs). While that process is starting, the backend is
+ * unreachable, so we show a full-screen overlay instead of a broken shell.
  *
- * Detection: only in the *packaged* shell (`isElectron` + `file://` protocol).
+ * Detection: only in the *packaged* shell (`isElectron` + `octopus-app:` protocol).
  * Dev mode loads the renderer from the Vite server (http://localhost:3000) and
  * runs the backend externally, so it never triggers this gate.
  *
- * We just track raw backend reachability: show the gate whenever the backend
- * is down, and refine the copy from `backend:bootstrap-progress` events (which
- * may be missed if the renderer mounts mid-install, hence the health poll).
+ * We track readiness rather than the legacy always-200 health endpoint. The
+ * progress event remains useful for the unpackaged development smoke path.
  */
 
 interface BootstrapProgress {
@@ -28,17 +26,30 @@ interface BootstrapProgress {
 const HEALTH_POLL_MS = 1500;
 const HEALTH_TIMEOUT_MS = 2000;
 
-function isPackagedShell(): boolean {
+interface PackagedShellWindow {
+  location: { protocol: string };
+  octopus?: { isElectron?: boolean };
+}
+
+export function isPackagedShell(
+  shellWindow: PackagedShellWindow | undefined = typeof window === "undefined"
+    ? undefined
+    : window,
+): boolean {
   return (
-    typeof window !== "undefined" &&
-    !!window.octopus?.isElectron &&
-    window.location.protocol === "file:"
+    !!shellWindow?.octopus?.isElectron &&
+    shellWindow.location.protocol === "octopus-app:"
   );
 }
 
 async function backendReady(): Promise<boolean> {
   try {
-    const res = await fetch(`${getOctopusBaseURL()}/health`, {
+    // The packaged shell serves the renderer from octopus-app://app and
+    // reaches the loopback backend only through the protocol proxy's
+    // route prefixes. The readiness endpoint lives at the backend root
+    // (/readyz, NOT under /api), so request it same-origin relative:
+    // packaged → protocol proxy, dev → Vite dev-server proxy.
+    const res = await fetch("/readyz", {
       method: "GET",
       signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
     });
@@ -66,8 +77,7 @@ export function BackendBootstrapOverlay() {
       setReady(ok);
     };
 
-    // Refine the message from the main process as it progresses through
-    // venv creation → core dep install → optional dep install.
+    // Refine the message when the development-only bootstrap path emits it.
     const off = window.octopus?.on(
       "backend:bootstrap-progress",
       (payload: unknown) => {
@@ -100,7 +110,7 @@ export function BackendBootstrapOverlay() {
           <div className="space-y-1">
             <p className="text-sm font-medium text-foreground">{message}</p>
             <p className="text-xs text-muted-foreground">
-              首次启动需安装后端依赖，请稍候
+              正在启动随应用安装的后端，无需下载依赖
             </p>
           </div>
           {percent !== undefined && (

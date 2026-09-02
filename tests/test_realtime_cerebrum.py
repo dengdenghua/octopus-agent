@@ -14,6 +14,8 @@ couldn't be tested without monkey-patching.
 from __future__ import annotations
 
 import json
+import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -41,6 +43,8 @@ pytestmark = pytest.mark.skipif(
     FastAPI is None, reason="fastapi required for realtime gateway tests"
 )
 
+_REAL_STREAM_REACT_LOOP: Any = None
+
 
 @pytest.fixture(autouse=True)
 def _patch_react_loop(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -52,6 +56,10 @@ def _patch_react_loop(monkeypatch: pytest.MonkeyPatch) -> None:
     tool, and sandbox machinery out of the test.
     """
     import runtime.core.cerebrum.react_loop as rl
+
+    global _REAL_STREAM_REACT_LOOP
+    if _REAL_STREAM_REACT_LOOP is None:
+        _REAL_STREAM_REACT_LOOP = rl.stream_react_loop
 
     def fake_stream(*args: Any, **kwargs: Any) -> Iterator[dict[str, Any]]:
         from runtime.platform.process.session import current_session
@@ -117,6 +125,7 @@ def _set_script(events: list[dict[str, Any]]) -> None:
     _SCRIPT.clear()
     _SCRIPT.extend(events)
     _SCRIPT_POP_ONCE = False
+    _LAST_STREAM_ARGS.clear()
     _LAST_STREAM_KWARGS.clear()
     _LAST_SESSION.clear()
 
@@ -190,6 +199,150 @@ def test_flatten_merges_post_final_trace_items_into_delivered_answer() -> None:
     assert "reasoning_content" not in ai["additional_kwargs"]
     assert "public_reasoning_summary" not in ai["additional_kwargs"]
     assert [tool["name"] for tool in ai["tool_calls"]] == ["todo_write"]
+
+
+def test_flatten_collapses_near_identical_resent_report() -> None:
+    """Regression: a guard-rejected report draft and its near-identical retry
+    (thread t0Wn5Zhvh3VUFwoAR2uP4M: two AI4S reports, 3665 vs 3670 chars, only
+    a '诺华'→'据公开披露约' fact fixed, 0.9988 similarity) were both persisted
+    into the sidebar and both re-sent to the model. The flatten adapter must
+    collapse them to a single message, keeping the newest copy while
+    preserving real tool calls attached to the earlier draft."""
+    from runtime.protocol import Turn
+    from runtime.sensing.gateway.realtime_cerebrum import _flatten_turns_to_messages
+
+    sentences = [
+        "AI for Science 正在从单点工具应用走向科研范式级别的重构，全球主要经济体都把 AI4S 写进了各自的国家科技战略。",
+        "蛋白质结构预测领域，AlphaFold 系列模型把过去需要数年冷冻电镜实验才能解析的结构，压缩到数小时之内完成端到端预测。",
+        "材料设计方向出现了一批生成式模型，能够在给定目标力学性能的前提下逆向搜索候选晶体结构，大幅压缩实验试错周期。",
+        "气象与气候建模方面，高分辨率风场与降水模型已经开始辅助极端天气预警，相关论文连续出现在 Nature 与 Science 的正刊上。",
+        "药物发现管线里，分子对接、亲和力预测与毒性筛选正在被统一到同一套预训练框架里，临床前研究的人力成本显著下降。",
+        "产业端的热钱正在涌入这一赛道，一级市场多笔亿元级融资集中在通用科学模型与垂直行业基座模型两类标的。",
+        "风险层面，跨学科评估仍然缺乏统一基准，部分模型在训练分布外场景的泛化能力仍不达预期，存在被过度宣传的问题。",
+    ]
+    body = "".join(sentences) * 4
+    base = "# AI4S（AI for Science）领域调研报告\n\n## 一、执行摘要\n\n" + body
+    mid = len(base) // 2
+    draft = base
+    retry = base[:mid] + "据公开披露约" + base[mid + 6 :]  # same-length fact fix
+
+    turn = Turn.model_validate(
+        {
+            "id": "turn-dup-report",
+            "threadId": "thread-dup",
+            "status": "completed",
+            "startedAt": "2026-06-01T18:53:24Z",
+            "completedAt": "2026-06-01T19:03:00Z",
+            "items": [
+                {
+                    "id": "u1",
+                    "type": "userMessage",
+                    "status": "completed",
+                    "createdAt": "2026-06-01T18:53:24Z",
+                    "text": "调研一下 AI4S",
+                    "attachments": [],
+                },
+                {
+                    "id": "tc1",
+                    "type": "commandExecution",
+                    "status": "completed",
+                    "createdAt": "2026-06-01T19:02:47Z",
+                    "command": "todo_write",
+                    "inputPreview": {},
+                    "cwd": None,
+                    "aggregatedOutput": "ok",
+                    "exitCode": 0,
+                    "processId": None,
+                    "networkAccess": False,
+                },
+                {
+                    "id": "a1",
+                    "type": "agentMessage",
+                    "status": "completed",
+                    "createdAt": "2026-06-01T19:03:00Z",
+                    "text": draft,
+                },
+                {
+                    "id": "r2",
+                    "type": "reasoning",
+                    "status": "completed",
+                    "createdAt": "2026-06-01T19:03:01Z",
+                    "summary": ["guard rejected the draft, fixing the number"],
+                    "content": "",
+                },
+                {
+                    "id": "a2",
+                    "type": "agentMessage",
+                    "status": "completed",
+                    "createdAt": "2026-06-01T19:03:02Z",
+                    "text": retry,
+                },
+            ],
+            "error": None,
+        }
+    )
+
+    messages, _, _ = _flatten_turns_to_messages([turn])
+
+    ai = [m for m in messages if m.get("type") == "ai"]
+    reports = [m for m in ai if (m.get("content") or "").startswith("# AI4S")]
+    assert len(reports) == 1, "near-identical re-sent report must be collapsed"
+    kept = reports[0]
+    assert kept["content"] == retry, "newest (guard-passed) copy must win"
+    # The todo_write action attached to the earlier draft must survive.
+    assert [tool["name"] for tool in (kept.get("tool_calls") or [])] == ["todo_write"]
+
+
+def test_flatten_keeps_genuinely_different_answers_apart() -> None:
+    """The near-duplicate collapse must NOT merge two genuinely different
+    consecutive assistant answers (e.g. a real follow-up after a report)."""
+    from runtime.protocol import Turn
+    from runtime.sensing.gateway.realtime_cerebrum import _flatten_turns_to_messages
+
+    first = "# AI4S 领域调研报告\n\n" + "AI for Science 正在走向科研范式重构。" * 40
+    second = (
+        "# 智能睡眠行业调研报告\n\n"
+        + "智能睡眠是睡眠经济与 AI 结合的最新赛道，覆盖监测硬件、助眠内容与数字疗法。" * 30
+    )
+
+    turn = Turn.model_validate(
+        {
+            "id": "turn-distinct",
+            "threadId": "thread-distinct",
+            "status": "completed",
+            "startedAt": "2026-06-01T18:53:24Z",
+            "completedAt": "2026-06-01T19:03:00Z",
+            "items": [
+                {
+                    "id": "u1",
+                    "type": "userMessage",
+                    "status": "completed",
+                    "createdAt": "2026-06-01T18:53:24Z",
+                    "text": "调研一下",
+                    "attachments": [],
+                },
+                {
+                    "id": "a1",
+                    "type": "agentMessage",
+                    "status": "completed",
+                    "createdAt": "2026-06-01T19:03:00Z",
+                    "text": first,
+                },
+                {
+                    "id": "a2",
+                    "type": "agentMessage",
+                    "status": "completed",
+                    "createdAt": "2026-06-01T19:03:02Z",
+                    "text": second,
+                },
+            ],
+            "error": None,
+        }
+    )
+
+    messages, _, _ = _flatten_turns_to_messages([turn])
+    ai = [m for m in messages if m.get("type") == "ai"]
+    assert len(ai) == 2, "genuinely different answers must not be collapsed"
 
 
 def test_flatten_keeps_reasoning_private_and_commentary_explicit() -> None:
@@ -318,6 +471,127 @@ def test_flatten_file_change_tool_calls_are_json_serializable() -> None:
     assert change["op"] == "update"
 
 
+def test_flatten_preserves_subagent_lifecycle_result_for_history() -> None:
+    """A refreshed thread must retain the finish marker's public envelope."""
+    from runtime.protocol import Turn
+    from runtime.sensing.gateway.realtime_cerebrum import _flatten_turns_to_messages
+
+    turn = Turn.model_validate(
+        {
+            "id": "turn-subagent-history",
+            "threadId": "thread-subagent-history",
+            "status": "completed",
+            "startedAt": "2026-08-17T08:00:00Z",
+            "completedAt": "2026-08-17T08:00:03Z",
+            "items": [
+                {
+                    "id": "u1",
+                    "type": "userMessage",
+                    "status": "completed",
+                    "createdAt": "2026-08-17T08:00:00Z",
+                    "text": "审计项目",
+                },
+                {
+                    "id": "finish-prism",
+                    "type": "mcpToolCall",
+                    "status": "failed",
+                    "createdAt": "2026-08-17T08:00:03Z",
+                    "server": "runtime",
+                    "tool": "__subagent_finished__",
+                    "arguments": {"parent_tool_use_id": "orchestration-1"},
+                    "result": {
+                        "agent_id": "reviewer",
+                        "role": "reviewer",
+                        "codename": "Prism-fcc",
+                        "ok": False,
+                        "error": "verification failed",
+                        "iteration_count": 4,
+                        "files_touched": ["frontend/src/page.tsx"],
+                    },
+                    "durationMs": 2300,
+                },
+                {
+                    "id": "a1",
+                    "type": "agentMessage",
+                    "status": "completed",
+                    "createdAt": "2026-08-17T08:00:03Z",
+                    "text": "审计结束",
+                },
+            ],
+        }
+    )
+
+    messages, _, _ = _flatten_turns_to_messages([turn])
+
+    finish = messages[-1]["tool_calls"][0]
+    assert finish["name"] == "runtime.__subagent_finished__"
+    assert finish["args"] == {
+        "agent_id": "reviewer",
+        "role": "reviewer",
+        "codename": "Prism-fcc",
+        "ok": False,
+        "error": "verification failed",
+        "iteration_count": 4,
+        "files_touched": ["frontend/src/page.tsx"],
+        "parent_tool_use_id": "orchestration-1",
+        "status": "failed",
+        "duration_ms": 2300,
+    }
+
+
+def test_flatten_preserves_first_class_subagent_item_for_history() -> None:
+    from runtime.protocol import Turn
+    from runtime.sensing.gateway.realtime_cerebrum import _flatten_turns_to_messages
+
+    turn = Turn.model_validate(
+        {
+            "id": "turn-first-class-subagent",
+            "threadId": "thread-first-class-subagent",
+            "status": "completed",
+            "startedAt": "2026-08-17T08:00:00Z",
+            "completedAt": "2026-08-17T08:00:03Z",
+            "items": [
+                {
+                    "id": "u1",
+                    "type": "userMessage",
+                    "status": "completed",
+                    "createdAt": "2026-08-17T08:00:00Z",
+                    "text": "并行审计",
+                },
+                {
+                    "id": "sub-1",
+                    "type": "subagent",
+                    "status": "completed",
+                    "createdAt": "2026-08-17T08:00:01Z",
+                    "subagentId": "reviewer",
+                    "role": "reviewer",
+                    "name": "Prism-fcc",
+                    "codename": "Prism-fcc",
+                    "avatar": "🛡️",
+                    "summary": "检查了前端回放",
+                    "iterationCount": 3,
+                    "filesTouched": ["frontend/src/page.tsx"],
+                },
+                {
+                    "id": "a1",
+                    "type": "agentMessage",
+                    "status": "completed",
+                    "createdAt": "2026-08-17T08:00:03Z",
+                    "text": "完成",
+                },
+            ],
+        }
+    )
+
+    messages, _, _ = _flatten_turns_to_messages([turn])
+
+    tool_call = messages[-1]["tool_calls"][0]
+    assert tool_call["name"] == "subagent"
+    assert tool_call["args"]["codename"] == "Prism-fcc"
+    assert tool_call["args"]["iteration_count"] == 3
+    assert tool_call["args"]["files_touched"] == ["frontend/src/page.tsx"]
+
+
 @pytest.fixture()
 def gateway(tmp_path: Path) -> Any:
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
@@ -395,6 +669,126 @@ def test_text_delta_maps_to_agent_message(gateway: Any) -> None:
     assert len(agent_items) == 1
     assert agent_items[0]["text"] == "hello world"
     assert agent_items[0]["status"] == "completed"
+
+
+def test_codex_partner_routes_to_app_server_before_legacy_cli(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The selected Codex role must enter one and only one inner engine."""
+    from types import SimpleNamespace
+
+    from runtime.platform.runtime_policy import feature_flags
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "local")
+    monkeypatch.delenv("OCTOPUS_CODEX_APP_SERVER_ENABLED", raising=False)
+    feature_flags.reload()
+    calls: list[str] = []
+
+    async def fake_codex(
+        runtime: CerebrumRuntime,
+        turn: Any,
+        log: Any,
+        emitter: Any,
+        intent: Any,
+        agent: Any,
+        provider: Any,
+        *,
+        text: str,
+    ) -> bool:
+        del intent, agent, provider
+        calls.append(f"app-server:{text}")
+        await runtime._emit_agent_message(turn, log, emitter, "由 Codex App Server 完成")
+        return True
+
+    monkeypatch.setattr(CerebrumRuntime, "_drive_codex_app_server", fake_codex)
+    agent = SimpleNamespace(
+        agent_id="coder",
+        display_name="Codex CLI 伙伴",
+        capabilities={
+            "execution_backend": "codex_app_server",
+            "codex_app_server_executable": "/opt/octopus/bin/codex",
+        },
+    )
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=agent,
+        logs_root=str(tmp_path / "threads"),
+    )
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-codex-app-server",
+                "input": [{"type": "text", "text": "修复测试"}],
+                "approvalPolicy": "on-request",
+            },
+        )
+
+    assert calls == ["app-server:修复测试"]
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "completed"
+    assert [item["text"] for item in turn["items"] if item["type"] == "agentMessage"] == [
+        "由 Codex App Server 完成"
+    ]
+
+
+def test_codex_partner_failure_reports_the_actual_driver(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from runtime.platform.runtime_policy import feature_flags
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "local")
+    monkeypatch.delenv("OCTOPUS_CODEX_APP_SERVER_ENABLED", raising=False)
+    feature_flags.reload()
+
+    async def fail_codex(*_args: Any, **_kwargs: Any) -> bool:
+        raise RuntimeError("codex protocol failed")
+
+    monkeypatch.setattr(CerebrumRuntime, "_drive_codex_app_server", fail_codex)
+    agent = SimpleNamespace(
+        agent_id="coder",
+        display_name="Codex CLI 伙伴",
+        capabilities={
+            "execution_backend": "codex_app_server",
+            "codex_app_server_executable": "/opt/octopus/bin/codex",
+        },
+    )
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=agent,
+        logs_root=str(tmp_path / "threads"),
+    )
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-codex-app-server-error",
+                "input": [{"type": "text", "text": "修复测试"}],
+                "approvalPolicy": "on-request",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "failed"
+    errors = [item for item in turn["items"] if item["type"] == "error"]
+    assert errors[-1]["message"] == "codex protocol failed"
+    assert errors[-1]["errorInfo"]["driver"] == "codex_app_server"
 
 
 def test_user_turn_refills_subagent_wake_budget(gateway: Any, tmp_path: Path) -> None:
@@ -490,6 +884,7 @@ def test_thread_steering_injection_into_running_turn() -> None:
         assert item_id
         assert len(turn.items) == 1
         assert turn.items[0].text == "报告文本"
+        assert turn.items[0].source == "user"
     finally:
         _unregister_thread_turn("th-inject", runtime, "turn-1")
 
@@ -562,6 +957,34 @@ def test_drain_returns_injected_steering_text() -> None:
         _unregister_thread_turn("th-inject", runtime, "turn-1")
 
 
+def test_subagent_report_steering_is_marked_internal() -> None:
+    from runtime.sensing.gateway._realtime_cerebrum_steering import (
+        _inject_thread_steering,
+        _register_thread_turn,
+        _unregister_thread_turn,
+    )
+
+    runtime = _SteeringRuntime()
+    turn = _TurnLike()
+    runtime._turn_steering["turn-1"] = runtime._queue_factory()
+    runtime._turn_steering_accepting["turn-1"] = True
+    runtime._active_turns["turn-1"] = (turn, None)
+
+    _register_thread_turn("th-inject", runtime, "turn-1")
+    try:
+        assert (
+            _inject_thread_steering(
+                "th-inject",
+                "[子代理报告] 完成",
+                source="subagent_report",
+            )
+            is True
+        )
+        assert turn.items[0].source == "subagent_report"
+    finally:
+        _unregister_thread_turn("th-inject", runtime, "turn-1")
+
+
 def test_inject_writes_durable_log_and_never_delivers_twice() -> None:
     from runtime.sensing.gateway._realtime_cerebrum_steering import (
         _drain_turn_steering,
@@ -575,9 +998,7 @@ def test_inject_writes_durable_log_and_never_delivers_twice() -> None:
             self.writes: list[dict[str, Any]] = []
 
         def item_completed(self, thread_id: str, turn_id: str, item: Any) -> None:
-            self.writes.append(
-                {"thread_id": thread_id, "turn_id": turn_id, "item": item}
-            )
+            self.writes.append({"thread_id": thread_id, "turn_id": turn_id, "item": item})
 
         def tail_events(self, offset: int) -> tuple[list[Any], int]:
             events = []
@@ -589,9 +1010,7 @@ def test_inject_writes_durable_log_and_never_delivers_twice() -> None:
                     {
                         "event": "item_completed",
                         "turn_id": write["turn_id"],
-                        "payload": {
-                            "item": write["item"].model_dump(by_alias=True, mode="json")
-                        },
+                        "payload": {"item": write["item"].model_dump(by_alias=True, mode="json")},
                     },
                 )()
                 events.append(event)
@@ -625,7 +1044,11 @@ def test_inject_writes_durable_log_and_never_delivers_twice() -> None:
         _unregister_thread_turn("th-inject", runtime, "turn-1")
 
 
-def test_turn_start_surfaces_pending_thread_reports(gateway: Any, tmp_path: Path) -> None:
+def test_turn_start_surfaces_pending_thread_reports(
+    gateway: Any,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from runtime.execution.subagents.sessions import (
         SubagentSessionStore,
         get_subagent_session_store,
@@ -642,7 +1065,15 @@ def test_turn_start_surfaces_pending_thread_reports(gateway: Any, tmp_path: Path
         store.append_report(first.session_id, content="部分发现", delivery="quiet")
         store.append_report(second.session_id, content="最终结论", delivery="quiet")
 
-        _set_script([{"type": "react_completed"}])
+        drained_reports: list[str] = []
+
+        def _stream_with_initial_steering(*_args: Any, **kwargs: Any) -> Iterator[dict[str, Any]]:
+            drained_reports.extend(kwargs["steering_drain"]())
+            yield {"type": "react_completed"}
+
+        import runtime.core.cerebrum.react_loop as rl
+
+        monkeypatch.setattr(rl, "stream_react_loop", _stream_with_initial_steering)
         with client.websocket_connect("/api/realtime") as ws:
             out = _drive(
                 ws,
@@ -654,20 +1085,373 @@ def test_turn_start_surfaces_pending_thread_reports(gateway: Any, tmp_path: Path
             )
 
         turn = out["response"].result["turn"]
-        steering = [
-            item
-            for item in turn["items"]
-            if item.get("type") == "steeringUserMessage"
-        ]
+        steering = [item for item in turn["items"] if item.get("type") == "steeringUserMessage"]
         texts = [item["text"] for item in steering]
         assert "[子代理报告] 部分发现" in texts
         assert "[子代理报告] 最终结论" in texts
+        assert "[子代理报告] 部分发现" in drained_reports
+        assert "[子代理报告] 最终结论" in drained_reports
         # Surfaced reports are claimed (acked) so the next turn does not
         # re-inject them (dsh inbox claim semantics).
         assert store.pending_reports(first.session_id) == []
         assert store.pending_reports(second.session_id) == []
     finally:
         set_subagent_session_store(previous)
+
+
+def test_subagent_store_lock_does_not_block_turn_started_or_user_message(
+    gateway: Any,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A durable session scan cannot hold the visible Send boundary."""
+
+    import runtime.core.cerebrum.react_loop as rl
+    from runtime.execution.subagents.sessions import (
+        SubagentSessionStore,
+        get_subagent_session_store,
+        set_subagent_session_store,
+    )
+
+    client, logs_root = gateway
+    pending_read_finished = threading.Event()
+    drained_reports: list[str] = []
+
+    def _fast_react_impl(*args: Any, **kwargs: Any) -> Iterator[dict[str, Any]]:
+        drain = kwargs.get("steering_drain")
+        if callable(drain):
+            drained_reports.extend(drain())
+        yield {"type": "react_completed"}
+
+    # Preserve the production stream_react_loop lifecycle wrapper so this
+    # regression really exercises mark_thread_busy/idle.  The autouse fake
+    # replaces that wrapper wholesale and would make this lock test pass even
+    # if those live markers still waited on the durable store lock.
+    monkeypatch.setattr(rl, "stream_react_loop", _REAL_STREAM_REACT_LOOP)
+    monkeypatch.setattr(rl, "_stream_react_loop_impl", _fast_react_impl)
+
+    class _ObservedStore(SubagentSessionStore):
+        def pending_thread_reports(self, thread_id: str) -> Any:
+            try:
+                return super().pending_thread_reports(thread_id)
+            finally:
+                pending_read_finished.set()
+
+    store = _ObservedStore(base_dir=Path(logs_root) / "subagent_sessions")
+    previous = get_subagent_session_store()
+    set_subagent_session_store(store)
+    session = store.create(agent_id="researcher", thread_id="th-slow-session-lock")
+    store.append_report(session.session_id, content="稍后注入", delivery="quiet")
+    lock_held = threading.Event()
+    release_lock = threading.Event()
+    lock_released = threading.Event()
+    injection_attempted = threading.Event()
+
+    import runtime.execution.subagents.sessions as sessions_module
+
+    original_inject = sessions_module.inject_report_into_thread
+
+    def _observe_inject(thread_id: str, content: str) -> bool:
+        try:
+            return original_inject(thread_id, content)
+        finally:
+            injection_attempted.set()
+
+    monkeypatch.setattr(sessions_module, "inject_report_into_thread", _observe_inject)
+
+    def _hold_durable_session_lock() -> None:
+        # Deliberately model another thread doing a cold all-session scan.
+        # Handler/injector registration must use its independent live lock;
+        # refill + pending reads must happen only after the user item is sent.
+        with store._lock:  # noqa: SLF001 - intentional contention injection
+            lock_held.set()
+            release_lock.wait(3.0)
+        lock_released.set()
+
+    holder = threading.Thread(target=_hold_durable_session_lock, daemon=True)
+    holder.start()
+    assert lock_held.wait(1.0)
+    caplog.set_level(
+        "INFO",
+        logger="runtime.sensing.gateway.realtime_turn_lifecycle",
+    )
+    _set_script([{"type": "react_completed"}])
+    response: JsonRpcResponse | None = None
+    second_response: JsonRpcResponse | None = None
+    notifications: list[Notification] = []
+    try:
+        with client.websocket_connect("/api/realtime") as ws:
+            turn_sent_at = time.monotonic()
+            ws.send_text(
+                encode_message(
+                    JsonRpcRequest(
+                        id=1,
+                        method="turn/start",
+                        params={
+                            "threadId": "th-slow-session-lock",
+                            "userItemId": "itm_client_slow_lock_1",
+                            "input": [{"type": "text", "text": "立即显示"}],
+                            "approvalPolicy": "never",
+                        },
+                    )
+                )
+            )
+
+            user_visible = False
+            while not user_visible:
+                msg = decode_message(ws.receive_text())
+                if isinstance(msg, Notification):
+                    notifications.append(msg)
+                    item = msg.params.get("item") if isinstance(msg.params, dict) else None
+                    user_visible = bool(
+                        msg.method == "item/completed"
+                        and isinstance(item, dict)
+                        and item.get("type") == "userMessage"
+                    )
+                    continue
+                if isinstance(msg, JsonRpcResponse):
+                    pytest.fail("turn completed before the user message became visible")
+
+            methods = [notification.method for notification in notifications]
+            assert "turn/started" in methods
+            assert not lock_released.is_set(), "store lock delayed the visible Send boundary"
+
+            while response is None:
+                msg = decode_message(ws.receive_text())
+                if isinstance(msg, Notification):
+                    notifications.append(msg)
+                elif isinstance(msg, JsonRpcResponse) and msg.id == 1:
+                    response = msg
+            turn_elapsed = time.monotonic() - turn_sent_at
+            # The one-second pending-report budget also bounds model start:
+            # the real ReAct lifecycle wrapper (including busy+idle markers)
+            # and fake model finish while the store's main lock is unavailable.
+            assert not lock_released.is_set(), "store lock delayed turn execution"
+            assert turn_elapsed < 2.0, f"turn completion waited {turn_elapsed:.2f}s for store lock"
+            release_lock.set()
+            assert pending_read_finished.wait(2.0)
+            assert injection_attempted.wait(2.0)
+            # The turn already unregistered its injector before the deferred
+            # scan completed. Failed injection must not ack the durable report.
+            assert len(store.pending_reports(session.session_id)) == 1
+
+            # The next turn surfaces that same durable report exactly once and
+            # only then advances its delivery cursor.
+            second = _drive(
+                ws,
+                {
+                    "threadId": "th-slow-session-lock",
+                    "userItemId": "itm_client_slow_lock_2",
+                    "input": [{"type": "text", "text": "继续处理报告"}],
+                    "approvalPolicy": "never",
+                },
+            )
+            second_response = second["response"]
+            assert store.pending_reports(session.session_id) == []
+    finally:
+        release_lock.set()
+        holder.join(timeout=3.0)
+        set_subagent_session_store(previous)
+
+    assert response is not None and response.error is None
+    assert second_response is not None and second_response.error is None
+    turn = response.result["turn"]
+    assert turn["items"][0]["id"] == "itm_client_slow_lock_1"
+    report_text = "[子代理报告] 稍后注入"
+    assert drained_reports.count(report_text) == 1
+    second_steering = [
+        item
+        for item in second_response.result["turn"]["items"]
+        if item.get("type") == "steeringUserMessage"
+    ]
+    assert [item["text"] for item in second_steering].count(report_text) == 1
+    timing_messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "realtime turn startup timing thread_id=th-slow-session-lock" in message
+        and "active_register_ms=" in message
+        and "created_to_turn_started_ms=" in message
+        for message in timing_messages
+    )
+    assert any(
+        "realtime pending reports timing thread_id=th-slow-session-lock" in message
+        and "pending_reports_ms=" in message
+        for message in timing_messages
+    )
+
+
+def test_subagent_store_lock_does_not_delay_interrupt_terminal(
+    gateway: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Interrupt and ReAct busy/idle teardown stay off the durable store lock."""
+
+    import runtime.core.cerebrum.react_loop as rl
+    from runtime.execution.subagents.sessions import (
+        SubagentSessionStore,
+        get_subagent_session_store,
+        set_subagent_session_store,
+    )
+    from runtime.safety.approval.cancellation import current_cancellation_token
+
+    client, logs_root = gateway
+    store = SubagentSessionStore(base_dir=Path(logs_root) / "subagent_interrupt_sessions")
+    previous = get_subagent_session_store()
+    set_subagent_session_store(store)
+    producer_started = threading.Event()
+
+    def _interruptible_impl(*args: Any, **kwargs: Any) -> Iterator[dict[str, Any]]:
+        yield {
+            "type": "react_started",
+            "task_id": "task-live-lock-interrupt",
+            "thread_id": kwargs.get("thread_id", ""),
+        }
+        producer_started.set()
+        token = current_cancellation_token()
+        while not token.is_cancelled:
+            time.sleep(0.01)
+        yield {"type": "react_cancelled", "iteration": 1}
+
+    monkeypatch.setattr(rl, "stream_react_loop", _REAL_STREAM_REACT_LOOP)
+    monkeypatch.setattr(rl, "_stream_react_loop_impl", _interruptible_impl)
+
+    durable_locked = threading.Event()
+    release_durable = threading.Event()
+    durable_released = threading.Event()
+
+    def _hold_durable_lock() -> None:
+        with store._lock:  # noqa: SLF001 - intentional contention injection
+            durable_locked.set()
+            release_durable.wait(5.0)
+        durable_released.set()
+
+    holder = threading.Thread(target=_hold_durable_lock, daemon=True)
+    holder.start()
+    assert durable_locked.wait(1.0)
+    final: JsonRpcResponse | None = None
+    interrupt_sent_at: float | None = None
+    try:
+        with client.websocket_connect("/api/realtime") as ws:
+            ws.send_text(
+                encode_message(
+                    JsonRpcRequest(
+                        id=1,
+                        method="turn/start",
+                        params={
+                            "threadId": "th-live-lock-interrupt",
+                            "input": [{"type": "text", "text": "开始后立即停止"}],
+                            "approvalPolicy": "never",
+                        },
+                    )
+                )
+            )
+            turn_id: str | None = None
+            while turn_id is None:
+                message = decode_message(ws.receive_text())
+                if isinstance(message, Notification) and message.method == "turn/started":
+                    turn_id = message.params["turn"]["id"]
+            # This event is set only after the production wrapper successfully
+            # entered its inner loop, so a durable-lock-bound mark_thread_busy
+            # makes the regression fail here rather than falsely passing.
+            assert producer_started.wait(2.0), "ReAct wrapper waited on durable store lock"
+            interrupt_sent_at = time.monotonic()
+            ws.send_text(
+                encode_message(
+                    JsonRpcRequest(
+                        id=99,
+                        method="turn/interrupt",
+                        params={
+                            "threadId": "th-live-lock-interrupt",
+                            "turnId": turn_id,
+                        },
+                    )
+                )
+            )
+            while final is None:
+                message = decode_message(ws.receive_text())
+                if isinstance(message, JsonRpcResponse) and message.id == 1:
+                    final = message
+
+        assert interrupt_sent_at is not None
+        interrupt_elapsed = time.monotonic() - interrupt_sent_at
+        assert interrupt_elapsed < 2.0, (
+            f"interrupt terminal waited {interrupt_elapsed:.2f}s for durable store lock"
+        )
+        assert not durable_released.is_set()
+        assert final is not None and final.error is None
+        assert final.result["turn"]["status"] == "cancelled"
+    finally:
+        release_durable.set()
+        holder.join(timeout=5.0)
+        set_subagent_session_store(previous)
+
+
+def test_turn_start_user_item_id_is_stable_and_retry_is_idempotent(gateway: Any) -> None:
+    from runtime.memory.threads.event_log import EventLog, thread_log_path
+
+    client, logs_root = gateway
+    params = {
+        "threadId": "th-idempotent-user-item",
+        "userItemId": "itm_client_retry_1234",
+        "input": [
+            {
+                "type": "text",
+                "text": "只执行一次",
+                "metadata": {"client_message_id": "client-message-1234"},
+            }
+        ],
+        "approvalPolicy": "never",
+    }
+    _set_script([{"type": "react_completed"}])
+    with client.websocket_connect("/api/realtime") as ws:
+        first = _drive(ws, params)
+        retry = _drive(ws, params)
+        conflicting_retry = _drive(
+            ws,
+            {
+                **params,
+                "input": [{"type": "text", "text": "恶意替换成另一条指令"}],
+            },
+        )
+
+    first_turn = first["response"].result["turn"]
+    retry_turn = retry["response"].result["turn"]
+    assert retry_turn["id"] == first_turn["id"]
+    assert retry["notifications"] == []
+    assert conflicting_retry["response"].error is not None
+    assert conflicting_retry["response"].error.code == JsonRpcErrorCode.INVALID_PARAMS
+    assert conflicting_retry["notifications"] == []
+    user_items = [item for item in first_turn["items"] if item["type"] == "userMessage"]
+    assert [item["id"] for item in user_items] == ["itm_client_retry_1234"]
+    assert first_turn["params"]["userItemId"] == "itm_client_retry_1234"
+    assert (
+        first_turn["params"]["input"][0]["metadata"]["client_message_id"] == "client-message-1234"
+    )
+
+    turns = EventLog(thread_log_path(logs_root, "th-idempotent-user-item")).replay()
+    assert [turn.id for turn in turns] == [first_turn["id"]]
+
+
+@pytest.mark.parametrize(
+    "user_item_id",
+    ["bad", "msg_not_an_item", "itm_has spaces", f"itm_{'a' * 100}"],
+)
+def test_turn_start_rejects_invalid_user_item_id(gateway: Any, user_item_id: str) -> None:
+    client, logs_root = gateway
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-invalid-user-item-id",
+                "userItemId": user_item_id,
+                "input": [{"type": "text", "text": "不要执行"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    assert out["response"].error is not None
+    assert out["response"].error.code == JsonRpcErrorCode.INVALID_PARAMS
+    assert out["notifications"] == []
+    assert not (Path(logs_root) / "th-invalid-user-item-id.jsonl").exists()
 
 
 def test_commentary_delta_maps_to_non_terminal_agent_message(gateway: Any) -> None:
@@ -1390,8 +2174,10 @@ def test_todo_write_emits_plan_update_and_resume_snapshot(gateway: Any) -> None:
     assert phases[1]["status"] == "running"
     assert phases[1]["activeItemId"] == "todo-1"
     assert updates[0].params["workspaceFocus"]["view"] == "trace"
-    assert updates[0].params["workbenchSnapshot"]["schemaVersion"] == 2
-    assert updates[0].params["workbenchSnapshot"]["currentItemId"] == "todo-1"
+    # SUNSET: the embedded workbenchSnapshot no longer ships on
+    # turn/plan/updated by default — the identical frame arrives on the
+    # dedicated workbench/snapshot notification (asserted below).
+    assert "workbenchSnapshot" not in updates[0].params
 
     snapshots = [n for n in out["notifications"] if n.method == "workbench/snapshot"]
     assert snapshots
@@ -1523,6 +2309,201 @@ def test_team_subagent_lifecycle_maps_to_first_class_item(
     assert sub_items[0]["status"] == "completed"
 
 
+def test_persistent_cowork_chat_without_mention_completes_without_model(
+    tmp_path: Path,
+) -> None:
+    from runtime.memory.cowork.collaboration_store import CollaborationStore
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member
+    from runtime.memory.cowork.session import link_room
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    groups = GroupStore(base_dir=tmp_path / "cowork")
+    collaboration = CollaborationStore(base_dir=tmp_path / "cowork")
+    invite_member(groups, "th-project-room", actor="u", target_id="general", kind="agent")
+    link_room(groups, "th-project-room", "room-project", actor="u")
+    collaboration.upsert_room(
+        "th-project-room",
+        {"id": "room-project", "name": "Project room", "participants": []},
+    )
+    _set_script(
+        [
+            {"type": "text_delta", "delta": "must not run"},
+            {"type": "react_completed"},
+        ]
+    )
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "threads"),
+        cowork_group_store=groups,
+        collaboration_store=collaboration,
+    )
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-project-room",
+                "input": [{"type": "text", "text": "这是一条普通项目群消息"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "completed"
+    assert turn["outcomeReason"] == "cowork_waiting_for_mention"
+    assert [item["type"] for item in turn["items"]] == ["userMessage"]
+    assert _LAST_STREAM_ARGS == {}
+
+    messages = collaboration.messages_for_session("th-project-room")
+    assert len(messages) == 1
+    message = messages[0]
+    user_item = turn["items"][0]
+    assert message["text"] == "这是一条普通项目群消息"
+    assert message["participant_id"] == "anonymous"
+    assert message["display_name"] == "我"
+    assert message["metadata"]["source_message_id"] == f"thread:{user_item['id']}"
+
+    # Emulate the frontend's lazy Project-action mirror.  The shared source id
+    # must resolve to the existing canonical row, never append a second copy.
+    repeated_seq = collaboration.append_message(
+        "th-project-room",
+        room_id="room-project",
+        text=message["text"],
+        participant_id="anonymous",
+        display_name="我",
+        metadata={"source_message_id": message["metadata"]["source_message_id"]},
+    )
+    assert repeated_seq == message["seq"]
+    assert len(collaboration.messages_for_session("th-project-room")) == 1
+
+
+def test_persistent_cowork_chat_mention_drives_addressed_agent(
+    tmp_path: Path,
+) -> None:
+    from runtime.memory.cowork.collaboration_store import CollaborationStore
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member
+    from runtime.memory.cowork.session import link_room
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    class FakeAgent:
+        def __init__(self, agent_id: str) -> None:
+            self.agent_id = agent_id
+            self.display_name = agent_id.title()
+
+    class Registry:
+        def __init__(self, agents: list[FakeAgent]) -> None:
+            self.agents = {agent.agent_id: agent for agent in agents}
+
+        def has(self, agent_id: str) -> bool:
+            return agent_id in self.agents
+
+        def get(self, agent_id: str) -> FakeAgent:
+            return self.agents[agent_id]
+
+    general = FakeAgent("general")
+    eve = FakeAgent("eve")
+    registry = Registry([general, eve])
+    groups = GroupStore(base_dir=tmp_path / "cowork")
+    collaboration = CollaborationStore(base_dir=tmp_path / "cowork")
+    invite_member(groups, "th-addressed-room", actor="u", target_id="general", kind="agent")
+    invite_member(groups, "th-addressed-room", actor="u", target_id="eve", kind="agent")
+    link_room(groups, "th-addressed-room", "room-addressed", actor="u")
+    collaboration.upsert_room(
+        "th-addressed-room",
+        {"id": "room-addressed", "name": "Addressed room", "participants": []},
+    )
+    _set_script(
+        [
+            {"type": "text_delta", "delta": "Eve handled it"},
+            {"type": "react_completed"},
+        ]
+    )
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=general,
+        agent_registry=registry,
+        logs_root=str(tmp_path / "threads"),
+        cowork_group_store=groups,
+        collaboration_store=collaboration,
+    )
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-addressed-room",
+                "input": [{"type": "text", "text": "@agent:eve 请检查一下"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "completed"
+    assert _LAST_STREAM_ARGS["args"][2] is eve
+    assert [item["text"] for item in turn["items"] if item["type"] == "agentMessage"] == [
+        "Eve handled it"
+    ]
+    messages = collaboration.messages_for_session("th-addressed-room")
+    assert len(messages) == 1
+    assert messages[0]["text"] == "@agent:eve 请检查一下"
+
+
+def test_unlinked_single_agent_cowork_chat_keeps_one_to_one_react(
+    tmp_path: Path,
+) -> None:
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    groups = GroupStore(base_dir=tmp_path / "cowork")
+    invite_member(groups, "th-private", actor="u", target_id="general", kind="agent")
+    _set_script(
+        [
+            {"type": "text_delta", "delta": "normal reply"},
+            {"type": "react_completed"},
+        ]
+    )
+    default_agent = object()
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=default_agent,
+        logs_root=str(tmp_path / "threads"),
+        cowork_group_store=groups,
+    )
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-private",
+                "input": [{"type": "text", "text": "hello"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "completed"
+    assert _LAST_STREAM_ARGS["args"][2] is default_agent
+    assert [item["text"] for item in turn["items"] if item["type"] == "agentMessage"] == [
+        "normal reply"
+    ]
+
+
 def test_cowork_swarm_plan_drives_group_fanout(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1538,9 +2519,36 @@ def test_cowork_swarm_plan_drives_group_fanout(
     set_mode(store, "th-cowork", actor="u", mode="swarm")
     seen: dict[str, Any] = {}
 
+    def fake_member_call(
+        *,
+        agent_id: str,
+        prompt: str,
+        context: dict[str, Any] | None = None,
+        **_kwargs: Any,
+    ) -> dict[str, Any]:
+        seen.setdefault("member_calls", []).append(
+            {
+                "agent_id": agent_id,
+                "prompt": prompt,
+                "context": dict(context or {}),
+            }
+        )
+        return {"success": True, "output": f"{agent_id} replied", "error": None}
+
+    monkeypatch.setattr(
+        "runtime.execution.suckers.delegation_skills._call_agent",
+        fake_member_call,
+    )
+
     def fake_fanout(message: str, members: list[dict[str, Any]], **_kwargs: Any) -> dict[str, Any]:
         seen["message"] = message
         seen["members"] = members
+        caller = _kwargs["agent_caller"]
+        for member in members:
+            caller(
+                agent_id=member["name"],
+                prompt=f"fanout prompt for {member['name']}",
+            )
         return {
             "ok": True,
             "count": len(members),
@@ -1612,13 +2620,39 @@ def test_cowork_swarm_plan_drives_group_fanout(
             ws,
             {
                 "threadId": "th-cowork",
-                "input": [{"type": "text", "text": "大家一起看下"}],
+                "input": [
+                    {
+                        "type": "text",
+                        "text": "大家一起看下",
+                        "metadata": {
+                            "context": {
+                                "agent_mode": "audit",
+                                "personal_mode": "research",
+                                "personal_instructions": "优先引用一手来源。",
+                                "workflow_preset": "audit.deep",
+                                "verification_policy": "strict",
+                            }
+                        },
+                    }
+                ],
                 "approvalPolicy": "never",
             },
         )
 
     assert seen["message"] == "大家一起看下"
     assert [m["name"] for m in seen["members"]] == ["db-agent", "ui-agent"]
+    assert len(seen["member_calls"]) == 2
+    for member_call in seen["member_calls"]:
+        member_context = member_call["context"]
+        assert member_context["agent_mode"] == "audit"
+        assert member_context["personal_mode"] == "research"
+        assert member_context["personal_instructions"] == "优先引用一手来源。"
+        assert member_context["workflow_preset"] == "audit.deep"
+        assert member_context["verification_policy"] == "strict"
+        assert member_context["tool_allowlist_read_only"] is True
+        assert "audit.deep" in member_context["system_addendum"]
+        assert "当前任务类型: research" in member_context["system_addendum"]
+        assert "audit.deep" in member_call["prompt"]
     turn = out["response"].result["turn"]
     team_items = [
         item
@@ -1721,9 +2755,7 @@ def test_cowork_swarm_failure_reports_group_fanout_driver(
     assert audit["fallback"] == "react"
 
 
-def test_cowork_project_mode_runs_project_os(
-    tmp_path: Path,
-) -> None:
+def test_legacy_project_mode_does_not_auto_create_or_run_project_os(tmp_path: Path) -> None:
     from runtime.memory.cowork.group_store import GroupStore
     from runtime.memory.cowork.service import invite_member, set_mode
     from runtime.projectos.store import ProjectStore
@@ -1734,6 +2766,7 @@ def test_cowork_project_mode_runs_project_os(
     invite_member(store, "th-project", actor="u", target_id="research-agent", kind="agent")
     invite_member(store, "th-project", actor="u", target_id="build-agent", kind="agent")
     set_mode(store, "th-project", actor="u", mode="project")
+    assert store.state("th-project").mode == "chat"
     project_store = ProjectStore(base_dir=tmp_path / "projectos")
     _set_script(
         [
@@ -1764,49 +2797,177 @@ def test_cowork_project_mode_runs_project_os(
 
     turn = out["response"].result["turn"]
     agent_texts = [item["text"] for item in turn["items"] if item["type"] == "agentMessage"]
-    assert len(agent_texts) == 1
-    assert "Project OS 已接管并运行项目" in agent_texts[0]
-    assert "react should not run" not in agent_texts[0]
-    todo_items = [item for item in turn["items"] if item["type"] == "todo-list"]
-    assert len(todo_items) == 1
-    assert todo_items[0]["explanation"].startswith("Project OS")
-    assert all(entry["status"] == "completed" for entry in todo_items[0]["plan"])
-    trace_items = [
-        item
-        for item in turn["items"]
-        if item["type"] == "reasoning"
-        and "octopus.projectos.run_trace.v1" in item.get("content", "")
-    ]
-    assert len(trace_items) == 1
-    trace = json.loads(trace_items[0]["content"])
-    assert trace["schema"] == "octopus.projectos.run_trace.v1"
-    assert trace["tick_events"]
-    projects = project_store.list_projects()
-    assert len(projects) == 1
-    project = projects[0]
-    assert project.status == "done"
-    assigned = {
-        task.assigned_agent
-        for milestone in project_store.milestones_for(project.id)
-        for task in project_store.tasks_for_milestone(milestone.id)
-    }
-    assert assigned <= {"research-agent", "build-agent"}
-    assert assigned
+    # The canonical chat strategy waits for an @mention in a multi-agent room;
+    # critically, the ordinary sentence cannot create or run Project OS.
+    assert turn["status"] == "completed"
+    assert agent_texts == []
+    assert project_store.list_projects() == []
+    assert project_store.project_for_thread("th-project") is None
 
 
-def test_cowork_project_mode_unhandled_failure_reports_driver_source(
+def test_authenticated_explicit_project_command_owns_project_and_subagent_workspace(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from runtime.memory.cowork.group_store import GroupStore
-    from runtime.memory.cowork.service import invite_member, set_mode
+    from runtime.memory.cowork.service import invite_member
+    from runtime.memory.threads import ThreadStateStore
+    from runtime.projectos.llm_hooks import subagent_execute_task
+    from runtime.projectos.model import Milestone, Task
+    from runtime.projectos.store import ProjectStore
+    from runtime.safety.auth import Identity, IdentityStore
+    from runtime.safety.auth.scope import TenantScope
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+    from runtime.sensing.gateway.thread_workspace import managed_workspace_path
+
+    thread_id = "th-auth-project"
+    groups = GroupStore(base_dir=tmp_path / "cowork")
+    invite_member(groups, thread_id, actor="alice", target_id="build-agent", kind="agent")
+    projects = ProjectStore(base_dir=tmp_path / "projectos")
+    threads = ThreadStateStore()
+    workspace_root = tmp_path / "managed"
+    dispatched: list[dict[str, Any]] = []
+
+    def fake_call_subagent(_agent: str, _prompt: str, **kwargs: Any) -> dict[str, Any]:
+        dispatched.append(dict(kwargs.get("context") or {}))
+        return {"success": True, "output": "delivered"}
+
+    monkeypatch.setattr(
+        "runtime.execution.subagents.call_subagent",
+        fake_call_subagent,
+    )
+
+    def milestones(goal: str) -> list[Milestone]:
+        return [Milestone(id="MS-auth", name="build", goal=goal)]
+
+    def tasks(milestone: Milestone) -> list[Task]:
+        return [
+            Task(
+                id="MS-auth-T1",
+                milestone_id=milestone.id,
+                type="code",
+                goal="deliver securely",
+            )
+        ]
+
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "logs"),
+        workspace_root=workspace_root,
+        thread_store=threads,
+        cowork_group_store=groups,
+        project_store=projects,
+        project_os_hooks={
+            "generate_milestones": milestones,
+            "decompose_tasks": tasks,
+            "execute_task": subagent_execute_task,
+            "qa_task": lambda _task, _milestone: {"approved": True, "reason": "ok"},
+        },
+    )
+    identities = IdentityStore()
+    identities.add(
+        Identity(actor_id="alice", metadata={"tenant_id": "tenant-a"}),
+        api_key_plaintext="sk-alice",
+    )
+    gateway = RealtimeGateway(
+        runtime=runtime,
+        approval_timeout=5.0,
+        identity_store=identities,
+        require_auth=True,
+    )
+    app = FastAPI()
+    app.include_router(gateway.router)
+    outside = tmp_path / "client-selected"
+
+    with (
+        TestClient(app) as client,
+        client.websocket_connect(
+            "/api/realtime",
+            headers={"Authorization": "Bearer sk-alice"},
+        ) as ws,
+    ):
+        created = _drive(
+            ws,
+            {
+                "threadId": thread_id,
+                "cwd": str(outside),
+                "input": [
+                    {
+                        "type": "text",
+                        "text": "/project run 交付认证项目",
+                        "metadata": {
+                            "context": {
+                                "workspace_path": str(outside),
+                                "extra_workspaces": [str(tmp_path)],
+                            }
+                        },
+                    }
+                ],
+                "approvalPolicy": "never",
+            },
+        )
+        reported = _drive(
+            ws,
+            {
+                "threadId": thread_id,
+                "input": [{"type": "text", "text": "/project report"}],
+            },
+        )
+
+    assert created["response"].result["turn"]["status"] == "completed"
+    report_text = "\n".join(
+        item["text"]
+        for item in reported["response"].result["turn"]["items"]
+        if item["type"] == "agentMessage"
+    )
+    assert "Project OS 已执行控制命令" in report_text
+
+    project = projects.project_for_thread(thread_id)
+    assert project is not None
+    assert project.owner_id == "alice"
+    assert project.tenant_id == "tenant-a"
+    assert projects.with_scope(
+        TenantScope(tenant_id="tenant-a", actor_id="alice")
+    ).list_projects() == [project]
+    assert (
+        projects.with_scope(TenantScope(tenant_id="tenant-a", actor_id="bob")).list_projects() == []
+    )
+
+    expected = managed_workspace_path(
+        workspace_root,
+        tenant_id="tenant-a",
+        actor_id="alice",
+        thread_id=thread_id,
+    )
+    persisted = threads.get(thread_id)["metadata"]
+    assert persisted["workspace_path"] == str(expected)
+    assert persisted["owner_actor_id"] == "alice"
+    assert persisted["tenant_id"] == "tenant-a"
+    assert dispatched
+    dispatch = dispatched[0]
+    assert dispatch["thread_id"] == thread_id
+    assert dispatch["actor"] == "alice"
+    assert dispatch["tenant_id"] == "tenant-a"
+    assert dispatch["workspace_path"] == str(expected)
+    runtime_metadata = dispatch["runtime_session_metadata"]
+    assert runtime_metadata["workspace_path"] == str(expected)
+    assert runtime_metadata["_artifact_output_root"] == str(expected / "output" / "final")
+
+
+def test_explicit_project_command_unhandled_failure_reports_driver_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member
     from runtime.projectos.store import ProjectStore
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
     from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
 
     store = GroupStore(base_dir=tmp_path / "cowork")
     invite_member(store, "th-project-fail", actor="u", target_id="research-agent", kind="agent")
-    set_mode(store, "th-project-fail", actor="u", mode="project")
 
     def fail_project(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
         raise RuntimeError("project engine exploded")
@@ -1831,7 +2992,7 @@ def test_cowork_project_mode_unhandled_failure_reports_driver_source(
             ws,
             {
                 "threadId": "th-project-fail",
-                "input": [{"type": "text", "text": "启动项目"}],
+                "input": [{"type": "text", "text": "/project run 启动项目"}],
                 "approvalPolicy": "never",
             },
         )
@@ -1842,14 +3003,14 @@ def test_cowork_project_mode_unhandled_failure_reports_driver_source(
     assert errors[-1]["message"] == "project engine exploded"
     assert errors[-1]["errorInfo"]["code"] == "turn_driver_exception"
     assert errors[-1]["errorInfo"]["driver"] == "project_os"
-    assert errors[-1]["errorInfo"]["cowork_mode"] == "project"
+    assert errors[-1]["errorInfo"]["cowork_mode"] == "chat"
 
 
-def test_cowork_project_mode_reuses_active_project(
+def test_explicit_project_command_reuses_active_project(
     tmp_path: Path,
 ) -> None:
     from runtime.memory.cowork.group_store import GroupStore
-    from runtime.memory.cowork.service import invite_member, set_mode
+    from runtime.memory.cowork.service import invite_member
     from runtime.projectos.store import ProjectStore
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
     from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
@@ -1857,7 +3018,6 @@ def test_cowork_project_mode_reuses_active_project(
     store = GroupStore(base_dir=tmp_path / "cowork")
     invite_member(store, "th-project", actor="u", target_id="research-agent", kind="agent")
     invite_member(store, "th-project", actor="u", target_id="build-agent", kind="agent")
-    set_mode(store, "th-project", actor="u", mode="project")
     project_store = ProjectStore(base_dir=tmp_path / "projectos")
     runtime = CerebrumRuntime(
         stack=object(),
@@ -1878,7 +3038,7 @@ def test_cowork_project_mode_reuses_active_project(
                 "input": [
                     {
                         "type": "text",
-                        "text": "启动项目",
+                        "text": "/project run 启动项目",
                         "metadata": {"context": {"project_os_max_ticks": 1}},
                     }
                 ],
@@ -1892,7 +3052,7 @@ def test_cowork_project_mode_reuses_active_project(
             ws,
             {
                 "threadId": "th-project",
-                "input": [{"type": "text", "text": "继续"}],
+                "input": [{"type": "text", "text": "/project run 继续"}],
                 "approvalPolicy": "never",
             },
         )
@@ -1963,12 +3123,26 @@ def test_project_os_blocked_result_does_not_claim_auto_continue() -> None:
     assert "状态：blocked" in text
     assert "项目已阻塞" in text
     assert "后续回合会继续" not in text
+    # 对话框交互引导：阻塞项目提示可用命令（恢复/PM 驾驶舱/复盘）。
+    assert "下一步可输入" in text
+    assert "/project recover（恢复项目）" in text
+    assert "/project report（PM 驾驶舱）" in text
 
 
 def test_project_os_control_parser() -> None:
+    from runtime.sensing.gateway._realtime_cerebrum_project_os import _is_project_os_command
     from runtime.sensing.gateway.realtime_cerebrum import _parse_project_os_control
 
     assert _parse_project_os_control("hello") is None
+    assert _parse_project_os_control("/project run ship the roadmap") == {
+        "type": "run",
+        "goal": "ship the roadmap",
+    }
+    assert _parse_project_os_control("/project start 'secure launch'") == {
+        "type": "run",
+        "goal": "secure launch",
+    }
+    assert _is_project_os_command("/projectile report") is False
     assert _parse_project_os_control("/project recover tasks=MS1-T1,MS1-T2 run") == {
         "type": "recover",
         "task_ids": ["MS1-T1", "MS1-T2"],
@@ -2002,11 +3176,11 @@ def test_project_os_control_parser() -> None:
     }
 
 
-def test_cowork_project_mode_accepts_task_control_command(
+def test_explicit_project_command_accepts_task_control_command(
     tmp_path: Path,
 ) -> None:
     from runtime.memory.cowork.group_store import GroupStore
-    from runtime.memory.cowork.service import invite_member, set_mode
+    from runtime.memory.cowork.service import invite_member
     from runtime.projectos.store import ProjectStore
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
     from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
@@ -2014,7 +3188,6 @@ def test_cowork_project_mode_accepts_task_control_command(
     store = GroupStore(base_dir=tmp_path / "cowork")
     invite_member(store, "th-project-control", actor="u", target_id="research-agent", kind="agent")
     invite_member(store, "th-project-control", actor="u", target_id="build-agent", kind="agent")
-    set_mode(store, "th-project-control", actor="u", mode="project")
     project_store = ProjectStore(base_dir=tmp_path / "projectos")
     runtime = CerebrumRuntime(
         stack=object(),
@@ -2035,7 +3208,7 @@ def test_cowork_project_mode_accepts_task_control_command(
                 "input": [
                     {
                         "type": "text",
-                        "text": "启动项目",
+                        "text": "/project run 启动项目",
                         "metadata": {"context": {"project_os_max_ticks": 1}},
                     }
                 ],
@@ -2085,18 +3258,17 @@ def test_cowork_project_mode_accepts_task_control_command(
     assert "task.intervention" in [e["kind"] for e in trace["audit_events"]]
 
 
-def test_cowork_project_mode_reports_failed_task_control_command(
+def test_explicit_project_command_reports_failed_task_control_command(
     tmp_path: Path,
 ) -> None:
     from runtime.memory.cowork.group_store import GroupStore
-    from runtime.memory.cowork.service import invite_member, set_mode
+    from runtime.memory.cowork.service import invite_member
     from runtime.projectos.store import ProjectStore
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
     from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
 
     store = GroupStore(base_dir=tmp_path / "cowork")
     invite_member(store, "th-project-control-fail", actor="u", target_id="agent-a", kind="agent")
-    set_mode(store, "th-project-control-fail", actor="u", mode="project")
     project_store = ProjectStore(base_dir=tmp_path / "projectos")
     runtime = CerebrumRuntime(
         stack=object(),
@@ -2117,7 +3289,7 @@ def test_cowork_project_mode_reports_failed_task_control_command(
                 "input": [
                     {
                         "type": "text",
-                        "text": "启动项目",
+                        "text": "/project run 启动项目",
                         "metadata": {"context": {"project_os_max_ticks": 1}},
                     }
                 ],
@@ -2949,6 +4121,48 @@ def test_explicit_turn_cwd_becomes_code_workspace(tmp_path: Path) -> None:
     assert intent.user_context["mode"] == "code"
 
 
+def test_local_context_project_binding_becomes_execution_cwd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.platform.runtime_policy.workspaces import WorkspaceManager
+    from runtime.protocol.items import TurnParams
+    from runtime.sensing.gateway.realtime_cerebrum import _build_intent
+
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "local")
+    monkeypatch.setenv("OCTOPUS_FS_ALLOWED_ROOTS", str(tmp_path))
+    params = TurnParams.model_validate(
+        {
+            "threadId": "th-context-project",
+            "input": [
+                {
+                    "type": "text",
+                    "text": "inspect the project",
+                    "metadata": {
+                        "context": {
+                            "mode": "code",
+                            "workspace_path": str(project),
+                            "workspace_scope": "project",
+                        }
+                    },
+                }
+            ],
+        }
+    )
+
+    intent = _build_intent(
+        "inspect the project",
+        params,
+        workspaces=WorkspaceManager(tmp_path / "managed"),
+    )
+
+    assert intent.user_context["cwd"] == str(project.resolve())
+    assert intent.user_context["workspace_path"] == str(project.resolve())
+    assert intent.user_context["workspace_scope"] == "project"
+
+
 def test_explicit_chat_turn_does_not_inherit_personal_code_metadata(tmp_path: Path) -> None:
     from runtime.sensing.gateway.turn_session import build_turn_metadata
 
@@ -2991,7 +4205,7 @@ def test_existing_thread_keeps_its_agent_when_turn_context_disagrees() -> None:
     class Store:
         def get(self, thread_id: str) -> dict[str, object]:
             assert thread_id == "th-opencode"
-            return {"metadata": {"agent": "local_opencode_cli", "mode": "react"}}
+            return {"metadata": {"agent": "installed_researcher", "mode": "react"}}
 
     metadata = build_turn_metadata(
         thread_id="th-opencode",
@@ -2999,8 +4213,8 @@ def test_existing_thread_keeps_its_agent_when_turn_context_disagrees() -> None:
         store=Store(),
     )
 
-    assert metadata["agent"] == "local_opencode_cli"
-    assert metadata["agent_name"] == "local_opencode_cli"
+    assert metadata["agent"] == "installed_researcher"
+    assert metadata["agent_name"] == "installed_researcher"
 
 
 def test_agent_resolution_prefers_existing_thread_owner() -> None:
@@ -3012,7 +4226,7 @@ def test_agent_resolution_prefers_existing_thread_owner() -> None:
 
     class Registry:
         agents = {
-            "local_opencode_cli": owner,
+            "installed_researcher": owner,
             "general": requested,
         }
 
@@ -3025,7 +4239,7 @@ def test_agent_resolution_prefers_existing_thread_owner() -> None:
     class Store:
         def get(self, thread_id: str) -> dict[str, object]:
             assert thread_id == "th-opencode"
-            return {"metadata": {"agent": "local_opencode_cli"}}
+            return {"metadata": {"agent": "installed_researcher"}}
 
     class Runtime:
         _thread_store = Store()
@@ -3272,6 +4486,7 @@ def test_codex_composer_marker_is_stripped_into_intent_metadata() -> None:
     assert intent.user_context["goal_mode"] is True
     assert intent.user_context["mode_preset"] == "goal.mode"
     assert intent.user_context["workflow_preset"] == "goal.mode"
+
 
 def test_mode_composer_marker_is_stripped_into_intent_metadata() -> None:
     from runtime.protocol import TurnParams
@@ -3910,6 +5125,37 @@ def test_react_error_becomes_error_item(gateway: Any) -> None:
     turn = out["response"].result["turn"]
     err_items = [it for it in turn["items"] if it["type"] == "error"]
     assert err_items and err_items[0]["message"] == "boom"
+
+
+def test_transient_model_disconnect_is_retryable_and_preserves_progress_copy(gateway: Any) -> None:
+    client, _ = gateway
+    _set_script(
+        [
+            {"type": "text_delta", "delta": "已完成一部分"},
+            {
+                "type": "react_error",
+                "kind": "RemoteProtocolError",
+                "message": "Server disconnected without sending a response",
+                "iteration": 2,
+            },
+        ]
+    )
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-transient-disconnect",
+                "input": [{"type": "text", "text": "go"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    err = next(item for item in turn["items"] if item["type"] == "error")
+    assert err["willRetry"] is True
+    assert "已完成的步骤" in err["message"]
+    assert err["errorInfo"]["code"] == "model_stream_disconnected"
+    assert turn["outcomeReason"] == "model_stream_disconnected"
 
 
 def test_resume_after_turn_rebuilds_from_disk(gateway: Any) -> None:
@@ -5354,9 +6600,7 @@ def test_auto_wake_turn_does_not_refill_budget(gateway: Any, tmp_path: Path) -> 
                     "approvalPolicy": "never",
                 },
             )
-            started_count = sum(
-                1 for n in out["notifications"] if n.method == "turn/started"
-            )
+            started_count = sum(1 for n in out["notifications"] if n.method == "turn/started")
             assert started_count == 1
 
             # A HUMAN turn refills the budget; the next wakeup wakes again.

@@ -42,9 +42,16 @@ def _ignored_tracked_files(paths: list[str]) -> list[str]:
 
 
 def _tracked_files() -> list[str]:
-    if not (ROOT / ".git").is_dir():
-        pytest.skip("not a git repository — hygiene check requires git ls-files")
     try:
+        probe = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        if probe.returncode != 0 or probe.stdout.strip() != "true":
+            pytest.skip("not a git worktree — hygiene check requires git ls-files")
         output = subprocess.check_output(
             ["git", "ls-files"],
             cwd=ROOT,

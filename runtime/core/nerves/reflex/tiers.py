@@ -268,9 +268,24 @@ class SLMTier(ReplyTier):
             "max_tokens": 80,
             "temperature": 0.2,
         }
+        # SSRF guard (audit C4): the SLM endpoint is a local/private model
+        # server by design, so private IPs are allowed — but the scheme and
+        # host still must pass url_guard (blocks file://, missing host, …).
+        from runtime.safety.auth.url_guard import check_url
+
+        endpoint_url = self.endpoint.rstrip("/") + "/chat/completions"
+        verdict = check_url(endpoint_url, allow_private=True)
+        if not verdict.allow:
+            self.errors += 1
+            return TierResult(
+                self.name,
+                None,
+                (time.perf_counter() - t0) * 1000,
+                detail=f"slm url rejected: {verdict.reason}",
+            )
         try:
             req = urllib.request.Request(
-                self.endpoint.rstrip("/") + "/chat/completions",
+                endpoint_url,
                 data=json.dumps(body).encode("utf-8"),
                 headers={"Content-Type": "application/json"},
                 method="POST",

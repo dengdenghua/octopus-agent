@@ -1,5 +1,11 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import type { ReactElement } from "react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import type { ReactElement, ReactNode } from "react";
 import { describe, expect, test, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/harness";
@@ -12,7 +18,9 @@ import {
   AgentWorkbenchPanel,
   hasAgentWorkbenchContent,
 } from "./agent-workbench-panel";
+import { AGENT_WORKBENCH_FOCUS_EVENT } from "./agent-workbench-events";
 import type { LiveToolEvent } from "./live-tool-timeline";
+import { deriveAgentTilesFromEvents } from "./use-agent-workbench-i18n";
 
 vi.mock("@/components/workspace/terminal-panel", () => ({
   TerminalPanel: ({ cwd, sessionId }: { cwd?: string; sessionId: string }) => (
@@ -40,6 +48,16 @@ vi.mock("./live-preview-panel", () => ({
 
 vi.mock("./browser-preview-panel", () => ({
   BrowserPreviewPanel: () => <div data-testid="mock-browser-preview" />,
+}));
+
+// Streamdown ships a package-level CSS side-effect. Rendering behavior is
+// covered elsewhere; this workbench suite only needs deterministic text so a
+// React.lazy import cannot escape Vitest's CSS transform after the test ends.
+vi.mock("@/components/ai-elements/streamdown-host", () => ({
+  default: ({ children }: { children?: ReactNode }) => <>{children}</>,
+  LocalizedStreamdown: ({ children }: { children?: ReactNode }) => (
+    <>{children}</>
+  ),
 }));
 
 function event(partial: Partial<LiveToolEvent>): LiveToolEvent {
@@ -118,6 +136,41 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("等待开机")).not.toBeInTheDocument();
   });
 
+  test("keeps a visible close control in the workbench header", () => {
+    const onClose = vi.fn();
+    renderWorkbench(
+      <AgentWorkbenchPanel activeTab="agent" events={[]} onClose={onClose} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭工作台" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test("lets temporary workbench tabs close themselves", () => {
+    const onSelectTab = vi.fn();
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="diff"
+        onSelectTab={onSelectTab}
+        events={[
+          event({
+            id: "diff-tab-file",
+            name: "write_file",
+            input: {
+              changes: [{ path: "src/app.tsx", op: "update", diff: "+change" }],
+            },
+          }),
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭标签页：Diff" }));
+    expect(onSelectTab).toHaveBeenCalledWith("agent");
+    expect(
+      screen.queryByRole("button", { name: "关闭标签页：协作工作台" }),
+    ).not.toBeInTheDocument();
+  });
+
   test("hides capability decisions when the turn has no decision trace", () => {
     renderWorkbench(<AgentWorkbenchPanel activeTab="agent" events={[]} />);
 
@@ -125,7 +178,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("本轮暂无能力决策")).not.toBeInTheDocument();
   });
 
-  test("presents capability decisions without exposing internal trace keys", () => {
+  test("keeps explanatory capability decisions out of the persistent workbench UI", () => {
     renderWorkbench(
       <AgentWorkbenchPanel
         activeTab="agent"
@@ -159,18 +212,59 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
+    expect(
+      screen.queryByRole("button", { name: /能力决策/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("委派工具隐藏")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("技能目录 42 条（未截断）"),
+    ).not.toBeInTheDocument();
+  });
+
+  test("surfaces only capability decisions that need user attention", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        events={[
+          event({
+            id: "visibility-action-required",
+            name: "visibility",
+            input: {
+              summary: "本轮能力路由 / 权限决策",
+              steps: [
+                {
+                  decision_point: "context.skill_catalog",
+                  conclusion: "技能目录已加载",
+                  basis: "能力检查已完成",
+                },
+                {
+                  decision_point: "permission.browser",
+                  conclusion: "需要授权浏览器控制",
+                  basis: "当前浏览器控制权限未开启",
+                  details: {
+                    status: "permission_required",
+                    requires_user_action: true,
+                  },
+                },
+              ],
+            },
+          }),
+        ]}
+      />,
+    );
+
     const trigger = screen.getByRole("button", { name: /能力决策/ });
-    expect(trigger).toHaveTextContent("2");
+    expect(trigger).toHaveTextContent("需要处理");
+    expect(trigger).toHaveTextContent("1");
     fireEvent.click(trigger);
 
     expect(screen.getByText("决策 1")).toBeInTheDocument();
-    expect(screen.getByText("委派工具隐藏")).toBeInTheDocument();
-    expect(screen.getByText("未命中委派条件")).toBeInTheDocument();
+    expect(screen.getByText("需要授权浏览器控制")).toBeInTheDocument();
+    expect(screen.getByText("当前浏览器控制权限未开启")).toBeInTheDocument();
+    expect(screen.queryByText("技能目录已加载")).not.toBeInTheDocument();
+    expect(screen.queryByText("permission.browser")).not.toBeInTheDocument();
     expect(
-      screen.queryByText("context.delegation_cap"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("本轮能力路由 / 委派 / 技能目录决策"),
+      screen.queryByText("本轮能力路由 / 权限决策"),
     ).not.toBeInTheDocument();
   });
 
@@ -195,8 +289,9 @@ describe("<AgentWorkbenchPanel />", () => {
 
     // The visible plan remains specific to this task rather than replacing
     // every row with a generic business bucket label.
-    expect(screen.getByText("阅读鉴权模块源码")).toBeInTheDocument();
-    expect(screen.getByText("修改登录页实现")).toBeInTheDocument();
+    const taskPlan = screen.getByTestId("workbench-task-plan");
+    expect(taskPlan).toHaveTextContent("阅读鉴权模块源码");
+    expect(taskPlan).toHaveTextContent("修改登录页实现");
     expect(screen.getByTitle("阅读鉴权模块源码")).toBeInTheDocument();
     expect(screen.getByTitle("修改登录页实现")).toBeInTheDocument();
     expect(
@@ -206,7 +301,6 @@ describe("<AgentWorkbenchPanel />", () => {
       "max-h-72",
       "overflow-y-auto",
     );
-    const taskPlan = screen.getByTestId("workbench-task-plan");
     expect(taskPlan).toHaveClass("border-b");
     expect(taskPlan.querySelector(".h-1")).toBeNull();
     expect(screen.queryByText("P1")).not.toBeInTheDocument();
@@ -215,6 +309,50 @@ describe("<AgentWorkbenchPanel />", () => {
     ).getAllByRole("listitem");
     expect(todoRows[0]).toHaveAttribute("data-task-status", "done");
     expect(todoRows[1]).toHaveAttribute("data-task-status", "running");
+  });
+
+  test("keeps a planned active run focused on the task list", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        events={[
+          event({
+            id: "todo-focused-active",
+            name: "todo_write",
+            input: {
+              items: [
+                { content: "整理创作需求", status: "completed" },
+                { content: "生成主视觉", status: "in_progress" },
+                { content: "整理交付物", status: "pending" },
+              ],
+            },
+          }),
+          event({
+            id: "active-output",
+            name: "write_file",
+            input: {
+              changes: [
+                {
+                  path: "output/brief.md",
+                  op: "create",
+                  diff: "+# Brief",
+                },
+              ],
+            },
+          }),
+        ]}
+      />,
+    );
+
+    const progress = screen.getByRole("button", { name: /待办事项.*1\/3/ });
+    expect(progress).not.toHaveTextContent("产物");
+    expect(screen.queryByTestId("workbench-current-objective")).toBeNull();
+    expect(screen.queryByTestId("workbench-result-receipt")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "产物" })).toBeNull();
+    expect(screen.getByRole("button", { name: /^上下文/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
   });
 
   test("keeps the todo list visible after a transcript process event is focused", () => {
@@ -249,9 +387,10 @@ describe("<AgentWorkbenchPanel />", () => {
     );
 
     expect(screen.getByTestId("workbench-todo-list")).toBeInTheDocument();
-    expect(screen.getByText("规划调研框架")).toBeInTheDocument();
-    expect(screen.getByText("收集市场数据")).toBeInTheDocument();
-    expect(screen.getByText("整理完整报告")).toBeInTheDocument();
+    const taskPlan = screen.getByTestId("workbench-task-plan");
+    expect(taskPlan).toHaveTextContent("规划调研框架");
+    expect(taskPlan).toHaveTextContent("收集市场数据");
+    expect(taskPlan).toHaveTextContent("整理完整报告");
   });
 
   test("renders the main agent workstation dock placeholder", () => {
@@ -356,10 +495,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(
       screen.queryByRole("button", { name: "主电脑 · 已完成" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("最新一轮")).toHaveAttribute(
-      "title",
-      "工作台始终显示最新一轮任务状态，即使当前正在查看较早消息。",
-    );
+    expect(screen.queryByText("最新一轮")).not.toBeInTheDocument();
   });
 
   test("empty shell admits the turn is live before the first tool event", () => {
@@ -478,6 +614,45 @@ describe("<AgentWorkbenchPanel />", () => {
     ).toBeInTheDocument();
   });
 
+  test("keeps human room participants out of the Agent machine rail", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        events={[]}
+        rosterSeats={[
+          { id: "general", name: "Eve", role: "tl", kind: "agent" },
+          { id: "coder", name: "Coder", role: "member", kind: "agent" },
+          { id: "local", name: "Local user", role: "群主", kind: "human" },
+        ]}
+      />,
+    );
+
+    const bottomRail = screen.getByTestId("workstation-bottom-rail");
+    expect(
+      within(bottomRail).getByRole("button", {
+        name: "Coder · 协作 · 在场",
+      }),
+    ).toBeInTheDocument();
+    expect(within(bottomRail).queryByText("Local user")).toBeNull();
+  });
+
+  test("can move team roster avatars out while retaining runtime machine seats", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        events={[]}
+        showMachineRosterRail={false}
+        rosterSeats={[
+          { id: "general", name: "Eve", role: "tl", kind: "agent" },
+          { id: "coder", name: "Coder", role: "member", kind: "agent" },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByTestId("workstation-bottom-rail")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Eve · 群主/ })).toBeNull();
+  });
+
   test("uses the leader avatar for the main workstation in solo mode", () => {
     const { container } = renderWorkbench(
       <AgentWorkbenchPanel
@@ -544,6 +719,264 @@ describe("<AgentWorkbenchPanel />", () => {
       screen.getByRole("button", { name: "执行画面" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("summary lane")).not.toBeInTheDocument();
+  });
+
+  test("merges dispatch specs with same-role runtime lifecycle by requested id", () => {
+    const tiles = deriveAgentTilesFromEvents([
+      event({
+        id: "parallel-call-1",
+        name: "call_agent_parallel",
+        status: "running",
+        input: {
+          specs: [
+            { agent_id: "reader_readme", prompt: "read README" },
+            { agent_id: "reader_pyproject", prompt: "read pyproject" },
+          ],
+        },
+      }),
+      event({
+        id: "spawn-readme",
+        name: "subagent",
+        lifecycle: "spawned",
+        status: "running",
+        agentId: "reader_readme",
+        subAgentRole: "explorer",
+        subagentCodename: "Spark-4f6",
+        parentToolUseId: "parallel-call-1",
+      }),
+      event({
+        id: "finish-readme",
+        name: "subagent",
+        lifecycle: "finished",
+        status: "done",
+        agentId: "reader_readme",
+        subAgentRole: "explorer",
+        subagentCodename: "Spark-4f6",
+        parentToolUseId: "parallel-call-1",
+      }),
+      event({
+        id: "spawn-pyproject",
+        name: "subagent",
+        lifecycle: "spawned",
+        status: "running",
+        agentId: "reader_pyproject",
+        subAgentRole: "explorer",
+        subagentCodename: "Aurora-108",
+        parentToolUseId: "parallel-call-1",
+      }),
+    ]);
+
+    expect(tiles).toHaveLength(2);
+    expect(tiles.map((tile) => tile.id)).toEqual([
+      "reader_readme",
+      "reader_pyproject",
+    ]);
+    expect(tiles.map((tile) => tile.codename)).toEqual([
+      "Spark-4f6",
+      "Aurora-108",
+    ]);
+  });
+
+  test("ignores a legacy identity-less spawn when dispatch specs already define the seats", () => {
+    const tiles = deriveAgentTilesFromEvents([
+      event({
+        id: "parallel-call-legacy",
+        name: "call_agent_parallel",
+        status: "done",
+        input: {
+          specs: [
+            { agent_id: "reader", prompt: "read sources" },
+            { agent_id: "reviewer", prompt: "review risks" },
+            { agent_id: "writer", prompt: "write report" },
+          ],
+        },
+        output: {
+          successes: [
+            { agent_id: "reader", output: "done" },
+            { agent_id: "reviewer", output: "done" },
+            { agent_id: "writer", output: "done" },
+          ],
+        },
+      }),
+      event({
+        id: "truncated-spawn-marker",
+        name: "subagent",
+        lifecycle: "spawned",
+        status: "running",
+        parentToolUseId: "parallel-call-legacy",
+      }),
+    ]);
+
+    expect(tiles).toHaveLength(3);
+    expect(tiles.map((tile) => tile.id)).toEqual([
+      "reader",
+      "reviewer",
+      "writer",
+    ]);
+    expect(tiles.every((tile) => tile.status === "done")).toBe(true);
+  });
+
+  test("keeps an agent running when one of its child tools settles", () => {
+    const active = deriveAgentTilesFromEvents([
+      event({
+        id: "spawn-reader",
+        name: "subagent",
+        lifecycle: "spawned",
+        status: "running",
+        agentId: "reader",
+        subagentCodename: "Quark-d9c",
+      }),
+      event({
+        id: "report-reader",
+        name: "report",
+        status: "done",
+        agentId: "reader",
+        subagentCodename: "Quark-d9c",
+      }),
+      event({
+        id: "read-reader",
+        name: "read_file",
+        status: "error",
+        agentId: "reader",
+        subagentCodename: "Quark-d9c",
+        output: "missing file",
+      }),
+    ]);
+
+    expect(active).toHaveLength(1);
+    expect(active[0]?.status).toBe("running");
+    expect(active[0]?.error).toBeUndefined();
+
+    const finished = deriveAgentTilesFromEvents([
+      ...[
+        event({
+          id: "spawn-reader",
+          name: "subagent",
+          lifecycle: "spawned",
+          status: "running",
+          agentId: "reader",
+          subagentCodename: "Quark-d9c",
+        }),
+        event({
+          id: "report-reader",
+          name: "report",
+          status: "done",
+          agentId: "reader",
+          subagentCodename: "Quark-d9c",
+        }),
+      ],
+      event({
+        id: "finish-reader",
+        name: "subagent",
+        lifecycle: "finished",
+        status: "done",
+        agentId: "reader",
+        subagentCodename: "Quark-d9c",
+      }),
+    ]);
+    expect(finished[0]?.status).toBe("done");
+  });
+
+  test("does not create workbench seats for a rejected zero-spawn batch", () => {
+    expect(
+      deriveAgentTilesFromEvents([
+        event({
+          id: "parallel-invalid",
+          name: "call_agent_parallel",
+          status: "error",
+          input: {
+            specs: [
+              { role: "reader", goal: "read README" },
+              { role: "reader", goal: "read pyproject" },
+            ],
+          },
+          output:
+            '(工具失败) status=success error=structured_error\n{"ok":false,"count":0}',
+        }),
+      ]),
+    ).toEqual([]);
+  });
+
+  test("keeps failed auto-parallel bootstrap attempts out of Agent seats", () => {
+    expect(
+      deriveAgentTilesFromEvents([
+        event({
+          id: "auto-probe-failure",
+          name: "subagent",
+          status: "error",
+          agentId: "task-auto-failed",
+          subAgentRole: "general-purpose",
+          output: { error: "empty_result_contract_violation" },
+        }),
+      ]),
+    ).toEqual([]);
+  });
+
+  test("does not mark a successful settled run anomalous for internal bootstrap failures", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        hasAnswer
+        runSettled
+        events={[
+          event({
+            id: "auto-probe-failure",
+            name: "subagent",
+            status: "error",
+            iteration: 1,
+            agentId: "task-auto-failed",
+            subAgentRole: "general-purpose",
+            output: { error: "empty_result_contract_violation" },
+          }),
+          event({
+            id: "server-phases:turn-1",
+            name: "todo_write",
+            status: "error",
+            iteration: 1,
+            input: {
+              source: "turn.phases",
+              items: [
+                {
+                  content: "Gather context",
+                  status: "error",
+                  phaseId: "phase-1",
+                  index: 1,
+                  total: 2,
+                },
+              ],
+            },
+          }),
+          event({
+            id: "child-read-retry",
+            name: "read_file",
+            status: "error",
+            iteration: 1,
+            agentId: "reader-a",
+            subAgentRole: "explorer",
+            input: {
+              server: "subagent",
+              tool: "read_file",
+              arguments: { path: "README.md", limit: "1" },
+            },
+            output: { error: "invalid limit" },
+          }),
+          event({
+            id: "explicit-agent-finished",
+            name: "subagent",
+            status: "done",
+            iteration: 2,
+            lifecycle: "finished",
+            agentId: "reader-a",
+            subAgentRole: "explorer",
+            subagentCodename: "Volt-01",
+          }),
+        ]}
+      />,
+    );
+
+    const progressButton = screen.getByRole("button", {
+      name: /(?:进展|待办事项) 2\/2 已完成/,
+    });
+    expect(progressButton).not.toHaveTextContent("异常");
   });
 
   test("keeps the main workstation status independent from subagent failures", () => {
@@ -783,8 +1216,9 @@ describe("<AgentWorkbenchPanel />", () => {
     expandSummarySection(/(?:待办事项|进展)/);
 
     // Backend phase titles stay visible after their machine prefix is removed.
-    expect(screen.getByText(/Read context/)).toBeInTheDocument();
-    expect(screen.getByText(/Run tests/)).toBeInTheDocument();
+    const taskPlan = screen.getByTestId("workbench-task-plan");
+    expect(taskPlan).toHaveTextContent(/Read context/);
+    expect(taskPlan).toHaveTextContent(/Run tests/);
     expect(screen.getByTitle(/Read context/)).toBeInTheDocument();
     expect(screen.getByTitle(/Run tests/)).toBeInTheDocument();
 
@@ -825,8 +1259,12 @@ describe("<AgentWorkbenchPanel />", () => {
 
     expandSummarySection(/(?:待办事项|进展)/);
 
-    expect(screen.getByText(/补齐上下文/)).toBeInTheDocument();
-    expect(screen.getByText(/收拢答案/)).toBeInTheDocument();
+    expect(screen.getByTestId("workbench-task-plan")).toHaveTextContent(
+      /补齐上下文/,
+    );
+    expect(screen.getByTestId("workbench-task-plan")).toHaveTextContent(
+      /收拢答案/,
+    );
     expect(screen.getByTitle("主电脑 · 待确认")).toBeInTheDocument();
     expect(screen.queryByTitle("主电脑 · 遇到问题")).not.toBeInTheDocument();
 
@@ -870,7 +1308,9 @@ describe("<AgentWorkbenchPanel />", () => {
     expandSummarySection(/(?:待办事项|进展)/);
 
     expect(screen.getByText("P1")).toBeInTheDocument();
-    expect(screen.getByText(/补齐上下文|了解代码结构/)).toBeInTheDocument();
+    expect(screen.getByTestId("workbench-task-plan")).toHaveTextContent(
+      /补齐上下文|了解代码结构/,
+    );
     expect(screen.queryByText("先查看项目结构")).not.toBeInTheDocument();
     expect(screen.queryByText("修复构建错误")).not.toBeInTheDocument();
     expect(screen.queryByText("运行测试验证")).not.toBeInTheDocument();
@@ -896,9 +1336,9 @@ describe("<AgentWorkbenchPanel />", () => {
 
     expandSummarySection(/(?:待办事项|进展)/);
 
-    expect(
-      screen.getByText(/补齐上下文|收拢答案|Read context/),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("workbench-task-plan")).toHaveTextContent(
+      /补齐上下文|收拢答案|Read context/,
+    );
   });
 
   test("shows recovered tool failures as warnings instead of failing the phase", () => {
@@ -1395,6 +1835,94 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.getAllByText("Spark-Design").length).toBeGreaterThan(0);
   });
 
+  test("resolves a main-chat codename focus to the runtime agent tile", async () => {
+    const onSelectTab = vi.fn();
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        onSelectTab={onSelectTab}
+        events={[
+          event({
+            id: "spawn-reviewer",
+            name: "subagent",
+            lifecycle: "spawned",
+            status: "running",
+            parentToolUseId: "parent-review",
+            agentId: "reviewer-runtime-id",
+            subAgentRole: "reviewer",
+            subagentCodename: "Prism-fcc",
+            thought: "Review the current frontend implementation",
+          }),
+        ]}
+      />,
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(AGENT_WORKBENCH_FOCUS_EVENT, {
+          detail: {
+            agentId: "Prism-fcc",
+            tab: "agent",
+            view: "screen",
+          },
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "查看 Prism-fcc 独立进程" }),
+      ).toHaveClass("border-foreground/25");
+    });
+    expect(onSelectTab).toHaveBeenCalledWith("agent");
+  });
+
+  test("keeps a historical main-chat agent inspectable after the workbench advances", async () => {
+    renderWorkbench(
+      <ThreadStreamingContext.Provider
+        value={{ streamingMessage: null, subgraphStreams: {} }}
+      >
+        <ThreadValuesContext.Provider value={{ values: {} as never }}>
+          <AgentWorkbenchPanel
+            activeTab="agent"
+            focusedAgentId="historic-reviewer"
+            focusedAgentView="screen"
+            focusedAgentNonce={1}
+            focusedAgentSnapshot={{
+              id: "historic-reviewer",
+              name: "Prism-history",
+              role: "reviewer",
+              status: "done",
+              task: "复核上一轮的前端视觉回归",
+              summary: "已完成上一轮视觉回归并记录关键差异。",
+              iterationCount: 3,
+              filesTouchedCount: 2,
+              index: 2,
+            }}
+            events={[]}
+          />
+        </ThreadValuesContext.Provider>
+      </ThreadStreamingContext.Provider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("复核上一轮的前端视觉回归")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText("已完成上一轮视觉回归并记录关键差异。"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "执行画面" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "角色卡" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "角色卡" }));
+    await waitFor(() => {
+      expect(screen.getByText("Agent 集群 - 创建助手")).toBeInTheDocument();
+    });
+    expect(screen.getAllByText("Prism-history").length).toBeGreaterThan(0);
+  });
+
   test("shows the backend built-in role identity on the nameplate", async () => {
     const spawn = event({
       id: "spawn-1",
@@ -1560,6 +2088,39 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText(/"duration_s"/)).not.toBeInTheDocument();
     expect(screen.queryByText(/"iteration_count"/)).not.toBeInTheDocument();
     expect(screen.queryByText(/"agent_id"/)).not.toBeInTheDocument();
+  });
+
+  test("extracts a readable reason from a legacy stringified verdict", async () => {
+    renderWorkbench(
+      <ThreadStreamingContext.Provider
+        value={{ streamingMessage: null, subgraphStreams: {} }}
+      >
+        <ThreadValuesContext.Provider value={{ values: {} as never }}>
+          <AgentWorkbenchPanel
+            activeTab="agent"
+            focusedAgentId="historic-reviewer"
+            focusedAgentView="screen"
+            focusedAgentNonce={1}
+            focusedAgentSnapshot={{
+              id: "historic-reviewer",
+              name: "Prism-history",
+              role: "reviewer",
+              status: "done",
+              task: "复核审计发现",
+              summary:
+                '{"verdict":"drop","reason":"这只是运行状态，不是可执行的代码发现。"}',
+              index: 2,
+            }}
+            events={[]}
+          />
+        </ThreadValuesContext.Provider>
+      </ThreadStreamingContext.Provider>,
+    );
+
+    expect(
+      await screen.findByText("这只是运行状态，不是可执行的代码发现。"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/"verdict"/)).not.toBeInTheDocument();
   });
 
   test("folds a trailing running step into a result once the sub-agent settles", async () => {
@@ -2155,14 +2716,15 @@ describe("<AgentWorkbenchPanel />", () => {
     );
   });
 
-  test("exposes the subagent event stream tab and selects it", () => {
-    renderWorkbench(<AgentWorkbenchPanel activeTab="substream" events={[]} />);
+  test("keeps the redundant subagent event stream tab removed", () => {
+    renderWorkbench(<AgentWorkbenchPanel events={[]} />);
 
-    const tab = screen.getByRole("tab", {
-      name: /子线程事件流/,
-    });
-    expect(tab).toBeInTheDocument();
-    expect(tab).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.queryByRole("tab", { name: /子线程事件流/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Agent 工作台" }),
+    ).toBeInTheDocument();
   });
 
   test("keeps the subagent tab hidden while preserving summary observability", () => {

@@ -7,14 +7,15 @@
       "domain": "general_runtime_and_coding",
       "execution_mode": "real_provider",
       "allowed_write_paths": ["cache.py", "tests/test_cache.py"],
-      "prompt": "In the supplied repository, implement the missing concurrent TTL cache behavior. Preserve the public API, coalesce simultaneous loads for one key, avoid caching exceptions, add focused tests, and leave unrelated files unchanged.",
+      "prompt": "In the supplied repository, implement the missing concurrent TTL cache behavior. Preserve the public API, coalesce simultaneous loads for one key, avoid caching exceptions, add focused tests under tests/, and leave unrelated files unchanged. The isolated fixture guarantees one repeatable verification command: ./.octopus-eval/run-tests (on Windows, .octopus-eval\\run-tests.cmd). Do not assume bare python, pytest, or ruff resolves to the fixture's test environment.",
       "rubric": {"grader": "fixture_tests", "checks": ["all hidden cache tests pass", "public API unchanged", "no unrelated diff"]}
     },
     {
       "id": "coding.path-boundary",
       "domain": "general_runtime_and_coding",
       "execution_mode": "real_provider",
-      "prompt": "Diagnose and fix the path-boundary vulnerability in the supplied file service. Encoded traversal and symlink escape must be rejected while valid nested paths continue to work. Add regression tests and explain the root cause briefly.",
+      "allowed_write_paths": ["file_service.py", "tests/test_file_service.py"],
+      "prompt": "Diagnose and fix the path-boundary vulnerability in file_service.py. Encoded traversal and symlink escape must be rejected while valid nested paths continue to work. Add the focused regression tests in tests/test_file_service.py and explain the root cause briefly. The isolated fixture guarantees one repeatable verification command: ./.octopus-eval/run-tests (on Windows, .octopus-eval\\run-tests.cmd). Do not assume bare python, pytest, or ruff resolves to the fixture's test environment.",
       "rubric": {"grader": "fixture_tests", "checks": ["encoded traversal rejected", "symlink escape rejected", "valid nested paths preserved", "regression tests added"]}
     },
     {

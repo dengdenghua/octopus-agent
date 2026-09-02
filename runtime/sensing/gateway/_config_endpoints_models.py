@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from runtime.platform.models.custom_model_selection import custom_model_selection_id
 from runtime.sensing.gateway._config_helpers import (
     _builtin_openai_compat_catalog,
     _compat_diagnostic_for_entry,
@@ -76,6 +77,7 @@ def _register_models(router: Any, ctx: _ConfigCtx) -> None:
         "/api/config/custom-models",
         response_model=CustomModelsList,
     )
+    @ctx.serialize_custom_models
     def api_list_custom_models() -> dict[str, Any]:
         """List user-added models. ``api_key`` is NEVER echoed back —
         presence reported as ``has_api_key`` boolean only."""
@@ -84,6 +86,7 @@ def _register_models(router: Any, ctx: _ConfigCtx) -> None:
         }
 
     @router.get("/api/config/custom-models/compat-diagnostics")
+    @ctx.serialize_custom_models
     def api_custom_model_compat_diagnostics(
         model_id: str | None = None,
     ) -> dict[str, Any]:
@@ -135,6 +138,7 @@ def _register_models(router: Any, ctx: _ConfigCtx) -> None:
     # dict it reads from.
 
     @router.get("/api/llm-models")
+    @ctx.serialize_custom_models
     def api_llm_models() -> dict[str, Any]:
         custom: list[dict[str, Any]] = []
         for e in custom_models_state.values():
@@ -200,6 +204,11 @@ def _register_models(router: Any, ctx: _ConfigCtx) -> None:
                     "max_temperature": e.get("max_temperature"),
                     "custom": True,
                     "entry_id": entry_id,
+                    "selection_id": custom_model_selection_id(
+                        entry_id,
+                        variant,
+                        "default",
+                    ),
                 }
                 custom.append(row)
                 if enable_1m_context:
@@ -210,6 +219,11 @@ def _register_models(router: Any, ctx: _ConfigCtx) -> None:
                             "name": f"{variant}::1m",
                             "context_window": 1_000_000,
                             "context_profile": "1m",
+                            "selection_id": custom_model_selection_id(
+                                entry_id,
+                                variant,
+                                "1m",
+                            ),
                         }
                     )
         # Octopus Mix — built-in mixture-of-agents virtual model. Selecting

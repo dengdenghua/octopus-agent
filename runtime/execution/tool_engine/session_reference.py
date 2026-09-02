@@ -369,9 +369,7 @@ class SessionReferenceResolver:
         ids = extract_session_mentions(scanned_text)
         if not canonical and not ids:
             return PreparedReferencedMessage(content=prompt)
-        known = (
-            None if sessions is None else {record.session_id for record in sessions}
-        )
+        known = None if sessions is None else {record.session_id for record in sessions}
         resolved: list[SessionReferenceInput] = []
         seen: set[str] = set()
         for session_id, label in [(r["session_id"], r.get("label")) for r in canonical] + [

@@ -12,6 +12,7 @@ from runtime.sensing.gateway.thread_state_router import create_thread_state_rout
 try:
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False

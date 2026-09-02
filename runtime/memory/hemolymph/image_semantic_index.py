@@ -169,27 +169,35 @@ def face_capable() -> bool:
 def _open(path: Path):
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path))
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS image_clip (path TEXT PRIMARY KEY, clip_embedding BLOB)"
-    )
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS image_faces (path TEXT, face_index INTEGER, face_embedding BLOB)"
-    )
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS image_meta (path TEXT PRIMARY KEY, width INTEGER, height INTEGER, "
-        "mtime REAL, exif_time TEXT, file_type TEXT, location TEXT)"
-    )
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS image_tags (path TEXT, tag TEXT, score REAL, "
-        "PRIMARY KEY (path, tag))"
-    )
-    conn.execute("CREATE TABLE IF NOT EXISTS image_ocr (path TEXT PRIMARY KEY, text TEXT)")
-    conn.execute("CREATE TABLE IF NOT EXISTS image_hashes (path TEXT PRIMARY KEY, dhash TEXT)")
-    conn.execute("CREATE TABLE IF NOT EXISTS image_quality (path TEXT PRIMARY KEY, sharpness REAL)")
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS image_categories (name TEXT PRIMARY KEY, prototype BLOB)"
-    )
-    return conn
+    try:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS image_clip (path TEXT PRIMARY KEY, clip_embedding BLOB)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS image_faces "
+            "(path TEXT, face_index INTEGER, face_embedding BLOB)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS image_meta "
+            "(path TEXT PRIMARY KEY, width INTEGER, height INTEGER, "
+            "mtime REAL, exif_time TEXT, file_type TEXT, location TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS image_tags (path TEXT, tag TEXT, score REAL, "
+            "PRIMARY KEY (path, tag))"
+        )
+        conn.execute("CREATE TABLE IF NOT EXISTS image_ocr (path TEXT PRIMARY KEY, text TEXT)")
+        conn.execute("CREATE TABLE IF NOT EXISTS image_hashes (path TEXT PRIMARY KEY, dhash TEXT)")
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS image_quality (path TEXT PRIMARY KEY, sharpness REAL)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS image_categories (name TEXT PRIMARY KEY, prototype BLOB)"
+        )
+        return conn
+    except BaseException:
+        conn.close()
+        raise
 
 
 def _iter_images(root: Path, max_files: int = 4000) -> list[Path]:
@@ -552,7 +560,6 @@ def search_face(
 # ---------------------------------------------------------------------------
 # Local AI-album data layer helpers (self-gating: return None / empty on miss)
 # ---------------------------------------------------------------------------
-
 
 
 _READ_DB_QUERIES = {

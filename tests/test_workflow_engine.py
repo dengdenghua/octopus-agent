@@ -315,7 +315,9 @@ def test_concurrent_agents_bounded() -> None:
         return {"ok": True, "output": "OUT", "structured": None, "stop_reason": "completed"}
 
     script = "return await parallel([lambda: agent('x')] * 6)"
-    result = _run(_engine(child_dispatch=dispatch, max_concurrent_agents=2), script=script, meta=FAKE_META)
+    result = _run(
+        _engine(child_dispatch=dispatch, max_concurrent_agents=2), script=script, meta=FAKE_META
+    )
     assert result.stop_reason == "completed"
     assert peak <= 2
 
@@ -418,6 +420,7 @@ def test_workflow_skill_registers_and_runs() -> None:
 
     set_workflow_engine(_engine())
     try:
+
         async def scenario() -> dict[str, Any]:
             return await skill.handler(  # type: ignore[misc]
                 script='return await agent("x", {"label": "A"})',
@@ -482,6 +485,7 @@ def test_default_child_bridge_routes_through_call_subagent() -> None:
 def test_run_total_duration_cap() -> None:
     """A run past its total duration cap settles promptly (cancelled with the
     cap reason) instead of waiting for the slow child to finish."""
+
     async def slow_dispatch(request: dict[str, Any]) -> dict[str, Any]:
         await asyncio.sleep(5)
         return {"ok": True, "output": "OUT", "structured": None, "stop_reason": "completed"}

@@ -107,7 +107,7 @@ export function SubtaskCard({
   // render." useCallback still guards against missing task inside.
   const handleHeaderClick = useCallback(() => {
     setCollapsed((c) => !c);
-  }, [task]);
+  }, []);
 
   if (!task) {
     return (

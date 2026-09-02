@@ -1,7 +1,5 @@
 import { useEffect, useRef } from "react";
 
-import type { PetMood } from "@/components/desktop-pet";
-
 /**
  * Bridges the realtime agent run state to the Godot desktop pet sidecar.
  *
@@ -12,7 +10,12 @@ import type { PetMood } from "@/components/desktop-pet";
  *
  * It is a hard no-op outside Electron (plain browser / dev without preload),
  * so enabling the pet never breaks web builds.
+ *
+ * The in-page sprite pet was removed — the Godot sidecar is the only pet, so
+ * this hook exists purely for its side effect. `PetMood` is kept as the return
+ * type for callers that still want to reflect run state locally.
  */
+export type PetMood = "idle" | "thinking" | "working" | "waiting" | "success" | "error";
 
 export type PetAgentInput = {
   /** "running" | "waiting" | "error" | null — already derived by the page. */

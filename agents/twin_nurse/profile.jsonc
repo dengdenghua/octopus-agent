@@ -1,0 +1,38 @@
+{
+  "id": "twin_nurse",
+  "templateId": "octopus:digital-twin:nurse",
+  "templateVersion": "1.0.0",
+  "source_kind": "digital-twin-human-role",
+  "source_plugin": "twin-nurse",
+  "expertType": "agent",
+  "name": "护理协作分身",
+  "icon": "🩹",
+  "description": "代表护理协作岗的数位分身:护理计划/观察记录等文档侧闭环,打针发药等实际护理操作必须真人护士,AI 不能替代护理操作与责任。",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "digital-twin:human-role",
+  "category": "specialist",
+  "tags": [
+    "数字分身",
+    "真人岗位",
+    "真身协同",
+    "护理",
+    "照护"
+  ],
+  "profession": "护理协作员",
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true,
+    "includeUserMd": true,
+    "includeMemoryMd": true
+  },
+  "capabilities": {
+    "digital_twin": true,
+    "human_collab": true,
+    "authorization_boundary": true,
+    "handoff_pack": true
+  }
+}

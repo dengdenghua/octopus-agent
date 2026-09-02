@@ -53,6 +53,31 @@ _BROWSER_RELAY_TOKEN_ENV_KEYS = (
 _BROWSER_RELAY_TIMEOUT_SECONDS = 10
 
 
+def _selected_relay_target() -> dict[str, str] | None:
+    """Return the trusted per-turn Chrome target selected by the operator."""
+
+    try:
+        from runtime.platform.process.session import current_session
+
+        session = current_session()
+        metadata = getattr(session, "metadata", None) if session is not None else None
+        raw = (metadata or {}).get("automation_target")
+        if not isinstance(raw, dict):
+            return None
+        if raw.get("kind") != "browser_tab" or raw.get("source") != "browser_relay":
+            return None
+        target_id = str(raw.get("id") or "").strip()
+        if not target_id:
+            return None
+        return {
+            "target_tab_id": target_id,
+            "target_tab_url": str(raw.get("url") or "").strip(),
+            "target_tab_title": str(raw.get("title") or "").strip(),
+        }
+    except (AttributeError, TypeError, ImportError):
+        return None
+
+
 def browser_relay_diagnostics() -> dict[str, Any]:
     raw, source = _configured_browser_relay_base_url()
     token, token_source = _configured_browser_relay_token()
@@ -185,9 +210,12 @@ class ElectronBackend:
 
     @staticmethod
     def _default_available() -> bool:
-        from runtime.execution.suckers.browser_act_skills import _load_bridge
+        from runtime.execution.suckers.browser_act_skills import _bridge_status
 
-        return _load_bridge() is not None
+        # A stale bridge.json must not capture the request and return a hard
+        # error. Only advertise Electron when the authenticated desktop bridge
+        # is alive and has a targetable browser surface.
+        return _bridge_status() is not None
 
     def available(self) -> bool:
         return bool(self._available_probe())
@@ -368,6 +396,9 @@ class ExtensionBackend:
             "action": action,
             **payload,
         }
+        selected_target = _selected_relay_target()
+        if selected_target is not None:
+            request_payload.update(selected_target)
         action_timeout_ms = int(payload.get("timeout") or 0)
         command_timeout_seconds = 0.0
         request_timeout_seconds = _BROWSER_RELAY_TIMEOUT_SECONDS

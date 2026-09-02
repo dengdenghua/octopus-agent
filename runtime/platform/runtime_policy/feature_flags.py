@@ -266,6 +266,18 @@ def source_of(name: str) -> str | None:
     return _ensure_snapshot().sources.get(name)
 
 
+def resolution(name: str, fallback: Any = None) -> tuple[Any, str | None]:
+    """Return one flag's value and source from the same immutable snapshot.
+
+    Security-sensitive gates must not compose :func:`value` and
+    :func:`source_of` as two separate reads: an administrative reload between
+    them could otherwise pair an old source with a new value.
+    """
+
+    snap = _ensure_snapshot()
+    return snap.values.get(name, fallback), snap.sources.get(name)
+
+
 def describe() -> list[dict[str, Any]]:
     """Catalog form used by ``GET /api/feature-flags``.
 
@@ -368,6 +380,18 @@ _BUILTIN: list[FlagSpec] = [
         default=True,
         description="Maintain session_index.jsonl for fast thread listing.",
     ),
+    # ─── Execution backends ────────────────────────────────
+    FlagSpec(
+        name="execution.codex_app_server",
+        default=True,
+        legacy_env=("OCTOPUS_CODEX_APP_SERVER_ENABLED",),
+        description=(
+            "Use the isolated Codex App Server backend for a selected local "
+            "Codex coding partner. Production-like deployments additionally "
+            "require an explicit non-default enablement and a hard sandbox."
+        ),
+        experimental=True,
+    ),
     # ─── Experimental surfaces ────────────────────────────
     FlagSpec(
         name="ui.ambient_suggestions",
@@ -437,6 +461,7 @@ __all__ = [
     "get_spec",
     "is_on",
     "register",
+    "resolution",
     "reload",
     "snapshot",
     "source_of",

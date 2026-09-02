@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from fastapi import HTTPException
+from fastapi import Depends, HTTPException
 
 from runtime.sensing.gateway._config_helpers import (
     _custom_model_wire_entry,
@@ -74,12 +74,17 @@ def _probe_vision_support(router: Any, *, model: str) -> bool | None:
 def _register_custom_models(router: Any, ctx: _ConfigCtx) -> None:
     custom_models_state = ctx.custom_models
     save = ctx.save
-    register = ctx.register
     unregister_entry = ctx.unregister_entry
+    rebuild_routes = ctx.rebuild_routes
+    require_admin = ctx.require_admin
 
     _default_reasoning_efforts = {"off", "high", "max", "none"}
 
-    @router.put("/api/config/custom-models/{model_id}")
+    @router.put(
+        "/api/config/custom-models/{model_id}",
+        dependencies=[Depends(require_admin)],
+    )
+    @ctx.serialize_custom_models
     def api_upsert_custom_model(
         model_id: str,
         body: dict[str, Any],
@@ -226,13 +231,18 @@ def _register_custom_models(router: Any, ctx: _ConfigCtx) -> None:
             unregister_entry(prev, fallback_id=model_id)
         custom_models_state[model_id] = entry
         save(model_id)
-        status = register(entry)
+        status = rebuild_routes().get(
+            model_id,
+            {"ok": False, "error": "custom model disappeared during route rebuild"},
+        )
         return {"model": _custom_model_wire_entry(entry), "_status": status}
 
     @router.delete(
         "/api/config/custom-models/{model_id}",
         response_model=CustomModelDeleteResponse,
+        dependencies=[Depends(require_admin)],
     )
+    @ctx.serialize_custom_models
     def api_delete_custom_model(model_id: str) -> dict[str, Any]:
         """Remove a custom model. Idempotent — deleting a missing id
         returns ok:true with removed:false rather than 404, matching
@@ -240,11 +250,13 @@ def _register_custom_models(router: Any, ctx: _ConfigCtx) -> None:
         prev = custom_models_state.pop(model_id, None)
         save(model_id)
         removed = unregister_entry(prev, fallback_id=model_id)
+        rebuild_routes()
         return {"ok": True, "removed": removed}
 
     @router.post(
         "/api/config/custom-models/test",
         response_model=CustomModelTestResponse,
+        dependencies=[Depends(require_admin)],
     )
     def api_test_custom_model(body: dict[str, Any]) -> dict[str, Any]:
         """Run a tiny real chat completion against a custom model."""

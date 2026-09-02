@@ -184,9 +184,15 @@ def test_search_face(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setenv("OCTOPUS_IMAGE_SEMANTIC", "auto")
     monkeypatch.setattr(isi, "face_capable", lambda: True)
-    monkeypatch.setattr(isi, "_face_app", lambda: type("A", (), {
-        "get": staticmethod(lambda arr: [type("F", (), {"normed_embedding": [1.0, 0.0]})()])
-    })())
+    monkeypatch.setattr(
+        isi,
+        "_face_app",
+        lambda: type(
+            "A",
+            (),
+            {"get": staticmethod(lambda arr: [type("F", (), {"normed_embedding": [1.0, 0.0]})()])},
+        )(),
+    )
 
     db = tmp_path / "sf.db"
     conn = isi._open(db)

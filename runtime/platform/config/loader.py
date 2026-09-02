@@ -61,7 +61,9 @@ def _resolve_extends(
         visited = set()
 
     if depth > _MAX_EXTENDS_DEPTH:
-        raise ConfigLoadError(f"extends chain too deep (>{_MAX_EXTENDS_DEPTH}), circular reference?")
+        raise ConfigLoadError(
+            f"extends chain too deep (>{_MAX_EXTENDS_DEPTH}), circular reference?"
+        )
 
     # Check if this config has already been visited
     resolved_path = config_path.resolve()

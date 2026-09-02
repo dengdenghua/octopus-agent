@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowRightIcon,
   KeyRoundIcon,
@@ -22,6 +22,10 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  authReturnToFromSearch,
+  loginPathWithReturnTo,
+} from "@/core/auth/return-to";
 import { useI18n } from "@/core/i18n/hooks";
 import { useAuth } from "@/providers/AuthProvider";
 import { toast } from "sonner";
@@ -53,6 +57,8 @@ function FloatingOrb({
 
 export default function RegisterPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = authReturnToFromSearch(location.search);
   const { t } = useI18n();
   const { register, authStatus, isLoading } = useAuth();
   const [username, setUsername] = useState("");
@@ -68,8 +74,8 @@ export default function RegisterPage() {
     authStatus && (!authStatus.enabled || !authStatus.allow_registration);
 
   useEffect(() => {
-    if (redirectToWorkspace) navigate("/workspace", { replace: true });
-  }, [redirectToWorkspace, navigate]);
+    if (redirectToWorkspace) navigate(returnTo, { replace: true });
+  }, [redirectToWorkspace, navigate, returnTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,7 +100,7 @@ export default function RegisterPage() {
     try {
       await register({ username, password, email: email || undefined });
       toast.success(t.registerPage.toastSuccess);
-      navigate("/login");
+      navigate(loginPathWithReturnTo(returnTo), { replace: true });
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : t.registerPage.toastFailed,
@@ -170,15 +176,13 @@ export default function RegisterPage() {
         <div className="hidden flex-col justify-center space-y-10 lg:flex">
           <div className="inline-flex items-center gap-3">
             <OctopusBrandMark size="lg" />
-            <span className="text-xl font-semibold tracking-tight">
-              Octopus Agent
-            </span>
+            <span className="text-xl font-semibold tracking-tight">EchoAI</span>
           </div>
 
           <div className="space-y-5">
             <div className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary">
               <SparklesIcon className="size-3.5" />
-              开始你的 AI 助理之旅
+              加入你的智能角色宇宙
             </div>
             <h1 className="text-5xl font-bold leading-[1.1] tracking-tight lg:text-[3.5rem]">
               创建账户
@@ -188,7 +192,7 @@ export default function RegisterPage() {
               </span>
             </h1>
             <p className="max-w-md text-lg leading-relaxed text-muted-foreground">
-              注册一个账户，立即体验多智能体协作带来的效率提升。
+              注册一个账户，让不同角色在 EchoOS 上协作、学习与进化。
             </p>
           </div>
 
@@ -198,7 +202,10 @@ export default function RegisterPage() {
               return (
                 <li key={feature.title} className="flex items-start gap-4">
                   <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-card/60 backdrop-blur-sm">
-                    <Icon className="size-5 text-primary/80" strokeWidth={1.8} />
+                    <Icon
+                      className="size-5 text-primary/80"
+                      strokeWidth={1.8}
+                    />
                   </div>
                   <div className="space-y-1">
                     <p className="text-[15px] font-semibold">{feature.title}</p>
@@ -216,9 +223,7 @@ export default function RegisterPage() {
         <div className="mx-auto w-full max-w-md">
           <div className="mb-8 flex items-center justify-center gap-2.5 lg:hidden">
             <OctopusBrandMark size="md" />
-            <span className="text-lg font-semibold tracking-tight">
-              Octopus Agent
-            </span>
+            <span className="text-lg font-semibold tracking-tight">EchoAI</span>
           </div>
 
           <Card className="overflow-hidden rounded-2xl border-border/50 bg-card/80 shadow-2xl shadow-black/[0.03] backdrop-blur-xl">
@@ -285,7 +290,10 @@ export default function RegisterPage() {
                   </div>
                 </div>
                 <div className="space-y-2.5">
-                  <Label htmlFor="confirmPassword" className="text-sm font-medium">
+                  <Label
+                    htmlFor="confirmPassword"
+                    className="text-sm font-medium"
+                  >
                     {t.registerPage.confirmPasswordLabel}
                   </Label>
                   <div className="relative">
@@ -315,7 +323,7 @@ export default function RegisterPage() {
               <div className="mt-6 text-center text-sm text-muted-foreground/80">
                 已有账户？{" "}
                 <Link
-                  to="/login"
+                  to={loginPathWithReturnTo(returnTo)}
                   className="font-medium text-primary transition-colors hover:text-primary/80"
                 >
                   立即登录
@@ -325,7 +333,7 @@ export default function RegisterPage() {
           </Card>
 
           <p className="mt-6 text-center text-xs text-muted-foreground/50">
-            © {new Date().getFullYear()} Octopus Agent. All rights reserved.
+            © {new Date().getFullYear()} EchoAI · Powered by EchoOS
           </p>
         </div>
       </div>

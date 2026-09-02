@@ -151,7 +151,7 @@ CHECKS: tuple[BrowserDesktopCheck, ...] = (
             "openpanelonactionclick",
             "connect-src",
             "ws://127.0.0.1:8000",
-            "octopus chrome sidecar",
+            "echoai browser relay",
             "turn/start",
             "item/agentmessage/delta",
             "request.params",

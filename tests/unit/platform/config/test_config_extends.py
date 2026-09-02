@@ -195,13 +195,9 @@ budget:
         for i in range(12):
             config = tmp_path / f"config{i}.yaml"
             if i == 0:
-                config.write_text(
-                    f"name: config{i}\nversion_compat: '0.2'\npreset: personal\n"
-                )
+                config.write_text(f"name: config{i}\nversion_compat: '0.2'\npreset: personal\n")
             else:
-                config.write_text(
-                    f"extends: config{i-1}.yaml\nname: config{i}\n"
-                )
+                config.write_text(f"extends: config{i - 1}.yaml\nname: config{i}\n")
 
         with pytest.raises(ConfigLoadError, match="extends chain too deep"):
             load_from_yaml(tmp_path / "config11.yaml")

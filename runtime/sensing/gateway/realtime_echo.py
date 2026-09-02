@@ -85,8 +85,29 @@ class EchoRuntime:
         actor_id: str | None,
         *,
         turns: list[Turn] | None = None,
+        access: str = "owner",
     ) -> None:
         from runtime.sensing.gateway.realtime_gateway import _RpcError
+
+        resolver = getattr(self, "_thread_access_resolver", None)
+        if callable(resolver):
+            try:
+                decision = resolver(log.path.stem, actor_id)
+            except Exception:  # noqa: BLE001 - authorization fails closed
+                decision = None
+            if decision is not None:
+                allowed = {
+                    "read": bool(getattr(decision, "can_read", False)),
+                    "write": bool(getattr(decision, "can_write", False)),
+                    "owner": bool(getattr(decision, "can_manage", False)),
+                }.get(access, False)
+                if allowed:
+                    return
+                if getattr(decision, "thread", None) is not None:
+                    raise _RpcError(
+                        JsonRpcErrorCode.THREAD_NOT_FOUND,
+                        f"unknown thread {log.path.stem}",
+                    )
 
         owner = owner_actor_id_from_turns(turns if turns is not None else log.replay())
         if owner is not None and actor_id != owner:
@@ -123,7 +144,9 @@ class EchoRuntime:
         self._require_thread_id(thread_id)
         log = await self._ensure_thread(thread_id, emitter)
         self._require_owner(
-            log, actor_id_from_turn_params(validated) or getattr(emitter, "actor_id", None)
+            log,
+            actor_id_from_turn_params(validated) or getattr(emitter, "actor_id", None),
+            access="write",
         )
 
         turn = Turn(thread_id=thread_id, params=validated)
@@ -266,6 +289,7 @@ class EchoRuntime:
             log,
             getattr(emitter, "actor_id", None),
             turns=turns,
+            access="read",
         )
         summary = log.summary(snapshot)
         if summary is not None and summary.archived:
@@ -307,6 +331,7 @@ class EchoRuntime:
                     "eventStreamId": snapshot.stream_id,
                 }
         next_sequence = log.latest_sequence(snapshot=snapshot)
+        last_turn = turns[-1] if turns else None
         raw_limit = params.get("limit")
         window, has_more = EventLog.paginate_turns(
             turns,
@@ -321,6 +346,8 @@ class EchoRuntime:
             "thread": {"id": thread_id, "path": str(log.path)},
             "turns": [t.model_dump(by_alias=True, mode="json") for t in window],
             "totalTurns": len(turns),
+            "lastTurnId": last_turn.id if last_turn is not None else None,
+            "lastTurnStatus": (last_turn.status.value if last_turn is not None else None),
             "hasMore": has_more,
             "incremental": False,
             "nextEventSequence": next_sequence,
@@ -338,8 +365,9 @@ class EchoRuntime:
             if not include_archived and summary.archived:
                 continue
             log = self._log_for(summary.thread_id)
-            owner = owner_actor_id_from_turns(log.replay())
-            if owner is not None and actor_id != owner:
+            try:
+                self._require_owner(log, actor_id, access="read")
+            except Exception:  # authorization failures are omitted from list
                 continue
             items.append(summary.model_dump(by_alias=True, mode="json"))
         return {"threads": items}
@@ -348,12 +376,16 @@ class EchoRuntime:
         self, params: dict[str, Any], emitter: EventEmitter
     ) -> dict[str, Any]:
         from runtime.memory.threads.event_log import archive_thread
+        from runtime.sensing.gateway._realtime_thread_delete_probe import (
+            claimed_runtime_thread_write,
+        )
         from runtime.sensing.gateway.realtime_gateway import _RpcError
 
         thread_id = self._require_thread_id(params.get("threadId"))
-        self._require_owner(self._log_for(thread_id), getattr(emitter, "actor_id", None))
-        if not archive_thread(self._logs_root, thread_id):
-            raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
+        async with claimed_runtime_thread_write(self, thread_id):
+            self._require_owner(self._log_for(thread_id), getattr(emitter, "actor_id", None))
+            if not archive_thread(self._logs_root, thread_id):
+                raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
         return {"threadId": thread_id, "archived": True}
 
     # ── Item emitters ────────────────────────────────────────

@@ -11,6 +11,7 @@ import {
   normalizeWorkspaceArtifactRef,
 } from "@/core/artifacts/utils";
 import { getBackendBaseURL } from "@/core/config";
+import { emitOpenSettings } from "@/core/events/event-bus";
 import { useI18n } from "@/core/i18n/hooks";
 import {
   stripInternalToolProtocol,
@@ -34,6 +35,7 @@ import {
   FilesIcon,
   LinkIcon,
   Loader2Icon,
+  Settings2Icon,
   WandSparklesIcon,
   XCircleIcon,
 } from "lucide-react";
@@ -42,6 +44,8 @@ import { toast } from "sonner";
 
 import { useArtifacts } from "../artifacts";
 import { emitOpenAgentWorkbench } from "../agent-workbench-events";
+import { isInternalWorkingFilePath } from "../agent-workbench-utils";
+import { RoutedWebLink } from "@/components/ui/routed-web-link";
 
 type OutputArtifact = {
   path: string;
@@ -95,10 +99,16 @@ type OutputSummary = {
 export type FailurePresentation = {
   message: string;
   detail: string;
+  /** A later user turn completed successfully, so this is historical audit. */
+  resolved?: boolean;
   kind:
     | "error"
+    | "auth"
+    | "capability"
     | "network"
+    | "rate-limit"
     | "verification"
+    | "verification-failed"
     | "guard"
     | "lifecycle"
     | "environment"
@@ -160,16 +170,19 @@ function isCreatedFileChange(
 function isFinalOutputArtifactPath(path: string): boolean {
   const normalized = path.replaceAll("\\", "/").toLowerCase();
   return (
-    normalized.includes("/output/final/") ||
-    normalized.startsWith("output/final/")
+    !isInternalWorkingFilePath(path) &&
+    (normalized.includes("/output/final/") ||
+      normalized.startsWith("output/final/"))
   );
 }
 
 function changeDisplayPath(path: string): string {
   const displayPath = artifactDisplayPath(path);
-  return isFinalOutputArtifactPath(path)
-    ? getFileName(displayPath)
-    : displayPath;
+  const normalized = path.replaceAll("\\", "/").toLowerCase();
+  const isOutputPath =
+    normalized.includes("/output/final/") ||
+    normalized.startsWith("output/final/");
+  return isOutputPath ? getFileName(displayPath) : displayPath;
 }
 
 function artifactFromToolCall(toolCall: ToolCall): OutputArtifact | null {
@@ -311,7 +324,7 @@ function verificationFromToolMessage(
 type ToolCallOutputs = {
   toolCalls: ToolCall[];
   artifacts: OutputArtifact[];
-  changes: OutputChange[];
+  changes: Array<{ fingerprint: string; value: OutputChange }>;
 };
 
 const toolCallOutputsCache = new WeakMap<Message, ToolCallOutputs>();
@@ -329,7 +342,22 @@ function toolCallOutputsFromMessage(message: Message): ToolCallOutputs {
       extracted.toolCalls.push(toolCall);
       const artifact = artifactFromToolCall(toolCall);
       if (artifact) extracted.artifacts.push(artifact);
-      extracted.changes.push(...changesFromToolCall(toolCall));
+      for (const change of changesFromToolCall(toolCall)) {
+        // Reconnect/replay can deliver the same file_change event more than
+        // once, sometimes under a reconstructed message id.  The diff itself
+        // is the authoritative identity for this summary; counting it twice
+        // turns a one-line edit into misleading totals such as +133/-0.
+        extracted.changes.push({
+          fingerprint: [
+            change.path,
+            change.op ?? "",
+            change.diff ?? "",
+            change.added,
+            change.removed,
+          ].join("\u0000"),
+          value: change,
+        });
+      }
     }
   }
   toolCallOutputsCache.set(message, extracted);
@@ -358,6 +386,7 @@ function verificationFromToolMessageCached(
 function summarizeOutputs(messages: Message[]): OutputSummary {
   const artifacts = new Map<string, OutputArtifact>();
   const changes = new Map<string, OutputChange>();
+  const seenChanges = new Set<string>();
   const verifications = new Map<string, VerificationEntry>();
   const toolCallMap = new Map<string, ToolCall>();
 
@@ -370,7 +399,10 @@ function summarizeOutputs(messages: Message[]): OutputSummary {
     for (const artifact of extracted.artifacts) {
       artifacts.set(artifact.path, artifact);
     }
-    for (const change of extracted.changes) {
+    for (const extractedChange of extracted.changes) {
+      if (seenChanges.has(extractedChange.fingerprint)) continue;
+      seenChanges.add(extractedChange.fingerprint);
+      const change = extractedChange.value;
       const existing = changes.get(change.path);
       const seen = new Set(change.hunks.map((h) => h.id));
       const carried = (existing?.hunks ?? []).filter((h) => !seen.has(h.id));
@@ -435,9 +467,22 @@ function extractOriginalPrompt(messages: Message[]): string | null {
   return null;
 }
 
+export function extractRetryPrompt(
+  turnMessages: Message[],
+  contextMessages: Message[],
+): string | null {
+  const turnPrompt = extractOriginalPrompt(turnMessages);
+  // A punctuation-only nudge ("?", "？？", "...") carries no task intent.
+  // Replaying it in a fresh task produces an empty-looking conversation and
+  // loses the objective that was interrupted. Fall back to the first real
+  // user prompt from the conversation in that case.
+  if (turnPrompt && /[\p{L}\p{N}]/u.test(turnPrompt)) return turnPrompt;
+  return extractOriginalPrompt(contextMessages) ?? turnPrompt;
+}
+
 // Cloudflare Pages deploys to <project>.pages.dev (no "cloudflare." label).
 const DEPLOY_URL_PATTERN =
-  /\bhttps?:\/\/(?:localhost:\d+|127\.0\.0\.1:\d+|(?:[a-z0-9-]+\.)+(?:vercel\.app|netlify\.app|onrender\.com|herokuapp\.com|pages\.dev|gitpod\.io|github\.io|preview\.app))\b[^\s)\]]*/i;
+  /\bhttps?:\/\/(?:localhost:\d+|127\.0\.0\.1:\d+|(?:[a-z0-9-]+\.)+(?:vercel\.app|netlify\.app|onrender\.com|herokuapp\.com|pages\.dev|gitpod\.io|github\.io|preview\.app))\b[^\s)\]}>"'`，。；：！？、]*/i;
 
 /**
  * Scans AI messages (latest first) for a URL that looks like a deployed
@@ -448,7 +493,7 @@ export function extractResultUrl(messages: Message[]): string | null {
     const message = messages[i];
     if (!message || message.type !== "ai") continue;
     const match = messageText(message.content).match(DEPLOY_URL_PATTERN);
-    if (match) return match[0];
+    if (match) return match[0].replace(/[.,;:!?]+$/u, "");
   }
   return null;
 }
@@ -456,8 +501,10 @@ export function extractResultUrl(messages: Message[]): string | null {
 export function MessageOutputSummary({
   messages,
   turnMessages,
+  retryContextMessages,
   threadId,
   onOpenArtifact: onOpenArtifactProp,
+  onRetryTask,
   failure,
   className,
   presentation = "final",
@@ -469,9 +516,13 @@ export function MessageOutputSummary({
    *  results, the original prompt and deploy URLs can only be found here.
    *  Falls back to `messages` when absent. */
   turnMessages?: Message[];
+  /** Full conversation used when the failed turn contains only punctuation. */
+  retryContextMessages?: Message[];
   threadId?: string;
   /** Keep artifact navigation inside the host workbench when available. */
   onOpenArtifact?: (path: string) => void;
+  /** Retry the failed task while preserving the host conversation context. */
+  onRetryTask?: (prompt: string) => void;
   failure?: FailurePresentation | null;
   className?: string;
   presentation?: "final" | "process";
@@ -480,13 +531,17 @@ export function MessageOutputSummary({
   const { select, setOpen } = useArtifacts();
   const scanMessages = turnMessages ?? messages;
   const summary = useMemo(() => summarizeOutputs(scanMessages), [scanMessages]);
+  // Error details frequently contain failed proxy endpoints. They are
+  // diagnostics, not user-facing results, so a failed turn must never expose
+  // them as an "Open result" action.
   const resultUrl = useMemo(
-    () => extractResultUrl(scanMessages),
-    [scanMessages],
+    () => (failure ? null : extractResultUrl(scanMessages)),
+    [failure, scanMessages],
   );
   const originalPrompt = useMemo(
-    () => extractOriginalPrompt(scanMessages),
-    [scanMessages],
+    () =>
+      extractRetryPrompt(scanMessages, retryContextMessages ?? scanMessages),
+    [retryContextMessages, scanMessages],
   );
   if (
     !failure &&
@@ -498,10 +553,15 @@ export function MessageOutputSummary({
   }
 
   const isFailure = Boolean(failure);
+  const isResolvedFailure = Boolean(failure?.resolved);
   // Network loss, an environment block, and a "needs your input" hand-off are
   // not agent failures — render them as amber/warning, not destructive red.
   const isWarningFailure =
+    failure?.kind === "auth" ||
+    failure?.kind === "capability" ||
     failure?.kind === "network" ||
+    failure?.kind === "rate-limit" ||
+    failure?.kind === "verification" ||
     failure?.kind === "environment" ||
     failure?.kind === "blocked";
 
@@ -521,6 +581,10 @@ export function MessageOutputSummary({
 
   const handleMakeSimilar = () => {
     if (!originalPrompt) return;
+    if (onRetryTask) {
+      onRetryTask(originalPrompt);
+      return;
+    }
     window.location.hash = `/workspace/realtime/new?prompt=${encodeURIComponent(
       originalPrompt,
     )}`;
@@ -546,6 +610,7 @@ export function MessageOutputSummary({
   const reviewableChanges = summary.changes;
   const visibleArtifacts = summary.artifacts.filter(
     (artifact) =>
+      !isInternalWorkingFilePath(artifact.path) &&
       !finalOutputRefs.has(
         normalizeWorkspaceArtifactRef(artifact.path, threadId),
       ),
@@ -614,14 +679,18 @@ export function MessageOutputSummary({
         <div
           className={cn(
             "flex min-w-0 flex-wrap items-center gap-2 rounded-md border px-3 py-1.5 text-xs",
-            isFailure
-              ? isWarningFailure
-                ? "border-warning/20 bg-warning/50/[0.04]"
-                : "border-destructive/20 bg-destructive/[0.035]"
-              : "border-success/20 bg-success/50/[0.055]",
+            isResolvedFailure
+              ? "border-border-default bg-muted/35"
+              : isFailure
+                ? isWarningFailure
+                  ? "border-warning/20 bg-warning/50/[0.04]"
+                  : "border-destructive/20 bg-destructive/[0.035]"
+                : "border-success/20 bg-success/50/[0.055]",
           )}
         >
-          {isFailure ? (
+          {isResolvedFailure ? (
+            <CheckCircle2Icon className="size-4 shrink-0 text-success/75" />
+          ) : isFailure ? (
             isWarningFailure ? (
               <AlertTriangleIcon className="size-4 shrink-0 text-warning" />
             ) : (
@@ -632,6 +701,7 @@ export function MessageOutputSummary({
           )}
           <div className="min-w-0 flex-1">
             <div
+              title={isResolvedFailure ? failure?.message : undefined}
               className={cn(
                 "font-medium text-foreground/85",
                 isFailure
@@ -639,9 +709,11 @@ export function MessageOutputSummary({
                   : "truncate",
               )}
             >
-              {isFailure
-                ? (failure?.message ?? t.message.taskFailed)
-                : t.message.taskOutputs}
+              {isResolvedFailure
+                ? t.message.previousAttemptRecovered
+                : isFailure
+                  ? (failure?.message ?? t.message.taskFailed)
+                  : t.message.taskOutputs}
             </div>
             {!isFailure && (
               <div className="truncate text-xs text-muted-foreground">
@@ -667,31 +739,51 @@ export function MessageOutputSummary({
             </div>
           )}
           {resultUrl && (
-            <a
+            <RoutedWebLink
               href={resultUrl}
-              target="_blank"
-              rel="noopener noreferrer"
+              openTargetSource="task-result"
               className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border-default bg-background/70 px-2 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/55 hover:text-foreground"
               title={t.message.resultUrl}
             >
               <LinkIcon className="size-3" />
               {t.message.openResult}
-            </a>
+            </RoutedWebLink>
           )}
-          {isFailure && originalPrompt && (
-            <button
-              type="button"
-              onClick={handleMakeSimilar}
-              title={t.message.retryTaskHint}
-              className={cn(
-                "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-colors",
-                "border-destructive/30 bg-destructive/[0.08] text-destructive hover:border-destructive/50 hover:bg-destructive/15",
-              )}
-            >
-              <WandSparklesIcon className="size-3" />
-              {t.message.retryTask}
-            </button>
-          )}
+          {isFailure &&
+            !isResolvedFailure &&
+            (failure?.kind === "auth" || failure?.kind === "rate-limit") && (
+              <button
+                type="button"
+                onClick={() => emitOpenSettings("models")}
+                title={t.streaming.openModelSettings}
+                className={cn(
+                  "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-colors",
+                  "border-warning/35 bg-warning/[0.08] text-warning hover:border-warning/55 hover:bg-warning/15",
+                )}
+              >
+                <Settings2Icon className="size-3" />
+                {t.streaming.openModelSettings}
+              </button>
+            )}
+          {isFailure &&
+            !isResolvedFailure &&
+            failure?.kind !== "auth" &&
+            originalPrompt && (
+              <button
+                type="button"
+                onClick={handleMakeSimilar}
+                title={t.message.retryTaskHint}
+                className={cn(
+                  "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-colors",
+                  isWarningFailure
+                    ? "border-warning/35 bg-warning/[0.08] text-warning hover:border-warning/55 hover:bg-warning/15"
+                    : "border-destructive/30 bg-destructive/[0.08] text-destructive hover:border-destructive/50 hover:bg-destructive/15",
+                )}
+              >
+                <WandSparklesIcon className="size-3" />
+                {t.message.retryTask}
+              </button>
+            )}
         </div>
       )}
       {visibleArtifacts.length > 0 && (

@@ -117,10 +117,14 @@ def resolve_work_mode(user_context: dict[str, Any] | None) -> WorkMode:
     workflow_preset = (
         str(uc.get("workflow_preset") or metadata.get("workflow_preset") or "").strip().lower()
     )
-    workflow_mode = str(uc.get("workflow_mode") or metadata.get("workflow_mode") or "").strip().lower()
+    workflow_mode = (
+        str(uc.get("workflow_mode") or metadata.get("workflow_mode") or "").strip().lower()
+    )
     # Backward compatibility: codex_mode is deprecated, map to workflow_mode
     if not workflow_mode:
-        workflow_mode = str(uc.get("codex_mode") or metadata.get("codex_mode") or "").strip().lower()
+        workflow_mode = (
+            str(uc.get("codex_mode") or metadata.get("codex_mode") or "").strip().lower()
+        )
     completion_policy = (
         str(uc.get("completion_policy") or metadata.get("completion_policy") or "").strip().lower()
     )

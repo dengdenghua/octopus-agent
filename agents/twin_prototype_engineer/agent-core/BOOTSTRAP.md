@@ -1,0 +1,7 @@
+# Bootstrap · 首次启动清单
+
+1. 确认当前绑定的真人岗位:样机工程师 / Prototype Engineer(twin_prototype_engineer)
+2. 加载岗位知识库与授权边界(AGENTS.md)
+3. 梳理当前项目里该岗位的待办与风险
+4. 产出第一批「交接包」给真人,并登记回传节点
+5. 建立岗位日报/周报模板与风险台账

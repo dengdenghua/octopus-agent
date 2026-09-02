@@ -14,11 +14,13 @@ import pytest
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
+from runtime.execution.suckers.browser_act_skills import register_browser_act_skills
 from runtime.execution.suckers.browser_backend import Track
 from runtime.execution.suckers.browser_backends import ExtensionBackend
 from runtime.execution.suckers.browser_launch import (
     launch_persistent_chromium,
 )
+from runtime.execution.suckers.registry import SkillRegistry
 from runtime.platform.ui.browser_router import create_browser_router
 from runtime.safety.auth import Identity, IdentityStore
 
@@ -83,7 +85,7 @@ def loaded_extension_id(context: Any) -> str:
               const manager = document.querySelector('extensions-manager');
               const list = manager?.shadowRoot?.querySelector('extensions-item-list');
               return [...(list?.shadowRoot?.querySelectorAll('extensions-item') || [])]
-                .filter(item => item.data?.name === 'Octopus Agent')
+                .filter(item => item.data?.name?.includes('EchoAI') || item.data?.name === 'Octopus Agent')
                 .map(item => item.id);
             }"""
         )
@@ -114,6 +116,9 @@ def live_extension_runtime(
 
     monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("OCTOPUS_BROWSER_EXTENSION_DIR", str(extension))
+    monkeypatch.setenv("OCTOPUS_BROWSER_RELAY_BASE_URL", f"http://127.0.0.1:{port}")
+    if api_key:
+        monkeypatch.setenv("OCTOPUS_BROWSER_RELAY_TOKEN", api_key)
     app = FastAPI()
     identity_store = None
     if require_auth:
@@ -167,7 +172,23 @@ def live_extension_runtime(
 
     @app.get("/destination", response_class=HTMLResponse)
     def destination_page() -> str:
-        return "<!doctype html><title>Destination</title><h1>Arrived</h1>"
+        return """
+        <!doctype html>
+        <title>Destination</title>
+        <h1>Arrived</h1>
+        <script>
+          function observeRestoredCursor() {
+            const host = document.querySelector('#octopus-agent-cursor-overlay-host');
+            const cursor = host?.shadowRoot?.querySelector('#cursor');
+            if (cursor?.dataset.visible === 'true') {
+              document.documentElement.dataset.cursorRestored = 'true';
+              return;
+            }
+            requestAnimationFrame(observeRestoredCursor);
+          }
+          requestAnimationFrame(observeRestoredCursor);
+        </script>
+        """
 
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
     server_thread = threading.Thread(target=server.run, daemon=True)
@@ -235,6 +256,32 @@ def test_real_chrome_extension_observes_and_operates_active_tab(
 
     page.evaluate(
         """() => {
+          window.__octopusCursorPhases = [];
+          const attach = () => {
+            const host = document.querySelector('#octopus-agent-cursor-overlay-host');
+            const cursor = host?.shadowRoot?.querySelector('#cursor');
+            if (!cursor) {
+              requestAnimationFrame(attach);
+              return;
+            }
+            const record = () => {
+              const phase = String(cursor.dataset.phase || '');
+              if (phase && window.__octopusCursorPhases.at(-1) !== phase) {
+                window.__octopusCursorPhases.push(phase);
+              }
+            };
+            record();
+            new MutationObserver(record).observe(cursor, {
+              attributes: true,
+              attributeFilter: ['data-phase'],
+            });
+          };
+          requestAnimationFrame(attach);
+        }"""
+    )
+
+    page.evaluate(
+        """() => {
           const replacement = document.createElement("button");
           replacement.id = "replacement";
           replacement.textContent = "Save changes";
@@ -244,20 +291,55 @@ def test_real_chrome_extension_observes_and_operates_active_tab(
           document.querySelector("#replaceable").replaceWith(replacement);
         }"""
     )
-    recovered = request_json(
-        base_url,
-        "/api/browser/relay/command",
-        {
-            "action": "click",
-            "selector": "#replaceable",
-            "timeout": 1_000,
-            "timeout_seconds": 5,
-        },
-    )
+    skill_registry = SkillRegistry()
+    register_browser_act_skills(skill_registry)
+    recovered = skill_registry.get("live_browser_click").handler(selector="#replaceable")
     assert recovered["ok"] is True
+    assert recovered["track"] == "extension"
+    assert recovered["live_browser_fallback"]["to"] == "extension"
     assert recovered["selector"] == "#replacement"
     assert recovered["recoveredFromSelector"] == "#replaceable"
     assert page.locator("#recovered").text_content() == "1"
+
+    command_result: dict[str, Any] = {}
+    page.evaluate(
+        """() => setTimeout(() => {
+          const marker = document.createElement('div');
+          marker.id = 'cursor-hold';
+          document.body.appendChild(marker);
+        }, 750)"""
+    )
+
+    def run_visible_wait() -> None:
+        result = skill_registry.get("live_browser_wait").handler(
+            selector="#cursor-hold",
+            timeout=2_000,
+        )
+        command_result.update(result)
+
+    wait_thread = threading.Thread(target=run_visible_wait)
+    wait_thread.start()
+    wait_until(
+        lambda: page.evaluate(
+            """() => {
+              const host = document.querySelector('#octopus-agent-cursor-overlay-host');
+              const cursor = host?.shadowRoot?.querySelector('#cursor');
+              return cursor?.dataset.visible === 'true' &&
+                cursor?.textContent.includes('EchoAI');
+            }"""
+        ),
+        timeout=5,
+    )
+    wait_thread.join(timeout=5)
+    assert command_result["ok"] is True
+    wait_until(
+        lambda: page.evaluate(
+            """() => document
+              .querySelector('#octopus-agent-cursor-overlay-host')
+              ?.shadowRoot?.querySelector('#cursor')?.dataset.visible === 'false'"""
+        ),
+        timeout=3,
+    )
 
     typed = request_json(
         base_url,
@@ -276,6 +358,24 @@ def test_real_chrome_extension_observes_and_operates_active_tab(
     assert typed["value"] == "after"
     assert page.locator("#query").input_value() == "after"
     assert page.title() == "Query: after"
+    phases = wait_until(
+        lambda: (
+            observed
+            if {"start", "move", "click", "type", "end"}
+            <= set(observed := page.evaluate("() => window.__octopusCursorPhases"))
+            else None
+        ),
+        timeout=3,
+    )
+    assert {"start", "move", "click", "type", "end"} <= set(phases)
+    assert page.evaluate(
+        """() => {
+          const host = document.querySelector('#octopus-agent-cursor-overlay-host');
+          const cursor = host?.shadowRoot?.querySelector('#cursor');
+          return host?.style.pointerEvents === 'none' &&
+            getComputedStyle(cursor).pointerEvents === 'none';
+        }"""
+    )
 
     pressed = request_json(
         base_url,
@@ -338,6 +438,10 @@ def test_real_chrome_extension_observes_and_operates_active_tab(
     assert navigated["url"].endswith("/destination")
     page.wait_for_url("**/destination")
     assert page.title() == "Destination"
+    wait_until(
+        lambda: page.locator("html").get_attribute("data-cursor-restored") == "true",
+        timeout=3,
+    )
 
 
 @pytest.mark.parametrize("live_extension_runtime", [True], indirect=True)
@@ -349,14 +453,44 @@ def test_sidepanel_pairing_connects_extension_to_authenticated_gateway(
     extension_id = loaded_extension_id(context)
 
     sidepanel = context.new_page()
+    sidepanel.set_viewport_size({"width": 420, "height": 800})
     sidepanel.goto(f"chrome-extension://{extension_id}/sidepanel.html")
-    sidepanel.locator("#authToggleButton").click()
+    sidepanel.get_by_role("button", name="新建对话").click()
+    assert sidepanel.locator("#promptInput").evaluate(
+        "element => document.activeElement === element"
+    )
+    auth_toggle = sidepanel.get_by_role("button", name="连接密钥设置")
+    assert auth_toggle.get_attribute("aria-expanded") == "false"
+    auth_toggle.click()
+    assert auth_toggle.get_attribute("aria-expanded") == "true"
+    composer_box = sidepanel.locator("#composer").bounding_box()
+    prompt_box = sidepanel.locator("#promptInput").bounding_box()
+    save_box = sidepanel.locator("#authSaveButton").bounding_box()
+    messages_box = sidepanel.locator("#messages").bounding_box()
+    assert composer_box is not None and composer_box["height"] <= 160
+    assert composer_box["y"] + composer_box["height"] <= 800
+    assert prompt_box is not None and prompt_box["height"] <= 100
+    assert save_box is not None and save_box["height"] <= 44
+    assert messages_box is not None and messages_box["height"] >= 180
+
+    sidepanel.locator("#authTokenInput").fill("invalid-key")
+    sidepanel.locator('#authForm button[type="submit"]').click()
+    sidepanel.locator("#authStatus").get_by_text(
+        "密钥已保存，但未能连接。请检查密钥或确认 EchoOS 主控已启动。"
+    ).wait_for(timeout=10_000)
+    assert sidepanel.locator("#authStatus").get_attribute("data-tone") == "error"
+    assert sidepanel.locator("#authSaveButton").is_enabled()
+
     sidepanel.locator("#authTokenInput").fill(api_key)
     sidepanel.locator('#authForm button[type="submit"]').click()
-    sidepanel.locator("#authStatus").get_by_text("连接密钥已保存并重新连接。").wait_for()
+    sidepanel.locator("#authStatus").get_by_text("连接密钥已验证，Chrome Relay 已连接。").wait_for(
+        timeout=10_000
+    )
+    assert sidepanel.locator("#authStatus").get_attribute("data-tone") == "success"
 
     page = context.new_page()
-    page.goto(f"{base_url}/fixture")
+    long_source = "x" * 240
+    page.goto(f"{base_url}/fixture?source={long_source}")
     status = wait_until(
         lambda: (
             current
@@ -373,6 +507,14 @@ def test_sidepanel_pairing_connects_extension_to_authenticated_gateway(
         timeout=10,
     )
     assert status["connected"] is True
+    sidepanel.wait_for_function(
+        "source => document.querySelector('#tabUrl')?.textContent.includes(source)",
+        arg=long_source,
+        timeout=5_000,
+    )
+    assert sidepanel.evaluate(
+        "() => document.documentElement.scrollWidth === document.documentElement.clientWidth"
+    )
 
     state = request_json(
         base_url,

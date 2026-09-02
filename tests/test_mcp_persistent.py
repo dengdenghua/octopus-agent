@@ -93,7 +93,10 @@ def test_persistent_call_sends_protocol_cancel_notification():
             await asyncio.Event().wait()
 
         async def send_notification(self, notification, **_kwargs):
-            notices.append(notification.root)
+            # MCP 1.x: notification is ClientNotification(root=...).
+            # MCP 2.x: notification is the CancelledNotification directly.
+            note = getattr(notification, "root", notification)
+            notices.append(note)
 
     client = PersistentStdioMCPClient.__new__(PersistentStdioMCPClient)
     client._session = _Session()
@@ -116,7 +119,11 @@ def test_persistent_call_sends_protocol_cancel_notification():
 
     assert len(notices) == 1
     assert notices[0].method == "notifications/cancelled"
-    assert notices[0].params.requestId == 17
+    # MCP 1.x 用 alias requestId,2.x 原生字段名 request_id。
+    request_id = getattr(notices[0].params, "request_id", None) or getattr(
+        notices[0].params, "requestId", None
+    )
+    assert request_id == 17
     assert notices[0].params.reason == "user redirected"
 
 

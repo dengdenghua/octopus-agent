@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
-import pytest
-
 import runtime.execution.suckers.image_search_backends as isb
 
 
 def test_unwrap_ddg_url() -> None:
     assert _unwrap("https://example.com/x?a=1") == "https://example.com/x?a=1"
-    assert _unwrap("https://duckduckgo.com/?q=x&uddg=https%3A%2F%2Ftarget.com%2Fimg") == "https://target.com/img"
+    assert (
+        _unwrap("https://duckduckgo.com/?q=x&uddg=https%3A%2F%2Ftarget.com%2Fimg")
+        == "https://target.com/img"
+    )
     assert _unwrap("https://duckduckgo.com/?q=x") == "https://duckduckgo.com/?q=x"
 
 
@@ -31,11 +30,11 @@ class _Client:
 
     def get(self, url, **kw):
         self.calls.append(("get", url, kw))
-        return self._invoke(self.handlers.get(("get", url), _Resp200({})))
+        return self._invoke(self.handlers.get(("get", url), _resp200({})))
 
     def post(self, url, **kw):
         self.calls.append(("post", url, kw))
-        return self._invoke(self.handlers.get(("post", url), _Resp200({})))
+        return self._invoke(self.handlers.get(("post", url), _resp200({})))
 
     def __enter__(self):
         return self
@@ -60,7 +59,7 @@ class _Resp:
             raise RuntimeError(f"HTTP {self.status_code}")
 
 
-def _Resp200(data):
+def _resp200(data):
     return _Resp(data=data)
 
 
@@ -186,7 +185,16 @@ def test_searxng_image_search(monkeypatch) -> None:
     client = _Client(
         {
             ("get", "https://sx.example/search"): _Resp(
-                data={"results": [{"title": "T", "img_src": "https://i", "thumbnail": "https://t", "url": "https://s"}]}
+                data={
+                    "results": [
+                        {
+                            "title": "T",
+                            "img_src": "https://i",
+                            "thumbnail": "https://t",
+                            "url": "https://s",
+                        }
+                    ]
+                }
             )
         }
     )

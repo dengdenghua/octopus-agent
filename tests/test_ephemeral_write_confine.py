@@ -148,9 +148,7 @@ def test_lock_blocks_shell_tool_by_affinity(_session):
         return None
 
     call = _Call("exec_shell", {"command": "echo escape"})
-    block = _ephemeral_write_confine_block(
-        call, _Skill(_shell, ["shell", "exec", "dangerous"])
-    )
+    block = _ephemeral_write_confine_block(call, _Skill(_shell, ["shell", "exec", "dangerous"]))
     assert block is not None
     assert "shell/exec" in block
     # No confinement args may have been injected before the refusal.
@@ -190,7 +188,4 @@ def test_shell_tool_allowed_without_locked_root(_session):
         return None
 
     call = _Call("exec_shell", {"command": "ls"})
-    assert (
-        _ephemeral_write_confine_block(call, _Skill(_shell, ["shell", "exec"]))
-        is None
-    )
+    assert _ephemeral_write_confine_block(call, _Skill(_shell, ["shell", "exec"])) is None

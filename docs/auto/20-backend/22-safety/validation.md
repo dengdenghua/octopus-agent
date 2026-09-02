@@ -140,7 +140,7 @@ tier: "core"
 
 ## Who imports this
 
-**17** file(s) reference this package:
+**19** file(s) reference this package:
 
 - **`runtime/adapters/`** · 1 file(s)
   - `runtime/adapters/channels/base.py`
@@ -151,13 +151,15 @@ tier: "core"
   - `runtime/core/cerebrum/_react_prompt_assembly_state.py`
   - `runtime/core/cerebrum/react_parallel_dispatch.py`
   - `runtime/core/cerebrum/react_resume.py`
-- **`runtime/execution/`** · 6 file(s)
+- **`runtime/execution/`** · 7 file(s)
   - `runtime/execution/agents/loader.py`
+  - `runtime/execution/codex_backend/dynamic_tools.py`
   - `runtime/execution/misc/parallel_runner.py`
   - `runtime/execution/parallel_agents/orchestrator.py`
   - `runtime/execution/subagents/bridge.py`
-  - `runtime/execution/suckers/ephemeral_injection_gate.py`
-  - `runtime/execution/tool_engine/executor.py`
+  - _… and 2 more_
+- **`runtime/memory/`** · 1 file(s)
+  - `runtime/memory/threads/llm_summariser.py`
 - **`runtime/safety/`** · 4 file(s)
   - `runtime/safety/approval/approval_gate.py`
   - `runtime/safety/evolution/weekly_report.py`

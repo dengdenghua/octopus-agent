@@ -196,7 +196,8 @@ def test_computer_control_skills_declare_desktop():
     from runtime.execution.suckers.registry import SkillRegistry
 
     reg = SkillRegistry()
-    if register_computer_skills(reg, verify_tests=False) == 0:
+    register_computer_skills(reg, verify_tests=False)
+    if not reg.has("mouse_click"):
         pytest.skip("pyautogui not installed — computer skills not registered")
     # Control skills drive the single physical screen/mouse/keyboard ⇒ exclusive.
     for name in ("mouse_click", "mouse_move", "keyboard_type", "keyboard_press"):

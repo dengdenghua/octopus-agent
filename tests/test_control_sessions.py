@@ -539,3 +539,44 @@ def test_control_sessions_object_level_ownership_isolates_actors(tmp_path) -> No
         ).status_code
         == 200
     )
+
+
+def test_legacy_unowned_control_sessions_are_admin_only(tmp_path) -> None:
+    store_id = IdentityStore()
+    store_id.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    store_id.add(
+        Identity(actor_id="admin", roles=("admin",)),
+        api_key_plaintext="sk-admin",
+    )
+    sessions = ControlSessionStore(base_dir=tmp_path)
+    sessions.upsert_session(
+        session_id="ctrl-legacy-1",
+        surface="browser",
+        target_id="tab",
+        creator_actor=None,
+    )
+    app = FastAPI()
+    app.include_router(
+        create_control_sessions_router(
+            store=sessions,
+            identity_store=store_id,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+    alice = {"Authorization": "Bearer sk-alice"}
+    admin = {"Authorization": "Bearer sk-admin"}
+
+    assert client.get("/api/control-sessions/ctrl-legacy-1", headers=alice).status_code == 404
+    assert (
+        client.post(
+            "/api/control-sessions/ctrl-legacy-1/takeover",
+            headers=alice,
+        ).status_code
+        == 404
+    )
+    assert client.get("/api/control-sessions", headers=alice).json()["count"] == 0
+
+    assert client.get("/api/control-sessions/ctrl-legacy-1", headers=admin).status_code == 200
+    admin_list = client.get("/api/control-sessions", headers=admin).json()
+    assert [item["session_id"] for item in admin_list["sessions"]] == ["ctrl-legacy-1"]

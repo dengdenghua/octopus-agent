@@ -141,6 +141,31 @@ def _read_or_empty(path: Path) -> str:
         return ""
 
 
+def _read_or_empty(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8").strip()
+    except (FileNotFoundError, PermissionError):
+        return ""
+
+
+# Per-tier cap for memory injected into the system prompt. A large
+# memory file (e.g. a grown project index in ``.octopus/MEMORY.md``)
+# must never be able to blow the planner/react context budget — past
+# the ceiling the compression engine drops the *entire* system segment,
+# taking the agent's identity/soul with it. Bound each tier instead and
+# keep the section readable.
+_MAX_MEMORY_TIER_CHARS = 2000
+
+
+def _bounded_memory_text(text: str) -> str:
+    """Trim one memory tier to ``_MAX_MEMORY_TIER_CHARS`` with a marker."""
+    text = (text or "").strip()
+    if len(text) <= _MAX_MEMORY_TIER_CHARS:
+        return text
+    head = text[:_MAX_MEMORY_TIER_CHARS].rstrip()
+    return f"{head}\n\n…(记忆过长，已截断为前 {_MAX_MEMORY_TIER_CHARS} 字符，原文 {len(text)} 字符)"
+
+
 def _compose_soul(
     agent_dir: Path,
     shared_dir: Path,
@@ -220,7 +245,7 @@ def _compose_soul(
             txt = _read_or_empty(tier_path)
             if txt and not _is_template_only(txt):
                 parts.append(
-                    f"## Long-term Memory ({tier_name})\n\n{txt}",
+                    f"## Long-term Memory ({tier_name})\n\n{_bounded_memory_text(txt)}",
                 )
 
     # Constitution summary · internalize the five principles. On by
@@ -321,7 +346,9 @@ def render_runtime_memory_sections(
     ):
         txt = _read_or_empty(tier_path)
         if txt and not _is_template_only(txt):
-            parts.append(f"## Long-term Memory ({tier_name})\n\n{txt}")
+            parts.append(
+                f"## Long-term Memory ({tier_name})\n\n{_bounded_memory_text(txt)}",
+            )
     return "\n\n".join(parts)
 
 

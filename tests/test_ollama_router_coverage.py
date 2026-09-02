@@ -7,12 +7,12 @@ import json
 import pytest
 
 import runtime.sensing.model_router.ollama_router as or_mod
+from runtime.platform.models.llm import Message, ModelRequest, ToolSpec
 from runtime.sensing.model_router.ollama_router import (
     OllamaModelInfo,
     OllamaModelRouter,
     OllamaRouterError,
 )
-from runtime.platform.models.llm import Message, ModelRequest, ToolSpec
 
 
 class _Client:
@@ -84,7 +84,17 @@ def test_init_auto_detect(monkeypatch) -> None:
 
 
 def test_is_available_and_list(monkeypatch) -> None:
-    client = _Client(tags={"models": [{"name": "llama3.2:3b", "size": 100, "details": {"family": "llama", "quantization_level": "q4"}}]})
+    client = _Client(
+        tags={
+            "models": [
+                {
+                    "name": "llama3.2:3b",
+                    "size": 100,
+                    "details": {"family": "llama", "quantization_level": "q4"},
+                }
+            ]
+        }
+    )
     monkeypatch.setattr(or_mod, "httpx", None)
     r = _router(client)
     assert r.is_available() is True

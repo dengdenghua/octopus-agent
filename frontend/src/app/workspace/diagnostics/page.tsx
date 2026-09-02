@@ -26,6 +26,7 @@ import { RemoteBackendsPanel } from "@/components/workspace/remote-backends-pane
 import { RuntimeSelfCheckPanel } from "@/components/workspace/runtime-self-check-panel";
 import { StreamTelemetryPanel } from "@/components/workspace/stream-telemetry-panel";
 import { useI18n } from "@/core/i18n/hooks";
+import { getBackendBaseURL } from "@/core/config";
 
 // The /workspace/diagnostics route renders ObservabilityPage (which embeds
 // DiagnosticsContent in its system tab), so this module intentionally has
@@ -35,14 +36,14 @@ export function DiagnosticsContent() {
   const [project, setProject] = useState<string>("");
 
   // Resolve the active workspace root for the ambient-suggestions
-  // panel. Reads from ``/api/projects/active`` when the molili /
+  // panel. Reads from ``/api/projects/active`` when the account /
   // scope subsystem has one bound; otherwise leaves empty and the
   // panel renders a "no active project" hint.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const r = await fetch("/api/projects/active");
+        const r = await fetch(`${getBackendBaseURL()}/api/projects/active`);
         if (r.ok) {
           const body = (await r.json()) as { project_root?: string };
           if (!cancelled && body.project_root) {

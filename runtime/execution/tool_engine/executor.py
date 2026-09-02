@@ -89,6 +89,51 @@ from runtime.safety.validation.prompt_injection import (
     scan_for_injection,
 )
 
+
+def _canonical_execution_provenance(
+    skill: Any,
+    *,
+    handler_executed: bool,
+    receipt_rewrite_source: str | None = None,
+) -> tuple[bool, str]:
+    """Classify the exact Skill handler captured for this execution.
+
+    Registry names and metadata are replaceable. Object identity of the
+    canonical built-in handler is the sealed fact a same-name plugin cannot
+    forge, and using the already-captured ``skill`` closes the lookup/call
+    race.  Handler identity alone is insufficient, however: a pre hook can
+    bypass the handler and a post hook can replace the receipt later consumed
+    by environment-gap classification.  Both cases fail closed.
+    """
+
+    if not handler_executed:
+        return False, receipt_rewrite_source or "handler_not_executed"
+    if receipt_rewrite_source is not None:
+        return False, receipt_rewrite_source
+
+    tool_name = str(getattr(skill, "skill_id", "") or getattr(skill, "name", ""))
+    if tool_name not in {"exec_shell", "format_code", "lint_check", "run_tests"}:
+        return False, "registered_noncanonical"
+
+    from runtime.execution.suckers._write_skills_exec import _exec_shell
+    from runtime.execution.suckers._write_skills_quality import (
+        _format_code,
+        _lint_check,
+        _run_tests,
+    )
+
+    canonical_handlers = {
+        "exec_shell": _exec_shell,
+        "format_code": _format_code,
+        "lint_check": _lint_check,
+        "run_tests": _run_tests,
+    }
+    expected = canonical_handlers.get(tool_name)
+    if expected is not None and getattr(skill, "handler", None) is expected:
+        return True, "canonical_builtin"
+    return False, "registered_noncanonical"
+
+
 __all__ = [
     "ReadBeforeWriteRequired",
     "StepExecutionError",
@@ -312,6 +357,33 @@ class ToolExecutor:
                 self.journal.write_step(task_id, arm_id, step, actor=actor)
                 return step
 
+            # A workflow preset is trusted, per-turn policy metadata.  Enforce
+            # audit read-only at the executor chokepoint so both native tool
+            # use and text-protocol ReAct calls receive the same hard gate.
+            # The advertised catalog is narrowed too, but this check is the
+            # authoritative defence against forged/stale tool calls.
+            from runtime.execution.misc.skill_policy import (
+                audit_read_only_tool_denial,
+            )
+            from runtime.platform.process.session import current_session
+
+            _policy_session = current_session()
+            _policy_context = getattr(_policy_session, "metadata", None) or {}
+            _audit_denial = audit_read_only_tool_denial(
+                sucker_id,
+                args,
+                context=_policy_context,
+            )
+            if _audit_denial is not None:
+                return _reject_step(
+                    "failed",
+                    _audit_denial,
+                    span_attrs={
+                        "octopus.audit_read_only.blocked": True,
+                        "octopus.audit_read_only.tool": str(sucker_id),
+                    },
+                )
+
             governance = evaluate_execution_policy(
                 build_execution_instruction(
                     instruction_id=f"{task_id}:{arm_id}:{step_id}:{sucker_id}",
@@ -463,6 +535,8 @@ class ToolExecutor:
                 return step
 
             pre_result: ExecutionResult | None = None
+            _handler_executed = False
+            _receipt_rewrite_source: str | None = None
             if self.hooks is not None:
                 from runtime.core.nerves.hooks import HookContext, HookError
 
@@ -480,6 +554,7 @@ class ToolExecutor:
                     pre_out = self.hooks.run_pre(pre_ctx)
                     if pre_out is not None and pre_out.replace_with is not None:
                         pre_result = pre_out.replace_with
+                        _receipt_rewrite_source = "legacy_pre_hook_replaced"
                 except HookError as he:
                     budget.commit(reservation, CostEntry())
                     self.journal.write_budget("budget_commit", task_id=task_id, actor=actor)
@@ -656,15 +731,21 @@ class ToolExecutor:
                             intent_event,
                             _effect_resolution,
                         )
+
                     # Bind the runtime TrustEngine as the ambient engine for
                     # the handler call. A meta-skill (use_capability / forged
                     # composite) dispatches to an inner handler DIRECTLY,
                     # bypassing this execute_step; binding here lets that
                     # nested dispatch run the SAME immunity policy via
                     # skill_gate.gate_inner_dispatch.
+                    def _invoke_captured_handler(**handler_args: Any) -> Any:
+                        nonlocal _handler_executed
+                        _handler_executed = True
+                        return skill.handler(**handler_args)
+
                     with use_trust_engine(self.immunity):
                         output, retry_tags = _call_handler_with_transient_retry(
-                            skill.handler,
+                            _invoke_captured_handler,
                             args,
                             allow_retry=(caller != "react_loop" or not _effect_side),
                             timeout_s=getattr(skill, "timeout_s", None),
@@ -824,6 +905,7 @@ class ToolExecutor:
                     session=_cs2(),
                 )
                 if post_decision.modified_output is not None:
+                    _receipt_rewrite_source = "public_post_tool_rewritten"
                     # re-hash · keep ExecutionResult self-consistent
                     result = ExecutionResult(
                         call_id=call.call_id,
@@ -849,11 +931,7 @@ class ToolExecutor:
                     dispatch_post_tool_failure(
                         sucker_id=str(sucker_id),
                         args=args,
-                        error=(
-                            result.error_type
-                            if isinstance(result.error_type, str)
-                            else ""
-                        ),
+                        error=(result.error_type if isinstance(result.error_type, str) else ""),
                         session=_cs3(),
                     )
                 except (TypeError, ValueError, RuntimeError):  # noqa: BLE001
@@ -937,6 +1015,22 @@ class ToolExecutor:
                 post_out = self.hooks.run_post(post_ctx)
                 if post_out is not None and post_out.replace_with is not None:
                     result = post_out.replace_with
+                    _receipt_rewrite_source = "legacy_post_hook_replaced"
+            # Stamp provenance only after all post hooks have finished, but
+            # derive it from the exact Skill object captured before dispatch.
+            # This survives a concurrent registry replacement without either
+            # trusting the replacement or accidentally executing it.
+            _trusted_execution, _execution_source = _canonical_execution_provenance(
+                skill,
+                handler_executed=_handler_executed,
+                receipt_rewrite_source=_receipt_rewrite_source,
+            )
+            result = result.model_copy(
+                update={
+                    "trusted_execution": _trusted_execution,
+                    "execution_source": _execution_source,
+                }
+            )
             step = Step(
                 step_id=step_id,
                 node_id=node_id,

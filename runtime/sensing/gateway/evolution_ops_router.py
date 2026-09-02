@@ -30,13 +30,17 @@ except ImportError:  # pragma: no cover
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
+from ._evolution_ops_insights import (
+    evolution_learning_curve_payload,
+    evolution_memory_growth_payload,
+    evolution_overview_payload,
+    evolution_recommendations_payload,
+    evolution_story_payload,
+)
 from .evolution_ops import (
-    _as_dt,
-    _bounded_score,
     _budget_snapshot,
     _csv_response,
     _curriculum_goal_rows,
-    _date_key,
     _dispatch_snapshot,
     _forge_addendums_csv_rows,
     _forge_addendums_snapshot,
@@ -59,23 +63,17 @@ from .evolution_ops import (
     _forge_variants_snapshot,
     _framework_benchmark_rows,
     _iso,
-    _knowledge_graph_overview,
     _learn_from_intel_result,
-    _learned_section_counts,
     _mcp_proposal_rows,
     _model_benchmark_rows,
     _model_payload,
     _protocol_drift_rows,
     _protocol_repair_rows,
     _registry_skill_is_auto,
-    _registry_skill_names,
     _skill_candidate_to_proposal,
     _skill_forge_candidates,
     _skill_performance_rows,
     _skill_step_rows,
-    _trajectory_rows,
-    _utcnow,
-    _week_key,
     _write_budget_breaker_reset,
     _write_curriculum_goal_decision,
     _write_mcp_proposal_decision,
@@ -84,40 +82,12 @@ from .evolution_ops import (
 )
 
 
-def _intelligence_store_snapshot() -> dict[str, Any]:
-    import json
-    import os
-    from pathlib import Path
-
-    path = Path(os.environ.get("OCTOPUS_HOME", ".octopus")) / "intelligence.json"
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        raw = {}
-
-    subscriptions = [item for item in raw.get("subscriptions", []) if isinstance(item, dict)]
-    reports = [item for item in raw.get("reports", []) if isinstance(item, dict)]
-    enabled = [item for item in subscriptions if item.get("enabled") is not False]
-
-    last_report_at = ""
-    for report in reports:
-        created_at = str(report.get("created_at") or "")
-        if created_at > last_report_at:
-            last_report_at = created_at
-
-    return {
-        "subscriptions": len(subscriptions),
-        "enabled_subscriptions": len(enabled),
-        "total_reports": len(reports),
-        "last_report_at": last_report_at or None,
-    }
-
-
 def create_evolution_ops_router(
     *,
     journal: Any = None,
     registry: Any = None,
     planner: Any = None,
+    thread_store: Any = None,
     forged_skill_dir: Path | str | None = None,
     identity_store: Any = None,
     require_auth: bool = False,
@@ -165,63 +135,26 @@ def create_evolution_ops_router(
 
     @router.get("/api/evolution/overview")
     def evolution_overview() -> dict[str, Any]:
-        skill_perf = _skill_performance_rows(journal, registry)
-        used_skill_rates = [
-            float(row["success_rate"]) for row in skill_perf if int(row["usage_count"]) > 0
-        ]
-        avg_success = sum(used_skill_rates) / len(used_skill_rates) if used_skill_rates else 0.0
+        return evolution_overview_payload(journal, registry, planner)
 
-        skill_names = _registry_skill_names(registry)
-        auto_skills = [name for name in skill_names if _registry_skill_is_auto(registry, name)]
-        learned_counts = _learned_section_counts(planner)
-        trajectory_rows = _trajectory_rows(journal)
-        kg = _knowledge_graph_overview(journal)
-        intelligence = _intelligence_store_snapshot()
+    @router.get("/api/evolution/story")
+    def evolution_story(
+        limit: int = Query(default=8, ge=1, le=30),
+    ) -> dict[str, Any]:
+        """Plain-language evidence for what the system actually learned.
 
-        learning_events = (
-            len(trajectory_rows)
-            + learned_counts["rules"]
-            + learned_counts["memories"]
-            + len(auto_skills)
-            + int(intelligence["total_reports"])
+        Trajectories are observations, not evolution outcomes. This endpoint
+        keeps them separate from durable planner rules, memories, and forged
+        skills so the UI cannot imply that merely running a task changed the
+        agent's future behaviour.
+        """
+        return evolution_story_payload(
+            journal,
+            registry,
+            planner,
+            thread_store,
+            limit=limit,
         )
-        improvement_score = _bounded_score(
-            avg_success * 0.55
-            + min(1.0, len(trajectory_rows) / 25) * 0.25
-            + min(1.0, learned_counts["rules"] / 10) * 0.10
-            + min(1.0, len(auto_skills) / 8) * 0.10
-            + min(1.0, int(intelligence["total_reports"]) / 12) * 0.05
-        )
-
-        return {
-            "skills": {
-                "total": len(skill_names),
-                "auto_extracted": len(auto_skills),
-                "manual": max(0, len(skill_names) - len(auto_skills)),
-                "avg_success_rate": avg_success,
-            },
-            "memory": {
-                "total_facts": learned_counts["memories"],
-                "categories": {
-                    "memories": learned_counts["memories"],
-                    "rules": learned_counts["rules"],
-                    "trajectories": len(trajectory_rows),
-                },
-            },
-            "knowledge_graph": kg,
-            "learning_events": learning_events,
-            "improvement_score": improvement_score,
-            "proactive_learning": {
-                "enabled": int(intelligence["enabled_subscriptions"]) > 0,
-                "is_running": False,
-                "total_reports": intelligence["total_reports"],
-                "subscriptions": intelligence["subscriptions"],
-                "enabled_subscriptions": intelligence["enabled_subscriptions"],
-                "last_report_at": intelligence["last_report_at"],
-                "total_skills_created": len(auto_skills),
-            },
-            "source": "journal",
-        }
 
     @router.get("/api/evolution/skills/history")
     def evolution_skill_history(
@@ -315,118 +248,22 @@ def create_evolution_ops_router(
     def evolution_memory_growth(
         days: int = Query(default=30, ge=1, le=365),
     ) -> list[dict[str, Any]]:
-        from collections import defaultdict
-        from datetime import timedelta
-
-        by_day: dict[str, dict[str, int]] = defaultdict(
-            lambda: {
-                "fact": 0,
-                "preference": 0,
-                "learned_skill": 0,
-                "relationship": 0,
-            }
+        return evolution_memory_growth_payload(
+            journal,
+            registry,
+            planner,
+            days=days,
         )
-        cutoff = _utcnow() - timedelta(days=days)
-        for item in _skill_step_rows(journal):
-            ts = item["ts"]
-            if ts and ts >= cutoff:
-                bucket = by_day[_date_key(ts)]
-                if _registry_skill_is_auto(registry, item["skill_name"]):
-                    bucket["learned_skill"] += 1
-                else:
-                    bucket["fact"] += 1
-
-        learned = _learned_section_counts(planner)
-        if learned["memories"] > 0:
-            by_day[_date_key(_utcnow())]["fact"] += learned["memories"]
-        if learned["rules"] > 0:
-            by_day[_date_key(_utcnow())]["relationship"] += learned["rules"]
-
-        return [{"date": day, **counts} for day, counts in sorted(by_day.items())]
 
     @router.get("/api/evolution/learning-curve")
     def evolution_learning_curve(
         weeks: int = Query(default=12, ge=1, le=104),
     ) -> list[dict[str, Any]]:
-        from collections import defaultdict
-        from datetime import timedelta
-
-        cutoff = _utcnow() - timedelta(weeks=weeks)
-        buckets: dict[str, list[Any]] = defaultdict(list)
-        for _event, traj in _trajectory_rows(journal):
-            completed = _as_dt(getattr(traj, "completed_at", None))
-            if completed is None or completed < cutoff:
-                continue
-            buckets[_week_key(completed)].append(traj)
-
-        rows: list[dict[str, Any]] = []
-        for week, trajs in sorted(buckets.items()):
-            if not trajs:
-                continue
-            success_rate = sum(1 for t in trajs if getattr(t.outcome, "success", False)) / len(
-                trajs
-            )
-            durations = [
-                max(
-                    0.0,
-                    (
-                        (_as_dt(getattr(t, "completed_at", None)) or _utcnow())
-                        - (_as_dt(getattr(t, "started_at", None)) or _utcnow())
-                    ).total_seconds()
-                    * 1000,
-                )
-                for t in trajs
-            ]
-            skill_count = sum(len(getattr(t, "steps", []) or []) for t in trajs)
-            rows.append(
-                {
-                    "week": week,
-                    "success_rate": success_rate,
-                    "avg_duration_ms": (sum(durations) / len(durations) if durations else 0),
-                    "skills_used": skill_count,
-                }
-            )
-        return rows
+        return evolution_learning_curve_payload(journal, weeks=weeks)
 
     @router.get("/api/evolution/recommendations")
     def evolution_recommendations() -> list[dict[str, Any]]:
-        recommendations: list[dict[str, Any]] = []
-        for row in _skill_performance_rows(journal, registry):
-            usage = int(row["usage_count"])
-            rate = float(row["success_rate"])
-            if usage >= 3 and rate < 0.6:
-                recommendations.append(
-                    {
-                        "type": "declining_skill",
-                        "title": f"Review {row['name']}",
-                        "description": (
-                            f"{row['name']} succeeded on {rate:.0%} of "
-                            f"{usage} recent calls. Check arguments, permissions, "
-                            "or add a narrower recovery rule."
-                        ),
-                        "severity": "warning" if rate >= 0.35 else "critical",
-                        "action_label": "Inspect failures",
-                        "meta": {"skill_name": row["name"], "usage_count": usage},
-                    }
-                )
-
-        learned = _learned_section_counts(planner)
-        if learned["rules"] == 0 and len(_trajectory_rows(journal)) >= 3:
-            recommendations.append(
-                {
-                    "type": "extraction_opportunity",
-                    "title": "Run reflection",
-                    "description": (
-                        "Recent trajectories exist, but no learned mitigation "
-                        "rules are active yet. Run the reflection pass to extract "
-                        "repeatable lessons."
-                    ),
-                    "severity": "info",
-                    "action_label": "Reflect",
-                    "meta": {"trajectory_count": len(_trajectory_rows(journal))},
-                }
-            )
-        return recommendations[:12]
+        return evolution_recommendations_payload(journal, registry, planner)
 
     @router.post("/api/evolution/learn-from-intel")
     def evolution_learn_from_intel(request: Request) -> dict[str, Any]:

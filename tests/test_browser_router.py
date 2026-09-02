@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import threading
 import time
@@ -238,6 +239,14 @@ def test_browser_relay_heartbeat_and_status(client: TestClient) -> None:
         json={
             "extension_version": "test",
             "active_tab": {"id": 1, "url": "https://example.test", "title": "Example"},
+            "recent_human_activity": [
+                {
+                    "kind": "pointerdown",
+                    "at": 1_777_000_000,
+                    "url": "https://example.test",
+                    "target": {"role": "button", "aria_label": "Continue"},
+                }
+            ],
         },
     )
 
@@ -247,9 +256,122 @@ def test_browser_relay_heartbeat_and_status(client: TestClient) -> None:
     status = client.get("/api/browser/relay/status")
     assert status.status_code == 200
     data = status.json()
+    assert data["connected"] is True
+    assert data["connection_state"] == "online"
     assert data["extension_version"] == "test"
     assert data["active_tab"]["title"] == "Example"
+    assert data["recent_human_activity"][0]["target"]["aria_label"] == "Continue"
     assert data["site_policy"]["schema"] == "octopus.browser_relay_site_policy.v1"
+
+
+def test_browser_relay_status_reaches_offline_inside_disconnect_budget(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = [100.0]
+    monkeypatch.setattr(time, "time", lambda: clock[0])
+    assert (
+        client.post(
+            "/api/browser/relay/heartbeat",
+            json={"extension_version": "budget-test"},
+        ).status_code
+        == 200
+    )
+
+    clock[0] = 107.0
+    reconnecting = client.get("/api/browser/relay/status").json()
+    assert reconnecting["connected"] is False
+    assert reconnecting["connection_state"] == "reconnecting"
+
+    clock[0] = 108.0
+    offline = client.get("/api/browser/relay/status").json()
+    assert offline["connected"] is False
+    assert offline["connection_state"] == "offline"
+
+
+def test_browser_relay_half_open_push_socket_does_not_mask_stale_heartbeat(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = [100.0]
+    monkeypatch.setattr(time, "time", lambda: clock[0])
+
+    # Do not answer server pings. The transport remains counted as open, which
+    # reproduces a cable-pull / sleeping-extension half-open connection.
+    with client.websocket_connect("/api/browser/relay/ws"):
+        clock[0] = 107.0
+        reconnecting = client.get("/api/browser/relay/status").json()
+        assert reconnecting["push_connected"] is True
+        assert reconnecting["connected"] is False
+        assert reconnecting["connection_state"] == "reconnecting"
+
+        clock[0] = 108.0
+        offline = client.get("/api/browser/relay/status").json()
+        assert offline["push_connected"] is True
+        assert offline["connected"] is False
+        assert offline["connection_state"] == "offline"
+
+
+def test_browser_relay_status_websocket_streams_current_state(client: TestClient) -> None:
+    assert (
+        client.post(
+            "/api/browser/relay/heartbeat",
+            json={"extension_version": "stream-test"},
+        ).status_code
+        == 200
+    )
+
+    with client.websocket_connect("/api/browser/relay/status/ws") as websocket:
+        payload = websocket.receive_json()
+
+    assert payload["type"] == "browser_relay_status"
+    assert payload["status"]["connected"] is True
+    assert payload["status"]["connection_state"] == "online"
+    assert payload["status"]["extension_version"] == "stream-test"
+
+
+def test_browser_relay_status_websocket_accepts_bearer_subprotocol() -> None:
+    store = IdentityStore()
+    store.add(
+        Identity(actor_id="extension", roles=("operator",)),
+        api_key_plaintext="sk-extension",
+    )
+    app = FastAPI()
+    app.include_router(create_browser_router(identity_store=store, require_auth=True))
+    client = TestClient(app)
+
+    with client.websocket_connect(
+        "/api/browser/relay/status/ws",
+        subprotocols=["bearer", "sk-extension"],
+    ) as websocket:
+        payload = websocket.receive_json()
+        assert websocket.accepted_subprotocol == "bearer"
+
+    assert payload["type"] == "browser_relay_status"
+    assert payload["status"]["connection_state"] == "offline"
+
+
+def test_browser_relay_status_websocket_accepts_base64url_subprotocol() -> None:
+    store = IdentityStore()
+    store.add(
+        Identity(actor_id="extension", roles=("operator",)),
+        api_key_plaintext="令牌 with spaces/(test)",
+    )
+    encoded = (
+        base64.urlsafe_b64encode("令牌 with spaces/(test)".encode()).decode("ascii").rstrip("=")
+    )
+    app = FastAPI()
+    app.include_router(create_browser_router(identity_store=store, require_auth=True))
+    client = TestClient(app)
+
+    with client.websocket_connect(
+        "/api/browser/relay/status/ws",
+        subprotocols=["bearer.b64", encoded],
+    ) as websocket:
+        payload = websocket.receive_json()
+        assert websocket.accepted_subprotocol == "bearer.b64"
+
+    assert payload["type"] == "browser_relay_status"
 
 
 def test_browser_relay_websocket_respects_gateway_auth() -> None:
@@ -268,7 +390,10 @@ def test_browser_relay_websocket_respects_gateway_auth() -> None:
     ):
         pass
 
-    with client.websocket_connect("/api/browser/relay/ws?token=sk-extension") as websocket:
+    with client.websocket_connect(
+        "/api/browser/relay/ws",
+        headers={"Authorization": "Bearer sk-extension"},
+    ) as websocket:
         websocket.send_json(
             {
                 "type": "heartbeat",
@@ -479,6 +604,55 @@ def test_browser_relay_command_carries_tab_control_lease(client: TestClient) -> 
 
     assert holder["response"].status_code == 200
     assert holder["response"].json()["control"]["mode"] == "idle"
+
+
+def test_browser_relay_command_lease_uses_explicit_operator_target(client: TestClient) -> None:
+    client.post(
+        "/api/browser/relay/heartbeat",
+        json={
+            "extension_version": "test",
+            "active_tab": {"id": 9, "url": "https://other.test", "title": "Other"},
+        },
+    )
+    holder: dict[str, object] = {}
+
+    def send_command() -> None:
+        holder["response"] = client.post(
+            "/api/browser/relay/command",
+            json={
+                "action": "state",
+                "target_tab_id": "7",
+                "target_tab_url": "https://selected.test",
+                "target_tab_title": "Selected",
+                "timeout_seconds": 1,
+            },
+        )
+
+    thread = threading.Thread(target=send_command)
+    thread.start()
+    command = None
+    deadline = time.time() + 1
+    while time.time() < deadline and command is None:
+        heartbeat = client.post("/api/browser/relay/heartbeat", json={})
+        commands = heartbeat.json()["commands"]
+        command = commands[0] if commands else None
+        if command is None:
+            time.sleep(0.02)
+
+    assert command is not None
+    assert command["lease"]["tab"] == {
+        "id": "7",
+        "url": "https://selected.test",
+        "title": "Selected",
+    }
+    assert command["lease"]["target_source"] == "operator_selection"
+
+    client.post(
+        "/api/browser/relay/result",
+        json={"id": command["id"], "result": {"ok": True}},
+    )
+    thread.join(timeout=2)
+    assert holder["response"].status_code == 200
 
 
 def test_browser_relay_stop_interrupts_active_lease(client: TestClient) -> None:

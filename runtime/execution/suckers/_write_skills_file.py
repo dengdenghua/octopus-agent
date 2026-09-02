@@ -41,11 +41,27 @@ def _write_text_file(
         resolved.write_bytes(data)
     except OSError as e:
         return {"error": f"write_failed: {e}", "path": str(resolved)}
-    return {
+
+    # Write-after verification (Hermes write_file parity): confirm the bytes
+    # actually landed on disk. A silent partial write (quota, CoW hiccup,
+    # exotic FS) would otherwise look like success and waste a model turn.
+    result: dict[str, Any] = {
         "path": str(resolved),
         "bytes_written": len(data),
         "overwrote": resolved.exists(),
     }
+    try:
+        on_disk = resolved.read_bytes()
+    except OSError as e:
+        result["verify_error"] = f"read_back_failed: {e}"
+        return result
+    if on_disk != data:
+        result["verify_error"] = (
+            f"read_back_mismatch: {len(on_disk)} bytes on disk vs {len(data)} expected"
+        )
+    else:
+        result["verified"] = True
+    return result
 
 
 def _append_text_file(
@@ -71,11 +87,27 @@ def _append_text_file(
             f.write(data)
     except OSError as e:
         return {"error": f"append_failed: {e}", "path": str(resolved)}
-    return {
+
+    result: dict[str, Any] = {
         "path": str(resolved),
         "bytes_appended": len(data),
         "total_size": resolved.stat().st_size,
     }
+    # Write-after verification: confirm the appended tail landed on disk.
+    try:
+        on_disk = resolved.read_bytes()
+    except OSError as e:
+        result["verify_error"] = f"read_back_failed: {e}"
+        return result
+    expected_tail = data
+    if not on_disk.endswith(expected_tail):
+        result["verify_error"] = (
+            f"read_back_mismatch: appended tail not found on disk "
+            f"({resolved.stat().st_size} bytes total)"
+        )
+    else:
+        result["verified"] = True
+    return result
 
 
 def _edit_text_file(
@@ -121,12 +153,33 @@ def _edit_text_file(
         resolved.write_bytes(new_bytes)
     except OSError as e:
         return {"error": f"write_failed: {e}"}
-    return {
+
+    result: dict[str, Any] = {
         "path": str(resolved),
         "occurrences": occurrences,
         "replaced": replaced,
         "new_size": len(new_bytes),
     }
+    # Write-after verification: confirm the edit actually landed and the
+    # find pattern is gone (or replaced as requested). A stale-cache or
+    # partial write would otherwise read back as success.
+    try:
+        on_disk = resolved.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        result["verify_error"] = f"read_back_failed: {e}"
+        return result
+    if on_disk != new_text:
+        result["verify_error"] = (
+            f"read_back_mismatch: expected {len(new_text)} chars, got {len(on_disk)}"
+        )
+    elif count >= 0 and on_disk.count(find) != max(0, occurrences - count):
+        result["verify_error"] = (
+            f"read_back_mismatch: expected {max(0, occurrences - count)} "
+            f"remaining occurrences of pattern, got {on_disk.count(find)}"
+        )
+    else:
+        result["verified"] = True
+    return result
 
 
 def _edit_file(
@@ -158,6 +211,24 @@ def _edit_file(
 
     occurrences = original.count(old_string)
     if occurrences == 0:
+        # Hermes parity: detect the "edit already applied" case — the target
+        # text is gone but the replacement is present, so the model is likely
+        # retrying a completed edit rather than fixing a mismatch.
+        if new_string and new_string in original:
+            preview = new_string[:80].replace("\n", "\\n")
+            return {
+                "error": "edit_already_applied",
+                "occurrences": 0,
+                "hint": (
+                    "old_string wasn't found, but new_string is already "
+                    "present in the file — the edit appears to have been "
+                    "applied already. No further action needed; if you "
+                    "meant a different edit, re-read the file with "
+                    "read_file(path) to see the current content."
+                ),
+                "new_string_present": True,
+                "preview": preview,
+            }
         # Help the model recover by hinting at the most common cause —
         # whitespace / line-ending / quoting drift between what they
         # remembered and what's actually on disk.
@@ -204,12 +275,25 @@ def _edit_file(
         resolved.write_bytes(new_bytes)
     except OSError as e:
         return {"error": f"write_failed: {e}"}
-    return {
+
+    result: dict[str, Any] = {
         "path": str(resolved),
         "occurrences": occurrences,
         "replaced": occurrences if replace_all else 1,
         "new_size": len(new_bytes),
     }
+    try:
+        on_disk = resolved.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        result["verify_error"] = f"read_back_failed: {e}"
+        return result
+    if on_disk != new_text:
+        result["verify_error"] = (
+            f"read_back_mismatch: expected {len(new_text)} chars, got {len(on_disk)}"
+        )
+    else:
+        result["verified"] = True
+    return result
 
 
 def _multi_edit_file(
@@ -291,8 +375,21 @@ def _multi_edit_file(
         resolved.write_bytes(new_bytes)
     except OSError as e:
         return {"error": f"write_failed: {e}"}
-    return {
+
+    result: dict[str, Any] = {
         "path": str(resolved),
         "edits": len(normalized),
         "new_size": len(new_bytes),
     }
+    try:
+        on_disk = resolved.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        result["verify_error"] = f"read_back_failed: {e}"
+        return result
+    if on_disk != candidate:
+        result["verify_error"] = (
+            f"read_back_mismatch: expected {len(candidate)} chars, got {len(on_disk)}"
+        )
+    else:
+        result["verified"] = True
+    return result

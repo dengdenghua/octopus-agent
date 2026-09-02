@@ -105,7 +105,13 @@ def test_rules_cards_put_upsert_and_delete(tmp_path: Path) -> None:
             "expected_mtime": 0,
             "reload": False,
             "upserts": [
-                {"id": "new1", "trigger_mode": "contains", "trigger_text": "ping", "reply": "pong", "priority": "low"}
+                {
+                    "id": "new1",
+                    "trigger_mode": "contains",
+                    "trigger_text": "ping",
+                    "reply": "pong",
+                    "priority": "low",
+                }
             ],
             "deletes": ["webhook"],
         },
@@ -130,7 +136,9 @@ def test_rules_yaml_mtime_conflict(tmp_path: Path) -> None:
     )
     data = resp.json()
     if data.get("ok") is not True:
-        assert "modified externally" in data.get("error", "") or "parse failed" in data.get("error", "")
+        assert "modified externally" in data.get("error", "") or "parse failed" in data.get(
+            "error", ""
+        )
 
 
 def test_rules_yaml_put_schema_and_reload(tmp_path: Path) -> None:
@@ -174,11 +182,13 @@ def test_rules_yaml_put_reload_failure(tmp_path: Path, monkeypatch) -> None:
     rules.write_text(RULES_YAML, encoding="utf-8")
     app = FastAPI()
     admin = app.router
-    import runtime.core.nerves.reflex.rules_loader as rl
     import runtime.cli as cli
+    import runtime.core.nerves.reflex.rules_loader as rl
 
     monkeypatch.setattr(rl, "find_default_rules_file", lambda: rules)
-    monkeypatch.setattr(cli, "_build_reflex_router", lambda: (_ for _ in ()).throw(RuntimeError("no reflex")))
+    monkeypatch.setattr(
+        cli, "_build_reflex_router", lambda: (_ for _ in ()).throw(RuntimeError("no reflex"))
+    )
 
     class _Router:
         def replace_reflexes(self, reflexes):

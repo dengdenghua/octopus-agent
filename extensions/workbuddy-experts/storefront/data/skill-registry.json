@@ -1,0 +1,1392 @@
+{
+ "meta": {
+  "title": "Octopus Skill Hub — 云商城技能",
+  "count": 121,
+  "workbuddy_skills": 19,
+  "octopus_skills": 102,
+  "source": "https://raw.githubusercontent.com/dengdenghua/workbuddy-expert-market/gh-pages/data/skill-registry.json",
+  "generated_at": "2026-08-19T13:48:06.885498+00:00"
+ },
+ "skills": [
+  {
+   "name": "academic-paper-expert",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:tencent-docx",
+   "description": "WorkBuddy writing expert: academic-paper-expert",
+   "tags": [
+    "writing",
+    "docx",
+    "workbuddy",
+    "expert"
+   ],
+   "source": "workbuddy",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "ad-copywriter",
+   "version": "1.1.0",
+   "author": "octopus-agent",
+   "description": "广告创意写作与优化技能，覆盖标题、描述、正文及完整广告方案的生成与迭代，适用于Google Ads、Meta、LinkedIn、TikTok、Twitter/X等主流付费广告平台。当用户需要撰写广告文案、进行创意生成、标题撰写，或请求批量生产广告变体、基于数据进行创意测试与效果优化时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "ad-creative",
+   "version": "1.1.0",
+   "author": "octopus-agent",
+   "description": "When the user wants to generate, iterate, or scale ad creative — headlines, descriptions, primary text, or full ad variations — for any paid advertising platform. Also use when the user mentions 'ad copy variations,' 'ad creative,' 'generate headlines,' 'RSA headlines,' 'bulk ad copy,' 'ad iterations,' 'creative testing,' 'ad performance optimization,' 'write me some ads,' 'Facebook ad copy,' 'Google ad headlines,' 'LinkedIn ad text,' or 'I need more ad variations.' Use this whenever someone needs to produce ad copy at scale or iterate on existing ads.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "agent-generator",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Generate a complete Octopus Agent from a short natural-language brief. Use when creating, bootstrapping, or refining an Agent from a one-line description, role idea, use case, or persona concept; expands the brief into SOUL, ARM/tool groups, private_skills whitelist, permissions, behavior boundaries, default workflow, and setup_agent-ready configuration.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "agent-visual-kit",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Metaskill workflow for generating Octopus Agent character artwork. Use when creating or regenerating Agent portraits, three-view character sheets, transparent-background standees, separate close-up avatars, or visual assets from HUD character profile data; constrains prompt assembly, generation, post-processing, quality checks, and retry reasons.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "agnes-image-generate",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "使用火山引擎(火山方舟)或 Agnes AI 网关从文字描述生成图像。默认火山 doubao-seedream-5.0-lite（文生图+图生图），未配置火山 key 时自动回退 Agnes agnes-image-2.1-flash。当用户需要生成图片、插画或封面时调用此技能。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "agnes-video-generate",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "使用火山引擎(火山方舟, doubao-seedance-1.5-pro)或 Agnes AI 网关异步提交视频生成任务。默认 wait=true 阻塞到完成并返回 video_url；也可 wait=false 立即返回 task_id，用 agnes-video-poll 查询进度。支持文字到视频、图像到视频(首帧/首尾帧)。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "agnes-video-poll",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "查询视频生成任务的状态（火山 doubao-seedance 或 Agnes）。配合 agnes-video-generate（wait=false 异步提交）使用——后者返回 task_id 后，模型可在后续轮次用 task_id 调用本技能查看进度或获取 video_url。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "api-and-interface-design",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Guides stable API and interface design. Use when designing APIs, module boundaries, or any public interface. Use when creating REST or GraphQL endpoints, defining type contracts between modules, or establishing boundaries between frontend and backend.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "api-doc-gen",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "从 Flask、FastAPI、Express 或 Gin 等 Web 框架的源代码中自动扫描路由定义，生成符合 OpenAPI 3.0 / Swagger 规范的标准化 API 文档文件。当用户需要生成 API 文档、提到 OpenAPI、Swagger、接口文档、路由扫描或从代码自动提取接口信息时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "api-shape-explorer",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Generate multiple radically different interface designs for a module using parallel sub-agents. Use when user wants to design an API, explore interface options, compare module shapes, or mentions \"design it twice\".",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "auto-hypothesis-test",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Automatically selects and runs the right statistical test for your data — t-test, ANOVA, chi-square, Mann-Whitney, or others — and provides plain-language interpretations of the results. Triggered when you ask about group comparisons, significance, p-values, hypothesis testing, or mention specific tests like t-test, ANOVA, or chi-square.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "auto-stat-test",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "自动执行统计检验，根据数据特征（组数、正态性、配对设计）智能选择 t 检验、卡方检验、ANOVA、Mann-Whitney U 等合适方法，并输出包含 p 值、效应量和通俗中文解读的完整报告。当用户需要进行假设检验、组间比较、显著性分析，或提及 t 检验、卡方、方差分析、p 值、配对检验、非参数检验等关键词时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "backend-building",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Backend building that grafts tRPC + Drizzle ORM + Hono onto an existing webapp-building frontend. Supports incremental features (db, auth). Use when the user needs a backend, API, database, server, authentication, or wants to add tRPC/Drizzle to their webapp-building project. Requires webapp-building first.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "brand-name-forge",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "A systematic brand naming workshop that generates 8 distinct name candidates using classic methods like portmanteau and metaphor, each with meaning, rationale, and domain suggestions. Triggered when a user needs to name a product, service, or company, or asks for brand name ideas, brainstorming, or naming help.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "browse",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Automate browser interactions via CLI commands to navigate web pages, extract data, take screenshots, fill forms, and interact with web apps. Supports remote sessions with CAPTCHA solving and anti-bot stealth for scraping protected sites. Trigger when the user asks to browse websites, scrape data, or automate clicks on any page.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "browser-testing-with-devtools",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Tests in real browsers. Use when building or debugging anything that runs in a browser. Use when you need to inspect the DOM, capture console errors, analyze network requests, profile performance, or verify visual output with real runtime data via Chrome DevTools MCP.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "browser-use",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:senior-developer",
+   "description": "Browser automation: navigate, click, screenshot, extract",
+   "tags": [
+    "automation",
+    "workbuddy",
+    "senior-developer"
+   ],
+   "source": "workbuddy",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "business-copy-expert",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:tencent-docx",
+   "description": "WorkBuddy writing expert: business-copy-expert",
+   "tags": [
+    "writing",
+    "docx",
+    "workbuddy",
+    "expert"
+   ],
+   "source": "workbuddy",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "business-plan-ppt",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "创建专业精美的投资路演PPT和商业计划书，风格参照中国创业公司融资路演材料，默认输出18页、白色背景搭配藏青色点缀的PPTX格式，也可导出PDF，支持中英文内容。当用户需要为投资人制作路演PPT、撰写商业计划书或融资方案、生成包含市场分析和财务预测的公司概览幻灯片，或提及创业融资/投资备忘录演示文稿时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "canva",
+   "version": "1.0.0",
+   "author": "octopus-agent",
+   "description": "Use Canva's design capabilities: create and edit designs, manage assets and brand resources, search the asset library, export designs, and add comments.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus-local",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "capability-evolver",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:senior-developer",
+   "description": "AI agent self-evolution engine over run history",
+   "tags": [
+    "meta",
+    "workbuddy",
+    "senior-developer"
+   ],
+   "source": "workbuddy",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "chart-gen",
+   "version": "2.5.1",
+   "author": "octopus-agent",
+   "description": "从JSON数据生成高质量PNG/SVG图表图片，支持折线图、柱状图、面积图、散点图、K线图、饼图/环形图、热力图、多系列图和堆叠图等多种类型。适用于快速可视化数据、生成报告图表、绘制趋势变化等场景。当用户请求“生成图表”、“画个趋势图”、“做个柱状图”、“可视化这些数据”，或提供具体数据并要求“做成图表图片”、“导出为PNG”时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "chart-image",
+   "version": "2.5.1",
+   "author": "octopus-agent",
+   "description": "Generate publication-quality PNG chart images from data, supporting line, bar, area, candlestick, pie, and heatmap charts. Triggers when the user asks to visualize data, create a graph, plot a time series, or generate a chart for a report, alert, or dashboard. Runs as a lightweight, headless Node.js process without a browser.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "cn-finance-data",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "通过 Tushare Pro 获取中国金融市场数据，覆盖 A 股、港股、美股、基金、期货、债券等 220+ 个数据接口，可查询股票行情、财务报表、指数成分、GDP/CPI 等宏观经济指标。当用户请求金融数据查询、股票历史行情、财务指标分析、宏观数据获取，或提及 Tushare、数据接口、量化数据源等关键词时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "code-arch-optimizer",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "探索代码库，识别架构摩擦点，并通过“加深浅模块”来提升可测试性，最终输出包含多种接口设计方案的详细重构建议与GitHub Issue RFC。当用户希望改进架构、寻找重构机会、合并紧耦合模块，或让代码库更易于AI导航和理解时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "code-mentor",
+   "version": "1.0.1",
+   "author": "Samuel Kahessay",
+   "description": "Comprehensive AI programming tutor offering interactive lessons, code reviews, debugging help, algorithm practice, and project guidance for Python and JavaScript. Triggers when users ask to learn a language, debug code, review their work, practice algorithms, prepare for interviews, or build a project.",
+   "tags": [
+    "octopus",
+    "education"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "code-quality",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "代码质量技能，包含代码审查、重构、性能优化、最佳实践检查。在代码审查或重构时调用。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "code-safety-audit",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "扫描代码安全漏洞，检测依赖漏洞、密钥泄露和OWASP安全模式。当用户提到安全扫描、漏洞检测、依赖审计、密钥泄露、API key、OWASP、npm audit、pip-audit或SQL注入/XSS等关键词时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "code-vuln-audit",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Scan code for security issues: dependency vulnerabilities (npm/pip audit), secret leaks (regex and entropy analysis), and OWASP anti-patterns like SQL injection, XSS, or command injection. Use when the user mentions security scans, vulnerability detection, secret leaks, API keys, OWASP, npm audit, pip-audit, hardcoded passwords, or code security checks.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "competitive-seo-intel",
+   "version": "3.0.0",
+   "author": "aaron-he-zhu",
+   "description": "深入分析竞争对手的SEO与GEO策略，涵盖关键词排名、内容打法、外链画像、技术SEO评估及AI引用模式，识别超越对手的市场机会，并提供竞品分析模板、战斗卡片等参考。当用户询问“分析竞品SEO”、“竞争对手为什么排名更高”、“竞品关键词和外链分析”或“内容策略对比”时触发。如需专项分析，可使用content-gap-analysis进行内容差距分析，或使用backlink-analyzer进行外链深度分析。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "content-writing",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:seo-content-team",
+   "description": "SEO long-form content writing workflow",
+   "tags": [
+    "marketing",
+    "workbuddy",
+    "seo-content-team"
+   ],
+   "source": "workbuddy",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "cro-optimization",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:seo-content-team",
+   "description": "CRO & landing-page conversion optimization",
+   "tags": [
+    "marketing",
+    "workbuddy",
+    "seo-content-team"
+   ],
+   "source": "workbuddy",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "cross-platform-adapter",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Adapts and repurposes content (blog posts, articles, reports, newsletters) for LinkedIn, Twitter/X, WeChat Official Accounts, Zhihu, and Slack — adjusting tone, length, formatting, and language to match each platform's norms, including English-Chinese cross-language adaptation. Use when a user wants to repurpose, cross-post, adapt, or convert existing content for different platforms.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "cv-tailor",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Optimize resumes by matching keywords to the job description, rewriting experience with the quantified STAR method, and checking ATS compatibility. Triggered when users ask for resume help, review, or polishing, mention JD matching, STAR method, ATS, or want to tailor their resume for a specific role.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "data-viz-gen",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "从 JSON 数据生成自包含的 HTML/SVG 信息图，支持 KPI 统计卡片、分组柱状图对比、流程图和混合仪表盘四种类型，提供 8 套配色方案和 24 个内置图标，输出完全自包含的 HTML 文件，无需外部依赖。当用户需要数据可视化、信息图、图表、仪表盘，或提及生成图表、制作 dashboard、展示统计数据等请求时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "data-viz-renderer",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Generate self-contained HTML/SVG infographics from JSON data, including stat cards, bar charts, flow diagrams, and mixed dashboards. Offers 8 color palettes and built-in icons with no external dependencies. Triggered when users request data visualization, infographics, charts, or dashboards.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "database-inspector",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "探索 SQLite 或 PostgreSQL 数据库，执行安全只读查询，提供表列表、详细表结构（列/类型/约束/索引）、数据预览，并生成 Mermaid ER 图。当用户需要查看数据库架构、探索表关系、预览数据、执行只读查询，或提及 schema、ER 图、SQL 查询、数据预览、describe table、数据库探索等关键词时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "database-scout",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Explore SQLite and PostgreSQL databases: list tables, inspect schemas (columns/types/constraints), preview data, generate Mermaid ER diagrams, and run safe read-only queries. Triggered by requests to explore a database, view table structures, describe tables, generate diagrams, or query data, and by keywords like database exploration, schema, ER diagram, or SQL query.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "deep-module-refactor",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Explore a codebase to find opportunities for architectural improvement, focusing on making the codebase more testable by deepening shallow modules. Use when user wants to improve architecture, find refactoring opportunities, consolidate tightly-coupled modules, or make a codebase more AI-navigable.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "deep-probe",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "对用户的方案或设计进行连环追问，逐一排查决策树的每个分支，直到双方达成共识。当用户希望压力测试某个方案、被深度质询设计思路，或提到“帮我审一下”、“追问一下”、“挑挑毛病”等关键词时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "deep-research",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": ">",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "deep-research-swarm",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": ">",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "design-system-builder",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Extract design systems from reference UI images and generate implementation-ready UI design prompts. Use when users provide UI screenshots/mockups and want to create consistent designs, generate design systems, or build MVP UIs matching reference aesthetics.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "edge-tts",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Convert text to high-quality spoken audio using Microsoft Edge's neural TTS, supporting multiple voices, languages, speed, and pitch adjustments, plus subtitle generation. Use when a user requests voice output, mentions TTS, wants content read aloud for multitasking or accessibility, or specifies a particular voice, speed, or format.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "email-manager",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "收发和管理邮件，支持查看未读邮件、搜索邮件、下载附件、发送带附件的邮件，并提供交互式配置向导。兼容Gmail、Outlook、163.com、126.com、QQ邮箱等主流服务商。当用户需要收发邮件、查看收件箱、搜索特定邮件、管理附件，或提及配置邮箱时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "email-to-calendar",
+   "version": "1.13.1",
+   "author": "octopus-agent",
+   "description": "Extract calendar events and deadlines from emails and create calendar entries. Two modes: monitor your inbox directly, or process emails you forward to a dedicated address. Trigger when a user asks to scan emails for events, mentions an event in an email, or wants to add something from an email to their calendar.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "equity-research",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Generate comprehensive equity research snapshots combining analyst consensus estimates, company fundamentals, historical prices, and macroeconomic context. Use when researching stocks, comparing estimates to actuals, analyzing company financials, assessing equity valuations, or building investment cases.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "fast-browser-use",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Fastest browser automation with anti-bot bypass and DOM extraction. Navigate pages, capture screenshots, manage sessions, and harvest data from infinite scroll via Chrome DevTools Protocol. Runs 10x faster than Puppeteer. Trigger for any web scraping, automated browsing, data extraction, or screenshot task.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "frontend-design",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "前端设计技能，包含 UI/UX 设计原则、响应式设计、设计系统构建。在设计界面或实现设计时调用。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "frontend-dev",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:senior-developer",
+   "description": "Frontend UI/CSS/component development with AI media generation",
+   "tags": [
+    "engineering",
+    "workbuddy",
+    "senior-developer"
+   ],
+   "source": "workbuddy",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "frontend-ui-engineering",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Builds production-quality UIs. Use when building or modifying user-facing interfaces. Use when creating components, implementing layouts, managing state, or when the output needs to look and feel production-quality rather than AI-generated.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "fullstack-dev",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:senior-developer",
+   "description": "Full-stack development architecture & build guide",
+   "tags": [
+    "engineering",
+    "workbuddy",
+    "senior-developer"
+   ],
+   "source": "workbuddy",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "gantt-chart-builder",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "根据任务列表和依赖关系生成交互式HTML甘特图，支持关键路径分析（CPM），可视化项目时间线、依赖关系和可延迟的浮动时间。当用户提到甘特图、项目时间线、关键路径、任务排期、项目进度图、依赖关系可视化、工期计算或直接说“帮我排一下项目时间”、“生成一个项目进度图”、“分析一下哪些任务是关键路径”时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "general-writer",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:tencent-docx",
+   "description": "WorkBuddy writing expert: general-writer",
+   "tags": [
+    "writing",
+    "docx",
+    "workbuddy",
+    "expert"
+   ],
+   "source": "workbuddy",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "general-writing",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": ">",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "git-repo-audit",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "深度分析 Git 仓库历史，识别高频变更的热点文件、分析代码的实际贡献归属关系、并扫描历史提交中的密钥泄露等安全隐患。当用户提及分析仓库、查看代码归属、寻找热点文件或安全风险扫描，或询问团队协作、代码审查分配、技术债务与安全审计等关键词时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "gitlab-cli-guide",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "GitLab personal access token with 'api' scope. Used by automation scripts (e.g. post-inline-comment.py) to post MR comments via the REST API. If not set, scripts fall back to reading the token from glab CLI config (~/.config/glab-cli/config.yml).",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "gitlab-cli-skills",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "GitLab personal access token with 'api' scope. Used by automation scripts (e.g. post-inline-comment.py) to post MR comments via the REST API. If not set, scripts fall back to reading the token from glab CLI config (~/.config/glab-cli/config.yml).",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "http-load-profiler",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Run stepped HTTP load tests with ab/wrk, ramping concurrency levels to collect p50/p90/p99 latency, detect performance inflection points, and recommend optimal concurrency. Triggered by requests like 'load test this URL', 'benchmark my API', 'find the max concurrency', or mentions of p99 latency, throughput saturation, or capacity planning.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "http-load-tester",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "HTTP 阶梯式并发压测工具，自动执行多级并发压力测试，采集 p50/p90/p99 延迟百分位数，分析性能拐点（如延迟激增、吞吐饱和或错误率飙升），并输出结构化报告与最优并发建议。使用纯 Python 标准库，零外部依赖。当用户提及 HTTP 压测、基准测试、ab、wrk、并发测试、阶梯压测、延迟百分位、p99、拐点分析、性能测试、QPS、RPS 或容量规划等关键词或场景时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "idea-to-prd",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "一句话需求生成完整产品需求文档（PRD），包含用户故事、功能清单、MoSCoW优先级排序和验收标准。当用户提及编写PRD、产品需求文档、需求分析，或使用如“帮我把这个想法写成PRD”、“这个需求帮我细化一下”、“帮我拆解功能点”、“写用户故事”、“排优先级”、“定验收标准”等具体请求时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "imap-smtp-email",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Manage email through IMAP and SMTP: read and search inboxes, check for new messages, fetch content, mark as read/unread, and send emails with attachments. Works with Gmail, Outlook, 163.com, and other standard servers. Triggered when the user asks to check mail, read an email, search inboxes, send an email, or mentions IMAP/SMTP email handling.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "incident-retrospective",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "线上事故复盘与结构化 Blameless Postmortem 撰写工具，遵循 SRE 最佳实践。帮助用户撰写专业的事故复盘报告，通过六步 SOP 引导完成从时间线梳理、5 Whys 根因分析到制定 SMART 改进措施的全过程，输出格式化的复盘文档。当用户需要撰写事故复盘、进行根因分析（RCA）、创建 blameless postmortem、分析线上故障、制定改进措施（action items）或总结事故教训时触发，常见于提到 postmortem、事故复盘、故障分析、RCA、5 Whys、incident review、故障报告等关键词的场景。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "incident-review-guide",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Blameless postmortem and incident review writing tool based on SRE best practices. Produces structured incident reports with timelines, root cause analysis (5 Whys), action items, and lessons learned. Trigger when users need to write incident reviews, perform RCAs, analyze production outages, or use keywords like postmortem, incident report, root cause analysis, or 5 Whys.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "interface-design-lab",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "为模块生成多种截然不同的接口设计方案，通过并行探索产出多个接口签名、使用示例和封装说明，并详细对比其简洁性、通用性、深度与易用性。当用户需要设计API、探索接口方案、对比模块形态，或明确提及“设计两次”原则、并行设计、接口形态比较时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "interview-simulator",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "模拟真实面试官进行追问训练，覆盖行为面试、技术面试和案例面试三大场景，每次训练包含3-5轮循序渐进的追问，并基于STAR框架对用户回答进行结构化诊断与优化，输出综合评分和改进建议。当用户希望练习面试、提及行为面试/技术面试/案例面试等关键词、或直接给出面试问题或回答内容时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "k8s-cluster-ops",
+   "version": "1.0.0",
+   "author": "Dennis de Vaal <d.devaal@gmail.com>",
+   "description": "通过 kubectl 命令行工具管理 Kubernetes 集群，执行查询资源状态、部署应用、查看日志、调试容器、切换上下文和监控集群健康等操作。适用于日常运维、发布和故障排查。当用户询问集群状态、Pod/Deployment信息、查看日志、执行容器命令、切换集群或上下文，或使用 kubectl get/describe/logs/exec/apply 等相关命令短语时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "kubectl",
+   "version": "1.0.0",
+   "author": "Dennis de Vaal <d.devaal@gmail.com>",
+   "description": "Execute kubectl commands to manage Kubernetes clusters — query pods and deployments, deploy applications, debug containers with logs and exec, update configurations, and monitor cluster health. Use when working with Kubernetes, asking for pod status, container logs, deployment updates, cluster diagnostics, or any kubectl operation.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "landing-page-scaffold",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Generate a self-contained landing page HTML prototype with five standard sections (Hero → Social Proof → Features → Pricing → CTA), outputting a single inlined HTML file ready to preview in any browser. Triggered when the user asks to build, generate, or scaffold a landing page, wireframe, or marketing page prototype, or mentions specific sections like hero, pricing, or CTA.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "legal-contract-expert",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:tencent-docx",
+   "description": "WorkBuddy writing expert: legal-contract-expert",
+   "tags": [
+    "writing",
+    "docx",
+    "workbuddy",
+    "expert"
+   ],
+   "source": "workbuddy",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "legal-contract-gen",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "通过交互式问答生成常用法律文书初稿，支持NDA（保密协议）、服务协议、隐私政策、合作框架协议等类型。当用户提到NDA、保密协议、服务协议、隐私政策、合同模板、法律文书、合作协议，或相应的英文术语（如terms of service、privacy policy、service agreement、non-disclosure agreement、contract template、legal document）时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "legal-risk-analyzer",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "法律风险评估助手，基于“严重性 × 发生概率”的框架评估法律风险，提供风险评分、等级（绿/黄/橙/红）及具体行动建议（从接受监控到上报法务负责人或聘请外部律师）。适用于用户询问合同风险、交易风险、问题分级、或是否需要上报高级法务/外部律师等场景，当用户提及风险评估、风险等级、法律风险分析或类似关键词时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "localization-toolkit",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "This skill should be used when setting up, auditing, or enforcing internationalization/localization in UI codebases (React/TS, i18next or similar, JSON locales), including installing/configuring the i18n framework, replacing hard-coded strings, ensuring en-US/zh-CN coverage, mapping error codes to localized messages, and validating key parity, pluralization, and formatting.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "log-diagnostic",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "分析日志文件的错误模式，支持JSON、syslog、Nginx等常见格式，自动检测并输出错误聚类、频率统计和时间分布报告，用于排查问题、定位高发时段。当用户上传.log文件并要求排查错误、分析错误分布、定位高发时段，或提及错误统计、日志分析等关键词时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "log-error-digest",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Analyze log files to troubleshoot errors, identify peak error periods, and produce error clustering, frequency statistics, and time distribution reports. Supports JSON, syslog, and Nginx formats with automatic detection. Use when a user uploads a .log file and asks to analyze errors, find patterns, debug issues, or get distribution stats.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "md-to-html",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:stock-partner-team",
+   "description": "Render markdown research reports to styled HTML",
+   "tags": [
+    "finance",
+    "workbuddy",
+    "stock-partner-team"
+   ],
+   "source": "workbuddy",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "mock-interview-drill",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Conduct realistic mock interviews with follow-up question drills across Behavioral, Technical, and Case scenarios, providing structured STAR framework diagnostics and polished sample answers to improve performance. Triggers when users mention practicing for interviews, preparing for behavioral/technical/case questions, or wanting to simulate follow-up questions and get feedback.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "okr-planner",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "OKR 制定/拆解/复盘教练。当用户提到以下场景时触发：OKR、目标管理、关键结果、OKR制定、OKR拆解、OKR复盘、OKR检查、OKR对齐、季度目标、objectives and key results、目标拆解、KR制定、OKR评分、OKR改进。即使用户只是说'帮我写个OKR''这个OKR写得好不好''帮我复盘一下这个季度的OKR''目标怎么拆解'，也应触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "paper-writing",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": ">",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "pdf",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Read, inspect, create, render, and verify PDF files when the user asks to work with PDFs, extract PDF content, generate a PDF deliverable, or visually validate PDF layout.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "pipeline-blueprint",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Provide CI/CD best practices and pipeline templates for GitHub Actions and GitLab CI, recommending configurations based on project type (frontend, backend, fullstack, library, monorepo, mobile). Trigger when users ask about setting up CI/CD, automating builds, improving pipelines, or mention keywords like GitHub Actions, GitLab CI, pipeline templates, or deployment automation.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "playwright-scraper-skill",
+   "version": "1.2.0",
+   "author": "Simon Chan",
+   "description": "Scrape dynamic and anti-bot protected websites using Playwright, returning page content, titles, and screenshots. Triggers when users ask to fetch, scrape, or extract data from a URL, especially for sites with JavaScript rendering, Cloudflare, or known blocking (like Discuss.com.hk).",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "poetry-prose-expert",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:tencent-docx",
+   "description": "WorkBuddy writing expert: poetry-prose-expert",
+   "tags": [
+    "writing",
+    "docx",
+    "workbuddy",
+    "expert"
+   ],
+   "source": "workbuddy",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "pricing-advisor",
+   "version": "1.0.0",
+   "author": "Alireza Rezvani",
+   "description": "设计与优化SaaS产品的定价体系，包括套餐结构、价值指标、定价页面及涨价策略，输出具体的定价方案与实施建议。当用户需要从零搭建定价模型、重构现有定价、规划涨价路径、或提升定价页转化率时触发，例如询问“SaaS如何定价”、“优化定价套餐”、“设计涨价策略”或提及“定价模型”、“价值指标”、“转化率”等关键词。",
+   "tags": [
+    "octopus",
+    "marketing"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "product-spec-writer",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Transform one-line product ideas into complete PRD documents with user stories, feature lists, MoSCoW prioritization, and acceptance criteria. Trigger when users ask to 'write a PRD', 'turn this idea into a spec', 'flesh out requirements', or mention product requirements, user stories, feature breakdowns, or acceptance criteria.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "project-sizing-guide",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Software project effort estimation assistant. Outputs three-point estimates (optimistic/most-likely/pessimistic values with confidence intervals), T-shirt sizes, or Function Point Analysis (FPA) counts. Triggered when users ask 'how long will this feature take,' need to assess project workload, perform PERT estimation, T-shirt sizing, FPA, sprint planning, or quote-based effort breakdowns.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "py-perf-analyzer",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "定位 Python 脚本的性能瓶颈，集成 cProfile、tracemalloc 和 line_profiler，一键执行 CPU 热点函数、内存分配或逐行耗时分析，并可输出 JSON 报告。当用户提到优化脚本、分析性能、定位 CPU 或内存热点、进行逐行分析，或询问代码为什么慢、如何加速、内存泄漏等问题时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "r2-upload",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Upload files to Cloudflare R2, AWS S3, or any S3-compatible storage (like MinIO) and generate secure, time-limited presigned download links with configurable expiration, typically set to 5 minutes. Use when the user needs to upload a file to cloud storage and get a shareable link, or mentions R2, S3, presigned URLs, temporary links, or file uploads with expiration.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "repo-audit",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Deep analysis of Git history: identify frequently changed hotspot files, analyze code ownership by contributor, and scan for leaked secrets. Triggered when users ask about Git analysis, code hotspots, who owns what code, secret scanning, security audits of commit history, or optimizing code review assignments.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "report-writing",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": ">",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "resume-craft",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "优化简历，基于目标岗位JD进行关键词匹配分析，用STAR法则量化改写经历描述，并进行ATS友好度检查，最终输出一份针对性强、通过率高的优化简历。当用户请求优化、修改、润色简历，提到JD匹配、关键词、STAR法则、ATS，或询问“帮我改一下简历”、“这份简历能不能优化”、“简历怎么过ATS”等具体问题时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "route-to-openapi",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Generates RESTful API documentation (OpenAPI 3.0 / Swagger spec) by scanning route definitions in code for Flask, FastAPI, Express, Gin, and other frameworks. Trigger when users ask about API documentation, OpenAPI, Swagger, endpoint docs, generating docs from code, or extracting endpoints.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "rust-browser-pilot",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "基于 Rust 的高性能浏览器自动化工具，通过 Chrome DevTools 协议直接驱动浏览器，执行 DOM 提取、页面截图、表单填写、会话管理和站点地图分析等操作。启动速度和内存效率远超 Puppeteer 与 Selenium，非常适合网页抓取、自动化测试和需要复杂交互的场景。当用户需要自动化浏览器任务、提及网页抓取、自动化测试、DOM 提取、页面截图、表单填写、会话管理、站点地图分析，或比较 Puppeteer/Selenium 性能时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "science-writing-expert",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:tencent-docx",
+   "description": "WorkBuddy writing expert: science-writing-expert",
+   "tags": [
+    "writing",
+    "docx",
+    "workbuddy",
+    "expert"
+   ],
+   "source": "workbuddy",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "seedance-video-generate",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "使用火山引擎 Seedance 模型从文字提示、图像或参考素材生成视频。支持多种视频风格、时长和分辨率。当用户需要生成视频内容、动画、广告片或任何动态视觉内容时调用此技能。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "seedream-image-generate",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "使用火山引擎 Seedream 模型从文字描述生成高质量图像，支持多种艺术风格和宽高比。当用户需要生成图片、插画、设计素材或任何视觉内容时调用此技能。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "seo-analysis",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:seo-content-team",
+   "description": "SEO on-page analysis & keyword clustering",
+   "tags": [
+    "marketing",
+    "workbuddy",
+    "seo-content-team"
+   ],
+   "source": "workbuddy",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "seo-analyzer",
+   "version": "1.1.0",
+   "author": "octopus-agent",
+   "description": "网站SEO诊断与优化，提供全面的技术审计、页面内容分析和可执行建议。当用户提到SEO问题、排名下降、流量波动、页面收录、SEO审计、技术SEO分析，或表述较模糊（如“SEO不好”、“网站没流量”）时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "seo-audit",
+   "version": "1.1.0",
+   "author": "octopus-agent",
+   "description": "When the user wants to audit, review, or diagnose SEO issues on their site. Also use when the user mentions \"SEO audit,\" \"technical SEO,\" \"why am I not ranking,\" \"SEO issues,\" \"on-page SEO,\" \"meta tags review,\" \"SEO health check,\" \"my traffic dropped,\" \"lost rankings,\" \"not showing up in Google,\" \"site isn't ranking,\" \"Google update hit me,\" \"page speed,\" \"core web vitals,\" \"crawl errors,\" or \"indexing issues.\" Use this even if the user just says something vague like \"my SEO is bad\" or \"help with SEO\" — start with an audit.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "smart-web-scraper",
+   "version": "1.2.0",
+   "author": "Simon Chan",
+   "description": "基于 Playwright 智能爬取网页内容，内置绕过 Cloudflare 等反爬机制的能力，提供简单模式和隐身模式两种方案以应对不同反爬强度，输出网页标题、文本内容和截图。当用户需要抓取动态网页、获取被保护网站的数据，或提到爬虫、反爬虫、Cloudflare、网页截图、JavaScript渲染等关键词时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "speech-synthesis",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "将文本转换为高质量语音，支持多语言、多种音色，可调节语速、音调和音量，并生成字幕，输出MP3音频文件。当你需要朗读文本（比如文章、消息）、为视频或演示文稿生成配音，或直接提到“TTS”、“文字转语音”、“配音”、“朗读”时，就会使用这个技能。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "sql-insight",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Translate natural language to SQL, optimize query performance, and interpret EXPLAIN plans for SQLite and PostgreSQL. Triggered when users ask to convert questions into SQL, improve slow queries, tune indexes, analyze execution plans, or mention keywords like NL2SQL, query tuning, or full table scan.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "sql-tutor",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "帮助用户编写和优化 SQL 查询，包括将自然语言转换为 SQL、提供查询优化建议以及解读 EXPLAIN 执行计划。当用户需要 SQL 相关帮助时触发，例如直接请求“自然语言转SQL”、“帮我优化这条SQL”、“解释一下这个执行计划”，或提及关键词如 NL2SQL、SQL优化、慢查询、索引建议、全表扫描、SQL调优，以及支持 SQLite 和 PostgreSQL 数据库时。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "stock-research-report-expert",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:tencent-docx",
+   "description": "WorkBuddy writing expert: stock-research-report-expert",
+   "tags": [
+    "writing",
+    "docx",
+    "workbuddy",
+    "expert"
+   ],
+   "source": "workbuddy",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "sun-path",
+   "version": "1.4.1",
+   "author": "qrost",
+   "description": "Analyzes sunlight and shadows for architectural design, generating sun path diagrams, solar position data, shadow plots, and thermal comfort charts. Triggered by requests about sun position, shadow analysis, annual sun hours, or diagrams for a specific location and time.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "sunlight-analysis",
+   "version": "1.4.1",
+   "author": "qrost",
+   "description": "生成太阳轨迹图，计算实时太阳位置，分析建筑阴影投射范围与全年日照时数，并提供热舒适度评估，适用于建筑设计与场地环境分析。当用户询问太阳位置、请求绘制太阳轨迹、分析建筑阴影、计算全年日照时间、评估热舒适度或进行地形阴影分析时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "tdd-coach",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "指导测试驱动开发，遵循红-绿-重构循环来编写聚焦行为的测试和最小化实现。当用户希望以TDD方式开发功能或修复Bug、提到\\\"红绿重构\\\"、需要进行集成测试、或要求测试先行开发时使用。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "tech-blog-expert",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:tencent-docx",
+   "description": "WorkBuddy writing expert: tech-blog-expert",
+   "tags": [
+    "writing",
+    "docx",
+    "workbuddy",
+    "expert"
+   ],
+   "source": "workbuddy",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "terraform-deploy-pitfalls",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Operational traps for Terraform provisioners, multi-environment isolation, and zero-to-deployment reliability. Covers provisioner timing races, SSH connection conflicts, DNS record duplication, volume permissions, database bootstrap gaps, snapshot cross-contamination, Cloudflare credential format errors, hardcoded domains in Caddyfiles/compose, and init-data-only-on-first-boot pitfalls. Activate when writing null_resource provisioners, creating multi-environment Terraform setups, debugging containers that are Restarting/unhealthy after terraform apply, setting up fresh instances with cloud-init, or any IaC code that SSHs into remote hosts. Also activate when the user mentions terraform plan/apply errors, provisioner failures, infrastructure drift, TLS certificate errors, or Caddy/gateway configuration.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "test-driven-dev",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Test-driven development with red-green-refactor loop. Use when user wants to build features or fix bugs using TDD, mentions \"red-green-refactor\", wants integration tests, or asks for test-first development.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "typescript-best-practices",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "TypeScript 最佳实践技能，包含类型安全、泛型、类型推断、严格模式配置。在编写 TypeScript 代码或类型定义时调用。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "ui-blueprint",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "从参考 UI 截图或设计稿中提取完整的设计系统，生成包含配色、字体、组件和间距规范的设计文档，并最终产出可直接用于实现、风格一致的 MVP 界面提示词。当用户提供 UI 截图并希望提取设计规范、构建设计系统文档、或需要基于参考风格创建新界面时触发。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "vibecoding-general-swarm",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": ">",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "vibecoding-webapp-swarm",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": ">",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "web-security-audit",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "基于 OWASP Top 10 (2021) 标准提供代码安全审查，逐项检查 SQL 注入、XSS、SSRF、访问控制、加密失败等常见漏洞，并给出具体的漏洞代码示例与修复方案。当用户需要代码安全审查、安全加固、渗透测试辅助，或提及 OWASP、安全检查、SQL 注入、XSS、代码审计、安全清单等关键词时触发此技能。",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "webapp-building",
+   "version": "0.1.0",
+   "author": "octopus-agent",
+   "description": "Tools for building modern React webapps with TypeScript, Tailwind CSS and shadcn/ui. Best suited for applications with complex UI components and state management. Supports optional templates for specialized requirement.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "westock-data",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:stock-partner-team",
+   "description": "Fetch quotes/financials via Tencent westock connector",
+   "tags": [
+    "finance",
+    "workbuddy",
+    "stock-partner-team"
+   ],
+   "source": "workbuddy",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "westock-tool",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:stock-partner-team",
+   "description": "Stock screening & watchlist tools via westock",
+   "tags": [
+    "finance",
+    "workbuddy",
+    "stock-partner-team"
+   ],
+   "source": "workbuddy",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "whatsapp-integration",
+   "version": "1.0",
+   "author": "membrane",
+   "description": "WhatsApp integration for sending messages, managing contacts, and interacting with chats and groups. Use when the user wants to send a WhatsApp message, check a contact, read a chat, or perform any other action related to WhatsApp data.",
+   "tags": [
+    "octopus"
+   ],
+   "source": "octopus",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  },
+  {
+   "name": "work-report-expert",
+   "version": "0.1.0",
+   "author": "workbuddy-builtin:tencent-docx",
+   "description": "WorkBuddy writing expert: work-report-expert",
+   "tags": [
+    "writing",
+    "docx",
+    "workbuddy",
+    "expert"
+   ],
+   "source": "workbuddy",
+   "download_url": "https://github.com/dengdenghua/workbuddy-expert-market/releases/download/octopus-content/octopus-skills.tar.gz"
+  }
+ ]
+}

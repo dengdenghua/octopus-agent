@@ -1,5 +1,6 @@
 import { CheckIcon, CopyIcon, TriangleAlertIcon } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import DOMPurify from "dompurify";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { copyTextToClipboard } from "@/core/clipboard";
@@ -39,6 +40,16 @@ export function MermaidBlock({
     ((element: Element) => void) | null
   >(null);
   const trimmedCode = code.trim();
+  // DOMPurify sanitizes the rendered SVG before insertion (audit C3/M4):
+  // Mermaid's strict security mode is good, but this is an independent layer
+  // against injected <script>/event handlers surviving render.
+  const sanitizedSvg = useMemo(
+    () =>
+      DOMPurify.sanitize(svg, {
+        USE_PROFILES: { svg: true, svgFilters: true },
+      }),
+    [svg],
+  );
 
   useEffect(() => {
     if (isStreaming || !trimmedCode) {
@@ -120,9 +131,10 @@ export function MermaidBlock({
           "overflow-auto bg-muted/20 p-3 animate-fade-in",
           "[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full",
         )}
-        // Mermaid returns SVG markup after applying its own strict security mode.
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: Mermaid renderer output.
-        dangerouslySetInnerHTML={{ __html: svg }}
+        // Mermaid returns SVG markup after applying its own strict security mode,
+        // and DOMPurify sanitizes it again before insertion (audit C3/M4).
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized via DOMPurify.
+        dangerouslySetInnerHTML={{ __html: sanitizedSvg }}
       />
     </div>
   );

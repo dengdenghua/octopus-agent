@@ -10,6 +10,7 @@ import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales/types";
 
 import { Button } from "@/components/ui/button";
+import { RoutedWebLink } from "@/components/ui/routed-web-link";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
@@ -601,14 +602,13 @@ export function ChannelCredentialDialog({
             {helpUrl && (
               <>
                 {" "}
-                <a
+                <RoutedWebLink
                   href={helpUrl}
-                  target="_blank"
-                  rel="noreferrer"
+                  openTargetSource="channel-credential-help"
                   className="text-primary underline underline-offset-2"
                 >
                   {t.channelCredential.howToConnect}
-                </a>
+                </RoutedWebLink>
               </>
             )}
           </DialogDescription>

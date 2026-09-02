@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AIMessage, Message, ToolMessage } from "@/core/api/types";
 import type { BaseStream } from "@/core/api/use-stream-types";
 import type { AgentThreadState } from "@/core/threads";
+import { eventBus } from "@/core/events/event-bus";
 import { SubtasksProvider } from "@/core/tasks/context";
 import { renderWithProviders } from "@/test/harness";
 
@@ -217,6 +218,124 @@ describe("MessageOutputSummary", () => {
     expect(setArtifactsOpen).not.toHaveBeenCalled();
   });
 
+  it("delegates failed-task retry so the host can preserve project context", () => {
+    const onRetryTask = vi.fn();
+    const human: Message = {
+      id: "user-retry",
+      type: "human",
+      content: "分析该项目",
+    };
+
+    renderWithProviders(
+      <MessageOutputSummary
+        messages={[human]}
+        failure={{
+          message: "任务失败",
+          detail: "redaction changed journal ownership scope",
+          kind: "error",
+        }}
+        onRetryTask={onRetryTask}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+
+    expect(onRetryTask).toHaveBeenCalledWith("分析该项目");
+    expect(window.location.hash).toBe("");
+  });
+
+  it("opens model settings instead of blindly retrying an auth failure", () => {
+    const onRetryTask = vi.fn();
+    const openSettings = vi.fn();
+    const unsubscribe = eventBus.on("ui:open-settings", openSettings);
+    const human: Message = {
+      id: "user-auth-retry",
+      type: "human",
+      content: "继续任务",
+    };
+
+    renderWithProviders(
+      <MessageOutputSummary
+        messages={[human]}
+        failure={{
+          message: "模型登录已失效",
+          detail: "credential refresh failed",
+          kind: "auth",
+        }}
+        onRetryTask={onRetryTask}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "打开模型设置" }));
+
+    expect(onRetryTask).not.toHaveBeenCalled();
+    expect(openSettings).toHaveBeenCalledTimes(1);
+    expect(openSettings).toHaveBeenCalledWith({ tab: "models" });
+    unsubscribe();
+  });
+
+  it("offers both model switching and retry for a rate limit", () => {
+    const onRetryTask = vi.fn();
+    const openSettings = vi.fn();
+    const unsubscribe = eventBus.on("ui:open-settings", openSettings);
+    const human: Message = {
+      id: "user-rate-limit",
+      type: "human",
+      content: "审计项目",
+    };
+
+    renderWithProviders(
+      <MessageOutputSummary
+        messages={[human]}
+        failure={{
+          message: "模型暂时限流",
+          detail: "http_429",
+          kind: "rate-limit",
+        }}
+        onRetryTask={onRetryTask}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "打开模型设置" }));
+    expect(openSettings).toHaveBeenCalledWith({ tab: "models" });
+
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(onRetryTask).toHaveBeenCalledWith("审计项目");
+    unsubscribe();
+  });
+
+  it("retries the original objective when the failed turn is punctuation-only", () => {
+    const onRetryTask = vi.fn();
+    const original: Message = {
+      id: "user-original",
+      type: "human",
+      content: "调研 Eight Sleep 的专利诉讼",
+    };
+    const nudge: Message = {
+      id: "user-nudge",
+      type: "human",
+      content: "？？",
+    };
+
+    renderWithProviders(
+      <MessageOutputSummary
+        messages={[]}
+        turnMessages={[nudge]}
+        retryContextMessages={[original, nudge]}
+        failure={{ message: "任务中断", kind: "error" }}
+        onRetryTask={onRetryTask}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+
+    expect(onRetryTask).toHaveBeenCalledWith("调研 Eight Sleep 的专利诉讼");
+  });
+
   it("renders file changes as a reviewable completed change set", () => {
     const message: AIMessage = {
       id: "ai-1",
@@ -281,6 +400,38 @@ describe("MessageOutputSummary", () => {
 
     expect(opened.at(-1)?.detail).toEqual({ tab: "diff" });
     window.removeEventListener(AGENT_WORKBENCH_OPEN_EVENT, handleOpen);
+  });
+
+  it("does not multiply replayed file-change totals", () => {
+    const repeatedCall = {
+      id: "change-replayed",
+      name: "file_change",
+      args: {
+        changes: [
+          {
+            path: "tests/appliance/test_docker_proxy.py",
+            op: "update",
+            diff: ["@@", "-old", "+new"].join("\n"),
+          },
+        ],
+      },
+    };
+    const messages: AIMessage[] = [
+      { id: "ai-live", type: "ai", content: "", tool_calls: [repeatedCall] },
+      {
+        id: "ai-replay",
+        type: "ai",
+        content: "",
+        tool_calls: [{ ...repeatedCall, id: "change-reconstructed" }],
+      },
+    ];
+
+    renderWithProviders(<MessageOutputSummary messages={messages} />, {
+      locale: "zh-CN",
+    });
+
+    expect(screen.getByLabelText("+1 -1")).toBeInTheDocument();
+    expect(screen.queryByLabelText("+2 -2")).not.toBeInTheDocument();
   });
 
   it("puts the hunk disclosure at the end of the file row", () => {
@@ -490,6 +641,39 @@ describe("extractResultUrl", () => {
       content: "See https://example.com/docs for details.",
     };
     expect(extractResultUrl([message])).toBeNull();
+  });
+
+  it("stops before prose punctuation and renderer markup", () => {
+    const message: AIMessage = {
+      id: "ai-proxy",
+      type: "ai",
+      content: "代理地址是 `http://127.0.0.1:1`，但连接失败。",
+    };
+    expect(extractResultUrl([message])).toBe("http://127.0.0.1:1");
+  });
+
+  it("does not expose a failed proxy endpoint as a result link", () => {
+    const message: AIMessage = {
+      id: "ai-failed-proxy",
+      type: "ai",
+      content: "代理地址 http://127.0.0.1:1 连接失败。",
+    };
+
+    renderWithProviders(
+      <MessageOutputSummary
+        messages={[message]}
+        failure={{
+          message: "任务未完成",
+          detail: "代理连接失败",
+          kind: "environment",
+        }}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(
+      screen.queryByRole("link", { name: "打开结果" }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -712,11 +896,12 @@ describe("MessageList failure visibility", () => {
     ];
     renderMessageList(mockThread({ messages }));
 
+    expect(screen.getByText("先前尝试失败，后续已恢复")).toBeInTheDocument();
     expect(
-      screen.getByText(
+      screen.queryByText(
         "该任务要求修改项目文件，但本轮没有产生有效的文件变更。",
       ),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("任务未完成")).not.toBeInTheDocument();
     expect(
       screen.queryByText(/implementation task yet/),

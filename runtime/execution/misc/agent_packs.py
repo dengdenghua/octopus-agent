@@ -27,6 +27,15 @@ _FRONTMATTER_RE = re.compile(r"\A\s*---\s*\n(.*?)\n---\s*(?:\n|$)", re.DOTALL)
 _SAFE_PACK_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 _PACK_IMPORT_SOURCE = "agent-pack-import"
 
+# Manifest directories this scanner understands. WorkBuddy/CodeBuddy experts use
+# `.codebuddy-plugin/plugin.json` (same agents/*.md + skills/**/SKILL.md shapes),
+# so we treat it as a first-class peer of Claude/Codex packs.
+_PACK_MANIFEST_FORMATS: tuple[tuple[str, str], ...] = (
+    (".claude-plugin", "claude"),
+    (".codex-plugin", "codex"),
+    (".codebuddy-plugin", "codebuddy"),
+)
+
 
 class AgentPackAgentNotFound(ValueError):
     """Raised when a requested agent is not present in a scanned pack."""
@@ -255,7 +264,7 @@ def import_agent_from_pack(
 def _scan_plugins(base: Path, warnings: list[str]) -> list[PackModule]:
     modules: list[PackModule] = []
     seen_ids: set[str] = set()
-    for manifest_dir, format_name in ((".claude-plugin", "claude"), (".codex-plugin", "codex")):
+    for manifest_dir, format_name in _PACK_MANIFEST_FORMATS:
         for manifest in sorted(base.rglob(f"{manifest_dir}/plugin.json")):
             plugin_dir = manifest.parent.parent
             data = _read_json(manifest, warnings) or {}
@@ -285,7 +294,7 @@ def _scan_plugins(base: Path, warnings: list[str]) -> list[PackModule]:
 
 def _infer_plugin_layout(plugin_dir: Path) -> list[str]:
     present: list[str] = []
-    for name in ("agents", "skills", "commands", "apps"):
+    for name in ("agents", "skills", "commands", "apps", "bin"):
         if (plugin_dir / name).is_dir():
             present.append(name)
     if (plugin_dir / ".mcp.json").is_file():
@@ -301,7 +310,7 @@ def _infer_plugin_layout(plugin_dir: Path) -> list[str]:
 
 def _read_marketplace(base: Path, warnings: list[str]) -> dict[str, Any] | None:
     marketplaces: dict[str, dict[str, Any]] = {}
-    for manifest_dir, format_name in ((".claude-plugin", "claude"), (".codex-plugin", "codex")):
+    for manifest_dir, format_name in _PACK_MANIFEST_FORMATS:
         data = _read_json(base / manifest_dir / "marketplace.json", warnings)
         if data is not None:
             marketplaces[format_name] = data

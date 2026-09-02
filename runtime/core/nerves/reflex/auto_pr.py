@@ -108,8 +108,8 @@ def generate_pr(
         return {"ok": False, "error": "no suggestions to apply"}
 
     # Capture current branch so we can return to it on failure.
-    code, current_branch, _ = _git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd)
-    current_branch = current_branch.strip() if code == 0 else None
+    code, current_branch_raw, _ = _git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd)
+    current_branch: str | None = current_branch_raw.strip() if code == 0 else None
     branch = _branch_name()
 
     # Create branch from current HEAD (don't depend on `main` existing
@@ -154,8 +154,8 @@ def generate_pr(
                 "ok": False,
                 "error": f"git commit: {proc.stderr.strip()}",
             }
-        code, sha, _ = _git(["rev-parse", "--short", "HEAD"], cwd=cwd)
-        sha = sha.strip() if code == 0 else None
+        code, sha_raw, _ = _git(["rev-parse", "--short", "HEAD"], cwd=cwd)
+        sha: str | None = sha_raw.strip() if code == 0 else None
 
         result: dict[str, Any] = {
             "ok": True,

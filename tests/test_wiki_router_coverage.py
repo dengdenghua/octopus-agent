@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from runtime.sensing.gateway import wiki_router as wr
@@ -156,7 +155,7 @@ def test_resolve_doc_path_rejects_traversal_and_symlink(monkeypatch, tmp_path: P
     assert wr._resolve_doc_path("ok.md") == (auto / "ok.md").resolve()
     import pytest as _pytest
 
-    with _pytest.raises(Exception):
+    with _pytest.raises(HTTPException):
         wr._resolve_doc_path("../etc/passwd")
 
 
@@ -168,7 +167,6 @@ def test_flat_docs_walks_and_skips_readme(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(wr, "_auto_dir", lambda: auto)
     docs = wr._flat_docs()
     assert {d["path"] for d in docs} == {"sub/a.md"}
-    empty = wr._flat_docs.__wrapped__ if hasattr(wr._flat_docs, "__wrapped__") else None
     monkeypatch.setattr(wr, "_auto_dir", lambda: tmp_path / "missing")
     assert wr._flat_docs() == []
 

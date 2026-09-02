@@ -13,7 +13,6 @@ runtime/platform/lifecycle/data_migration.py
 runtime/platform/lifecycle/demo.py
 runtime/platform/plugins/plugin_compat.py
 runtime/platform/ui/agent_watcher_lifecycle.py
-runtime/platform/ui/server_options.py
 runtime/research/deep_research_models.py
 runtime/safety/evolution/scorecard_calculations.py
 runtime/sensing/gateway/agent_trace_dependencies.py

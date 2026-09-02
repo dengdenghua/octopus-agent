@@ -96,10 +96,10 @@ def _write_baseline(errors: Counter[str]) -> None:
         "# Each line is `<path>\\t<code>\\t<message>` of an EXISTING mypy error",
         "# on the checked packages. New errors not on this list fail the gate.",
         "# Fixing an error? Re-run --write-baseline to ratchet the count down.",
-        "",
     ]
-    for key in sorted(errors.elements()):
-        lines.append(key)
+    entries = sorted(errors.elements())
+    if entries:
+        lines.extend(["", *entries])
     _BASELINE_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

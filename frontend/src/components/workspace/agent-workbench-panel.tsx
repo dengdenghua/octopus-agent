@@ -2,9 +2,10 @@ import {
   ArrowLeftIcon,
   ChevronRightIcon,
   DownloadIcon,
+  FolderKanbanIcon,
   GlobeIcon,
   PackageIcon,
-  RadioIcon,
+  PanelsTopLeftIcon,
   SparklesIcon,
   TerminalIcon,
 } from "lucide-react";
@@ -29,21 +30,25 @@ import { useArtifactContent } from "@/core/artifacts/hooks";
 import type { OutlineRound } from "@/core/threads/progress-outline";
 import type { GroundingSource } from "@/core/realtime/items";
 import { TerminalPanel } from "@/components/workspace/terminal-panel";
-import { SubAgentBusStreamPanel } from "@/core/threads/subagent-bus-stream-panel";
 import { ToolEffectDetailPanel } from "@/components/workspace/tool-effect-detail-panel";
 import { useArtifacts } from "@/components/workspace/artifacts/context";
+import {
+  HtmlPreview,
+  OfficePreview,
+} from "@/components/workspace/artifacts/artifact-file-detail";
+import { officeArtifactKind } from "@/components/workspace/artifacts/office-edit";
 import { ArtifactLink } from "@/components/workspace/citations/artifact-link";
 import { checkCodeFile, getFileIcon, getFileName } from "@/core/utils/files";
 import { useStreamdownPlugins } from "@/core/streamdown";
 import type {
   AgentWorkbenchEventView,
+  AgentWorkbenchFocusAgentSnapshot,
   AgentWorkbenchProcessEventSnapshot,
   AgentWorkbenchProcessEventKind,
 } from "./agent-workbench-events";
 import type { LiveToolEvent } from "./live-tool-timeline";
 import { cn } from "@/lib/utils";
 import { CoworkCollabBar } from "./cowork-collab-bar";
-import { CollaborationSessionPanel } from "./collaboration-session-view";
 import type { ExtractedCodeBlocks } from "@/lib/extract-code-blocks";
 import type { StreamdownProps } from "streamdown";
 import type { AgentWorkbenchTabId, DiffEntry } from "./agent-workbench-utils";
@@ -59,10 +64,18 @@ import {
   type WorkbenchTab,
 } from "./agent-workbench-panel/workbench-tab-header";
 import { BrowserTabPage } from "./agent-workbench-panel/browser-tab-page";
+import { PersonaWorkbenchHome } from "./agent-workbench-panel/persona-workbench-home";
 import { AgentKanbanView } from "./agent-workbench-panel/agent-kanban-view";
+import {
+  ProjectOsTab,
+  ProjectOsTabError,
+  ProjectOsTabLoading,
+  useBoundProjectState,
+} from "./agent-workbench-panel/project-os-tab";
 import type { WorkbenchRosterSeat } from "./agent-workbench-panel/helpers";
 import { useWorkbenchSelection } from "./agent-workbench-panel/use-workbench-selection";
 import { WorkbenchSnapshotCache } from "@/core/cache/workbench-snapshot-cache";
+import { workspacePresetForAgent } from "@/core/workspace/workspace-presets";
 
 // Re-export items that were exported from the original file
 export { hasAgentWorkbenchContent, __testing } from "./agent-workbench-utils";
@@ -78,6 +91,7 @@ function AgentWorkbenchPanelImpl({
   groundingSources,
   focusedAgentId,
   focusedAgentView,
+  focusedAgentSnapshot,
   focusedAgentNonce,
   focusedEventId,
   focusedEventKind,
@@ -90,9 +104,11 @@ function AgentWorkbenchPanelImpl({
   onSelectTab,
   onClose,
   onOpenArtifact,
+  onInvitePeople,
   runSettled,
   runFailed,
   runInterrupted,
+  runBlocked,
   paused,
   className,
   threadId,
@@ -105,6 +121,10 @@ function AgentWorkbenchPanelImpl({
   isCompressingContext,
   onCompressContext,
   rosterSeats = [],
+  groupTitle,
+  currentThreadTitle,
+  personaId,
+  showMachineRosterRail = true,
 }: {
   activeTab?: AgentWorkbenchTabId;
   events: LiveToolEvent[];
@@ -121,6 +141,9 @@ function AgentWorkbenchPanelImpl({
   /** Which activity view a focusedAgentId intent lands on; defaults to the
    * live computer screen when the caller doesn't say. */
   focusedAgentView?: "summary" | "screen" | "role" | null;
+  /** Public fallback used when a historical chat card no longer belongs to
+   * the latest-turn event snapshot shown by the workbench. */
+  focusedAgentSnapshot?: AgentWorkbenchFocusAgentSnapshot | null;
   /** Bumped by the parent on every focus emission. Without it, a second
    * intent for the same agent (e.g. 查看过程 then 查看电脑 on one row) would be
    * swallowed by the consume-once guard below. */
@@ -145,9 +168,12 @@ function AgentWorkbenchPanelImpl({
   /** Opens a generated artifact in the artifacts side panel (path comes from
    * the summary page's artifact rows). */
   onOpenArtifact?: (path: string) => void;
+  /** Opens the human-member invitation flow for the linked group room. */
+  onInvitePeople?: () => void | Promise<void>;
   runSettled?: boolean;
   runFailed?: boolean;
   runInterrupted?: boolean;
+  runBlocked?: boolean;
   threadId?: string | null;
   workDir?: string;
   paused?: boolean;
@@ -159,12 +185,21 @@ function AgentWorkbenchPanelImpl({
   resultPreviewUrl?: string | null;
   /** Public identity shown above the main-agent evidence surface. */
   mainAgentName?: string | null;
+  /** Persona that owns this conversation and its workspace preset. */
+  personaId?: string | null;
   /** Current conversation-window usage, shared with the composer. */
   contextTokens?: number;
   maxContextTokens?: number;
   isCompressingContext?: boolean;
   onCompressContext?: () => void | Promise<void>;
   rosterSeats?: WorkbenchRosterSeat[];
+  /** Current group-room title, used to collapse a duplicated project heading. */
+  groupTitle?: string | null;
+  /** Current conversation title when no distinct group title is available. */
+  currentThreadTitle?: string | null;
+  /** Team-member avatars can be hosted below the composer. Runtime-spawned
+   * machine seats remain in the workbench rail either way. */
+  showMachineRosterRail?: boolean;
 }) {
   const { t } = useI18n();
   const { deriveAgentTiles, workbenchStatus } = useAgentWorkbenchI18n();
@@ -295,8 +330,8 @@ function AgentWorkbenchPanelImpl({
       },
     );
   }, [groundingSources, typedGroundingSources]);
-  // Visibility (capability routing / delegation / skill-catalog) decisions,
-  // surfaced as a de-emphasised collapsed section on the Agent kanban view.
+  // Keep visibility traces available for the workbench, while the kanban view
+  // surfaces only decisions that explicitly require user attention.
   const visibilityEvents = useMemo(
     () => events.filter((event) => event.name === "visibility"),
     [events],
@@ -310,9 +345,31 @@ function AgentWorkbenchPanelImpl({
       deriveAgentPhases(events, { hasAnswer, runSettled, runFailed, paused }),
     [events, hasAnswer, runSettled, runFailed, paused],
   );
+  const hasTerminalAgentFailure = agentTiles.some(
+    (agent) => agent.status === "error",
+  );
   const phases = useMemo<AgentPhase[]>(() => {
-    return snapshotPhases.length > 0 ? snapshotPhases : directDerived.phases;
-  }, [snapshotPhases, directDerived.phases]);
+    const source =
+      snapshotPhases.length > 0 ? snapshotPhases : directDerived.phases;
+    if (!runSettled || runFailed || paused) return source;
+    // A replayed snapshot can preserve its last in-flight phase even though
+    // the owning turn has a terminal answer. The terminal run signal is more
+    // authoritative than that stale progress frame.
+    return source.map((phase) =>
+      phase.status === "running" ||
+      phase.status === "waiting_approval" ||
+      (phase.status === "error" && !hasTerminalAgentFailure)
+        ? { ...phase, status: "done" as const }
+        : phase,
+    );
+  }, [
+    snapshotPhases,
+    directDerived.phases,
+    paused,
+    runFailed,
+    runSettled,
+    hasTerminalAgentFailure,
+  ]);
   const currentPhase =
     phases.find((phase) => phase.status === "waiting_approval") ??
     phases.find((phase) => phase.status === "running") ??
@@ -323,18 +380,14 @@ function AgentWorkbenchPanelImpl({
     selectedEffectKey,
     setSelectedEffectKey,
     setActivityView,
-    locatableTranscriptEventId,
     selectedAgent,
     screenBlocks,
     mainBlocks,
     mainPhases,
     screenFrame,
-    screenProgress,
     visibleRosterSeats,
     leaderRosterSeat,
     selectedRosterSeat,
-    rosterBlocks,
-    activeScreenBlocks,
     openMainProcess,
     openSubagentProcess,
     openRosterProcess,
@@ -348,13 +401,13 @@ function AgentWorkbenchPanelImpl({
     agentTiles,
     focusedAgentId,
     focusedAgentView,
+    focusedAgentSnapshot,
     focusedAgentNonce,
     focusedEventId,
     focusedEventKind,
     focusedEventView,
     focusedEventNonce,
     focusedEffectKey,
-    focusedProcessEvent,
     rosterSeats,
     onSelectTab,
   });
@@ -395,19 +448,27 @@ function AgentWorkbenchPanelImpl({
     return () => window.removeEventListener("keydown", handleEscape);
   }, [onClose]);
 
+  // Project OS binding: fetch the project bound to this thread so the
+  // workbench can surface a "项目" tab with live milestones / PM console.
+  const projectOsQuery = useBoundProjectState(threadId);
+  const boundProject = projectOsQuery.data;
+  const hasBoundProject = !!boundProject;
+
   const emptyShell =
     blocks.length === 0 &&
     agentTiles.length === 0 &&
+    !selectedAgent &&
     visibleRosterSeats.length === 0 &&
     (progressOutline?.length ?? 0) === 0;
   const mainRunStatus = workbenchStatus(mainBlocks, mainPhases, {
     settled: runSettled,
     failed: runFailed,
     interrupted: runInterrupted,
+    blocked: runBlocked,
   });
   const mainRunState: AgentRunState = runFailed
     ? "error"
-    : runInterrupted
+    : runInterrupted || runBlocked
       ? "waiting"
       : isLoading
         ? "running"
@@ -421,9 +482,9 @@ function AgentWorkbenchPanelImpl({
   const machineRail = (
     <MachineScopeRail
       agents={agentTiles}
-      leaderSeat={leaderRosterSeat}
+      leaderSeat={showMachineRosterRail ? leaderRosterSeat : null}
       mainRunState={mainRunState}
-      rosterSeats={visibleRosterSeats}
+      rosterSeats={showMachineRosterRail ? visibleRosterSeats : []}
       selectedAgentId={selectedAgent?.id ?? selectedRosterSeat?.id ?? null}
       onSelectMain={openMainProcess}
       onSelectAgent={openSubagentProcess}
@@ -432,18 +493,36 @@ function AgentWorkbenchPanelImpl({
   );
   const requestedActiveTab: AgentWorkbenchTabId =
     activeTab ?? (focusedAgentId ? "agent" : focusedTab) ?? "agent";
+  // Keep an explicitly requested project surface mounted while its binding is
+  // loading (or temporarily failed) so users see a truthful state instead of
+  // being silently bounced to the agent tab. Background lookups still avoid a
+  // transient project-tab flash for ordinary, unbound conversations.
+  const projectTabVisible =
+    hasBoundProject ||
+    (requestedActiveTab === "project" &&
+      (projectOsQuery.isLoading || projectOsQuery.isError));
   const effectiveActiveTab:
     | "agent"
     | "diff"
     | "terminal"
     | "browser"
     | "artifacts"
-    | "substream" =
-    requestedActiveTab === "subagents" || requestedActiveTab === "plan"
+    | "workspace"
+    | "project" =
+    requestedActiveTab === "subagents" ||
+    requestedActiveTab === "plan" ||
+    requestedActiveTab === "design"
       ? "agent"
-      : requestedActiveTab;
+      : requestedActiveTab === "project" && !projectTabVisible
+        ? "agent"
+        : requestedActiveTab;
   const workbenchTabs: WorkbenchTab[] = useMemo(
     () => [
+      {
+        id: "workspace",
+        label: workspacePresetForAgent(personaId).workbenchLabel,
+        Icon: PanelsTopLeftIcon,
+      },
       {
         id: "diff",
         label: t.agentWorkbenchPages.diffTab,
@@ -464,13 +543,17 @@ function AgentWorkbenchPanelImpl({
         label: t.conversation.artifactsTitle,
         Icon: PackageIcon,
       },
-      {
-        id: "substream",
-        label: t.agentWorkbenchPanel.substreamTab,
-        Icon: RadioIcon,
-      },
+      ...(projectTabVisible
+        ? [
+            {
+              id: "project" as const,
+              label: t.agentWorkbenchPages.projectTab,
+              Icon: FolderKanbanIcon,
+            },
+          ]
+        : []),
     ],
-    [t.agentWorkbenchPages, t.conversation, t.agentWorkbenchPanel],
+    [t.agentWorkbenchPages, t.conversation, projectTabVisible, personaId],
   );
 
   // Auto-open a tab if it becomes the effective active tab
@@ -551,6 +634,7 @@ function AgentWorkbenchPanelImpl({
       browserPreviewBlocks={browserPreviewBlocks}
     />
   );
+  const personaWorkbenchPage = <PersonaWorkbenchHome personaId={personaId} />;
   // The main conversation owns the global execution narrative. A selected
   // sub-agent may still open its own computer: a complete, isolated streaming
   // conversation rather than a duplicate mixed activity trace.
@@ -563,7 +647,12 @@ function AgentWorkbenchPanelImpl({
     : "summary";
 
   // Workbench view: summary / computer view.
-  if (emptyShell && !selectedEffectKey && !focusedProcessEvent) {
+  if (
+    emptyShell &&
+    effectiveActiveTab !== "project" &&
+    !selectedEffectKey &&
+    !focusedProcessEvent
+  ) {
     return (
       <EmptyShellView
         mainButton={{
@@ -583,12 +672,12 @@ function AgentWorkbenchPanelImpl({
         effectiveActiveTab={effectiveActiveTab}
         onTabClick={handleOpenTab}
         onTabClose={handleCloseTab}
-        locatableTranscriptEventId={locatableTranscriptEventId}
         onClose={onClose}
         visibleDiffEntries={visibleDiffEntries}
         threadId={threadId}
         inferredWorkDir={inferredWorkDir}
         browserTabPage={browserTabPage}
+        personaWorkbenchPage={personaWorkbenchPage}
         isLoading={isLoading}
         className={className}
         machineRail={machineRail}
@@ -614,8 +703,15 @@ function AgentWorkbenchPanelImpl({
       groundingSources={effectiveGroundingSources}
       preferStructuredReferences={evidence.length > 0}
       mainAgentName={mainAgentName}
+      resultPreviewUrl={resultPreviewUrl}
       terminalState={
-        runInterrupted ? "interrupted" : runFailed ? "failed" : null
+        runInterrupted
+          ? "interrupted"
+          : runFailed
+            ? "failed"
+            : runBlocked
+              ? "blocked"
+              : null
       }
       contextTokens={contextTokens}
       maxContextTokens={maxContextTokens}
@@ -650,6 +746,8 @@ function AgentWorkbenchPanelImpl({
       />
     ) : effectiveActiveTab === "browser" ? (
       browserTabPage
+    ) : effectiveActiveTab === "workspace" ? (
+      personaWorkbenchPage
     ) : effectiveActiveTab === "artifacts" && threadId ? (
       // Reuses the outer ArtifactsProvider (page-level) so the artifact list
       // synced from the backend stays visible. Wrapping in a fresh provider
@@ -658,9 +756,32 @@ function AgentWorkbenchPanelImpl({
       <ArtifactInlinePreviewEmbedded
         threadId={threadId}
         currentTurnEntries={visibleDiffEntries}
+        runBlocked={runBlocked}
+        runSettled={runSettled}
+        isLoading={isLoading}
       />
-    ) : effectiveActiveTab === "substream" ? (
-      <SubAgentBusStreamPanel rootThreadId={threadId} showAll />
+    ) : effectiveActiveTab === "project" ? (
+      boundProject ? (
+        <ProjectOsTab
+          state={boundProject}
+          rosterSeats={rosterSeats}
+          groupTitle={groupTitle}
+          currentThreadTitle={currentThreadTitle}
+          onOpenArtifact={onOpenArtifact}
+          onInvitePeople={onInvitePeople}
+          onRefetch={() => {
+            void projectOsQuery.refetch();
+          }}
+        />
+      ) : projectOsQuery.isError ? (
+        <ProjectOsTabError
+          onRetry={() => {
+            void projectOsQuery.refetch();
+          }}
+        />
+      ) : (
+        <ProjectOsTabLoading />
+      )
     ) : (
       agentKanbanPage
     );
@@ -690,22 +811,16 @@ function AgentWorkbenchPanelImpl({
         effectiveActiveTab={effectiveActiveTab}
         onTabClick={handleOpenTab}
         onTabClose={handleCloseTab}
-        locatableTranscriptEventId={locatableTranscriptEventId}
         onClose={onClose}
         workspaceLabel={workspaceLabel}
         showWorkspaceLabel
         mainRunStatusLabel={mainRunStatus.label}
       />
 
-      {threadId ? (
+      {threadId &&
+      effectiveActiveTab !== "project" &&
+      effectiveActiveTab !== "workspace" ? (
         <CoworkCollabBar threadId={threadId} rosterSeats={rosterSeats} />
-      ) : null}
-      {threadId ? (
-        <CollaborationSessionPanel
-          threadId={threadId}
-          onlyWhenRoomLinked
-          className="px-3 pb-2"
-        />
       ) : null}
 
       <section
@@ -714,7 +829,9 @@ function AgentWorkbenchPanelImpl({
       >
         {effectiveEmbeddedPage}
       </section>
-      {machineRail}
+      {effectiveActiveTab === "project" || effectiveActiveTab === "workspace"
+        ? null
+        : machineRail}
     </div>
   );
 }
@@ -739,9 +856,15 @@ const LazyStreamdown = lazy(
 function ArtifactInlinePreviewEmbedded({
   threadId,
   currentTurnEntries = [],
+  runBlocked,
+  runSettled,
+  isLoading,
 }: {
   threadId: string;
   currentTurnEntries?: DiffEntry[];
+  runBlocked?: boolean;
+  runSettled?: boolean;
+  isLoading?: boolean;
 }) {
   const {
     artifacts,
@@ -805,9 +928,26 @@ function ArtifactInlinePreviewEmbedded({
   }, []);
 
   if (allFiles.length === 0) {
+    const detail = runBlocked
+      ? t.streaming.blockedOnUser
+      : isLoading
+        ? t.agentWorkbenchPanel.agentStatusRunning
+        : runSettled
+          ? t.livePreview.emptyHint
+          : t.agentWorkbenchPanel.agentStatusPending;
     return (
-      <div className="flex flex-1 items-center justify-center p-4 text-sm text-muted-foreground">
-        {t.conversation.noPreviewArtifacts}
+      <div className="flex flex-1 items-center justify-center p-6">
+        <div className="flex max-w-xs flex-col items-center text-center">
+          <div className="mb-3 flex size-10 items-center justify-center rounded-xl border border-border-subtle bg-muted/45">
+            <PackageIcon className="size-4 text-muted-foreground" />
+          </div>
+          <p className="text-sm font-medium text-foreground">
+            {t.conversation.noPreviewArtifacts}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {detail}
+          </p>
+        </div>
       </div>
     );
   }
@@ -878,7 +1018,7 @@ function FileListRow({
 
 /* ─────────────────────── Preview pane (full-screen) ─────────────────────── */
 
-function PreviewPane({
+export function PreviewPane({
   filepath,
   threadId,
   streamdownPlugins,
@@ -892,17 +1032,17 @@ function PreviewPane({
   const { t } = useI18n();
   const displayPath = artifactDisplayPath(filepath);
   const isWriteFile = filepath.startsWith("write-file:");
-  const { content, url, isLoading } = useArtifactContent({
+  const { content, url, isLoading, refetch } = useArtifactContent({
     filepath,
     threadId,
     enabled: !isWriteFile,
   });
   const effectiveContent = isWriteFile ? "" : (content ?? "");
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const lang = checkCodeFile(displayPath).language;
   const isHtml = lang === "html";
   const isMarkdown = lang === "markdown";
+  const officeKind = officeArtifactKind(displayPath);
 
   return (
     <div className="flex min-h-0 size-full flex-col">
@@ -945,7 +1085,15 @@ function PreviewPane({
             {t.common.loading}…
           </div>
         )}
-        {isMarkdown ? (
+        {officeKind ? (
+          <OfficePreview
+            displayPath={displayPath}
+            filepath={filepath}
+            isMock={false}
+            kind={officeKind}
+            threadId={threadId}
+          />
+        ) : isMarkdown ? (
           <div className="size-full overflow-auto px-4 py-3">
             <Suspense
               fallback={
@@ -964,12 +1112,13 @@ function PreviewPane({
             </Suspense>
           </div>
         ) : isHtml ? (
-          <iframe
-            ref={iframeRef}
-            className="size-full border-0"
-            sandbox="allow-scripts allow-forms"
-            title={`${getFileName(displayPath)} preview`}
-            {...(url ? { src: url } : { srcDoc: effectiveContent })}
+          <HtmlPreview
+            artifactRef={filepath}
+            content={effectiveContent}
+            filepath={displayPath}
+            onSaved={() => void refetch()}
+            threadId={threadId}
+            url={url}
           />
         ) : (
           <div className="flex size-full items-center justify-center p-4 text-xs text-muted-foreground">

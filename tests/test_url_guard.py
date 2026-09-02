@@ -68,6 +68,19 @@ class TestScheme:
         # Implementation note.
         assert not v.allow
 
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://example.com:bad/path",
+            "https://example.com:99999/path",
+            "https://example.com:0/path",
+        ],
+    )
+    def test_invalid_port_blocked(self, url):
+        v = check_url(url)
+        assert not v.allow
+        assert "invalid_port" in v.reason
+
 
 # ═══════════════════════════════════════════════════════════
 # Implementation note.
@@ -208,6 +221,30 @@ class TestDNSRebinding:
         v = check_url("http://legit.example/")
         assert v.allow
 
+    def test_fake_ip_proxy_pool_is_treated_as_public(self, monkeypatch):
+        """198.18.0.0/15 is the Clash/Surge fake-ip pool standing in for the
+        whole public internet — it must not be flagged as a private/SSRF
+        target or a fake-ip proxy environment can never reach any external
+        MCP/OAuth endpoint."""
+        import runtime.safety.auth.url_guard as guard
+
+        def fake_getaddrinfo(host, *a, **kw):
+            return [
+                (
+                    socket.AF_INET,
+                    socket.SOCK_STREAM,
+                    socket.IPPROTO_TCP,
+                    "",
+                    ("198.18.0.21", 0),
+                )
+            ]
+
+        monkeypatch.setattr(guard.socket, "getaddrinfo", fake_getaddrinfo)
+
+        v = check_url("https://mcp.linear.app/mcp")
+        assert v.allow
+        assert "private" not in v.reason
+
     def test_dns_failure_fails_closed(self, monkeypatch):
         """Implementation note."""
         import runtime.safety.auth.url_guard as guard
@@ -250,6 +287,361 @@ class TestIsSafeURL:
 
     def test_allow_private_shortcut(self):
         assert is_safe_url("http://10.0.0.1/", allow_private=True)
+
+
+# ═══════════════════════════════════════════════════════════
+# Bounded streaming reads
+# ═══════════════════════════════════════════════════════════
+
+
+class TestSafeHttpxRequestStreamingCap:
+    def test_caller_cannot_override_supported_response_encodings(self):
+        import runtime.safety.auth.url_guard as guard
+
+        with pytest.raises(ValueError, match="Accept-Encoding is managed"):
+            guard.safe_httpx_request(
+                "GET",
+                "https://downloads.example/catalog.json",
+                headers={"Accept-Encoding": "br"},
+                read_cap_bytes=32,
+            )
+
+    def test_legacy_urlopen_uses_safe_redirects_and_bounded_read(self, monkeypatch):
+        import runtime.safety.auth.url_guard as guard
+
+        captured: dict[str, object] = {}
+
+        class _Headers(dict):
+            pass
+
+        class _Response:
+            content = b"abcdef"
+            headers = _Headers({"content-type": "text/plain"})
+
+            @staticmethod
+            def raise_for_status() -> None:
+                return None
+
+        def _request(method, url, **kwargs):
+            captured.update({"method": method, "url": url, **kwargs})
+            return _Response()
+
+        monkeypatch.setattr(guard, "safe_httpx_request", _request)
+
+        body, headers = guard.safe_urlopen(
+            "https://downloads.example/page",
+            timeout=2.5,
+            read_cap_bytes=5,
+        )
+
+        assert body == b"abcde"
+        assert headers == {
+            "Content-Type": "text/plain",
+            "X-Octopus-Truncated": "true",
+        }
+        assert captured == {
+            "method": "GET",
+            "url": "https://downloads.example/page",
+            "timeout": 2.5,
+            "allow_private": False,
+            "follow_redirects": True,
+            "read_cap_bytes": 6,
+        }
+
+    def test_pins_tcp_ip_but_preserves_tls_sni(self, monkeypatch):
+        import httpx
+
+        import runtime.safety.auth.url_guard as guard
+
+        captured: dict[str, object] = {}
+
+        class _Transport(httpx.BaseTransport):
+            def handle_request(self, request):
+                captured["connect_host"] = request.url.host
+                captured["host_header"] = request.headers["Host"]
+                captured["sni_hostname"] = request.extensions.get("sni_hostname")
+                return httpx.Response(200, request=request, content=b"ok")
+
+        monkeypatch.setattr(httpx, "HTTPTransport", _Transport)
+        monkeypatch.setattr(
+            guard,
+            "check_url",
+            lambda url, **kwargs: guard.URLVerdict(
+                True,
+                url,
+                resolved_ip="203.0.113.10",
+            ),
+        )
+
+        response = guard.safe_httpx_request(
+            "GET",
+            "https://downloads.example:8443/catalog.json",
+            headers={"host": "attacker.invalid"},
+        )
+
+        assert response.content == b"ok"
+        assert captured == {
+            "connect_host": "203.0.113.10",
+            "host_header": "downloads.example:8443",
+            "sni_hostname": "downloads.example",
+        }
+
+    def test_aborts_before_reading_past_cap(self, monkeypatch):
+        import httpx
+
+        import runtime.safety.auth.url_guard as guard
+
+        yielded: list[bytes] = []
+        closed: list[bool] = []
+
+        class _Stream(httpx.SyncByteStream):
+            def __iter__(self):
+                for chunk in (b"abc", b"def", b"must-not-be-read"):
+                    yielded.append(chunk)
+                    yield chunk
+
+            def close(self) -> None:
+                closed.append(True)
+
+        class _Transport(httpx.BaseTransport):
+            def handle_request(self, request):
+                return httpx.Response(200, request=request, stream=_Stream())
+
+        monkeypatch.setattr(httpx, "HTTPTransport", _Transport)
+        monkeypatch.setattr(
+            guard,
+            "check_url",
+            lambda url, **kwargs: guard.URLVerdict(
+                True,
+                url,
+                resolved_ip="203.0.113.10",
+            ),
+        )
+
+        with pytest.raises(ValueError, match="response exceeds 5 bytes"):
+            guard.safe_httpx_request(
+                "GET",
+                "https://downloads.example/archive.tar.gz",
+                read_cap_bytes=5,
+            )
+
+        assert yielded == [b"abc", b"def"]
+        assert closed == [True]
+
+    def test_returns_regular_response_within_cap(self, monkeypatch):
+        import httpx
+
+        import runtime.safety.auth.url_guard as guard
+
+        class _Stream(httpx.SyncByteStream):
+            def __iter__(self):
+                yield b'{"ok":'
+                yield b"true}"
+
+        class _Transport(httpx.BaseTransport):
+            def handle_request(self, request):
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "application/json"},
+                    request=request,
+                    stream=_Stream(),
+                )
+
+        monkeypatch.setattr(httpx, "HTTPTransport", _Transport)
+        monkeypatch.setattr(
+            guard,
+            "check_url",
+            lambda url, **kwargs: guard.URLVerdict(
+                True,
+                url,
+                resolved_ip="203.0.113.10",
+            ),
+        )
+
+        response = guard.safe_httpx_request(
+            "GET",
+            "https://downloads.example/catalog.json",
+            read_cap_bytes=32,
+        )
+
+        assert response.content == b'{"ok":true}'
+        assert response.json() == {"ok": True}
+
+    def test_detached_response_does_not_decode_compressed_body_twice(self, monkeypatch):
+        import gzip
+
+        import httpx
+
+        import runtime.safety.auth.url_guard as guard
+
+        encoded = gzip.compress(b'{"ok":true}')
+
+        class _Stream(httpx.SyncByteStream):
+            def __iter__(self):
+                yield encoded
+
+        class _Transport(httpx.BaseTransport):
+            def handle_request(self, request):
+                return httpx.Response(
+                    200,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Content-Encoding": "gzip",
+                        "Content-Length": str(len(encoded)),
+                        "Transfer-Encoding": "chunked",
+                    },
+                    request=request,
+                    stream=_Stream(),
+                )
+
+        monkeypatch.setattr(httpx, "HTTPTransport", _Transport)
+        monkeypatch.setattr(
+            guard,
+            "check_url",
+            lambda url, **kwargs: guard.URLVerdict(
+                True,
+                url,
+                resolved_ip="203.0.113.10",
+            ),
+        )
+
+        response = guard.safe_httpx_request(
+            "GET",
+            "https://downloads.example/catalog.json",
+            read_cap_bytes=32,
+        )
+
+        assert response.content == b'{"ok":true}'
+        assert response.json() == {"ok": True}
+        assert "content-encoding" not in response.headers
+        assert "transfer-encoding" not in response.headers
+        assert response.headers["content-length"] == str(len(response.content))
+
+    def test_streaming_cap_applies_after_content_decoding(self, monkeypatch):
+        import gzip
+
+        import httpx
+
+        import runtime.safety.auth.url_guard as guard
+
+        encoded = gzip.compress(b"a" * 4096)
+
+        class _Stream(httpx.SyncByteStream):
+            def __iter__(self):
+                yield encoded
+
+        class _Transport(httpx.BaseTransport):
+            def handle_request(self, request):
+                return httpx.Response(
+                    200,
+                    headers={"Content-Encoding": "gzip"},
+                    request=request,
+                    stream=_Stream(),
+                )
+
+        monkeypatch.setattr(httpx, "HTTPTransport", _Transport)
+        monkeypatch.setattr(
+            guard,
+            "check_url",
+            lambda url, **kwargs: guard.URLVerdict(
+                True,
+                url,
+                resolved_ip="203.0.113.10",
+            ),
+        )
+
+        with pytest.raises(ValueError, match="response exceeds 1024 bytes"):
+            guard.safe_httpx_request(
+                "GET",
+                "https://downloads.example/archive.json",
+                read_cap_bytes=1024,
+            )
+
+    def test_unadvertised_content_encoding_fails_closed(self, monkeypatch):
+        import httpx
+
+        import runtime.safety.auth.url_guard as guard
+
+        closed: list[bool] = []
+
+        class _Stream(httpx.SyncByteStream):
+            def __iter__(self):
+                yield b"opaque"
+
+            def close(self) -> None:
+                closed.append(True)
+
+        class _Transport(httpx.BaseTransport):
+            def handle_request(self, request):
+                return httpx.Response(
+                    200,
+                    headers={"Content-Encoding": "x-octopus-unsupported"},
+                    request=request,
+                    stream=_Stream(),
+                )
+
+        monkeypatch.setattr(httpx, "HTTPTransport", _Transport)
+        monkeypatch.setattr(
+            guard,
+            "check_url",
+            lambda url, **kwargs: guard.URLVerdict(
+                True,
+                url,
+                resolved_ip="203.0.113.10",
+            ),
+        )
+
+        with pytest.raises(httpx.DecodingError, match="unadvertised content encoding"):
+            guard.safe_httpx_request(
+                "GET",
+                "https://downloads.example/catalog.json",
+                read_cap_bytes=32,
+            )
+
+        assert closed == [True]
+
+    def test_malformed_advertised_encoding_fails_closed_and_closes(self, monkeypatch):
+        import httpx
+
+        import runtime.safety.auth.url_guard as guard
+
+        closed: list[bool] = []
+
+        class _Stream(httpx.SyncByteStream):
+            def __iter__(self):
+                yield b"not-a-gzip-stream"
+
+            def close(self) -> None:
+                closed.append(True)
+
+        class _Transport(httpx.BaseTransport):
+            def handle_request(self, request):
+                return httpx.Response(
+                    200,
+                    headers={"Content-Encoding": "gzip"},
+                    request=request,
+                    stream=_Stream(),
+                )
+
+        monkeypatch.setattr(httpx, "HTTPTransport", _Transport)
+        monkeypatch.setattr(
+            guard,
+            "check_url",
+            lambda url, **kwargs: guard.URLVerdict(
+                True,
+                url,
+                resolved_ip="203.0.113.10",
+            ),
+        )
+
+        with pytest.raises(httpx.DecodingError):
+            guard.safe_httpx_request(
+                "GET",
+                "https://downloads.example/catalog.json",
+                read_cap_bytes=32,
+            )
+
+        assert closed == [True]
 
 
 # ═══════════════════════════════════════════════════════════

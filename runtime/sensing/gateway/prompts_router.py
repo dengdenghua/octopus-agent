@@ -69,6 +69,19 @@ def create_prompts_router(
             jwt_audience=jwt_audience,
         )
 
+    def _admin_dep(request: Request) -> None:
+        from runtime.safety.auth.principal import require_roles
+
+        require_roles(
+            request,
+            identity_store,
+            require_auth,
+            ("admin",),
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     router = APIRouter(dependencies=[Depends(_auth_dep)])
 
     @router.get("/api/prompts")
@@ -90,7 +103,10 @@ def create_prompts_router(
             "content": content,
         }
 
-    @router.put("/api/prompts/{name}")
+    @router.put(
+        "/api/prompts/{name}",
+        dependencies=[Depends(_admin_dep)],
+    )
     def put_prompt(
         name: str,
         body: dict[str, Any] | None = None,
@@ -118,7 +134,7 @@ def create_prompts_router(
             "variant": variant,
         }
 
-    @router.post("/api/prompts/reload")
+    @router.post("/api/prompts/reload", dependencies=[Depends(_admin_dep)])
     def reload_prompts() -> dict[str, Any]:
         _require_flag()
         registry.reload()

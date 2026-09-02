@@ -159,6 +159,8 @@ class TestEchoResumePagination:
         assert out["totalTurns"] == 5
         assert out["hasMore"] is False
         assert out["incremental"] is False
+        assert out["lastTurnId"] == "turn-4"
+        assert out["lastTurnStatus"] == "completed"
         assert out["nextEventSequence"] == 11
         assert out["eventStreamId"].startswith("stream_")
 

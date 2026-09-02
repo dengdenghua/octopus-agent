@@ -20,11 +20,14 @@ duplicates are detected by ``itemId`` and silently merged.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
+import os
 import threading
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -52,12 +55,22 @@ from ._replay import _apply_event
 
 _logger = logging.getLogger(__name__)
 
+_COMPACT_THRESHOLD_BYTES = 16 * 1024 * 1024
+_COMPACT_MIN_SAVINGS_BYTES = 4 * 1024 * 1024
+_compaction_executor = ThreadPoolExecutor(
+    max_workers=1,
+    thread_name_prefix="thread-log-compaction",
+)
+_compaction_pending: set[Path] = set()
+_compaction_pending_lock = threading.Lock()
+
 
 EventKind = Literal[
     "thread_started",
     "thread_archived",
     "turn_started",
     "turn_updated",
+    "turn_interrupt_requested",
     "turn_completed",
     "turn_diff_updated",
     "item_started",
@@ -127,6 +140,21 @@ class EventLogSnapshot:
         return changed_turn_ids, requires_reset
 
 
+@dataclass(frozen=True, slots=True)
+class LogCompactionResult:
+    """Outcome of one physical thread-log compaction attempt."""
+
+    compacted: bool
+    bytes_before: int
+    bytes_after: int
+    events_before: int
+    events_after: int
+
+    @property
+    def bytes_reclaimed(self) -> int:
+        return max(0, self.bytes_before - self.bytes_after)
+
+
 class EventLog:
     """Per-thread JSONL writer + reader.
 
@@ -140,6 +168,7 @@ class EventLog:
         self._path = Path(path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
+        self._storage_lock_path = self._path.with_suffix(self._path.suffix + ".lock")
 
     @property
     def path(self) -> Path:
@@ -147,25 +176,210 @@ class EventLog:
 
     # ── Writer side ──────────────────────────────────────────
 
-    def append(self, event: LoggedEvent) -> LoggedEvent:
+    def append(
+        self,
+        event: LoggedEvent,
+        *,
+        durable: bool = False,
+    ) -> LoggedEvent:
         """Append one event and return the stored copy (with its ``eventId``).
 
         Callers that fan the event out to live subscribers stamp the returned
         id onto the notification so clients can deduplicate live delivery
         against a later log replay (at-least-once on both paths).
+
+        ``durable=True`` is reserved for execution/terminal boundaries where
+        returning before the kernel has accepted the write for persistence
+        could make an externally visible side effect outrun its audit record.
+        High-frequency text deltas deliberately keep the cheaper flush-only
+        path.
         """
         if not event.event_id:
             event = event.model_copy(update={"event_id": f"evt_{new_id().hex}"})
         line = event.model_dump_json(by_alias=True) + "\n"
         with (
             self._lock,
+            self._storage_lock_path.open("a+b") as storage_lock,
+            _exclusive_file_lock(storage_lock, self._storage_lock_path),
             self._path.open("a", encoding="utf-8") as stream,
             _exclusive_file_lock(stream, self._path),
         ):
             stream.seek(0, 2)
             stream.write(line)
             stream.flush()
+            if durable:
+                os.fsync(stream.fileno())
         return event
+
+    @staticmethod
+    def _replay_payload(events: list[tuple[int, LoggedEvent]]) -> list[dict[str, Any]]:
+        snapshot = EventLogSnapshot(events=tuple(events), cursor=len(events))
+        return [turn.model_dump(by_alias=True, mode="json") for turn in snapshot.replay()]
+
+    @staticmethod
+    def _with_new_stream_id(
+        events: list[tuple[int, LoggedEvent]],
+    ) -> list[tuple[int, LoggedEvent]]:
+        """Change the replay stream identity after physical line renumbering."""
+
+        refreshed = list(events)
+        for index, (sequence, event) in enumerate(refreshed):
+            if event.event != "thread_started":
+                continue
+            payload = dict(event.payload)
+            payload["streamId"] = f"stream_{new_id().hex}"
+            refreshed[index] = (sequence, event.model_copy(update={"payload": payload}))
+            return refreshed
+        if not refreshed:
+            return refreshed
+        first_event = refreshed[0][1]
+        marker = LoggedEvent(
+            event="thread_started",
+            eventId=f"evt_{new_id().hex}",
+            thread_id=first_event.thread_id,
+            ts=first_event.ts,
+            payload={"streamId": f"stream_{new_id().hex}"},
+        )
+        return [(0, marker), *refreshed]
+
+    @staticmethod
+    def _fsync_directory(path: Path) -> None:
+        if os.name != "posix":
+            return
+        flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        directory_fd = os.open(path, flags)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+
+    def compact_if_needed(
+        self,
+        *,
+        threshold_bytes: int = _COMPACT_THRESHOLD_BYTES,
+        min_savings_bytes: int = _COMPACT_MIN_SAVINGS_BYTES,
+    ) -> LogCompactionResult:
+        """Atomically remove replay-redundant events from a large log.
+
+        The existing ``coalesce_events`` transform is replay-equivalent. This
+        method adds the production storage contract around it: all appenders
+        coordinate on a stable sidecar lock, replay is compared before the
+        rewrite, the replacement is fsynced and atomic, and a new stream id
+        forces connected clients to discard cursors based on old line numbers.
+        """
+
+        try:
+            observed_size = self._path.stat().st_size
+        except FileNotFoundError:
+            return LogCompactionResult(False, 0, 0, 0, 0)
+        if observed_size < max(0, int(threshold_bytes)):
+            return LogCompactionResult(False, observed_size, observed_size, 0, 0)
+
+        temp_path: Path | None = None
+        with (
+            self._lock,
+            self._storage_lock_path.open("a+b") as storage_lock,
+            _exclusive_file_lock(storage_lock, self._storage_lock_path),
+        ):
+            try:
+                bytes_before = self._path.stat().st_size
+            except FileNotFoundError:
+                return LogCompactionResult(False, 0, 0, 0, 0)
+            if bytes_before < max(0, int(threshold_bytes)):
+                return LogCompactionResult(False, bytes_before, bytes_before, 0, 0)
+
+            captured = self.snapshot()
+            raw_events = list(captured.events)
+            compacted_events = coalesce_events(raw_events)
+            if len(compacted_events) >= len(raw_events):
+                return LogCompactionResult(
+                    False,
+                    bytes_before,
+                    bytes_before,
+                    len(raw_events),
+                    len(raw_events),
+                )
+            if self._replay_payload(compacted_events) != self._replay_payload(raw_events):
+                _logger.error("thread-log compaction replay mismatch for %s", self._path)
+                return LogCompactionResult(
+                    False,
+                    bytes_before,
+                    bytes_before,
+                    len(raw_events),
+                    len(raw_events),
+                )
+
+            compacted_events = self._with_new_stream_id(compacted_events)
+            rendered = "".join(
+                event.model_dump_json(by_alias=True) + "\n" for _sequence, event in compacted_events
+            )
+            encoded = rendered.encode("utf-8")
+            bytes_after = len(encoded)
+            if bytes_before - bytes_after < max(0, int(min_savings_bytes)):
+                return LogCompactionResult(
+                    False,
+                    bytes_before,
+                    bytes_before,
+                    len(raw_events),
+                    len(raw_events),
+                )
+
+            temp_path = self._path.with_name(
+                f".{self._path.name}.{os.getpid()}.{new_id().hex}.compact"
+            )
+            try:
+                with temp_path.open("xb") as stream:
+                    stream.write(encoded)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                with contextlib.suppress(OSError):
+                    os.chmod(temp_path, self._path.stat().st_mode & 0o777)
+                os.replace(temp_path, self._path)
+                temp_path = None
+                self._fsync_directory(self._path.parent)
+            finally:
+                if temp_path is not None:
+                    with contextlib.suppress(OSError):
+                        temp_path.unlink()
+
+        _logger.info(
+            "compacted thread log %s: %d -> %d bytes, %d -> %d events",
+            self._path.name,
+            bytes_before,
+            bytes_after,
+            len(raw_events),
+            len(compacted_events),
+        )
+        return LogCompactionResult(
+            True,
+            bytes_before,
+            bytes_after,
+            len(raw_events),
+            len(compacted_events),
+        )
+
+    def _schedule_compaction_if_needed(self) -> None:
+        try:
+            if self._path.stat().st_size < _COMPACT_THRESHOLD_BYTES:
+                return
+        except FileNotFoundError:
+            return
+        resolved = self._path.resolve(strict=False)
+        with _compaction_pending_lock:
+            if resolved in _compaction_pending:
+                return
+            _compaction_pending.add(resolved)
+
+        def _compact() -> None:
+            try:
+                EventLog(resolved).compact_if_needed()
+            except Exception:
+                _logger.exception("background thread-log compaction failed for %s", resolved)
+            finally:
+                with _compaction_pending_lock:
+                    _compaction_pending.discard(resolved)
+
+        _compaction_executor.submit(_compact)
 
     def reserve_timeline_sequence(self, turn_id: str) -> int:
         """Atomically reserve the next 1-based item slot for one turn.
@@ -244,13 +458,52 @@ class EventLog:
         status: TurnStatus,
         error: dict[str, Any] | None = None,
     ) -> LoggedEvent:
-        return self.append(
+        stored = self.append(
             LoggedEvent(
                 event="turn_completed",
                 threadId=thread_id,
                 turnId=turn_id,
                 payload={"status": status.value, "error": error},
-            )
+            ),
+            durable=True,
+        )
+        self._schedule_compaction_if_needed()
+        return stored
+
+    def turn_interrupt_requested(
+        self,
+        thread_id: str,
+        turn_id: str,
+        *,
+        claim_epoch: str,
+        requested_by_actor: str | None,
+        tenant_id: str | None,
+        request_id: str | None = None,
+    ) -> LoggedEvent:
+        """Durably address one cancellation request to one claim epoch.
+
+        ``claim_epoch`` is minted by the OS-lock owner, never accepted from
+        the client.  A later turn on the same thread therefore ignores a
+        delayed request for an older owner (the classic validate/append ABA
+        race).  Replay intentionally treats this control record as a no-op;
+        it is an auditable signal consumed only by the resident claim owner.
+        """
+
+        payload: dict[str, Any] = {"claimEpoch": claim_epoch}
+        if requested_by_actor is not None:
+            payload["requestedByActor"] = requested_by_actor
+        if tenant_id is not None:
+            payload["tenantId"] = tenant_id
+        if request_id is not None:
+            payload["requestId"] = request_id
+        return self.append(
+            LoggedEvent(
+                event="turn_interrupt_requested",
+                threadId=thread_id,
+                turnId=turn_id,
+                payload=payload,
+            ),
+            durable=True,
         )
 
     def turn_updated(
@@ -321,14 +574,22 @@ class EventLog:
             )
         )
 
-    def item_started(self, thread_id: str, turn_id: str, item: Item) -> LoggedEvent:
+    def item_started(
+        self,
+        thread_id: str,
+        turn_id: str,
+        item: Item,
+        *,
+        durable: bool = False,
+    ) -> LoggedEvent:
         return self.append(
             LoggedEvent(
                 event="item_started",
                 threadId=thread_id,
                 turnId=turn_id,
                 payload={"item": item.model_dump(by_alias=True, mode="json")},
-            )
+            ),
+            durable=durable,
         )
 
     def item_delta(
@@ -615,6 +876,9 @@ def list_threads(logs_root: Path | str) -> list[ThreadSummary]:
         s = log.summary()
         if s is not None:
             summaries.append(s)
+            # Listing is the natural maintenance sweep for dormant threads:
+            # schedule large historic logs without delaying the sidebar.
+            log._schedule_compaction_if_needed()
     summaries.sort(key=lambda s: s.updated_at, reverse=True)
     return summaries
 
@@ -635,6 +899,7 @@ __all__ = [
     "EventLog",
     "EventLogSnapshot",
     "LoggedEvent",
+    "LogCompactionResult",
     "ThreadSummary",
     "actor_id_from_turn_params",
     "archive_thread",

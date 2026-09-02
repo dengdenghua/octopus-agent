@@ -1,7 +1,7 @@
 import {
   ArrowLeftIcon,
   AppWindowIcon,
-  BotIcon,
+  BookOpenIcon,
   ChevronRightIcon,
   DatabaseIcon,
   DnaIcon,
@@ -21,13 +21,18 @@ import {
   PlusIcon,
   RssIcon,
   Trash2Icon,
+  CandlestickChartIcon,
   CompassIcon,
+  SquareKanbanIcon,
   StoreIcon,
   UserRoundPenIcon,
+  WorkflowIcon,
   type LucideIcon,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -42,12 +47,17 @@ import { swallow } from "@/core/utils/log";
 import { useEvent, eventBus, emitProjectsChanged } from "@/core/events";
 
 import {
-  SettingsDialog,
   normalizeSettingsSection,
   type SettingsSection,
-} from "./settings/settings-dialog";
+} from "./settings/settings-sections";
 import { AgentFooter } from "./sidebar-footer";
 import { FileTree } from "./file-tree";
+
+const LazySettingsDialog = lazy(() =>
+  import("./settings/settings-dialog").then((module) => ({
+    default: module.SettingsDialog,
+  })),
+);
 
 import {
   Collapsible,
@@ -71,6 +81,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  inElectron,
+  useElectronTitleBar,
+} from "@/components/electron-title-bar";
 import { isIMEComposing } from "@/lib/ime";
 
 import {
@@ -80,6 +94,7 @@ import {
   SidebarGroup,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
@@ -90,10 +105,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getAPIClient } from "@/core/api";
-import { getBackendBaseURL } from "@/core/config";
 import { pickLocalDirectory } from "@/core/workspace/pick-local-directory";
-import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import { useI18n } from "@/core/i18n/hooks";
+import { type Project, useProjects, useThreadMap } from "@/core/projects/hooks";
 import {
   useDeleteThread,
   useRenameThread,
@@ -110,7 +124,6 @@ import {
   projectNameForThread,
   summarizeThreadForSidebar,
   syncThreadAgentSelection,
-  threadHref,
   activeTeamTaskRoomId,
   activeWorkspaceThreadIdFromPathname,
   withThreadSidebarMode,
@@ -118,18 +131,40 @@ import {
   type ThreadSummary,
 } from "@/core/threads/sidebar";
 import type { AgentThread } from "@/core/threads/types";
-import {
-  agentRunStatusLightClass,
-  agentRunStatusLightPulseClass,
-} from "@/components/workspace/agent-run-status";
 import { useTasks } from "@/core/tasks/hooks";
+
+import {
+  BROWSER_WORKSPACE_ROUTE,
+  isAgentSurfaceActive,
+  isCompanySurfaceActive,
+  isNavRouteActive,
+  isStorageLibraryRouteActive,
+  isStorageRouteActive,
+  PRIMARY_WORKSPACE_ROUTE,
+} from "@/core/workspace/sidebar-routing";
+
+import { ModuleEditorDialog } from "@/components/workspace/module-editor-dialog";
+import { modulesInSection } from "@/core/modules/catalog";
+import { useEnabledModuleIds } from "@/core/modules/enabled-modules";
+import { filterRoutesByEnabled } from "@/core/modules/module-routing";
+import type { ModuleSection } from "@/core/modules/types";
+
+import { AvatarCell } from "@/components/workspace/avatar-cell";
+
+import { ThreadRunStatusLight } from "@/components/workspace/thread-run-status-light";
 import { useTeamTasks } from "@/core/team-tasks";
 import { useActiveAgentId } from "@/core/agents/active";
 import { formatCompactRelativeTimestamp } from "@/core/utils/datetime";
 import { basename, isAbsolutePath } from "@/lib/path-utils";
 import { cn } from "@/lib/utils";
+import { preloadWorkspaceRoute } from "@/core/navigation/workspace-route-preload";
 import { WorkspaceSurfaceHeader } from "@/components/workspace/workspace-surface-header";
 import { WorkspaceSwitcher } from "@/components/workspace/workspace-switcher";
+import {
+  setWorkspaceWebShortcut,
+  useWorkspaceWebShortcuts,
+  workspaceWebAppRoute,
+} from "@/core/workbench/apps";
 
 // Surface modes in the left sidebar. Chat and Company are handled by a
 // dedicated two-panel switch so they feel like peer work surfaces instead
@@ -142,8 +177,9 @@ type NavRoute = {
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   labelKey?: string;
   label?: string;
+  externalUrl?: string;
+  iconUrl?: string;
 };
-const PRIMARY_WORKSPACE_ROUTE = "/workspace/realtime/new";
 /** 助理固定对话线程 id —— 像微信一样共用一个持久会话，不随每次进入新建。
  *  侧边栏据此识别助理对话，避免生成指向自身的"当前任务会话"条目。 */
 const OCTOPUS_THREAD_ID = "octopus-assistant";
@@ -153,70 +189,66 @@ const OCTOPUS_THREAD_ID = "octopus-assistant";
 const LIVE_RUN_STATUS_TTL_MS = 30 * 60 * 1000;
 const LIVE_RUN_STATUS_PRUNE_INTERVAL_MS = 60 * 1000;
 
-const CHAT_CAPABILITY_ROUTES: NavRoute[] = [
-  {
-    to: "/workspace/agents?surface=chat",
-    labelKey: "navHR",
-    icon: StoreIcon,
-  },
-  {
-    to: "/workspace/intelligence?surface=chat",
-    labelKey: "navIntelligence",
-    icon: RssIcon,
-  },
-  {
-    // 助手（octopus）是全局上层入口，放在「订阅」下方，避免与主任务入口混淆。
-    to: "/workspace/realtime/octopus-assistant?agent=octopus",
-    labelKey: "navAssistant",
-    icon: UserRoundPenIcon,
-  },
-  {
-    to: "/workspace/evolution?surface=chat",
-    labelKey: "navEvolution",
-    icon: DnaIcon,
-  },
-];
+// Sidebar history needs labels, routing metadata, workspace bindings and
+// avatars, but never full message transcripts or artifacts. Keep metadata
+// intact for legacy records while projecting only the values fallbacks still
+// read by the sidebar derivation helpers.
+const SIDEBAR_THREAD_QUERY_PARAMS = {
+  limit: 30,
+  sortBy: "updated_at",
+  sortOrder: "desc",
+  select: [
+    "thread_id",
+    "updated_at",
+    "metadata",
+    "values.title",
+    "values.sidebar_title_source",
+    "values.current_speaker",
+    "values.agent_name",
+    "values.agent_roster",
+    "values.team_members",
+    "values.mode",
+    "values.workspace_path",
+    "values.workspace_id",
+    "values.team_room_id",
+    "values.room_id",
+  ],
+} as const;
 
-const COMMUNITY_ROUTES: NavRoute[] = [
-  {
-    to: "/workspace/community",
-    labelKey: "navCommunity",
-    icon: CompassIcon,
-  },
-];
+// Icons live here rather than in the catalog so `core/modules` stays free of
+// component imports (it is pure data + logic, unit-tested without React).
+const MODULE_ICONS: Record<string, ComponentType<SVGProps<SVGSVGElement>>> = {
+  hr: StoreIcon,
+  assistant: UserRoundPenIcon,
+  intelligence: RssIcon,
+  "paper.trading": CandlestickChartIcon,
+  projects: SquareKanbanIcon,
+  design: WorkflowIcon,
+  narrative: BookOpenIcon,
+  evolution: DnaIcon,
+  community: CompassIcon,
+  knowledge: DatabaseIcon,
+  "library.apps": AppWindowIcon,
+  "library.docs": FileTextIcon,
+  "library.images": FileImageIcon,
+  "library.videos": FilmIcon,
+  "library.computer": HardDriveIcon,
+};
 
-const STORAGE_LIBRARY_ROUTES: NavRoute[] = [
-  {
-    to: "/workspace/knowledge?surface=chat",
-    labelKey: "navKnowledgeGraph",
-    icon: DatabaseIcon,
-  },
-  {
-    to: "/workspace/storage?surface=company&library=apps",
-    labelKey: "libraryApps",
-    icon: AppWindowIcon,
-  },
-  {
-    to: "/workspace/storage?surface=company&library=docs",
-    labelKey: "libraryDocs",
-    icon: FileTextIcon,
-  },
-  {
-    to: "/workspace/storage?surface=company&library=images",
-    labelKey: "libraryImages",
-    icon: FileImageIcon,
-  },
-  {
-    to: "/workspace/storage?surface=company&library=videos",
-    labelKey: "libraryVideos",
-    icon: FilmIcon,
-  },
-  {
-    to: "/workspace/storage?surface=company&library=computer",
-    labelKey: "libraryComputer",
-    icon: HardDriveIcon,
-  },
-];
+/** Catalog descriptors → sidebar NavRoutes, in catalog order. */
+function moduleNavRoutes(section: ModuleSection): NavRoute[] {
+  return modulesInSection(section).map((m) => ({
+    to: m.to,
+    labelKey: m.labelKey,
+    icon: MODULE_ICONS[m.id] ?? StoreIcon,
+  }));
+}
+
+const CHAT_CAPABILITY_ROUTES: NavRoute[] = moduleNavRoutes("chatCapability");
+
+const COMMUNITY_ROUTES: NavRoute[] = moduleNavRoutes("community");
+
+const STORAGE_LIBRARY_ROUTES: NavRoute[] = moduleNavRoutes("storageLibrary");
 
 type SidebarFileExplorerTarget = {
   project: string;
@@ -229,12 +261,7 @@ type SidebarFileExplorerTarget = {
 const PROJECTS_KEY = "octopus.projects";
 const RECENT_WORKDIRS_KEY = "octopus:recentWorkdirs";
 const PROJECT_GROUPING_KEY = "octopus.sidebar.project-grouping-enabled";
-const ONGOING_THREADS_LIMIT = 5;
 const PROJECT_THREAD_PREVIEW_LIMIT = 6;
-
-type OngoingThreadSummary = ThreadSummary & {
-  runStatus: ThreadRunStatus;
-};
 
 function readUserProjects(): string[] {
   try {
@@ -313,55 +340,6 @@ function transientThreadModeFromHref(href: string): string {
   return "chat";
 }
 
-function buildOngoingThreadSummaries({
-  threads,
-  runStatusByHref,
-  limit = ONGOING_THREADS_LIMIT,
-}: {
-  threads: ThreadSummary[];
-  runStatusByHref: Map<string, ThreadRunStatus>;
-  limit?: number;
-}): OngoingThreadSummary[] {
-  const seen = new Set<string>();
-  const statusPriority: Record<ThreadRunStatus, number> = {
-    error: 4,
-    waiting: 3,
-    running: 2,
-    pending: 1,
-  };
-  return threads
-    .flatMap((thread) => {
-      if (seen.has(thread.href)) return [];
-      seen.add(thread.href);
-      const runStatus = runStatusByHref.get(thread.href);
-      return runStatus ? [{ ...thread, runStatus }] : [];
-    })
-    .sort((a, b) => {
-      const byStatus =
-        statusPriority[b.runStatus] - statusPriority[a.runStatus];
-      if (byStatus !== 0) return byStatus;
-      const aTime = a.updatedAt || "";
-      const bTime = b.updatedAt || "";
-      // 瞬时进行中会话没有时间戳：视为最新，排在同状态条目最前，
-      // 避免正在跑的会话因空时间戳沉底。
-      if (!aTime || !bTime) {
-        if (!aTime && !bTime) return a.id.localeCompare(b.id);
-        return aTime ? 1 : -1;
-      }
-      return bTime.localeCompare(aTime);
-    })
-    .slice(0, limit);
-}
-
-function excludeActiveThread<T extends ThreadSummary>(
-  threads: T[],
-  pathname: string,
-): T[] {
-  const activeId = activeWorkspaceThreadIdFromPathname(pathname);
-  if (!activeId) return threads;
-  return threads.filter((thread) => thread.id !== activeId);
-}
-
 function prioritizeActiveThread<T extends ThreadSummary>(
   threads: T[],
   pathname: string,
@@ -384,6 +362,90 @@ function projectThreadsForPreview<T>(
   return showAll ? threads : threads.slice(0, limit);
 }
 
+type ProjectOsSidebarIndex = {
+  projectNames: string[];
+  projectNameByThreadId: Map<string, string>;
+  threads: ThreadSummary[];
+};
+
+/**
+ * Reconcile the agent-scoped thread search with Project OS' durable indexes.
+ *
+ * Project homes are shared work groups, so their discoverability must not
+ * depend on the currently-selected agent or on optional thread metadata. The
+ * projects endpoint keeps empty projects visible, while thread-map recovers
+ * legacy bindings whose project record does not yet carry execution_thread_id.
+ */
+function buildProjectOsSidebarIndex(
+  projects: Project[],
+  threadProjectMap: Record<string, string>,
+  existingThreads: ThreadSummary[],
+): ProjectOsSidebarIndex {
+  const existingById = new Map(
+    existingThreads.map((thread) => [thread.id, thread]),
+  );
+  const durableThreads: ThreadSummary[] = [];
+  const durableThreadIds = new Set<string>();
+  const projectNameByThreadId = new Map<string, string>();
+  const projectNames: string[] = [];
+  const seenProjectNames = new Set<string>();
+
+  for (const project of projects) {
+    const projectName = project.name.trim();
+    if (!projectName) continue;
+    if (!seenProjectNames.has(projectName)) {
+      seenProjectNames.add(projectName);
+      projectNames.push(projectName);
+    }
+
+    const mappedThreadIds = Object.entries(threadProjectMap)
+      .filter(([, projectId]) => projectId === project.id)
+      .map(([threadId]) => threadId.trim())
+      .filter(Boolean);
+    const canonicalThreadId =
+      project.execution_thread_id?.trim() || mappedThreadIds[0] || "";
+    const threadIds = Array.from(
+      new Set([canonicalThreadId, ...mappedThreadIds].filter(Boolean)),
+    );
+
+    for (const threadId of threadIds) {
+      // A corrupt cross-project duplicate should not render twice. Prefer the
+      // first project returned by the authoritative project list.
+      if (durableThreadIds.has(threadId)) continue;
+      durableThreadIds.add(threadId);
+      projectNameByThreadId.set(threadId, projectName);
+
+      const existing = existingById.get(threadId);
+      durableThreads.push({
+        ...(existing ?? {
+          id: threadId,
+          updatedAt: project.created_at ?? "",
+          mode: "code",
+          href: `/workspace/realtime/${encodeURIComponent(threadId)}`,
+          agents: [],
+        }),
+        // The canonical child is the stable project-group entry. Its label
+        // must survive values.title being replaced by the first user message.
+        title:
+          threadId === canonicalThreadId
+            ? projectName
+            : existing?.title || projectName,
+      });
+    }
+  }
+
+  return {
+    projectNames,
+    projectNameByThreadId,
+    // Put durable entries first so the project home cannot fall behind the
+    // compact six-thread preview after a reload.
+    threads: [
+      ...durableThreads,
+      ...existingThreads.filter((thread) => !durableThreadIds.has(thread.id)),
+    ],
+  };
+}
+
 export function syncedSidebarPathname(
   pathname: string,
   pendingThreadPath: string | null,
@@ -394,9 +456,16 @@ export function syncedSidebarPathname(
 export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const { pathname, search } = useLocation();
   const { t } = useI18n();
-  const { isMobile, openMobile, setOpenMobile } = useSidebar();
+  const {
+    isMobile,
+    openMobile,
+    setOpenMobile,
+    state: sidebarState,
+  } = useSidebar();
   const queryClient = useQueryClient();
   const apiClient = useMemo(() => getAPIClient(), []);
+  const electron = inElectron();
+  const { macTrafficLightsWidth } = useElectronTitleBar();
   // Starting from `/new` swaps in a server thread id before the live page can
   // safely remount. Use its transient route for sidebar selection until the
   // page finishes the Router transition.
@@ -422,17 +491,35 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       (t.sidebar as unknown as Record<string, string>)[key] ?? key,
     [t],
   );
+  const activeAgentId = useActiveAgentId();
+  const enabledModuleIds = useEnabledModuleIds(activeAgentId ?? "general");
+  const workspaceWebShortcuts = useWorkspaceWebShortcuts();
   const resolveRoutes = useCallback(
     (routes: NavRoute[]) =>
-      routes.map((r) => ({
+      filterRoutesByEnabled(routes, enabledModuleIds).map((r) => ({
         ...r,
         label: r.label ?? (r.labelKey ? resolveLabel(r.labelKey) : r.to),
       })),
-    [resolveLabel],
+    [enabledModuleIds, resolveLabel],
   );
   const chatCapabilityItems = useMemo(
     () => resolveRoutes(CHAT_CAPABILITY_ROUTES),
     [resolveRoutes],
+  );
+  const workspaceWebShortcutItems = useMemo(
+    () =>
+      workspaceWebShortcuts.map((shortcut) => ({
+        to: workspaceWebAppRoute(shortcut),
+        icon: GlobeIcon,
+        label: shortcut.name,
+        externalUrl: shortcut.url,
+        iconUrl: shortcut.logoUrl,
+      })),
+    [workspaceWebShortcuts],
+  );
+  const workbenchCapabilityItems = useMemo(
+    () => [...chatCapabilityItems, ...workspaceWebShortcutItems],
+    [chatCapabilityItems, workspaceWebShortcutItems],
   );
   const communityItems = useMemo(
     () => resolveRoutes(COMMUNITY_ROUTES),
@@ -445,6 +532,8 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
 
   // Settings dialog state
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsHostActivated, setSettingsHostActivated] = useState(false);
+  const [moduleEditorOpen, setModuleEditorOpen] = useState(false);
   const [settingsDefaultSection, setSettingsDefaultSection] =
     useState<SettingsSection>("appearance");
   const pendingSettingsOpenRef = useRef<number | null>(null);
@@ -457,6 +546,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
 
       const openDialog = () => {
         pendingSettingsOpenRef.current = null;
+        setSettingsHostActivated(true);
         setSettingsDefaultSection(next);
         setSettingsOpen(true);
       };
@@ -536,37 +626,23 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   // so the left-bottom persona switch only affects the current chat lane.
   // Solo project conversations follow the same role boundary below. Shared
   // team sessions are queried separately and remain visible to the team.
-  const activeAgentId = useActiveAgentId();
   const { data: rawConversationThreads } = useThreads(
-    {
-      limit: 30,
-      sortBy: "updated_at",
-      sortOrder: "desc",
-      select: ["thread_id", "updated_at", "values", "metadata"],
-    },
+    SIDEBAR_THREAD_QUERY_PARAMS,
     undefined,
     activeAgentId,
   );
   const { data: rawProjectThreads } = useThreads(
-    {
-      limit: 30,
-      sortBy: "updated_at",
-      sortOrder: "desc",
-      select: ["thread_id", "updated_at", "values", "metadata"],
-    },
+    SIDEBAR_THREAD_QUERY_PARAMS,
     "code",
     activeAgentId,
   );
   const { data: rawTeamThreads } = useThreads(
-    {
-      limit: 30,
-      sortBy: "updated_at",
-      sortOrder: "desc",
-      select: ["thread_id", "updated_at", "values", "metadata"],
-    },
+    SIDEBAR_THREAD_QUERY_PARAMS,
     "team",
     null,
   );
+  const { data: projectOsProjects = [] } = useProjects();
+  const { data: threadProjectMap = {} } = useThreadMap();
 
   const mergedConversationRaw = (() => {
     const m = new Map<string, AgentThread>();
@@ -592,12 +668,16 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     );
   })();
 
+  const queriedProjectThreads = buildProjectThreadSummaries(mergedProjectRaw);
+  const projectOsSidebar = buildProjectOsSidebarIndex(
+    projectOsProjects,
+    threadProjectMap,
+    queriedProjectThreads,
+  );
+  const projectThreads = projectOsSidebar.threads;
   const conversationThreads: ThreadSummary[] = buildConversationThreadSummaries(
     mergedConversationRaw,
-  );
-
-  const projectThreads: ThreadSummary[] =
-    buildProjectThreadSummaries(mergedProjectRaw);
+  ).filter((thread) => !projectOsSidebar.projectNameByThreadId.has(thread.id));
 
   // User-defined projects (localStorage) — so an empty project still
   // shows in the sidebar before any threads are tagged with it.
@@ -763,11 +843,10 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     [activeTeamTasksQuery.data],
   );
   const backgroundTasksQuery = useTasks("all");
-  const threadHrefById = useMemo(() => {
-    return new Map(
-      mergedProjectRaw.map((thread) => [thread.thread_id, threadHref(thread)]),
-    );
-  }, [mergedProjectRaw]);
+  const threadHrefById = useMemo(
+    () => new Map(projectThreads.map((thread) => [thread.id, thread.href])),
+    [projectThreads],
+  );
   // Live run status with a last-touch timestamp. Bare statuses never
   // expire: a turn that terminated without a clearing event (crashed tab,
   // abnormal stream end) left its light stuck on "running" forever. The
@@ -836,16 +915,15 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const byProject: Record<string, ThreadSummary[]> = {};
   const threadIdsByProject: Record<string, string[]> = {};
   const ungroupedProjectThreads: ThreadSummary[] = [];
+  for (const name of projectOsSidebar.projectNames) byProject[name] = [];
   for (const name of userProjects) byProject[name] = [];
   const rawThreadMap = new Map(mergedProjectRaw.map((r) => [r.thread_id, r]));
   for (const thread of projectThreads) {
     const raw = rawThreadMap.get(thread.id);
     const meta = (raw?.metadata ?? {}) as Record<string, unknown>;
-    const project = projectNameForThread(
-      thread,
-      meta,
-      t.codeMode.personalSpace,
-    );
+    const project =
+      projectOsSidebar.projectNameByThreadId.get(thread.id) ??
+      projectNameForThread(thread, meta, t.codeMode.personalSpace);
     if (!project) {
       ungroupedProjectThreads.push(thread);
       continue;
@@ -854,11 +932,17 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     (byProject[project] ??= []).push(thread);
   }
   const projectOrder = Object.keys(byProject).filter(
-    (p) => (byProject[p]?.length ?? 0) > 0 || userProjects.includes(p),
+    (p) =>
+      (byProject[p]?.length ?? 0) > 0 ||
+      userProjects.includes(p) ||
+      projectOsSidebar.projectNames.includes(p),
   );
-  // Every visible project group can be removed. Deleting a group means
-  // unclassifying its conversations; local folders and thread history stay.
-  const deletableProjects = new Set(projectOrder);
+  // Local workspace folders keep the existing "unclassify" action. A Project
+  // OS record is server-owned and must not be silently treated as local-only.
+  const projectOsNames = new Set(projectOsSidebar.projectNames);
+  const deletableProjects = new Set(
+    projectOrder.filter((project) => !projectOsNames.has(project)),
+  );
   const [deletingProject, setDeletingProject] = useState<string | null>(null);
 
   const deleteProject = async (project: string) => {
@@ -916,61 +1000,6 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     ...sidebarConversationThreads,
     ...ungroupedProjectThreads,
   ].sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
-  const transientOngoingThreads = useMemo<ThreadSummary[]>(() => {
-    const knownHrefs = new Set(
-      [...projectThreads, ...conversationThreads].map((thread) => thread.href),
-    );
-    // Only the ACTIVE route may synthesize a "当前任务会话" row - its
-    // agent/workspace attribution comes from the current route, so a row
-    // for any other href would be mislabeled, and stale statuses for
-    // sessions you already left would linger as ghost rows in 进行中.
-    const activeThreadHref = sidebarPathname?.startsWith("/workspace/realtime/")
-      ? sidebarPathname
-      : null;
-    return Array.from(runStatusByHref.keys()).flatMap((href) => {
-      if (knownHrefs.has(href)) return [];
-      if (!activeThreadHref || href !== activeThreadHref) return [];
-      const id = activeWorkspaceThreadIdFromPathname(href);
-      if (!id) return [];
-      if (id === OCTOPUS_THREAD_ID) return [];
-      return [
-        {
-          id,
-          title: t.sidebar.currentTaskSession,
-          updatedAt: "",
-          mode: transientThreadModeFromHref(href),
-          href,
-          workspacePath: activeTaskWorkspacePath ?? undefined,
-          agents: activeAgentId ? [activeAgentId] : [],
-        },
-      ];
-    });
-  }, [
-    activeAgentId,
-    activeTaskWorkspacePath,
-    conversationThreads,
-    projectThreads,
-    runStatusByHref,
-    sidebarPathname,
-    t.sidebar.currentTaskSession,
-  ]);
-  const ongoingThreads = useMemo(
-    () =>
-      buildOngoingThreadSummaries({
-        threads: [
-          ...projectThreads,
-          ...conversationThreads,
-          ...transientOngoingThreads,
-        ],
-        runStatusByHref,
-      }),
-    [
-      conversationThreads,
-      projectThreads,
-      runStatusByHref,
-      transientOngoingThreads,
-    ],
-  );
   // Keep a fallback summary for an older/deep-linked task that was not present
   // in the bounded history queries. It is inserted into the normal Chat list
   // below instead of becoming a separate pinned conversation above navigation.
@@ -980,12 +1009,9 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     // 助理是固定对话，本身就是一个持久会话，不当作"当前任务"重复置顶。
     if (activeId === OCTOPUS_THREAD_ID) return null;
     return (
-      [
-        ...ongoingThreads,
-        ...projectThreads,
-        ...conversationThreads,
-        ...allHistoryThreads,
-      ].find((thread) => thread.id === activeId) ?? {
+      [...projectThreads, ...conversationThreads, ...allHistoryThreads].find(
+        (thread) => thread.id === activeId,
+      ) ?? {
         id: activeId,
         title: t.sidebar.currentTaskSession,
         updatedAt: "",
@@ -1000,15 +1026,10 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     activeTaskWorkspacePath,
     allHistoryThreads,
     conversationThreads,
-    ongoingThreads,
     projectThreads,
     sidebarPathname,
     t.sidebar.currentTaskSession,
   ]);
-  const backgroundOngoingThreads = useMemo(
-    () => excludeActiveThread(ongoingThreads, sidebarPathname),
-    [ongoingThreads, sidebarPathname],
-  );
   const sidebarHistoryThreads = useMemo(() => {
     if (!activeThreadSummary) return allHistoryThreads;
     const activeIsProjectThread = projectThreads.some(
@@ -1030,12 +1051,34 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
         {...props}
       >
         {/* Implementation note. */}
-        <SidebarHeader className="h-11 shrink-0 border-b border-white/40 bg-transparent p-0 pl-[10px] pr-2 py-0 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:px-0 dark:border-white/10">
-          <div className="grid h-full w-full grid-cols-[auto_minmax(0,1fr)] items-center group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
+        <SidebarHeader
+          className="h-10 shrink-0 border-b border-white/40 bg-transparent p-0 pr-2 py-0 group-data-[collapsible=icon]:px-0 dark:border-white/10"
+          style={
+            electron
+              ? ({
+                  paddingLeft:
+                    macTrafficLightsWidth > 0
+                      ? sidebarState === "collapsed"
+                        ? macTrafficLightsWidth - 8
+                        : macTrafficLightsWidth + 18
+                      : 10,
+                  WebkitAppRegion: "drag",
+                } as React.CSSProperties)
+              : { paddingLeft: 10 }
+          }
+        >
+          <div
+            className="grid h-full w-full grid-cols-[auto_minmax(0,1fr)] items-center group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center"
+            style={
+              electron
+                ? ({ WebkitAppRegion: "no-drag" } as React.CSSProperties)
+                : undefined
+            }
+          >
             <WorkspaceSurfaceHeader
-              // The workspace preview belongs to the Octopus task surface.
-              // Only the standalone /browser route represents the AI Browser.
-              active="agent"
+              active={
+                pathname === BROWSER_WORKSPACE_ROUTE ? "browser" : "agent"
+              }
               className="group-data-[collapsible=icon]:hidden"
             />
             <div className="flex shrink-0 items-center justify-self-end">
@@ -1064,13 +1107,13 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
               workspacePath={activeTaskWorkspacePath}
             />
           </SidebarGroup>
-          <OngoingThreadsSection
-            threads={backgroundOngoingThreads}
-            pathname={sidebarPathname}
-          />
           {/* Unified sidebar — no more surface branching. All navigation
             items are always visible regardless of the current route. */}
-          <NavSection items={chatCapabilityItems} pathname={pathname} />
+          <NavSection
+            items={workbenchCapabilityItems}
+            pathname={pathname}
+            search={search}
+          />
           <NavSection items={communityItems} pathname={pathname} />
           <LocalDatabaseSection
             title={resolveLabel("navDatabase")}
@@ -1078,6 +1121,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
             pathname={pathname}
             search={search}
           />
+          <EditModulesButton onOpen={() => setModuleEditorOpen(true)} />
           {fileExplorerTarget ? (
             <ProjectFileExplorerView
               target={fileExplorerTarget}
@@ -1119,10 +1163,18 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
           Radix unmounts a closed mobile SheetContent, which previously also
           unmounted this dialog and made every narrow-screen settings event a
           no-op. */}
-      <SettingsDialog
-        open={settingsOpen}
-        onOpenChange={handleSettingsOpenChange}
-        defaultSection={settingsDefaultSection}
+      {settingsHostActivated ? (
+        <Suspense fallback={null}>
+          <LazySettingsDialog
+            open={settingsOpen}
+            onOpenChange={handleSettingsOpenChange}
+            defaultSection={settingsDefaultSection}
+          />
+        </Suspense>
+      ) : null}
+      <ModuleEditorDialog
+        open={moduleEditorOpen}
+        onOpenChange={setModuleEditorOpen}
       />
     </>
   );
@@ -1133,10 +1185,12 @@ type NavItem = NavRoute & { label: string };
 function NavSection({
   items,
   pathname,
+  search,
   label,
 }: {
   items: NavItem[];
   pathname: string;
+  search?: string;
   label?: string;
 }) {
   return (
@@ -1148,8 +1202,43 @@ function NavSection({
       )}
       <SidebarMenu className="gap-0.5">
         {items.map((item) => (
-          <NavRow key={item.to} item={item} pathname={pathname} />
+          <NavRow
+            key={item.externalUrl ?? item.to}
+            item={item}
+            pathname={pathname}
+            search={search}
+          />
         ))}
+      </SidebarMenu>
+    </SidebarGroup>
+  );
+}
+
+/** 侧栏底部的「编辑侧栏」入口 —— 对标钉钉侧栏那个 `+`。 */
+function EditModulesButton({ onOpen }: { onOpen: () => void }) {
+  const { t } = useI18n();
+  return (
+    <SidebarGroup className="p-0 px-1 pb-0.5 group-data-[collapsible=icon]:px-0">
+      <SidebarMenu className="gap-0.5">
+        <SidebarMenuItem className="justify-center">
+          <SidebarMenuButton
+            tooltip={t.sidebar.editModules}
+            aria-label={t.sidebar.editModules}
+            onClick={onOpen}
+            className={cn(
+              "group/nav h-9 w-full text-sm opacity-55 transition-[opacity,background-color,border-color]",
+              "border border-transparent hover:border-border-subtle hover:bg-muted/32 hover:opacity-100",
+              "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0",
+            )}
+          >
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors group-hover/nav:text-foreground">
+              <PlusIcon className="size-[16px]" />
+            </span>
+            <span className="min-w-0 flex-1 truncate text-left group-data-[collapsible=icon]:hidden">
+              {t.sidebar.editModules}
+            </span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
       </SidebarMenu>
     </SidebarGroup>
   );
@@ -1260,6 +1349,8 @@ function StorageLibraryRow({
       >
         <Link
           to={item.to}
+          onMouseEnter={() => preloadWorkspaceRoute(item.to)}
+          onFocus={() => preloadWorkspaceRoute(item.to)}
           aria-current={active ? "page" : undefined}
           className="flex items-center gap-2"
         >
@@ -1277,116 +1368,6 @@ function StorageLibraryRow({
         </Link>
       </SidebarMenuButton>
     </SidebarMenuItem>
-  );
-}
-
-function routePath(to: string): string {
-  return to.split(/[?#]/)[0] || to;
-}
-
-function routeSearch(to: string): string {
-  const index = to.indexOf("?");
-  return index === -1 ? "" : to.slice(index);
-}
-
-function routeSearchFromLocation(pathname: string, search: string): string {
-  if (search) return search;
-  const index = pathname.indexOf("?");
-  return index === -1 ? "" : pathname.slice(index);
-}
-
-function libraryFromLocation(pathname: string, search: string): string {
-  const searchValue = routeSearchFromLocation(pathname, search);
-  return new URLSearchParams(searchValue).get("library") || "overview";
-}
-
-function isStorageRouteActive(pathname: string) {
-  const path = routePath(pathname);
-  return (
-    path === "/workspace/storage" ||
-    path.startsWith("/workspace/storage/") ||
-    path === "/workspace/nas" ||
-    path.startsWith("/workspace/nas/") ||
-    path === "/workspace/database" ||
-    path.startsWith("/workspace/database/") ||
-    path === "/workspace/knowledge" ||
-    path.startsWith("/workspace/knowledge/")
-  );
-}
-
-function isStorageLibraryRouteActive(
-  pathname: string,
-  search: string,
-  to: string,
-) {
-  const targetPath = routePath(to);
-  // Knowledge graph has its own route, not a ?library= param.
-  if (targetPath === "/workspace/knowledge") {
-    const path = routePath(pathname);
-    return (
-      path === "/workspace/knowledge" ||
-      path.startsWith("/workspace/knowledge/")
-    );
-  }
-  if (!isStorageRouteActive(pathname)) return false;
-  const targetLibrary = new URLSearchParams(routeSearch(to)).get("library");
-  if (!targetLibrary) return false;
-  return libraryFromLocation(pathname, search) === targetLibrary;
-}
-
-function isNavRouteActive(pathname: string, to: string) {
-  const path = routePath(to);
-  if (path === PRIMARY_WORKSPACE_ROUTE) {
-    return isChatSurfaceRoute(pathname);
-  }
-  return pathname === path || pathname.startsWith(`${path}/`);
-}
-
-function isChatSurfaceRoute(pathname: string) {
-  return (
-    pathname === "/workspace/realtime" || pathname === "/workspace/realtime/new"
-  );
-}
-
-function isCompanySurfaceRoute(pathname: string) {
-  return (
-    pathname === "/workspace/agents" ||
-    pathname.startsWith("/workspace/agents/") ||
-    pathname === "/workspace/intelligence" ||
-    pathname.startsWith("/workspace/intelligence/") ||
-    pathname === "/workspace/storage" ||
-    pathname.startsWith("/workspace/storage/") ||
-    pathname === "/workspace/nas" ||
-    pathname.startsWith("/workspace/nas/") ||
-    pathname === "/workspace/database" ||
-    pathname.startsWith("/workspace/database/") ||
-    pathname === "/workspace/evolution" ||
-    pathname.startsWith("/workspace/evolution/") ||
-    pathname === "/workspace/knowledge" ||
-    pathname.startsWith("/workspace/knowledge/")
-  );
-}
-
-function isCompanySurfaceActive(pathname: string, search = "") {
-  if (isAgentSurfaceActive(pathname, search)) return false;
-  const surfaceParam = new URLSearchParams(search).get("surface");
-  return (
-    surfaceParam === "company" ||
-    (surfaceParam !== "chat" && isCompanySurfaceRoute(pathname))
-  );
-}
-
-function isAgentSurfaceActive(pathname: string, search = "") {
-  const params = new URLSearchParams(search);
-  return (
-    (pathname === "/workspace/agents" &&
-      (params.get("surface") === "chat" ||
-        params.get("hud") === "1" ||
-        params.get("return") === "hud")) ||
-    (pathname.startsWith("/workspace/agents/") &&
-      (params.get("surface") === "chat" ||
-        params.get("hud") === "1" ||
-        params.get("return") === "hud"))
   );
 }
 
@@ -1495,11 +1476,13 @@ function ProjectFileExplorerView({
 }
 
 export const __testing = {
+  SIDEBAR_THREAD_QUERY_PARAMS,
   buildThreadRunStatusByHref,
   isProjectThreadMode,
   isNavRouteActive,
   isCompanySurfaceActive,
   isAgentSurfaceActive,
+  projectHasBoundFolder,
   buildConversationThreadSummaries,
   buildProjectThreadSummaries,
   mergeThreadRunStatus,
@@ -1508,111 +1491,15 @@ export const __testing = {
   withThreadSidebarMode,
   buildProjectSectionActions,
   buildChatsSectionActions,
-  buildOngoingThreadSummaries,
   transientThreadModeFromHref,
-  excludeActiveThread,
   prioritizeActiveThread,
   projectThreadsForPreview,
+  buildProjectOsSidebarIndex,
   syncedSidebarPathname,
   activeTeamTaskRoomId,
+  ProjectGroupTrigger,
+  SidebarTimestamp,
 };
-
-type WorkspaceSurfaceMode = "agent" | "browser";
-
-export function WorkspaceSurfaceSwitch({
-  active,
-}: {
-  active: WorkspaceSurfaceMode;
-}) {
-  const { t } = useI18n();
-  const items = [
-    {
-      to: PRIMARY_WORKSPACE_ROUTE,
-      label: t.desktop.header.brand,
-      icon: BotIcon,
-      value: "agent" as const,
-      kind: "brand" as const,
-    },
-    {
-      to: "/browser",
-      label: t.sidebar.navBrowserSurface,
-      icon: GlobeIcon,
-      value: "browser" as const,
-      kind: "icon" as const,
-    },
-  ];
-  const activeIndex = items.findIndex((item) => item.value === active);
-  const radiusVar = "var(--appearance-radius-control)";
-
-  return (
-    <div
-      className={cn(
-        "relative grid h-8 items-center gap-0 p-0.5",
-        "w-[96px] grid-cols-[minmax(0,1fr)_28px]",
-        "border border-border-default bg-muted/40",
-        "group-data-[collapsible=icon]:hidden",
-      )}
-      style={{ borderRadius: radiusVar }}
-      role="tablist"
-      aria-label="Workspace surface"
-    >
-      <span
-        className={cn(
-          "absolute top-0.5 bottom-0.5 z-0",
-          "bg-background shadow-[var(--shadow-xs)] ring-1 ring-border-default",
-          "transition-[left,width]",
-          activeIndex === 0
-            ? "left-[2px] w-[calc(100%-32px)]"
-            : "left-[calc(100%-26px)] w-[24px]",
-        )}
-        style={{ borderRadius: `calc(${radiusVar} - 4px)` }}
-        aria-hidden="true"
-      />
-      {items.map((item, index) => {
-        const Icon = item.icon;
-        const isActive = index === activeIndex;
-        return (
-          <Link
-            key={item.to}
-            to={item.to}
-            aria-current={isActive ? "page" : undefined}
-            aria-label={item.label}
-            title={item.label}
-            role="tab"
-            aria-selected={isActive}
-            className={cn(
-              "relative z-10 flex h-7 items-center justify-center",
-              "text-xs font-medium",
-              "transition-colors",
-              isActive
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-              item.kind === "brand" ? "px-0.5" : "px-0",
-              "group-data-[collapsible=icon]:grid group-data-[collapsible=icon]:size-7 group-data-[collapsible=icon]:place-items-center group-data-[collapsible=icon]:px-0",
-              isActive
-                ? "group-data-[collapsible=icon]:flex"
-                : "group-data-[collapsible=icon]:hidden",
-            )}
-            style={{ borderRadius: `calc(${radiusVar} - 4px)` }}
-          >
-            <Icon
-              className={cn(
-                "size-3.5 shrink-0",
-                item.kind === "brand" &&
-                  "hidden group-data-[collapsible=icon]:block",
-              )}
-            />
-            {item.kind === "brand" && (
-              <span className="min-w-0 truncate group-data-[collapsible=icon]:sr-only">
-                {item.label}
-              </span>
-            )}
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
 
 function SurfaceCreateButton({
   agentId,
@@ -1644,11 +1531,36 @@ function SurfaceCreateButton({
   );
 }
 
-function NavRow({ item, pathname }: { item: NavItem; pathname: string }) {
-  const active = isNavRouteActive(pathname, item.to);
+function NavRow({
+  item,
+  pathname,
+  search = "",
+}: {
+  item: NavItem;
+  pathname: string;
+  search?: string;
+}) {
+  const active = item.externalUrl
+    ? pathname === "/workspace/web-app" &&
+      new URLSearchParams(search).get("url") === item.externalUrl
+    : isNavRouteActive(pathname, item.to);
   const Icon = item.icon;
+
+  const removeWebShortcut = () => {
+    if (!item.externalUrl) return;
+    setWorkspaceWebShortcut(
+      {
+        name: item.label,
+        url: item.externalUrl,
+        logoUrl: item.iconUrl,
+      },
+      false,
+    );
+    toast.success(`已从侧栏移除 ${item.label}`);
+  };
+
   return (
-    <SidebarMenuItem className="justify-center">
+    <SidebarMenuItem className="group/menu-item justify-center">
       <SidebarMenuButton
         asChild
         isActive={active}
@@ -1664,8 +1576,17 @@ function NavRow({ item, pathname }: { item: NavItem; pathname: string }) {
       >
         <Link
           to={item.to}
+          onMouseEnter={() => {
+            if (!item.externalUrl) preloadWorkspaceRoute(item.to);
+          }}
+          onFocus={() => {
+            if (!item.externalUrl) preloadWorkspaceRoute(item.to);
+          }}
           aria-current={active ? "page" : undefined}
-          className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
+          className={cn(
+            "flex items-center gap-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0",
+            item.externalUrl && "pr-7",
+          )}
         >
           <span
             className={cn(
@@ -1675,13 +1596,37 @@ function NavRow({ item, pathname }: { item: NavItem; pathname: string }) {
                 : "text-muted-foreground group-hover/nav:text-foreground",
             )}
           >
-            <Icon className="size-[16px]" />
+            {item.iconUrl ? (
+              <img
+                src={item.iconUrl}
+                alt=""
+                className="size-[16px] rounded-sm object-contain"
+              />
+            ) : (
+              <Icon className="size-[16px]" />
+            )}
           </span>
-          <span className="group-data-[collapsible=icon]:hidden">
+          <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">
             {item.label}
           </span>
         </Link>
       </SidebarMenuButton>
+      {item.externalUrl ? (
+        <SidebarMenuAction
+          showOnHover
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            removeWebShortcut();
+          }}
+          aria-label={`从侧栏移除 ${item.label}`}
+          title={`从侧栏移除 ${item.label}`}
+          className="text-muted-foreground/55 hover:text-destructive md:pointer-events-none md:group-focus-within/menu-item:pointer-events-auto md:group-hover/menu-item:pointer-events-auto"
+        >
+          <Trash2Icon />
+        </SidebarMenuAction>
+      ) : null}
     </SidebarMenuItem>
   );
 }
@@ -1751,204 +1696,92 @@ function ThreadAvatar({
   );
 }
 
-function ThreadRunStatusLight({
-  active,
-  className,
-  idle = "hidden",
-  status,
-}: {
-  active?: boolean;
-  className?: string;
-  idle?: "hidden" | "queue";
-  status?: ThreadRunStatus;
-}) {
-  const { t } = useI18n();
-  if (!status) {
-    if (idle === "hidden") return null;
-    return (
-      <span
-        aria-hidden="true"
-        className={cn(
-          "relative inline-flex size-2 shrink-0 items-center justify-center rounded-full",
-          active
-            ? "border border-muted-foreground/40 bg-muted-foreground/60"
-            : "border border-muted-foreground/60 bg-muted-foreground/20",
-          className,
-        )}
-        data-thread-queue-indicator="idle"
-      />
-    );
-  }
-  const label =
-    status === "running"
-      ? t.sidebar.taskStatusRunning
-      : status === "error"
-        ? t.sidebar.taskStatusFailed
-        : status === "waiting"
-          ? t.agentWorkbench.waitingToContinue
-          : t.sidebar.taskStatusPending;
-  const colorClass = agentRunStatusLightClass(status);
-  const pulseClass = agentRunStatusLightPulseClass(status);
-
-  return (
-    <span
-      aria-label={label}
-      role="img"
-      title={label}
-      className={cn(
-        "relative inline-flex size-2 shrink-0 items-center justify-center rounded-full",
-        className,
-      )}
-    >
-      {pulseClass && (
-        <span
-          className={cn(
-            "absolute inline-flex size-3 rounded-full opacity-25",
-            colorClass,
-            pulseClass,
-          )}
-        />
-      )}
-      <span
-        className={cn(
-          "relative inline-flex size-2 rounded-full shadow-[var(--shadow-xs)]",
-          colorClass,
-        )}
-      />
-    </span>
-  );
+function projectHasBoundFolder(threads: ThreadSummary[]): boolean {
+  return threads.some((thread) => Boolean(thread.workspacePath?.trim()));
 }
 
-/** One image cell · falls back to a colored initial circle if the
- *  backend has no avatar for the agent (404 on
- *  ``/api/agents/<id>/avatar``). The initial fallback uses a hash-based
- *  color so different agents don't all blend into the same grey. */
-function AvatarCell({
-  agentId,
-  className,
-}: {
-  agentId: string;
-  className?: string;
-}) {
-  const [failed, setFailed] = useState(false);
-  if (failed) {
-    return (
-      <span
-        className={cn(
-          "flex items-center justify-center bg-muted text-micro font-semibold uppercase text-muted-foreground",
-          className,
-        )}
-        title={agentId}
-      >
-        {(agentId[0] || "?").toUpperCase()}
-      </span>
-    );
-  }
-  return (
-    <img
-      src={withAgentAvatarVersion(
-        `${getBackendBaseURL()}/api/agents/${encodeURIComponent(agentId)}/avatar`,
-      )}
-      alt={agentId}
-      title={agentId}
-      onError={() => setFailed(true)}
-      className={cn("object-cover", className)}
+function ProjectGroupIcon({ hasBoundFolder }: { hasBoundFolder: boolean }) {
+  return hasBoundFolder ? (
+    <FolderIcon
+      data-project-kind="folder"
+      className="size-[18px] shrink-0 opacity-70"
+    />
+  ) : (
+    <SquareKanbanIcon
+      data-project-kind="milestone"
+      className="size-[18px] shrink-0 opacity-70"
     />
   );
 }
 
-function ProjectGroupIcon({ project: _project }: { project: string }) {
-  return <FolderIcon className="size-[18px] shrink-0 opacity-70" />;
-}
-
-function threadRunStatusLabel(
-  status: ThreadRunStatus,
-  t: ReturnType<typeof useI18n>["t"],
-): string {
-  if (status === "running") return t.sidebar.taskStatusRunning;
-  if (status === "error") return t.sidebar.taskStatusFailed;
-  if (status === "waiting") return t.agentWorkbench.waitingToContinue;
-  return t.sidebar.taskStatusPending;
-}
-
-function OngoingThreadsSection({
-  pathname,
-  threads,
+function ProjectGroupTrigger({
+  project,
+  threadCount,
+  deletable,
+  hasBoundFolder,
+  boundWorkspacePath,
 }: {
-  pathname: string;
-  threads: OngoingThreadSummary[];
+  project: string;
+  threadCount: number;
+  deletable: boolean;
+  hasBoundFolder: boolean;
+  boundWorkspacePath?: string;
 }) {
-  const { t } = useI18n();
-  if (threads.length === 0) return null;
-
   return (
-    <SidebarGroup className="p-0 px-1 pb-0.5 group-data-[collapsible=icon]:hidden">
-      <div className="mb-1 flex items-center gap-1.5 px-2 text-mini font-medium text-muted-foreground/72">
-        <ListTodoIcon className="size-3.5" />
-        <span>{t.sidebar.sectionOngoing}</span>
-        <span className="ml-auto font-mono text-micro text-muted-foreground/55">
-          {threads.length}
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <CollapsibleTrigger
+          className={cn(
+            "flex h-9 w-full items-center gap-2 rounded-lg px-1 text-sm",
+            deletable ? "pr-8" : "pr-1",
+            "text-foreground/85 hover:text-foreground hover:bg-muted/40 transition-colors",
+            "outline-none focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:ring-inset",
+          )}
+        >
+          <ProjectGroupIcon hasBoundFolder={hasBoundFolder} />
+          <span className="min-w-0 truncate">{project}</span>
+          <span
+            className={cn(
+              "ml-auto shrink-0 text-xs text-muted-foreground/60 transition-opacity",
+              deletable && "group-hover/project:opacity-0",
+            )}
+          >
+            {threadCount}
+          </span>
+        </CollapsibleTrigger>
+      </TooltipTrigger>
+      <TooltipContent
+        side="right"
+        align="center"
+        className="max-w-72 break-words"
+      >
+        <span className="block font-medium">{project}</span>
+        <span className="mt-0.5 block text-[11px] text-muted-foreground">
+          {hasBoundFolder
+            ? boundWorkspacePath || "本地目录项目"
+            : "里程碑项目 · 不绑定本地目录"}
         </span>
-      </div>
-      <SidebarMenu className="gap-0.5">
-        {threads.map((thread) => {
-          const active =
-            activeWorkspaceThreadIdFromPathname(pathname) === thread.id;
-          const statusLabel = threadRunStatusLabel(thread.runStatus, t);
-          return (
-            <SidebarMenuItem key={thread.href} className="group/ongoing">
-              <SidebarMenuButton
-                isActive={active}
-                asChild
-                tooltip={`${statusLabel} · ${thread.title}`}
-                className={cn(
-                  "h-auto min-h-9 rounded-lg border border-transparent px-2 py-1.5",
-                  "bg-[color:color-mix(in_oklch,var(--sidebar-accent)_38%,transparent)] text-foreground/86",
-                  "hover:border-border-subtle hover:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_60%,transparent)] hover:text-foreground",
-                  active &&
-                    "border-sidebar-primary/18 bg-[color:color-mix(in_oklch,var(--sidebar-accent)_78%,transparent)] text-foreground",
-                )}
-              >
-                <Link
-                  to={thread.href}
-                  state={{
-                    threadOwnerAgentId:
-                      thread.agents.length === 1 ? thread.agents[0] : undefined,
-                    workspacePath: thread.workspacePath,
-                  }}
-                  onMouseDown={() => syncThreadAgentSelection(thread.agents)}
-                  aria-current={active ? "page" : undefined}
-                  title={`${statusLabel} · ${thread.title}`}
-                >
-                  <span aria-hidden="true" className="relative shrink-0">
-                    <ThreadAvatar
-                      agents={thread.agents}
-                      className="size-5 shrink-0"
-                    />
-                    <ThreadRunStatusLight
-                      status={thread.runStatus}
-                      className="absolute -bottom-0.5 -right-0.5 ring-2 ring-sidebar"
-                    />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs leading-tight">
-                      {thread.title}
-                    </span>
-                    <span className="mt-0.5 flex min-w-0 items-center gap-1 text-micro leading-none text-muted-foreground/72">
-                      <span className="truncate">{statusLabel}</span>
-                      <span aria-hidden="true">·</span>
-                      <span className="shrink-0 font-mono">
-                        {formatCompactRelativeTimestamp(thread.updatedAt)}
-                      </span>
-                    </span>
-                  </span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          );
-        })}
-      </SidebarMenu>
-    </SidebarGroup>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function SidebarTimestamp({
+  updatedAt,
+  className,
+}: {
+  updatedAt: string;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "shrink-0 overflow-hidden whitespace-nowrap text-right text-mini font-medium text-sidebar-foreground/70 transition-[width,opacity,color] duration-fast group-hover/thread:text-sidebar-foreground/90",
+        className,
+      )}
+    >
+      {formatCompactRelativeTimestamp(updatedAt)}
+    </span>
   );
 }
 
@@ -1972,6 +1805,10 @@ function ProjectGroup({
   onOpenFiles: (thread: ThreadSummary, project: string) => void;
 }) {
   const { t } = useI18n();
+  const hasBoundFolder = projectHasBoundFolder(threads);
+  const boundWorkspacePath = threads.find((thread) =>
+    Boolean(thread.workspacePath?.trim()),
+  )?.workspacePath;
   const containsActiveThread = threads.some(
     (thread) => activeWorkspaceThreadIdFromPathname(pathname) === thread.id,
   );
@@ -2033,25 +1870,13 @@ function ProjectGroup({
     <Collapsible open={open} onOpenChange={setOpen}>
       <SidebarGroup className="p-0 px-2 py-1">
         <div className="group/project relative">
-          <CollapsibleTrigger
-            className={cn(
-              "flex h-9 w-full items-center gap-2 rounded-lg px-1 text-sm",
-              deletable ? "pr-8" : "pr-1",
-              "text-foreground/85 hover:text-foreground hover:bg-muted/40 transition-colors",
-              "outline-none focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:ring-inset",
-            )}
-          >
-            <ProjectGroupIcon project={project} />
-            <span className="truncate">{project}</span>
-            <span
-              className={cn(
-                "ml-auto text-xs text-muted-foreground/60 shrink-0 transition-opacity",
-                deletable && "group-hover/project:opacity-0",
-              )}
-            >
-              {threads.length}
-            </span>
-          </CollapsibleTrigger>
+          <ProjectGroupTrigger
+            project={project}
+            threadCount={threads.length}
+            deletable={deletable}
+            hasBoundFolder={hasBoundFolder}
+            boundWorkspacePath={boundWorkspacePath}
+          />
           {deletable && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -2114,7 +1939,7 @@ function ProjectGroup({
         </div>
         <CollapsibleContent className="overflow-hidden">
           {/* Keep task content indented, but let the active/hover bar span
-              the full project lane like TRAE's code sidebar. */}
+              the full project lane in the code sidebar. */}
           <ul className="mt-1 space-y-0.5">
             {visibleThreads.map((thread) => {
               const active =
@@ -2163,16 +1988,14 @@ function ProjectGroup({
                     <span className="line-clamp-2 min-w-0 flex-1 break-words leading-tight">
                       {thread.title}
                     </span>
-                    <span
-                      className={cn(
-                        "overflow-hidden whitespace-nowrap text-mini text-muted-foreground transition-[width,opacity,color] duration-fast group-hover/thread:text-muted-foreground/90",
+                    <SidebarTimestamp
+                      updatedAt={thread.updatedAt}
+                      className={
                         active
                           ? "w-0 opacity-0"
-                          : "w-10 opacity-100 group-hover/thread:w-0 group-hover/thread:opacity-0 group-focus-within/thread:w-0 group-focus-within/thread:opacity-0",
-                      )}
-                    >
-                      {formatCompactRelativeTimestamp(thread.updatedAt)}
-                    </span>
+                          : "w-10 opacity-100 group-hover/thread:w-0 group-hover/thread:opacity-0 group-focus-within/thread:w-0 group-focus-within/thread:opacity-0"
+                      }
+                    />
                   </Link>
                   <button
                     type="button"
@@ -2579,7 +2402,6 @@ function ChatsSection({
   threads,
   pathname,
   label,
-  emptyLabel,
   newActionLabel,
   agentId,
   workspacePath,
@@ -2588,7 +2410,6 @@ function ChatsSection({
   threads: ThreadSummary[];
   pathname: string;
   label?: string;
-  emptyLabel?: string;
   newActionLabel?: string;
   agentId?: string | null;
   workspacePath?: string | null;
@@ -2728,9 +2549,10 @@ function ChatsSection({
                       <span className="min-w-0 flex-1 truncate leading-tight">
                         {t.title}
                       </span>
-                      <span className="w-10 shrink-0 overflow-hidden whitespace-nowrap text-right text-mini text-muted-foreground transition-[width,opacity,color] group-hover/thread:w-0 group-hover/thread:text-muted-foreground/90 group-hover/thread:opacity-0 group-focus-within/thread:w-0 group-focus-within/thread:opacity-0">
-                        {formatCompactRelativeTimestamp(t.updatedAt)}
-                      </span>
+                      <SidebarTimestamp
+                        updatedAt={t.updatedAt}
+                        className="w-10 group-hover/thread:w-0 group-hover/thread:opacity-0 group-focus-within/thread:w-0 group-focus-within/thread:opacity-0"
+                      />
                     </Link>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -2828,6 +2650,7 @@ function ChatsSection({
     </div>
   );
 }
+
 export function CollapseToggle({ compact = false }: { compact?: boolean }) {
   const { open, toggleSidebar, state } = useSidebar();
   const { t } = useI18n();
@@ -2859,13 +2682,5 @@ export function CollapseToggle({ compact = false }: { compact?: boolean }) {
         {open ? t.sidebar.collapseSidebar : t.sidebar.expandSidebar}
       </TooltipContent>
     </Tooltip>
-  );
-}
-
-function EmptyHint({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mt-1 rounded-lg border border-dashed border-border-default px-2.5 py-1.5 text-xs leading-tight text-muted-foreground/75">
-      {children}
-    </div>
   );
 }

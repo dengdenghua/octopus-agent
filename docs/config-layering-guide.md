@@ -350,7 +350,7 @@ dev-large.yaml (extends: dev.yaml)
 
 ## 相关资源
 
-- [PROPOSAL-001: Configuration Layering](../.agents/notes/proposed/PROPOSAL-001-config-layering.md) - 设计提案
+- [ADR-004: Configuration Layering](../.agents/notes/implemented/ADR-004-config-layering.md) - 已实施的架构决策
 - [config.example.yaml](../config.example.yaml) - 完整配置示例
 - [schema.py](../runtime/platform/config/schema.py) - 配置模式定义
 

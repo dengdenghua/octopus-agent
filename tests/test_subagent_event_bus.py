@@ -146,19 +146,30 @@ def _session_with_meta(monkeypatch, meta):
 def test_tool_events_mirror_to_bus(monkeypatch):
     from unittest.mock import MagicMock
 
-    from runtime.execution.suckers._ephemeral_events import _emit_sub_tool_event
+    from runtime.execution.suckers._ephemeral_events import (
+        _emit_sub_text_delta,
+        _emit_sub_tool_event,
+    )
+    from runtime.memory.journal import InMemoryJournal
 
+    journal = InMemoryJournal()
     _session_with_meta(
         monkeypatch,
-        {"root_thread_id": "R", "thread_id": "C", "_active_parent_tool_use_id": "p-1"},
+        {
+            "root_thread_id": "R",
+            "thread_id": "C",
+            "_active_parent_tool_use_id": "p-1",
+            "journal": journal,
+            "subagent_agent_id": "researcher-a",
+            "subagent_codename": "Spark-a1",
+            "subagent_avatar": "🔎",
+        },
     )
     tc = MagicMock()
     tc.id = "call-1"
     tc.name = "web_search"
     tc.input = {"q": "x"}
-    _emit_sub_tool_event(
-        "sub_tool_start", role_id="researcher", tool_call=tc, iteration=1
-    )
+    _emit_sub_tool_event("sub_tool_start", role_id="researcher", tool_call=tc, iteration=1)
     _emit_sub_tool_event(
         "sub_tool_end",
         role_id="researcher",
@@ -174,6 +185,18 @@ def test_tool_events_mirror_to_bus(monkeypatch):
     assert events[0]["payload"]["parent_tool_use_id"] == "p-1"
     assert events[1]["payload"]["status"] == "success"
     assert events[1]["payload"]["duration_ms"] == 12
+    _emit_sub_text_delta(
+        "researcher",
+        1,
+        "public progress",
+        session_id="session-a",
+    )
+    journal_events = journal.read_all()
+    assert journal_events[0].agent_id == "researcher-a"
+    assert journal_events[0].codename == "Spark-a1"
+    assert journal_events[1].agent_id == "researcher-a"
+    assert journal_events[2].agent_id == "researcher-a"
+    assert journal_events[2].session_id == "session-a"
 
 
 def test_lifecycle_events_mirror_to_bus(monkeypatch):
@@ -182,9 +205,7 @@ def test_lifecycle_events_mirror_to_bus(monkeypatch):
     )
     from runtime.memory.journal import InMemoryJournal
 
-    sess = _FakeSession(
-        {"root_thread_id": "R", "thread_id": "C", "journal": InMemoryJournal()}
-    )
+    sess = _FakeSession({"root_thread_id": "R", "thread_id": "C", "journal": InMemoryJournal()})
     import runtime.platform.process.session as _sess_mod
 
     monkeypatch.setattr(_sess_mod, "current_session", lambda: sess)
@@ -282,6 +303,7 @@ def test_call_subagent_mirrors_started_and_concluded_to_bus(monkeypatch):
     sub_started + sub_concluded on the event bus keyed to the caller's
     thread — the substrate the workbench subscribes to."""
     import runtime.execution.subagents.bridge as _bridge
+    from runtime.memory.journal import InMemoryJournal
     from runtime.platform.process.session import Session, session_scope
 
     def _fake_runner(prompt, *, subagent_name, context):
@@ -292,7 +314,12 @@ def test_call_subagent_mirrors_started_and_concluded_to_bus(monkeypatch):
     _bridge._RUNNER = _fake_runner
     reset_for_tests()
     try:
-        with session_scope(Session(thread_id="parent-thread")):
+        with session_scope(
+            Session(
+                thread_id="parent-thread",
+                metadata={"journal": InMemoryJournal()},
+            )
+        ):
             result = _bridge.call_subagent(agent_id="custom-probe", prompt="look around")
     finally:
         _bridge._RUNNER = orig
@@ -300,7 +327,7 @@ def test_call_subagent_mirrors_started_and_concluded_to_bus(monkeypatch):
     assert result["success"] is True
     events = get_bus("parent-thread").replay(0)
     types = [e["type"] for e in events]
-    assert "sub_started" in types
-    assert "sub_concluded" in types
+    assert types.count("sub_started") == 1
+    assert types.count("sub_concluded") == 1
     started = [e for e in events if e["type"] == "sub_started"][0]
     assert started["root_thread_id"] == "parent-thread"

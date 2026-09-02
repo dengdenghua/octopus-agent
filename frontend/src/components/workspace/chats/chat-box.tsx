@@ -5,6 +5,7 @@ import { env } from "@/env";
 import { getWorkspaceArtifactRefetchInterval } from "@/core/artifacts/polling";
 import { useWorkspaceArtifacts } from "@/core/artifacts/use-workspace-artifacts";
 import { normalizeWorkspaceArtifactRef } from "@/core/artifacts/utils";
+import { isInternalArtifactRef } from "@/core/artifacts/workspace-outputs";
 import { cn } from "@/lib/utils";
 
 import { ArtifactPanel, useArtifacts } from "../artifacts";
@@ -105,18 +106,31 @@ const ChatBox: React.FC<{
   // well, otherwise the drawer keeps querying the legacy uploads endpoint.
   useEffect(() => {
     if (!selectedArtifact) return;
-    const normalized = normalizeWorkspaceArtifactRef(selectedArtifact, threadId);
+    const normalized = normalizeWorkspaceArtifactRef(
+      selectedArtifact,
+      threadId,
+    );
     if (normalized !== selectedArtifact) {
       selectArtifact(normalized, true);
     }
   }, [selectedArtifact, selectArtifact, threadId]);
 
   useEffect(() => {
+    // External consumers (Realtime's unified workbench) own artifact
+    // visibility. Keep synchronising the artifact list, but never mutate the
+    // legacy drawer-open state behind their back.
+    if (artifactPanelMode !== "drawer") return;
     if (thread.isLoading) return;
     if (artifacts.length === 0) return;
     if (!autoOpen) return;
     setArtifactsOpen(true);
-  }, [artifacts.length, autoOpen, setArtifactsOpen, thread.isLoading]);
+  }, [
+    artifactPanelMode,
+    artifacts.length,
+    autoOpen,
+    setArtifactsOpen,
+    thread.isLoading,
+  ]);
 
   // In static-preview mode, hide the drawer entirely if no artifacts yet.
   const drawerEnabled = artifactPanelMode === "drawer";
@@ -163,11 +177,16 @@ const ChatBox: React.FC<{
   );
 };
 
-function mergeArtifacts(primary: string[], fallback: string[], threadId: string) {
+function mergeArtifacts(
+  primary: string[],
+  fallback: string[],
+  threadId: string,
+) {
   const merged: string[] = [];
   const seen = new Set<string>();
   for (const rawArtifact of [...primary, ...fallback]) {
     const artifact = normalizeWorkspaceArtifactRef(rawArtifact, threadId);
+    if (isInternalArtifactRef(artifact)) continue;
     if (seen.has(artifact)) continue;
     seen.add(artifact);
     merged.push(artifact);

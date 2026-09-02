@@ -1,0 +1,39 @@
+{
+  "id": "twin_health",
+  "templateId": "octopus:digital-twin:health",
+  "templateVersion": "1.0.0",
+  "source_kind": "digital-twin-human-role",
+  "source_plugin": "twin-health",
+  "expertType": "agent",
+  "name": "医疗健康协作分身",
+  "icon": "🩺",
+  "description": "代表医疗健康协作岗的数位分身:病历整理/随访提醒/健康资料等文档侧闭环,诊断与处方必须真人医生,AI 不能替代医疗责任。",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "digital-twin:human-role",
+  "category": "specialist",
+  "tags": [
+    "数字分身",
+    "真人岗位",
+    "真身协同",
+    "医疗",
+    "健康",
+    "协作"
+  ],
+  "profession": "医疗健康协作员",
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true,
+    "includeUserMd": true,
+    "includeMemoryMd": true
+  },
+  "capabilities": {
+    "digital_twin": true,
+    "human_collab": true,
+    "authorization_boundary": true,
+    "handoff_pack": true
+  }
+}

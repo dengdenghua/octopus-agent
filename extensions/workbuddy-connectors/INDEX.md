@@ -1,0 +1,115 @@
+# WorkBuddy 连接器 → octopus 插件索引
+
+共 **111** 个插件: mcp 84 / cli 23 / model-provider 2 / skill-only 2。
+
+- `77ircloud` **铱云AI供应链** · ⌨️CLI · auth=token · skills=2
+- `agentkey` **AgentKey** · 🔌MCP · auth=token · skills=1
+- `ai-hive` **AI-HIVE** · ⌨️CLI · auth=token · skills=10
+- `archive-hospital-mcp` **腾讯健康全周期管理平台** · 🔌MCP · auth=token · skills=1
+- `awesun` **向日葵远程控制** · ⌨️CLI · auth=token · skills=1
+- `baidu-netdisk` **百度网盘** · 🔌MCP · auth=server-side · skills=1
+- `bazhuayu` **八爪鱼** · 🔌MCP · auth=token · skills=1
+- `beisen-cli` **北森AI · HR专家** · ⌨️CLI · auth=token · skills=10
+- `bugly-token` **Bugly 质量概览** · 🔌MCP · auth=token · skills=1
+- `canva` **Canva可画** · 🔌MCP · auth=token · skills=1
+- `canva-ai` **Canva可画** · 🔌MCP · auth=token · skills=1
+- `chuhaijiang` **出海匠** · 🔌MCP · auth=token · skills=1
+- `cisp-mcp` **水滴征信** · 🔌MCP · auth=token · skills=1
+- `cloudbase` **腾讯云 CloudBase** · ⌨️CLI · auth=token · skills=31
+- `cnb-api` **CNB** · ⌨️CLI · auth=token · skills=1
+- `ctrip-wendao` **携程问道** · 🧩SKILL · auth=token · skills=1
+- `dcs-cloud` **DCS Cloud** · 🔌MCP · auth=token · skills=1
+- `dingtalk` **钉钉** · ⌨️CLI · auth=token · skills=1
+- `dknowc-mcp` **深知可信工作台** · 🔌MCP · auth=token · skills=1
+- `edgeone-pages` **EdgeOne Makers** · 🔌MCP · auth=token · skills=1
+- `emr-query` **弹性MapReduce** · ⌨️CLI · auth=token · skills=1
+- `ezjoin-meeting` **EzyJoin智慧会议** · 🔌MCP · auth=token · skills=1
+- `fanruan-growth-advisor` **帆软增长谋士** · 🔌MCP · auth=token · skills=0
+- `fazhi-law` **同花顺法律AI助手** · 🔌MCP · auth=token · skills=6
+- `fbs-connector` **福帮手** · 🔌MCP · auth=token · skills=1
+- `feishu` **飞书** · ⌨️CLI · auth=token · skills=27
+- `finenter` **进门投研** · 🔌MCP · auth=token · skills=1
+- `flova` **Flova** · 🔌MCP · auth=oauth · skills=1
+- `freebuff-cli` **Freebuff 本地 Agent** · ⌨️CLI · auth=token · skills=1
+- `freebuff2api-community` **Freebuff2API 社区适配器** · 🧠MODEL · auth=token · CLI=无
+- `fyopen-lawsearch` **法研·法律法规检索** · 🔌MCP · auth=token · skills=1
+- `gangtise-mcp` **Gangtise投研** · 🔌MCP · auth=token · skills=1
+- `gildata` **恒生聚源 MCP** · 🔌MCP · auth=token · skills=3
+- `github` **GitHub** · 🔌MCP · auth=server-side · skills=0
+- `gongyi-open-mcp` **腾讯公益机构服务平台** · 🔌MCP · auth=token · skills=1
+- `ima-mcp` **ima知识库** · 🔌MCP · auth=token · skills=0
+- `infimind-ecommerce-image` **极睿电商生图** · 🔌MCP · auth=token · skills=3
+- `infimind-video` **极睿视频** · 🔌MCP · auth=token · skills=2
+- `ioa` **零信任安全 iOA** · 🔌MCP · auth=token · skills=0
+- `jinshuju` **金数据** · 🔌MCP · auth=server-side · skills=1
+- `jiushuyun` **九数云BI** · 🔌MCP · auth=token · skills=0
+- `kdocs` **金山文档** · 🔌MCP · auth=server-side · skills=1
+- `kling-ai-plugin` **可灵 AI** · 🔌MCP · auth=token · skills=3
+- `kuaicha-search` **同花顺快查企业数据** · 🔌MCP · auth=token · skills=1
+- `lemonclaw` **柠檬云** · ⌨️CLI · auth=token · skills=1
+- `lexiang` **乐享知识库** · 🔌MCP · auth=token · skills=8
+- `linear-mcp` **Linear** · 🔌MCP · auth=oauth · skills=0
+- `lingxing-mcp` **领星ERP** · 🔌MCP · auth=token · skills=1
+- `linkfox-product-selection` **Linkfox 选品** · 🔌MCP · auth=token · skills=66
+- `lovrabet-cli` **Lovrabet CLI** · ⌨️CLI · auth=token · skills=1
+- `mastergo-vibe-mcp` **MasterGo 莫高设计** · 🔌MCP · auth=token · skills=1
+- `mglc` **芒果灵创 CLI** · ⌨️CLI · auth=token · skills=7
+- `miaoda` **秒哒应用搭建** · ⌨️CLI · auth=token · skills=1
+- `moka` **Moka HR 智能体** · 🔌MCP · auth=token · skills=24
+- `morningstar` **晨星 Morningstar** · 🔌MCP · auth=token · skills=1
+- `mx-ds-mcp` **东方财富妙想MCP** · 🔌MCP · auth=token · skills=1
+- `mzl-trademark` **摩知轮商标查询** · 🔌MCP · auth=token · skills=1
+- `neo-crm` **销售易CRM** · 🔌MCP · auth=token · skills=1
+- `netease-mail` **网易邮箱** · 🧩SKILL · auth=token · skills=1
+- `notion` **Notion** · 🔌MCP · auth=token · skills=4
+- `opendata` **及刻智能·时空数据MCP** · 🔌MCP · auth=token · skills=1
+- `opencode-zen` **OpenCode Zen 模型适配器** · 🧠MODEL · auth=token · CLI=无
+- `pandadata` **PandaData 金融数据** · 🔌MCP · auth=token · skills=1
+- `patsnap-search` **智慧芽专利&文献融合检索** · 🔌MCP · auth=token · skills=1
+- `picset-commerce-images` **Picset AI 电商图片** · 🔌MCP · auth=token · skills=2
+- `picset-video-generation` **Picset AI 视频生成** · 🔌MCP · auth=token · skills=1
+- `pkulaw` **北大法宝·法律智能检索** · 🔌MCP · auth=token · skills=1
+- `qcc-company` **企查查** · 🔌MCP · auth=token · skills=1
+- `qcc-legal` **企查查·法律数据** · 🔌MCP · auth=token · skills=1
+- `qingflow` **轻流** · 🔌MCP · auth=token · skills=1
+- `qixinhuiyan-mcp` **启信慧眼** · 🔌MCP · auth=token · skills=0
+- `qq-mail` **QQ邮箱** · 🔌MCP · auth=token · skills=1
+- `salesnail-instructor` **SalesNail 讲师** · 🔌MCP · auth=token · skills=1
+- `salestouch` **SalesTouch 经营执行** · 🔌MCP · auth=token · skills=1
+- `seeyon-office-marketing-suite` **致远互联协同办公服务** · ⌨️CLI · auth=token · skills=2
+- `shanglv-mcp-gateway` **用友智能服务（AI BaaS）** · 🔌MCP · auth=token · skills=1
+- `sharecrm` **纷享销客CRM** · 🔌MCP · auth=token · skills=7
+- `sq-company-dynamic` **上奇产业通-企业动态追踪** · 🔌MCP · auth=token · skills=1
+- `tapd` **TAPD** · 🔌MCP · auth=token · skills=1
+- `tc-chengxin` **同程程心** · ⌨️CLI · auth=token · skills=1
+- `tdx-connector` **通达信** · 🔌MCP · auth=oauth · skills=1
+- `teacher-assistant` **企鹅教师助手** · 🔌MCP · auth=token · skills=0
+- `tec-do` **Tec-Do 2.0 广告与增长情报** · 🔌MCP · auth=token · skills=1
+- `tencent-docs` **腾讯文档** · 🔌MCP · auth=token · skills=0
+- `tencent-docs-oa` **腾讯文档企业版** · 🔌MCP · auth=oneid-token · skills=0
+- `tencent-health-nges` **腾讯健康NGES** · 🔌MCP · auth=token · skills=1
+- `tencent-map` **腾讯地图** · 🔌MCP · auth=token · skills=0
+- `tencent-qidian-cs` **腾讯企点客服** · 🔌MCP · auth=mcp · skills=1
+- `tencent-survey` **腾讯问卷** · 🔌MCP · auth=token · skills=1
+- `tencent-tchouse-c` **腾讯云数据仓库 TCHouse-C** · 🔌MCP · auth=token · skills=5
+- `tencent-weiyun` **微云** · 🔌MCP · auth=token · skills=1
+- `tencentads` **腾讯营销投放** · ⌨️CLI · auth=token · skills=7
+- `textin-xparse` **TextIn xParse·智能文档解析** · ⌨️CLI · auth=token · skills=1
+- `tmeet` **腾讯会议** · ⌨️CLI · auth=token · skills=1
+- `tongzhou-fin-research` **同舟金融研究** · 🔌MCP · auth=token · skills=1
+- `tyc-mcp` **天眼查** · 🔌MCP · auth=token · skills=1
+- `wecom` **企业微信** · ⌨️CLI · auth=token · skills=14
+- `weisheng-scrm` **微盛企微管家SCRM** · 🔌MCP · auth=token · skills=1
+- `westock-mcp` **腾讯自选股** · 🔌MCP · auth=token · skills=1
+- `wind-finance` **Wind 金融数据** · 🔌MCP · auth=token · skills=1
+- `wk-workbuddy` **威科先行** · 🔌MCP · auth=token · skills=1
+- `woscli` **微盟 WOS CLI** · ⌨️CLI · auth=token · skills=1
+- `wps-knowledgebase` **WPS知识库** · ⌨️CLI · auth=token · skills=1
+- `xiaoe-cloud-cli` **小鹅通** · 🔌MCP · auth=token · skills=1
+- `xingtu-claw-risk` **天创信用星图MCP** · 🔌MCP · auth=token · skills=1
+- `yingmi-mcp` **盈米MCP** · 🔌MCP · auth=token · skills=1
+- `youshu-bd-mate` **有数智客 · 对公(To B)营销助手** · 🔌MCP · auth=token · skills=1
+- `yuandian-mcp` **华宇元典法律数据** · 🔌MCP · auth=token · skills=0
+- `yzf-invoice-mcp-server` **云帐房AI开票** · 🔌MCP · auth=token · skills=1
+- `zfs-fssc-ai` **中兴新云AI智报** · 🔌MCP · auth=token · skills=1
+- `zsxq` **知识星球** · ⌨️CLI · auth=token · skills=1

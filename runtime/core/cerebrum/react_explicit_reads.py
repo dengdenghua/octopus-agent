@@ -292,3 +292,17 @@ def _explicit_no_tool_goal(value: str | None) -> bool:
         )
         or re.search(r"(?:直接|仅|只)\s*(?:回答|回复).{0,12}(?:不用|不要|无需)\s*(?:工具)?", text)
     )
+
+
+def _punctuation_only_goal(value: str | None) -> bool:
+    """Whether a turn contains no semantic text that could identify a task.
+
+    A bare ``?``/``？`` is a request for clarification in context, not a new
+    coding objective. Letting it enter the tool loop previously caused an
+    active project preset to manufacture a large audit run from no user intent.
+    Unicode ``isalnum`` keeps the check language-agnostic while still treating
+    emoji-only acknowledgements as direct conversational turns.
+    """
+
+    text = str(value or "").strip()
+    return bool(text) and not any(char.isalnum() for char in text)

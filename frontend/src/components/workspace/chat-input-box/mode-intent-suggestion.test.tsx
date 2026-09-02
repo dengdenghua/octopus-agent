@@ -38,11 +38,7 @@ describe("ModeIntentSuggestion", () => {
     const onAccept = vi.fn();
     const user = userEvent.setup();
     render(
-      <ModeIntentSuggestion
-        mode="uxui"
-        modeLabel="UI"
-        onAccept={onAccept}
-      />,
+      <ModeIntentSuggestion mode="uxui" modeLabel="UI" onAccept={onAccept} />,
     );
     await user.click(screen.getByTestId("mode-intent-accept"));
     expect(onAccept).toHaveBeenCalledWith("uxui");
@@ -50,6 +46,23 @@ describe("ModeIntentSuggestion", () => {
     expect(
       screen.queryByTestId("mode-intent-suggestion"),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps a failed switch visible so the user can retry", async () => {
+    const onAccept = vi.fn().mockRejectedValue(new Error("sync failed"));
+    const user = userEvent.setup();
+    render(
+      <ModeIntentSuggestion
+        mode="audit"
+        modeLabel="审查"
+        onAccept={onAccept}
+      />,
+    );
+
+    await user.click(screen.getByTestId("mode-intent-accept"));
+
+    expect(screen.getByTestId("mode-intent-suggestion")).toBeInTheDocument();
+    expect(screen.getByTestId("mode-intent-accept")).toBeEnabled();
   });
 
   it("fires onDismiss and persists the ignore for the session", async () => {
@@ -69,7 +82,11 @@ describe("ModeIntentSuggestion", () => {
     // Re-mounting the same mode stays hidden within this session.
     unmount();
     render(
-      <ModeIntentSuggestion mode="audit" modeLabel="审查" onDismiss={onDismiss} />,
+      <ModeIntentSuggestion
+        mode="audit"
+        modeLabel="审查"
+        onDismiss={onDismiss}
+      />,
     );
     expect(
       screen.queryByTestId("mode-intent-suggestion"),

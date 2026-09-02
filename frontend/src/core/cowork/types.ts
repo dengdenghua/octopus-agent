@@ -60,16 +60,156 @@ export interface CoworkModeInput {
   mode: CoworkMode;
 }
 
+export interface CoworkRosterInput {
+  agent_ids: string[];
+  mode: CoworkMode;
+}
+
+export interface CoworkRosterResponse {
+  ok: boolean;
+  state: CoworkState;
+  events: CoworkEvent[];
+}
+
 export interface CollabRoomMessageInput {
   text: string;
   participant_id?: string;
   display_name?: string;
+  /** Stable producer-side id. Retries with the same id are idempotent. */
+  source_message_id?: string;
+  message_type?: CoworkRoomMessageType;
+  entity_refs?: CoworkRoomEntityRef[];
+  system_card?: CoworkRoomSystemCard | null;
+  metadata?: Record<string, unknown>;
 }
 
 export interface CollabRoomMessageResponse {
   ok: boolean;
   room_id: string;
   seq: number;
+  message?: CoworkRoomMessage | null;
+}
+
+export type CoworkRoomMessageType = "message" | "system_card";
+
+/** A typed pointer from the room timeline into the canonical Project OS. */
+export interface CoworkRoomEntityRef {
+  kind: string;
+  id: string;
+  project_id?: string;
+  milestone_id?: string;
+  task_id?: string;
+  label?: string;
+  [key: string]: unknown;
+}
+
+export type CoworkMessageProjectAction =
+  | "link_milestone"
+  | "create_item"
+  | "record_decision"
+  | "publish_artifact";
+
+export interface CoworkRoomProjectActionReceipt {
+  id: string;
+  action: CoworkMessageProjectAction;
+  project_id: string;
+  target: CoworkRoomEntityRef;
+  event_id?: string;
+  applied_at?: string;
+  [key: string]: unknown;
+}
+
+/** Presentation payload written by Project OS after a message action. */
+export interface CoworkRoomSystemCard {
+  schema?: string;
+  type: CoworkMessageProjectAction | string;
+  title: string;
+  summary?: string;
+  status?: string;
+  project_id?: string;
+  target?: CoworkRoomEntityRef;
+  source_message_seq?: number;
+  [key: string]: unknown;
+}
+
+export interface CoworkRoomMessageMetadata {
+  schema?: string;
+  source_message_id?: string;
+  message_type?: CoworkRoomMessageType;
+  entity_refs?: CoworkRoomEntityRef[];
+  system_card?: CoworkRoomSystemCard | null;
+  project_actions?: CoworkRoomProjectActionReceipt[];
+  [key: string]: unknown;
+}
+
+/** Canonical message returned by GET /api/collab/{thread_id}. */
+export interface CoworkRoomMessage {
+  session_id?: string;
+  seq: number;
+  room_id?: string;
+  participant_id?: string;
+  display_name?: string;
+  text: string;
+  ts?: string;
+  metadata?: CoworkRoomMessageMetadata;
+}
+
+export type CoworkProjectTaskType =
+  | "design"
+  | "code"
+  | "research"
+  | "analysis"
+  | "review";
+export type CoworkProjectPriority = "P0" | "P1" | "P2" | "P3";
+
+export interface CoworkMessageProjectActionInput {
+  action: CoworkMessageProjectAction;
+  action_id?: string;
+  project_id?: string;
+  milestone_id?: string;
+  item_id?: string;
+  title?: string;
+  description?: string;
+  task_type?: CoworkProjectTaskType;
+  priority?: CoworkProjectPriority;
+  estimate?: number;
+  due_at?: string;
+  acceptance_criteria?: string[];
+  assigned_role?: string;
+  assigned_agent?: string;
+  depends_on?: string[];
+  decision?: string;
+  rationale?: string;
+  artifact?: Record<string, unknown>;
+}
+
+export interface CoworkMessageProjectActionResponse {
+  ok: boolean;
+  replayed: boolean;
+  created: boolean;
+  action_id: string;
+  action: CoworkMessageProjectAction;
+  project_id: string;
+  milestone_id?: string;
+  target: CoworkRoomEntityRef;
+  receipt: CoworkRoomProjectActionReceipt;
+  event?: Record<string, unknown>;
+  task?: Record<string, unknown>;
+  source_message: CoworkRoomMessage;
+  system_card_message?: CoworkRoomMessage | null;
+}
+
+/** Room-member projection used by the timeline and @ autocomplete adapter. */
+export interface CoworkRoomParticipant {
+  id?: string;
+  participant_id?: string;
+  name?: string;
+  display_name?: string;
+  kind?: CoworkMemberKind;
+  avatar_url?: string | null;
+  icon?: string | null;
+  description?: string | null;
+  [key: string]: unknown;
 }
 
 export interface CollabRoomInput {
@@ -134,7 +274,7 @@ export interface CollaborationSession {
   blackboard: Record<string, unknown>;
   tasks: Record<string, unknown>[];
   presence: CoworkMemberPresence[];
-  room_messages: Record<string, unknown>[];
-  room_participants: Record<string, unknown>[];
+  room_messages: CoworkRoomMessage[];
+  room_participants: CoworkRoomParticipant[];
   room_tasks: Record<string, unknown>[];
 }

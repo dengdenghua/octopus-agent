@@ -36,6 +36,129 @@ from runtime.sensing.gateway.realtime_gateway import EventEmitter
 _logger = logging.getLogger(__name__)
 
 
+def _extract_mention_target(body: str, roster_members: list[dict[str, Any]]) -> str | None:
+    """③ 从回复正文里解析 @ 到的成员名，用于气泡"回应 @谁"标注。"""
+    if not body or not roster_members:
+        return None
+    for m in roster_members:
+        display = str(m.get("display_name") or m.get("name") or "")
+        parts = display.split()
+        cands = {
+            display,
+            parts[0] if parts else display,
+            display.replace(" ", ""),
+        }
+        if any(c and ("@" + c) in body for c in cands):
+            return display
+    return None
+
+
+# ── 成员失败的错误净化 ──────────────────────────────────────────────
+# 蜂群把成员异常(ConnectError/超时/429/权限)原样打进聊天气泡会让用户看到
+# 一堆 SSL/traceback 噪音(thread t0Wn5Zhvh3VUFwoAR2uP4M: "⚠️ 钊审财 · 财报
+# 研究员 未能回应 · ConnectError: [SSL: UNEXPECTED_EOF_WHILE_READING] …")。
+# 用户需要知道"谁没答上、要不要紧",不需要底层异常串。这里把常见异常归类成
+# 一句友好话术;原始细节只进日志/审计,不进聊天。
+_SANITIZED_ERROR_HINTS: tuple[tuple[str, str], ...] = (
+    ("ssl", "网络连接中断"),
+    ("unexpected_eof", "网络连接中断"),
+    ("timeout", "响应超时"),
+    ("timed out", "响应超时"),
+    ("connection refused", "服务未启动或拒绝连接"),
+    ("connection reset", "连接被重置"),
+    ("rate limit", "触发限流(稍后自动重试)"),
+    ("429", "触发限流(稍后自动重试)"),
+    ("quota", "额度不足"),
+    ("auth", "鉴权失败"),
+    ("permission", "权限不足"),
+    ("model not found", "模型不可用"),
+    ("model not found or", "模型不可用"),
+    ("no model", "模型未配置"),
+    ("context length", "上下文超长"),
+    ("exceeds", "上下文超长"),
+)
+
+
+def _friendly_member_error(error: Any) -> str:
+    raw = str(error or "").strip()
+    if not raw:
+        return "未能产生回复"
+    lower = raw.lower()
+    for hint, label in _SANITIZED_ERROR_HINTS:
+        if hint in lower:
+            return label
+    # 兜底:绝不在气泡里展示原始异常堆栈/长串,只给类型名的简短形式。
+    name = raw.splitlines()[0].strip()
+    if len(name) <= 60:
+        return f"异常({name})"
+    return "未知异常(详见审计日志)"
+
+
+def _fanout_member_context(ctx: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    """Clone the parent turn contract for every fan-out member.
+
+    Group fan-out previously forwarded only the generated chat prompt.  That
+    made a member silently fall back to its default mode even when the user had
+    selected research/build/audit for this turn.  Keep the structured context
+    for runtimes that consume it and a compact prompt addendum for lightweight
+    persona lanes that only consume text.
+    """
+
+    member_context = dict(ctx)
+    # These are group-driver implementation details, not child work policy.
+    member_context.pop("agent_roster", None)
+    member_context.pop("conversation_messages", None)
+
+    from runtime.core.cerebrum._react_context_code import (
+        _build_code_agent_mode_prompt,
+        _build_personal_agent_mode_prompt,
+        _build_workflow_preset_prompt,
+    )
+    from runtime.execution.misc.skill_policy import is_audit_read_only_context
+
+    sections: list[str] = []
+    workflow_preset = str(member_context.get("workflow_preset") or "").strip()
+    if workflow_preset:
+        rendered = _build_workflow_preset_prompt(workflow_preset)
+        if rendered:
+            sections.append(rendered)
+    agent_mode = str(member_context.get("agent_mode") or "").strip()
+    if agent_mode:
+        sections.append(_build_code_agent_mode_prompt(agent_mode))
+    personal_mode = str(member_context.get("personal_mode") or "").strip().lower()
+    if personal_mode:
+        rendered = _build_personal_agent_mode_prompt(personal_mode)
+        if rendered:
+            sections.append(rendered)
+        elif personal_mode == "research":
+            sections.append(
+                "<personal-mode>当前任务类型: research。先搜索、读取并交叉核对证据;"
+                "优先一手来源,不要把未经验证的印象写成结论。</personal-mode>"
+            )
+    personal_instructions = str(member_context.get("personal_instructions") or "").strip()
+    if personal_instructions:
+        sections.append(
+            "<inherited-personal-instructions>"
+            + personal_instructions[:2000]
+            + "</inherited-personal-instructions>"
+        )
+    mode_contract = str(member_context.get("mode_contract") or "").strip()
+    if mode_contract:
+        sections.append(
+            "<inherited-mode-contract>" + mode_contract[:2000] + "</inherited-mode-contract>"
+        )
+
+    if is_audit_read_only_context(member_context):
+        member_context["tool_allowlist_read_only"] = True
+    policy_prompt = "\n".join(sections)
+    existing_addendum = str(member_context.get("system_addendum") or "").strip()
+    if policy_prompt:
+        member_context["system_addendum"] = "\n\n".join(
+            part for part in (existing_addendum, policy_prompt) if part
+        )
+    return member_context, policy_prompt
+
+
 async def _drive_group_fanout(
     runtime: Any,
     turn: Turn,
@@ -51,6 +174,41 @@ async def _drive_group_fanout(
     room has <2 member agents or nobody answers, so the turn never stalls.
     """
     ctx = getattr(intent, "user_context", None) or {}
+    try:
+        from runtime.platform.process.session import Session, current_session
+
+        parent_session = current_session()
+        if parent_session is None:
+            # ``TurnParams.owner_actor_id`` / ``tenant_id`` are server-only
+            # fields stamped by RealtimeGateway. This gives worker-thread
+            # members a trusted principal without trusting user_context.
+            params = getattr(turn, "params", None)
+            actor = str(getattr(params, "owner_actor_id", None) or "").strip()
+            tenant = str(getattr(params, "tenant_id", None) or "").strip()
+            if actor and tenant:
+                metadata = dict(ctx)
+                metadata["tenant_id"] = tenant
+                parent_session = Session(
+                    actor=actor,
+                    thread_id=turn.thread_id,
+                    conversation_id=turn.thread_id,
+                    turn_id=turn.id,
+                    metadata=metadata,
+                )
+    except (ImportError, LookupError):
+        parent_session = None
+    member_context, member_policy_prompt = _fanout_member_context(ctx)
+    # Standard Coder members execute on worker threads, but approvals must
+    # still round-trip through this parent realtime turn.  This object is
+    # server-created and deliberately replaces any similarly named client key.
+    group_gateway_provider = GatewayApprovalProvider(
+        emitter,
+        asyncio.get_running_loop(),
+        thread_id=str(ctx.get("thread_id") or turn.thread_id),
+        turn_id=turn.id,
+        trace_store=runtime._trace_store,
+    )
+    member_context["_codex_approval_provider"] = runtime._wrap_with_policy(group_gateway_provider)
     roster = ctx.get("agent_roster") or []
     members = [
         {
@@ -67,6 +225,7 @@ async def _drive_group_fanout(
         display_name: str | None = None,
         agent_id: str | None = None,
         icon: str | None = None,
+        reply_to: str | None = None,
     ) -> None:
         # Tag the bubble with its real author so the UI shows that member's
         # avatar + name instead of the turn leader's. Use the shared resolver so
@@ -87,6 +246,7 @@ async def _drive_group_fanout(
             agent_display_name=display_name,
             agent_avatar_url=avatar_url,
             agent_icon=icon,
+            reply_to=reply_to,
         )
         turn.items.append(item)
         with contextlib.suppress(Exception):
@@ -319,9 +479,17 @@ async def _drive_group_fanout(
             empty = []
         if len(answered) < 2 and not failed and not empty:
             return None
+        # Multi-round debate double-counts the same member across rounds —
+        # the summary should report distinct members, not bubble count.
+        distinct_answered = list(dict.fromkeys(answered))
         parts = [
-            f"协作汇总: {len(answered)} 位成员已回应",
+            f"协作汇总: {len(distinct_answered)} 位成员已回应",
         ]
+        debate = result.get("debate")
+        debate_rounds = debate.get("rounds") if isinstance(debate, dict) else None
+        rounds = int(debate_rounds or arbitration.get("rounds") or 1)
+        if rounds > 1:
+            parts.append(f"共 {rounds} 轮成员互见辩论")
         if primary:
             parts.append(f"优先采纳 {primary} 的视角继续")
         if recommended and recommended != "use_primary_response":
@@ -348,95 +516,79 @@ async def _drive_group_fanout(
         return
 
     try:
-        import os
-
-        from runtime.execution.agents.cli_team import (
-            detect_installed_partners,
-            run_cli_team,
-        )
         from runtime.execution.agents.group_fanout import run_group_fanout
-        from runtime.execution.agents.local_partner_bridge import run_local_partner
         from runtime.execution.suckers.delegation_skills import _call_agent
-
-        # agent_id → {partner_id, command} for the CLIs actually on this machine.
-        detected = {d["agent_id"]: d for d in detect_installed_partners()}
 
         def _mentioned(display: str) -> bool:
             parts = display.split()
             cands = {display, parts[0] if parts else display, display.replace(" ", "")}
             return any(c and ("@" + c) in text for c in cands)
 
-        # Cheap cue that the user wants a CLI partner to actually DO work (run
-        # in a worktree) rather than just chime in. Conservative — defaults to
-        # chat so a casual "@Codex 在么" never fires a heavyweight run.
-        task_cues = (
-            "改",
-            "写",
-            "修",
-            "实现",
-            "重构",
-            "添加",
-            "新增",
-            "删",
-            "创建",
-            "生成",
-            "优化",
-            "修复",
-            "测试",
-            "运行",
-            "跑",
-            "重命名",
-            "替换",
-            "集成",
-            "接入",
-            "fix",
-            "add",
-            "implement",
-            "refactor",
-            "write",
-            "create",
-            "run",
-            "test",
-            "build",
-            "rename",
-            "replace",
-            "update",
-            "bug",
+        # 辩论意图检测：消息含辩论 cue（辩论/反驳/挑战/谁不同意/互怼/打擂台等）
+        # 或上下文显式传 swarm_debate_rounds/debate_rounds（>=2 强制多轮）。
+        # 用户 @ 了谁 → 这些成员在第二轮被点名优先回应（成员互见 + @反驳）。
+        debate_cues = (
+            "辩论",
+            "反驳",
+            "挑战",
+            "谁不同意",
+            "谁反对",
+            "互怼",
+            "打擂台",
+            "互驳",
+            "观点交锋",
+            "battle",
+            "debate",
+            "rebut",
         )
 
-        def _looks_like_task(t: str) -> bool:
-            low = t.lower()
-            return len(t.strip()) >= 6 and any(cue in low for cue in task_cues)
+        def _wants_debate() -> int:
+            # Explicit context flag wins.
+            for key in ("swarm_debate_rounds", "debate_rounds"):
+                raw = ctx.get(key)
+                if raw is not None:
+                    try:
+                        val = int(raw)
+                    except (TypeError, ValueError):
+                        val = 0
+                    if val >= 2:
+                        return min(val, 3)
+            low = text.lower()
+            if any(cue.lower() in low for cue in debate_cues):
+                return 2
+            return 0
 
-        # Split: local partners @-mentioned WITH a task → real worktree run;
-        # everyone else (persona agents + partners just chatting) → group bubble.
-        work_members = [
-            m
-            for m in members
-            if m["name"] in detected and _mentioned(m["display_name"]) and _looks_like_task(text)
-        ]
-        work_ids = {m["name"] for m in work_members}
-        chat_members = [m for m in members if m["name"] not in work_ids]
+        def _mentioned_names() -> list[str]:
+            """Display names the boss @-mentioned in the message (dedup)."""
+            found: list[str] = []
+            for m in members:
+                display = str(m.get("display_name") or m.get("name") or "")
+                parts = display.split()
+                cands = {
+                    display,
+                    parts[0] if parts else display,
+                    display.replace(" ", ""),
+                }
+                if any(c and ("@" + c) in text for c in cands):
+                    found.append(display)
+            return found
+
+        chat_members = list(members)
         # @-mentioned chat members first so a small fan-out cap never drops them.
         chat_members.sort(key=lambda m: 0 if _mentioned(m["display_name"]) else 1)
 
         def _member_caller(agent_id: str, prompt: str, timeout_s: int = 90) -> dict[str, Any]:
-            """Persona agents run in-process; local CLI partners bridge to their
-            real CLI for a short, conversational group-chat bubble."""
-            info = detected.get(agent_id)
-            if info is not None:
-                r = run_local_partner(
-                    partner_id=info["partner_id"],
-                    command=info["command"],
-                    prompt=prompt,
-                    timeout=min(int(timeout_s), 60),
-                )
-                return {
-                    "success": bool(r.ok),
-                    "output": r.output or "",
-                    "error": r.error,
-                }
-            return _call_agent(agent_id=agent_id, prompt=prompt, timeout_s=timeout_s)
+            """Run every group member through the in-process agent boundary."""
+            effective_prompt = (
+                member_policy_prompt + "\n\n" + prompt if member_policy_prompt else prompt
+            )
+            return _call_agent(
+                agent_id=agent_id,
+                prompt=effective_prompt,
+                timeout_s=timeout_s,
+                context=member_context,
+                session=parent_session,
+            )
 
         spoke = 0
         if chat_members:
@@ -468,17 +620,21 @@ async def _drive_group_fanout(
                 max_concurrency=fanout_concurrency,
                 scale_mode=scale_mode,
             )
+            debate_rounds = _wants_debate()
+            mentioned = _mentioned_names()
             result = await asyncio.to_thread(
                 run_group_fanout,
                 text,
                 chat_members,
                 agent_caller=_member_caller,
-                # Cover the whole roster (was hard-capped at 5, which silently
-                # dropped members ordered last — e.g. the local CLI partners).
+                # Cover the whole roster (a small hard cap would silently drop
+                # members ordered last).
                 max_members=fanout_limit,
                 max_concurrency=fanout_concurrency,
                 scale_mode=scale_mode,
                 turn_id=turn.id,
+                debate_rounds=debate_rounds,
+                mentioned=mentioned,
             )
             await _complete_group_trace(result)
             arbitration = result.get("arbitration")
@@ -499,65 +655,46 @@ async def _drive_group_fanout(
                     turn.items.append(audit_item)
                     log.item_started(turn.thread_id, turn.id, audit_item)
                     log.item_completed(turn.thread_id, turn.id, audit_item)
+            last_round_emitted = 0
             for reply in result.get("replies", []):
                 body = str(reply.get("reply") or "").strip()
+                round_no = int(reply.get("round") or 1)
+                if round_no > 1 and round_no != last_round_emitted:
+                    last_round_emitted = round_no
+                    await _emit(
+                        "⚔️ 第 "
+                        + str(round_no)
+                        + " 轮 · 成员互见辩论 —— 大家看到彼此观点后点名回应：",
+                        display_name="主持人",
+                        agent_id="swarm-moderator",
+                        icon="⚔️",
+                    )
                 if reply.get("ok") and body:
+                    # ③ @因果链：把回复里 @ 到的成员解析出来，作为气泡的
+                    # reply_to 附加信息，前端在气泡标题旁显示"回应 @谁"。
+                    reply_to = _extract_mention_target(body, chat_members)
                     await _emit(
                         body,
                         display_name=str(reply.get("display_name") or ""),
                         agent_id=str(reply.get("agent_id") or ""),
+                        reply_to=reply_to,
                     )
                     spoke += 1
+                elif not reply.get("ok"):
+                    # ② 蜂群失败可视化：workbuddy 在 inbox 里明确显示
+                    # "X failed · 原因"，我们之前是静默跳过——现在打一行。
+                    err = str(reply.get("error") or "no reply")
+                    await _emit(
+                        "⚠️ "
+                        + str(reply.get("display_name") or reply.get("agent_id") or "成员")
+                        + " 未能回应 · "
+                        + _friendly_member_error(err),
+                        display_name=str(reply.get("display_name") or ""),
+                        agent_id=str(reply.get("agent_id") or ""),
+                    )
             summary = _group_summary(result)
             if summary:
                 await _emit(summary)
-
-        # Each @-mentioned partner with a task runs it in its OWN git worktree
-        # (no collision with the live tree) and reports the diff for review.
-        for wm in work_members:
-            disp = wm["display_name"]
-            info = detected[wm["name"]]
-            await _emit(
-                "收到，正在独立 worktree 里处理这个任务，"
-                "完成后把 diff 给你 review（不会自动合并）……",
-                display_name=disp,
-                agent_id=wm["name"],
-            )
-            try:
-                cli = await asyncio.to_thread(
-                    run_cli_team, text, [info], repo_root=os.getcwd(), turn_id=turn.id
-                )
-                mem = (cli.get("members") or [{}])[0]
-                diff = str(mem.get("diff") or "").strip()
-                if mem.get("ok") and diff:
-                    files = mem.get("files") or []
-                    flist = "、".join(files[:8]) + ("…" if len(files) > 8 else "")
-                    shown = (
-                        diff
-                        if len(diff) <= 1500
-                        else diff[:1500] + "\n…(diff 截断，完整在 worktree)"
-                    )
-                    await _emit(
-                        f"✅ 已在隔离 worktree 完成 · 改动 {len(files)} 个文件"
-                        + (f"：{flist}" if files else "")
-                        + f"。diff 待 review：\n\n```diff\n{shown}\n```",
-                        display_name=disp,
-                        agent_id=wm["name"],
-                    )
-                else:
-                    err = str(mem.get("error") or "没有产生改动")
-                    await _emit(
-                        f"⚠️ 这次没能完成：{err[:400]}",
-                        display_name=disp,
-                        agent_id=wm["name"],
-                    )
-                spoke += 1
-            except Exception as exc:  # noqa: BLE001 — isolate one partner's failure
-                await _emit(
-                    f"⚠️ 运行出错：{type(exc).__name__}: {exc}",
-                    display_name=disp,
-                    agent_id=wm["name"],
-                )
 
         if spoke == 0:
             _record_fallback_audit("no_member_response")

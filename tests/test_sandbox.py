@@ -395,6 +395,7 @@ class TestProcessBackendSelection:
     ) -> None:
         monkeypatch.setenv("OCTOPUS_PROCESS_SANDBOX", "strict")
         monkeypatch.setattr(BubblewrapBackend, "available", staticmethod(lambda: False))
+        monkeypatch.setattr(LandlockBackend, "available", staticmethod(lambda: False))
         monkeypatch.setattr(SeatbeltBackend, "available", staticmethod(lambda: False))
 
         with pytest.raises(SandboxViolation):
@@ -536,6 +537,151 @@ class TestReadOnlyMode:
         assert str(workspace) in profile
 
 
+class TestAdditionalWriteRoots:
+    @staticmethod
+    def _roots(tmp_path: Path) -> tuple[Path, Path, Path]:
+        outer_root = tmp_path.parent / f"outer-sidecar-{tmp_path.name}"
+        thread_root = outer_root / "sidecar-state" / "thread"
+        codex_home = thread_root / "codex-home"
+        task_root = thread_root / "tasks" / "turn"
+        scratch_root = outer_root / "sidecar-scratch" / "turn"
+        for root in (codex_home, task_root, scratch_root):
+            root.mkdir(parents=True, exist_ok=True)
+        return codex_home, task_root, scratch_root
+
+    def test_policy_requires_exact_existing_non_symlink_directories(
+        self,
+        workspace: Path,
+        tmp_path: Path,
+    ) -> None:
+        missing = tmp_path / "missing"
+        with pytest.raises(SandboxViolation, match="does not exist"):
+            SandboxPolicy(workspace=workspace, additional_write_roots=(missing,))
+
+        regular = tmp_path / "regular-file"
+        regular.write_text("x", encoding="utf-8")
+        with pytest.raises(SandboxViolation, match="not a directory"):
+            SandboxPolicy(workspace=workspace, additional_write_roots=(regular,))
+
+        target = tmp_path / "target"
+        target.mkdir()
+        link = tmp_path / "link"
+        link.symlink_to(target, target_is_directory=True)
+        with pytest.raises(SandboxViolation, match="cannot be a symlink"):
+            SandboxPolicy(workspace=workspace, additional_write_roots=(link,))
+
+        with pytest.raises(SandboxViolation, match="must not overlap a system directory"):
+            SandboxPolicy(
+                workspace=workspace,
+                additional_write_roots=(Path("/usr/bin"),),
+            )
+
+        exact_roots = self._roots(tmp_path)
+        with pytest.raises(SandboxViolation, match="exact non-overlapping"):
+            SandboxPolicy(
+                workspace=workspace,
+                additional_write_roots=(exact_roots[0].parent, exact_roots[0]),
+            )
+
+    def test_bwrap_binds_each_exact_root_in_safe_parent_first_order(
+        self,
+        workspace: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(
+            "shutil.which", lambda name: "/usr/bin/bwrap" if name == "bwrap" else None
+        )
+        roots = self._roots(tmp_path)
+        policy = SandboxPolicy(
+            workspace=workspace,
+            allow_network=True,
+            additional_write_roots=roots,
+        )
+
+        argv, _env, _cwd = BubblewrapBackend().transform(
+            ["codex", "app-server"],
+            {},
+            workspace,
+            policy,
+        )
+
+        assert "--unshare-net" not in argv
+        bind_indexes: list[int] = []
+        for root in roots:
+            rendered = str(root.resolve())
+            index = next(
+                index
+                for index in range(len(argv) - 2)
+                if argv[index : index + 3] == ["--bind", rendered, rendered]
+            )
+            bind_indexes.append(index)
+        mounted_depths = [
+            len(root.parts) for _index, root in sorted(zip(bind_indexes, roots, strict=True))
+        ]
+        assert mounted_depths == sorted(mounted_depths)
+        adjacent = roots[0].parent / "adjacent-untrusted"
+        adjacent.mkdir()
+        assert str(adjacent.resolve()) not in argv
+
+    def test_seatbelt_read_only_allows_only_private_roots_not_workspace(
+        self,
+        workspace: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(
+            "shutil.which", lambda name: "/usr/bin/sandbox-exec" if name == "sandbox-exec" else None
+        )
+        roots = self._roots(tmp_path)
+        argv, _env, _cwd = SeatbeltBackend().transform(
+            ["codex", "app-server"],
+            {},
+            workspace,
+            SandboxPolicy(
+                workspace=workspace,
+                mode="read-only",
+                allow_network=True,
+                additional_write_roots=roots,
+            ),
+        )
+        profile = argv[2]
+        assert str(workspace.resolve()) not in profile
+        for root in roots:
+            assert str(root.resolve()) in profile
+        adjacent = roots[0].parent / "adjacent-untrusted"
+        adjacent.mkdir()
+        assert str(adjacent.resolve()) not in profile
+
+    def test_landlock_read_only_keeps_only_private_roots(
+        self,
+        workspace: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(
+            "runtime.safety.sandboxing.sandbox._landlock_kernel_available",
+            lambda: True,
+        )
+        roots = self._roots(tmp_path)
+        _argv, env, _cwd = LandlockBackend().transform(
+            ["codex", "app-server"],
+            {},
+            workspace,
+            SandboxPolicy(
+                workspace=workspace,
+                mode="read-only",
+                allow_network=True,
+                additional_write_roots=roots,
+            ),
+        )
+        spec = json.loads(env["OCTOPUS_LANDLOCK_SPEC"])
+        assert spec["write_paths"] == [str(root.resolve()) for root in roots]
+        adjacent = roots[0].parent / "adjacent-untrusted"
+        adjacent.mkdir()
+        assert str(adjacent.resolve()) not in spec["write_paths"]
+
+
 class TestLandlockBackend:
     def test_available_false_off_linux(self, monkeypatch) -> None:
         monkeypatch.setattr(sys, "platform", "darwin")
@@ -557,6 +703,11 @@ class TestLandlockBackend:
         )
         assert argv[0] == sys.executable
         assert argv[1] == "-c"
+        wrapper = argv[2]
+        assert "PR_SET_NO_NEW_PRIVS = 38" in wrapper
+        assert wrapper.index("libc.prctl(PR_SET_NO_NEW_PRIVS") < wrapper.index(
+            "rc = libc.syscall(SYS_LANDLOCK_RESTRICT_SELF"
+        )
         assert "--" in argv
         assert argv[argv.index("--") + 1 :] == ["python", "-V"]
         spec = json.loads(env["OCTOPUS_LANDLOCK_SPEC"])
@@ -679,12 +830,14 @@ class TestResolvedPosture:
         from runtime.safety.sandboxing import sandbox as sandbox_mod
         from runtime.safety.sandboxing.sandbox import (
             BubblewrapBackend,
+            LandlockBackend,
             SandboxViolation,
             SeatbeltBackend,
             resolve_process_backend,
         )
 
         monkeypatch.setattr(BubblewrapBackend, "available", staticmethod(lambda: False))
+        monkeypatch.setattr(LandlockBackend, "available", staticmethod(lambda: False))
         monkeypatch.setattr(SeatbeltBackend, "available", staticmethod(lambda: False))
         monkeypatch.setattr(sandbox_mod, "probe_backend_runs", lambda _b: True)
 
@@ -699,11 +852,13 @@ class TestResolvedPosture:
         from runtime.safety.sandboxing.sandbox import (
             BubblewrapBackend,
             DirectBackend,
+            LandlockBackend,
             SeatbeltBackend,
             resolve_process_backend,
         )
 
         monkeypatch.setattr(BubblewrapBackend, "available", staticmethod(lambda: False))
+        monkeypatch.setattr(LandlockBackend, "available", staticmethod(lambda: False))
         monkeypatch.setattr(SeatbeltBackend, "available", staticmethod(lambda: False))
         monkeypatch.setattr(sandbox_mod, "probe_backend_runs", lambda _b: True)
 
@@ -778,9 +933,9 @@ class TestResolvedPosture:
         # Second resolution must return the identical cached instance and must
         # not re-run the (now-failing) resolution path.
         monkeypatch.setattr(
-            sandbox_mod, "resolve_process_backend", lambda *a, **k: (_ for _ in ()).throw(
-                AssertionError("must not re-resolve")
-            )
+            sandbox_mod,
+            "resolve_process_backend",
+            lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not re-resolve")),
         )
         second = sandbox_mod.resolved_process_backend()
         assert second is first

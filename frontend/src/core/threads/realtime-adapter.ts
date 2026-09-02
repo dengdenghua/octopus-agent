@@ -62,6 +62,7 @@ const TEAM_ROLE_PREFIX_RE =
   /^\s*\[(?:planner|researcher|critic|arbiter|synthesizer|writer|reviewer|analyst|coder|designer|executor|tester)\]\s*/i;
 const NULLISH_PLACEHOLDER_RE = /^\s*(?:null|undefined|none|n\/a)\s*$/i;
 const REPEATED_NULL_PLACEHOLDER_RE = /^\s*(?:null\s*)+$/i;
+const STATUS_ONLY_MESSAGE_MAX_LENGTH = 320;
 
 /**
  * Convert a realtime ``Conversation`` into the ``AgentThreadState``
@@ -176,7 +177,7 @@ export function conversationToAgentThreadState(
 
 function turnArtifactsFrom(turn: Turn): string[] {
   const out: string[] = [];
-  for (const item of turn.items) {
+  for (const item of safeTurnItems(turn)) {
     if (item.type === "fileChange") {
       const fc = item as FileChangeItem;
       for (const change of fc.changes) {
@@ -196,7 +197,7 @@ function turnArtifactsFrom(turn: Turn): string[] {
  */
 function turnTodosFrom(turn: Turn): Todo[] | null {
   let latest: TodoListItem | null = null;
-  for (const item of turn.items) {
+  for (const item of safeTurnItems(turn)) {
     if (item.type === "todo-list") latest = item as TodoListItem;
   }
   if (latest === null) return null;
@@ -214,6 +215,10 @@ function turnTodosFrom(turn: Turn): Todo[] | null {
 // the reducer state that owns the keys.
 const turnMessagesCache = new WeakMap<Turn, Message[]>();
 const itemMessageCache = new WeakMap<Item, Message>();
+
+function safeTurnItems(turn: Turn): Item[] {
+  return Array.isArray(turn.items) ? turn.items : [];
+}
 
 // Conversation-level view cache, keyed on the ``conv.turns`` array reference.
 // Reuses the fully-materialized top-level mapping (messages/artifacts/todos)
@@ -254,7 +259,7 @@ function turnToMessagesStable(turn: Turn): Message[] {
   // React.memo consumers. Synthetic flush messages have no id → always
   // fresh (they only exist on interrupted/streaming tails).
   const itemsById = new Map<string, Item>();
-  for (const item of turn.items) itemsById.set(item.id, item);
+  for (const item of safeTurnItems(turn)) itemsById.set(item.id, item);
   for (let index = 0; index < fresh.length; index += 1) {
     const message = fresh[index];
     if (!message?.id) continue;
@@ -310,6 +315,10 @@ function stableDeepEqual(a: unknown, b: unknown): boolean {
 
 function turnToMessages(turn: Turn): Message[] {
   const out: Message[] = [];
+  // Persisted logs can outlive a schema revision. Treat a missing/corrupt
+  // items field as an empty turn instead of crashing the whole conversation
+  // during history recovery.
+  const turnItems = safeTurnItems(turn);
 
   // A cancelled turn may contain a final agentMessage snapshot whose bytes
   // were flushed just before the interruption. It is a recoverable draft,
@@ -321,8 +330,8 @@ function turnToMessages(turn: Turn): Message[] {
     turn.status === "paused" ||
     turn.status === "cancelled"
   ) {
-    for (let index = turn.items.length - 1; index >= 0; index -= 1) {
-      const item = turn.items[index];
+    for (let index = turnItems.length - 1; index >= 0; index -= 1) {
+      const item = turnItems[index];
       if (item?.type === "agentMessage") {
         interruptedMessageId = item.id;
         break;
@@ -330,13 +339,15 @@ function turnToMessages(turn: Turn): Message[] {
     }
   }
 
-  // We accumulate reasoning + plan + tool calls into the AIMessage that
-  // FOLLOWS them. ``pending`` holds the so-far-collected metadata that
-  // the next agentMessage (or end-of-turn synthetic AI) will absorb.
+  // We accumulate reasoning + plan into the AIMessage that FOLLOWS them.
+  // ``pending`` holds the so-far-collected metadata that the next
+  // agentMessage (or end-of-turn synthetic AI) will absorb. Tool items are
+  // NOT buffered here: they are emitted immediately as their own AI
+  // messages (see ``pushToolCallMessage``) so each command card lands at
+  // its real position in the timeline.
   type PendingAi = {
     reasoning: string[];
     plan: string | null;
-    toolCalls: ToolCall[];
     // Sum of reasoning item durationMs contributing to this AI message.
     // Null when no reasoning item carried a duration (legacy data).
     reasoningDurationMs: number | null;
@@ -352,7 +363,6 @@ function turnToMessages(turn: Turn): Message[] {
   const newPending = (): PendingAi => ({
     reasoning: [],
     plan: null,
-    toolCalls: [],
     reasoningDurationMs: null,
     reasoningStartedAt: null,
     createdAt: null,
@@ -371,16 +381,28 @@ function turnToMessages(turn: Turn): Message[] {
     out.push(ai);
   };
 
+  // Emit a tool item as its OWN message so it renders as an independent
+  // inline card at the position it actually occurred in the timeline — not
+  // buffered into the next agentMessage's tool_calls (which made commands
+  // appear under a later bubble during streaming). The render pipeline
+  // (convertToSteps) already turns an AI message's tool_calls into a
+  // standalone timeline row, so this reuses that path without a new type.
+  const pushToolCallMessage = (toolCall: ToolCall): void => {
+    pushAiMessage({
+      type: "ai",
+      id: toolCall.id,
+      content: "",
+      tool_calls: [toolCall],
+    });
+  };
+
   const flushPendingAsTrailingAi = (): void => {
-    // End-of-turn flush: if there's leftover reasoning/plan/tool_calls
+    // End-of-turn flush: if there's leftover reasoning/plan
     // but no agentMessage came through (e.g. interrupted mid-turn),
     // surface them as a synthetic AI record so the UI doesn't lose
-    // the work-in-progress display.
-    if (
-      pending.reasoning.length === 0 &&
-      pending.plan === null &&
-      pending.toolCalls.length === 0
-    ) {
+    // the work-in-progress display. Tool items never land here — they
+    // are emitted as independent messages at processing time.
+    if (pending.reasoning.length === 0 && pending.plan === null) {
       return;
     }
     if (
@@ -405,15 +427,12 @@ function turnToMessages(turn: Turn): Message[] {
       type: "ai",
       content: "",
       additional_kwargs: kwargs,
-      ...(pending.toolCalls.length > 0
-        ? { tool_calls: pending.toolCalls }
-        : {}),
     };
     pushAiMessage(ai);
     pending = newPending();
   };
 
-  for (const item of turn.items) {
+  for (const item of turnItems) {
     switch (item.type) {
       case "userMessage": {
         // Flush any preceding agent state before we move to a new
@@ -424,8 +443,19 @@ function turnToMessages(turn: Turn): Message[] {
         break;
       }
       case "steeringUserMessage": {
-        flushPendingAsTrailingAi();
         const steering = item as SteeringUserMessageItem;
+        // Child reports are internal steering: they update the running
+        // parent's model context and are already observable in Agent cards.
+        // Rendering them as human messages creates fake turn 2/3 rows and
+        // makes a single Kimi-style swarm look like several conversations.
+        // Prefix detection keeps old persisted histories clean too.
+        if (
+          steering.source === "subagent_report" ||
+          /^\s*\[子代理报告\]/.test(steering.text)
+        ) {
+          break;
+        }
+        flushPendingAsTrailingAi();
         out.push({
           type: "human",
           id: steering.id,
@@ -441,7 +471,7 @@ function turnToMessages(turn: Turn): Message[] {
         const r = item as ReasoningItem;
         const content = itemStreamText(r);
         if (content) pending.reasoning.push(content);
-        else if (r.summary.length > 0) {
+        else if (Array.isArray(r.summary) && r.summary.length > 0) {
           pending.reasoning.push(r.summary.join("\n"));
         }
         // Accumulate wall-clock thinking time across consecutive reasoning
@@ -469,7 +499,7 @@ function turnToMessages(turn: Turn): Message[] {
       }
       case "commandExecution": {
         const ce = item as CommandExecutionItem;
-        pending.toolCalls.push({
+        pushToolCallMessage({
           id: ce.id,
           name: commandExecutionToolName(ce),
           args: {
@@ -495,7 +525,7 @@ function turnToMessages(turn: Turn): Message[] {
           isSubagentMarker && mcp.result && typeof mcp.result === "object"
             ? (mcp.result as Record<string, unknown>)
             : null;
-        pending.toolCalls.push({
+        pushToolCallMessage({
           id: mcp.id,
           name: `${mcp.server}.${mcp.tool}`,
           args: markerResult
@@ -508,7 +538,7 @@ function turnToMessages(turn: Turn): Message[] {
       }
       case "subagent": {
         const subagent = item as SubagentItem;
-        pending.toolCalls.push({
+        pushToolCallMessage({
           id: subagent.id,
           name: "subagent",
           args: {
@@ -576,6 +606,9 @@ function turnToMessages(turn: Turn): Message[] {
         }
         if (am.agentIcon) {
           kwargs.agent_icon = am.agentIcon;
+        }
+        if (am.replyTo) {
+          kwargs.reply_to = am.replyTo;
         }
         if (am.phaseId) {
           kwargs.phase_id = am.phaseId;
@@ -666,9 +699,6 @@ function turnToMessages(turn: Turn): Message[] {
               ? ""
               : split.finalAnswer || split.publicUpdate || "",
           additional_kwargs: kwargs,
-          ...(pending.toolCalls.length > 0
-            ? { tool_calls: pending.toolCalls }
-            : {}),
         };
         pushAiMessage(ai);
         pending = newPending();
@@ -679,7 +709,7 @@ function turnToMessages(turn: Turn): Message[] {
         // LiveToolTimeline sees them; the artifact list separately
         // collects the paths (see ``turnArtifactsFrom``).
         const fc = item as FileChangeItem;
-        pending.toolCalls.push({
+        pushToolCallMessage({
           id: fc.id,
           name: "file_change",
           args: {
@@ -698,7 +728,7 @@ function turnToMessages(turn: Turn): Message[] {
       }
       case "approval": {
         const approval = item as ApprovalItem;
-        pending.toolCalls.push({
+        pushToolCallMessage({
           id: approval.id,
           name: "approval",
           args: {
@@ -714,7 +744,7 @@ function turnToMessages(turn: Turn): Message[] {
       }
       case "verification": {
         const verification = item as VerificationItem;
-        pending.toolCalls.push({
+        pushToolCallMessage({
           id: verification.id,
           name: "verification",
           args: {
@@ -732,7 +762,7 @@ function turnToMessages(turn: Turn): Message[] {
       }
       case "artifact": {
         const artifact = item as ArtifactItem;
-        pending.toolCalls.push({
+        pushToolCallMessage({
           id: artifact.id,
           name: "artifact",
           args: {
@@ -895,7 +925,7 @@ function appendFailedTurnReceipt(out: Message[], turn: Turn): void {
   const message = sanitizeLegacyGuardDiagnostic(
     verificationMessage || turnErrorMessage || "turn failed",
   );
-  const verificationRequired = turn.items.some(
+  const verificationRequired = safeTurnItems(turn).some(
     (item) =>
       item.type === "verification" &&
       item.status === "failed" &&
@@ -978,7 +1008,6 @@ function mergePendingIntoLastAiAnswer(
   pending: {
     reasoning: string[];
     plan: string | null;
-    toolCalls: ToolCall[];
   },
 ): boolean {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -992,15 +1021,13 @@ function mergePendingIntoLastAiAnswer(
     // were the terminal response and can hide the real answer downstream.
     if (message.additional_kwargs?.public_progress === true) continue;
     if (!normalizeMessageTextForDedupe(message.content)) continue;
-
+    // Tool items are never merged here — they are already emitted as their
+    // own AI messages at their real timeline position.
     const existing = message as AIMessage;
     const incoming: AIMessage = {
       type: "ai",
       content: "",
       additional_kwargs: buildAiAdditionalKwargs(pending),
-      ...(pending.toolCalls.length > 0
-        ? { tool_calls: pending.toolCalls }
-        : {}),
     };
     messages[index] = mergeAiTraceMetadata(existing, incoming);
     return true;
@@ -1010,7 +1037,7 @@ function mergePendingIntoLastAiAnswer(
 
 function isPostFinalStatusOnlyMessage(
   content: string,
-  pending: { reasoning: string[]; toolCalls: ToolCall[] },
+  pending: { reasoning: string[] },
   out: Message[],
 ): boolean {
   if (
@@ -1023,13 +1050,15 @@ function isPostFinalStatusOnlyMessage(
   ) {
     return false;
   }
-  const hasOnlyTodoTools =
-    pending.toolCalls.length === 0 ||
-    pending.toolCalls.every((toolCall) =>
-      ["todo_write", "write_todos"].includes(toolCall.name),
-    );
-  if (!hasOnlyTodoTools) return false;
-
+  // A real report often opens with wording such as "analysis complete" or
+  // "the report is delivered". Those phrases alone do not make a multi-
+  // paragraph answer bookkeeping noise. Only compact terminal acknowledgments
+  // are eligible for suppression; substantive answers must remain visible.
+  const publicContent = normalizeStatusOnlyText(content);
+  if (publicContent.length > STATUS_ONLY_MESSAGE_MAX_LENGTH) return false;
+  // Tool items are emitted as independent messages before this check runs,
+  // so only the prose lanes (answer text + trailing reasoning) decide
+  // whether this message is post-final bookkeeping noise.
   const text = normalizeStatusOnlyText(
     [content, ...pending.reasoning].join("\n"),
   );
@@ -1292,16 +1321,17 @@ export function conversationLastError(conv: Conversation): Error | undefined {
     }
   }
   // Look for a trailing ErrorItem.
-  for (let i = last.items.length - 1; i >= 0; i--) {
-    const item = last.items[i];
+  const lastItems = safeTurnItems(last);
+  for (let i = lastItems.length - 1; i >= 0; i--) {
+    const item = lastItems[i];
     if (item !== undefined && item.type === "error") {
       return new Error(
         sanitizeLegacyGuardDiagnostic((item as ErrorItem).message),
       );
     }
   }
-  for (let i = last.items.length - 1; i >= 0; i--) {
-    const item = last.items[i];
+  for (let i = lastItems.length - 1; i >= 0; i--) {
+    const item = lastItems[i];
     if (
       item?.type === "agentMessage" &&
       item.status === "failed" &&
@@ -1321,8 +1351,9 @@ export function conversationLastError(conv: Conversation): Error | undefined {
 }
 
 function failedVerificationMessage(turn: Turn): string | undefined {
-  for (let i = turn.items.length - 1; i >= 0; i--) {
-    const item = turn.items[i];
+  const items = safeTurnItems(turn);
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
     if (item?.type !== "verification" || item.status !== "failed") continue;
     const verification = item as VerificationItem;
     return (
@@ -1337,7 +1368,7 @@ function failedVerificationMessage(turn: Turn): string | undefined {
 
 function isNoOutputPlannerFailure(turn: Turn): boolean {
   let sawNoOutputAgentMessage = false;
-  for (const item of turn.items) {
+  for (const item of safeTurnItems(turn)) {
     if (item.type === "userMessage") continue;
     if (
       item.type === "agentMessage" &&

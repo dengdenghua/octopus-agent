@@ -882,18 +882,17 @@ def test_tool_effect_reconciliation_api_is_admin_fenced_and_audited(
     client = TestClient(app)
 
     assert client.get("/api/tool-effects").status_code == 401
-    listed = client.get(
+    forbidden_list = client.get(
         "/api/tool-effects?state=indeterminate",
         headers={"Authorization": "Bearer user-token"},
     )
-    assert listed.status_code == 200
-    assert listed.json()["state_counts"]["indeterminate"] == 1
-    assert listed.json()["can_authorize_retry"] is False
+    assert forbidden_list.status_code == 403
     admin_listed = client.get(
         "/api/tool-effects?state=indeterminate",
         headers={"Authorization": "Bearer admin-token"},
     )
     assert admin_listed.status_code == 200
+    assert admin_listed.json()["state_counts"]["indeterminate"] == 1
     assert admin_listed.json()["can_authorize_retry"] is True
     body = {
         "confirm": "AUTHORIZE RETRY",

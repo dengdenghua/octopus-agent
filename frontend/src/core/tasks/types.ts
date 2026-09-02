@@ -67,4 +67,10 @@ export interface Subtask {
   skills?: string[];
   tokenUsed?: number;
   tokenBudget?: number;
+  /** Number of iterations this subagent has completed */
+  iterationCount?: number;
+  /** Files touched/modified by this subagent */
+  filesTouched?: string[];
+  /** Duration in milliseconds */
+  duration?: number;
 }

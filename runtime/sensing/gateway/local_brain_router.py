@@ -51,6 +51,19 @@ def create_local_brain_router(
             jwt_audience=jwt_audience,
         )
 
+    def _require_operator(request: Request) -> None:
+        from runtime.safety.auth.principal import require_roles
+
+        require_roles(
+            request,
+            identity_store,
+            require_auth,
+            ("admin", "operator"),
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     @router.get("/api/local-brain/status")
     def api_local_brain_status(request: Request) -> dict[str, Any]:
         _auth(request)
@@ -64,7 +77,7 @@ def create_local_brain_router(
     @router.post("/api/local-brain/storage/start")
     def api_local_brain_storage_start(request: Request) -> dict[str, Any]:
         """Start/probe Storage and return its same-origin gateway path."""
-        _auth(request)
+        _require_operator(request)
 
         from runtime.execution.suckers.storage_skills import storage_alive
         from runtime.sensing.gateway.storage_supervisor import maybe_start_storage

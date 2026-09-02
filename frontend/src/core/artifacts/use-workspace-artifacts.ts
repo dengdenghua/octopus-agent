@@ -22,7 +22,11 @@ export function useWorkspaceArtifacts(
     queryFn: ({ signal }) => listWorkspaceArtifactRefs(threadId!, signal),
     enabled,
     refetchInterval: options?.refetchInterval,
-    refetchIntervalInBackground: true,
+    // Artifact discovery is presentation state, not task execution. The
+    // backend keeps working while the tab is hidden; refresh once the tab is
+    // visible again instead of polling every three seconds in the background.
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
     staleTime: 3000,
     gcTime: 30000,
   });

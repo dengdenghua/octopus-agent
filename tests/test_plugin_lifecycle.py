@@ -107,6 +107,46 @@ def test_plugin_lifecycle_rejects_unsafe_or_unready_upgrade(tmp_path: Path) -> N
     assert _installed_version(managed) == "1.0.0"
 
 
+def test_plugin_lifecycle_requires_trusted_publisher_only_for_remote_mode(
+    tmp_path: Path,
+) -> None:
+    source = _plugin(tmp_path / "sources", "1.0.0")
+
+    local = install_local_plugin(
+        source,
+        plugin_root=tmp_path / "local-managed",
+        confirm_install=True,
+    )
+    assert local["status"] == "committed"
+
+    with pytest.raises(ValueError, match="trusted publisher signature is required"):
+        install_local_plugin(
+            source,
+            plugin_root=tmp_path / "remote-managed",
+            confirm_install=True,
+            require_trusted_publisher=True,
+        )
+    assert not (tmp_path / "remote-managed" / "research").exists()
+
+
+def test_plugin_lifecycle_requires_trusted_publisher_in_production_mode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = _plugin(tmp_path / "sources", "1.0.0")
+    managed = tmp_path / "managed"
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "production")
+
+    with pytest.raises(ValueError, match="trusted publisher signature is required"):
+        install_local_plugin(
+            source,
+            plugin_root=managed,
+            confirm_install=True,
+        )
+
+    assert not (managed / "research").exists()
+
+
 def test_plugin_lifecycle_router_requires_confirmation_and_audits(tmp_path: Path) -> None:
     managed = tmp_path / "managed"
     source = _plugin(tmp_path / "sources", "1.0.0")

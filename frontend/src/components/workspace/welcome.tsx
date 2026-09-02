@@ -43,7 +43,7 @@ function pickGreetingName(
     if (footerDisplay) return footerDisplay;
   }
 
-  return "Octopus";
+  return "EchoAI";
 }
 
 export function Welcome({
@@ -62,7 +62,13 @@ export function Welcome({
   const isSkillSeed = searchParams.get("mode") === "skill";
 
   const greetingName = useMemo(
-    () => pickGreetingName(agent ?? null, agentName ?? null, allAgents, footerAgentId),
+    () =>
+      pickGreetingName(
+        agent ?? null,
+        agentName ?? null,
+        allAgents,
+        footerAgentId,
+      ),
     [agent, agentName, allAgents, footerAgentId],
   );
 
@@ -83,9 +89,9 @@ export function Welcome({
           </p>
         </>
       ) : (
-        <h1 className="text-[28px] font-semibold tracking-tight text-foreground">
+        <h2 className="text-[28px] font-semibold tracking-tight text-foreground">
           {t.welcome.greeting.replace("{name}", greetingName)}
-        </h1>
+        </h2>
       )}
     </div>
   );

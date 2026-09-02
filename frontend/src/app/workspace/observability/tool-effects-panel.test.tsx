@@ -1,5 +1,7 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { renderWithProviders } from "@/test/harness";
 
 import { ToolEffectsPanel } from "./page";
 
@@ -49,10 +51,14 @@ describe("ToolEffectsPanel", () => {
         });
       });
 
-    render(<ToolEffectsPanel />);
+    renderWithProviders(<ToolEffectsPanel />, { locale: "zh-CN" });
 
     expect(await screen.findByText("payment_tool")).toBeInTheDocument();
     expect(screen.getByText("1 项待核对")).toBeInTheDocument();
+    const read = fetchMock.mock.calls.find(([, init]) => !init?.method);
+    expect(String(read?.[0])).toContain(
+      "/api/tool-effects?limit=100&cross_tenant=true",
+    );
     fireEvent.click(screen.getByRole("button", { name: "核对后重试" }));
     fireEvent.change(
       screen.getByPlaceholderText(
@@ -70,7 +76,7 @@ describe("ToolEffectsPanel", () => {
       );
       expect(post).toBeDefined();
       expect(String(post?.[0])).toContain(
-        "/api/tool-effects/effect%3Apayment/authorize-retry",
+        "/api/tool-effects/effect%3Apayment/authorize-retry?cross_tenant=true",
       );
       expect(JSON.parse(String(post?.[1]?.body))).toMatchObject({
         confirm: "AUTHORIZE RETRY",
@@ -78,6 +84,40 @@ describe("ToolEffectsPanel", () => {
       });
     });
   });
+
+  it.each([
+    ["zh-CN", "需要跨租户管理员权限。"],
+    ["en-US", "Cross-tenant administrator permission is required."],
+  ] as const)(
+    "shows the localized admin gate for %s and stops heartbeat retries after a 403",
+    async (locale, expectedMessage) => {
+      let heartbeat: TimerHandler | undefined;
+      vi.spyOn(window, "setInterval").mockImplementation((handler) => {
+        heartbeat = handler;
+        return 1;
+      });
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ detail: "forbidden" }), {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+
+      renderWithProviders(<ToolEffectsPanel />, { locale });
+
+      expect(await screen.findByText(expectedMessage)).toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+        "/api/tool-effects?limit=100&cross_tenant=true",
+      );
+
+      await act(async () => {
+        if (typeof heartbeat === "function") heartbeat();
+        await Promise.resolve();
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("collapses old committed receipts without hiding later risk receipts", async () => {
     const receipts = Array.from({ length: 9 }, (_, index) => ({
@@ -103,7 +143,7 @@ describe("ToolEffectsPanel", () => {
       ),
     );
 
-    render(<ToolEffectsPanel />);
+    renderWithProviders(<ToolEffectsPanel />, { locale: "zh-CN" });
 
     expect(await screen.findByText("late_risk_tool")).toBeInTheDocument();
     expect(screen.getByText("committed_tool_5")).toBeInTheDocument();

@@ -1,0 +1,39 @@
+{
+  "id": "twin_rf",
+  "templateId": "octopus:digital-twin:rf",
+  "templateVersion": "1.0.0",
+  "source_kind": "digital-twin-human-role",
+  "source_plugin": "twin-rf",
+  "expertType": "agent",
+  "name": "射频工程师分身",
+  "icon": "📡",
+  "description": "代表射频工程师的数位分身:RF 测试/天线资料/认证问题等文档侧闭环,暗室实测与认证送测交给真人,AI 替代不了真实射频验证。",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "digital-twin:human-role",
+  "category": "engineering",
+  "tags": [
+    "数字分身",
+    "真人岗位",
+    "真身协同",
+    "射频",
+    "天线",
+    "认证"
+  ],
+  "profession": "射频工程师",
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true,
+    "includeUserMd": true,
+    "includeMemoryMd": true
+  },
+  "capabilities": {
+    "digital_twin": true,
+    "human_collab": true,
+    "authorization_boundary": true,
+    "handoff_pack": true
+  }
+}

@@ -38,7 +38,7 @@
 | 层 | 职责 | 关键模块 |
 |---|---|---|
 | **Tier 0 · 中枢** | DAG 分解 · 任务派发 · 跨端协调 · 预算治理 · 反思进化 | `runtime/cerebrum/` `runtime/safety/ink/` `runtime/memory/regeneration/` |
-| **Tier 1 · 设备** | 物理执行 · 屏幕感知 · 用户交互 · 状态上报 | 桌面：`extras/desktop/` + `runtime/sensing/eyes/devices/desktop.py`<br>手机：同级 checkout `../octopus-mobile/` 改造版 + `runtime/sensing/eyes/devices/mobile.py` |
+| **Tier 1 · 设备** | 物理执行 · 屏幕感知 · 用户交互 · 状态上报 | 桌面：`frontend/electron/` + `runtime/sensing/eyes/devices/desktop.py`<br>手机：同级 checkout `../octopus-mobile/` 改造版 + `runtime/sensing/eyes/devices/mobile.py` |
 | **Tier 2 · 网络**（隐含） | WebSocket 长连接 · NAT 穿透 · TLS 加密 | `runtime/protocol/envelope.py` |
 
 ### 仿生学映射

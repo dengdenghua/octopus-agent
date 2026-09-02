@@ -207,6 +207,18 @@ class ReflexBroadcaster:
         url = str(cfg.get("url") or "").strip()
         if not url:
             return
+        # SSRF guard (audit C4): block private/internal webhook targets
+        # unless the config explicitly opts in via ``allow_private: true``.
+        from runtime.safety.auth.url_guard import check_url
+
+        verdict = check_url(url, allow_private=bool(cfg.get("allow_private", False)))
+        if not verdict.allow:
+            _LOG.warning(
+                "reflex webhook %s rejected by url_guard: %s",
+                url,
+                verdict.reason,
+            )
+            return
         method = str(cfg.get("method") or "POST").upper()
         timeout_s = float(cfg.get("timeout_ms") or 1000) / 1000.0
         body = json.dumps(payload_obj, ensure_ascii=False).encode("utf-8")

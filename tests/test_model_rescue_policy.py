@@ -17,6 +17,12 @@ def test_retryable_model_error_covers_capacity_and_transport_failures() -> None:
     assert is_retryable_model_error(RuntimeError("http_429: rate limit exceeded"))
     assert is_retryable_model_error(TimeoutError("upstream timeout"))
     assert is_retryable_model_error(ConnectionError("connection reset by peer"))
+    assert is_retryable_model_error(
+        RuntimeError("[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol")
+    )
+    assert is_retryable_model_error(
+        RuntimeError("RemoteProtocolError: server disconnected without sending a response")
+    )
     assert not is_retryable_model_error(ValueError("invalid request schema"))
 
 
@@ -111,9 +117,7 @@ def test_custom_model_fallback_prefers_a_different_upstream_over_name_score(
         lambda: SimpleNamespace(custom_models_path=config_path),
     )
 
-    assert (
-        next_custom_model_fallback("kimi-k3", {"kimi-k3"}) == "agnes-2.5-flash"
-    )
+    assert next_custom_model_fallback("kimi-k3", {"kimi-k3"}) == "agnes-2.5-flash"
 
 
 def test_custom_model_fallback_uses_same_upstream_as_last_resort(
@@ -144,9 +148,7 @@ def test_custom_model_fallback_uses_same_upstream_as_last_resort(
         lambda: SimpleNamespace(custom_models_path=config_path),
     )
 
-    assert (
-        next_custom_model_fallback("kimi-k3", {"kimi-k3"}) == "ark-code-latest"
-    )
+    assert next_custom_model_fallback("kimi-k3", {"kimi-k3"}) == "ark-code-latest"
 
 
 def test_custom_model_fallback_skips_a_recently_stalled_model(

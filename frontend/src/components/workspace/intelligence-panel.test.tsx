@@ -114,7 +114,7 @@ describe("IntelligencePanel", () => {
     ).toBeInTheDocument();
 
     const example =
-      "每天跟踪 Octopus Agent 相关 GitHub release、issue 和竞品动态，只保留和产品决策有关的变化";
+      "每天跟踪 EchoAI Agent 相关 GitHub release、issue 和竞品动态，只保留和产品决策有关的变化";
     await user.click(screen.getAllByRole("button", { name: example })[0]!);
     expect(goal).toHaveValue(example);
     expect(

@@ -177,19 +177,24 @@ def _build_endpoints(ctx: _AgentsCtx) -> None:
         thread_id = ctrl.get_task_thread_id(task_id)
         if thread_id is None:
             raise HTTPException(404, f"task not found: {task_id}")
+        identity = _resolve_identity(request)
+        is_admin = _identity_has_admin_role(identity)
         if thread_store is None:
-            # No thread_store wired → can't verify ownership. Allow
-            # for backward-compat but log a warning. Operators should
-            # wire thread_store= when constructing this router.
-            return actor
+            if is_admin:
+                return actor
+            raise HTTPException(404, f"task not found: {task_id}")
         try:
             thread = thread_store.get_state(thread_id)
         except (AttributeError, TypeError):
             thread = None
         if thread is None:
-            return actor  # thread missing — defer to endpoint's own 404
-        owner = (thread.get("metadata") or {}).get("owner_id")
-        if owner is not None and owner != actor:
+            raise HTTPException(404, f"task not found: {task_id}")
+        metadata = thread.get("metadata") or {}
+        owner = metadata.get("owner_actor_id") or metadata.get("owner_id")
+        if owner is None:
+            if not is_admin:
+                raise HTTPException(404, f"task not found: {task_id}")
+        elif owner != actor:
             raise HTTPException(403, "not the owner of this task's thread")
         return actor
 
@@ -205,16 +210,24 @@ def _build_endpoints(ctx: _AgentsCtx) -> None:
             return actor
         if not actor:
             raise HTTPException(401, "authentication required")
+        identity = _resolve_identity(request)
+        is_admin = _identity_has_admin_role(identity)
         if thread_store is None:
-            return actor  # no store wired → can't verify
+            if is_admin:
+                return actor
+            raise HTTPException(404, f"thread not found: {thread_id}")
         try:
             thread = thread_store.get_state(thread_id)
         except (AttributeError, TypeError):
             thread = None
         if thread is None:
-            return actor
-        owner = (thread.get("metadata") or {}).get("owner_id")
-        if owner is not None and owner != actor:
+            raise HTTPException(404, f"thread not found: {thread_id}")
+        metadata = thread.get("metadata") or {}
+        owner = metadata.get("owner_actor_id") or metadata.get("owner_id")
+        if owner is None:
+            if not is_admin:
+                raise HTTPException(404, f"thread not found: {thread_id}")
+        elif owner != actor:
             raise HTTPException(403, "not the owner of this thread")
         return actor
 

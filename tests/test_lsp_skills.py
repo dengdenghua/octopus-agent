@@ -72,6 +72,7 @@ def test_commercial_lsp_requires_hard_process_sandbox(
 ) -> None:
     monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "commercial")
     monkeypatch.setattr(sandbox_mod.BubblewrapBackend, "available", staticmethod(lambda: False))
+    monkeypatch.setattr(sandbox_mod.LandlockBackend, "available", staticmethod(lambda: False))
     monkeypatch.setattr(sandbox_mod.SeatbeltBackend, "available", staticmethod(lambda: False))
 
     client = lsp_skills._LSPClient("python")

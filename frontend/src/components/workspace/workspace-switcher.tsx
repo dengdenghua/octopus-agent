@@ -29,9 +29,10 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { currentActorId } from "@/core/auth/api";
 import { useI18n } from "@/core/i18n/hooks";
 import { listWorkspaces } from "@/core/workspace/api";
+import { useAuth } from "@/providers/AuthProvider";
+import { useFeatureFlags } from "@/hooks/use-feature-flags";
 import type { MountType, Workspace } from "@/core/workspace/types";
 import { MountPointDialog } from "./mount-point-dialog";
 import { swallow } from "@/core/utils/log";
@@ -78,6 +79,8 @@ export function WorkspaceSwitcher({
   className,
 }: WorkspaceSwitcherProps) {
   const { t } = useI18n();
+  const { authStatus, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { loading: featureFlagsLoading, isOn: isFeatureOn } = useFeatureFlags();
   const tr = t.remoteWorkspace;
   const containerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -115,10 +118,20 @@ export function WorkspaceSwitcher({
   }, [workspaces, query]);
 
   const reload = useCallback(async () => {
+    const canReadRemoteWorkspaces =
+      !authLoading &&
+      !featureFlagsLoading &&
+      isFeatureOn("ui.remote_workspace") &&
+      (authStatus?.enabled === false || isAuthenticated);
+    if (!canReadRemoteWorkspaces) {
+      setWorkspaces([]);
+      setError(null);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const list = await listWorkspaces(currentActorId());
+      const list = await listWorkspaces();
       setWorkspaces(list);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -127,7 +140,13 @@ export function WorkspaceSwitcher({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [
+    authLoading,
+    authStatus?.enabled,
+    featureFlagsLoading,
+    isAuthenticated,
+    isFeatureOn,
+  ]);
 
   useEffect(() => {
     // Load once on mount so the switcher can disappear entirely in the common

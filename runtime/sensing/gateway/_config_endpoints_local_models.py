@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
+from fastapi import Depends
+
 from runtime.sensing.gateway._config_helpers import _custom_model_wire_entry
 
 if TYPE_CHECKING:
@@ -20,7 +22,9 @@ if TYPE_CHECKING:
 def _register_local_models(router: Any, ctx: _ConfigCtx) -> None:
     custom_models_state = ctx.custom_models
     save = ctx.save
-    register = ctx.register
+    unregister_entry = ctx.unregister_entry
+    rebuild_routes = ctx.rebuild_routes
+    require_admin = ctx.require_admin
 
     # ─── Local-model discovery + one-click import ────────────
     # These two endpoints back the "本地模型" collapsible in the
@@ -38,7 +42,10 @@ def _register_local_models(router: Any, ctx: _ConfigCtx) -> None:
     # into the production dispatch table), but the import itself
     # is one click and pre-fills models/base_url.
 
-    @router.get("/api/config/local-models/scan")
+    @router.get(
+        "/api/config/local-models/scan",
+        dependencies=[Depends(require_admin)],
+    )
     def api_scan_local_models(targets: str | None = None) -> dict[str, Any]:
         """Probe common local LLM server ports in parallel. Each
         probe tries the OpenAI-compat ``/v1/models`` endpoint; for
@@ -68,8 +75,6 @@ def _register_local_models(router: Any, ctx: _ConfigCtx) -> None:
         for every silent port on the box.
         """
         import concurrent.futures
-        import urllib.error
-        import urllib.request
 
         # Each candidate is (provider_hint, base_url, model_path).
         # ``provider_hint`` is what we'd tell the dispatcher if the
@@ -105,12 +110,24 @@ def _register_local_models(router: Any, ctx: _ConfigCtx) -> None:
         ) -> tuple[list[str], str | None]:
             url = base.rstrip("/") + path
             try:
-                req = urllib.request.Request(url, headers={"Accept": "application/json"})
-                with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310 — audited HTTP config endpoint
-                    if not (200 <= resp.status < 300):
-                        return [], f"http {resp.status}"
-                    payload = resp.read().decode("utf-8", errors="replace")
-            except (urllib.error.URLError, TimeoutError, OSError) as e:
+                from runtime.safety.auth.url_guard import safe_httpx_request
+
+                # Local-model discovery intentionally permits loopback/RFC1918
+                # targets, but still constrains schemes, pins DNS, refuses
+                # redirects, and caps the body before buffering it.
+                resp = safe_httpx_request(
+                    "GET",
+                    url,
+                    headers={"Accept": "application/json"},
+                    timeout=timeout,
+                    allow_private=True,
+                    follow_redirects=False,
+                    read_cap_bytes=256_000,
+                )
+                if not (200 <= resp.status_code < 300):
+                    return [], f"http {resp.status_code}"
+                payload = resp.content.decode("utf-8", errors="replace")
+            except Exception as e:  # noqa: BLE001 - each probe is best-effort
                 return [], f"connection: {type(e).__name__}"
             try:
                 data = json.loads(payload)
@@ -184,7 +201,11 @@ def _register_local_models(router: Any, ctx: _ConfigCtx) -> None:
                 )
         return {"services": results}
 
-    @router.post("/api/config/local-models/import")
+    @router.post(
+        "/api/config/local-models/import",
+        dependencies=[Depends(require_admin)],
+    )
+    @ctx.serialize_custom_models
     def api_import_local_model(body: dict[str, Any]) -> dict[str, Any]:
         """Take one row from ``/scan`` and write it into
         ``custom_models_state``. Mirrors what
@@ -260,9 +281,15 @@ def _register_local_models(router: Any, ctx: _ConfigCtx) -> None:
             "unsupported_request_fields": None,
             "default_headers": {},
         }
+        previous = custom_models_state.get(model_id)
+        if previous:
+            unregister_entry(previous, fallback_id=model_id)
         custom_models_state[model_id] = entry
         save(model_id)
-        status = register(entry)
+        status = rebuild_routes().get(
+            model_id,
+            {"ok": False, "error": "local model disappeared during route rebuild"},
+        )
         return {
             "ok": True,
             "model_id": model_id,

@@ -120,7 +120,11 @@ def _parse_event_data(data: dict) -> JournalEvent:
     """
     data = _migrate_event(dict(data))
     event_type = data.get("event_type")
-    cls = _EVENT_CLASSES.get(event_type, JournalEvent)
+    cls = (
+        _EVENT_CLASSES.get(event_type, JournalEvent)
+        if isinstance(event_type, str)
+        else JournalEvent
+    )
     return cls.model_validate(data)
 
 

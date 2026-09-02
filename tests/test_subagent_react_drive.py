@@ -335,9 +335,7 @@ def test_react_loop_carries_role_persona_to_the_model() -> None:
     assert runner(call) == "done"
     assert router.requests, "expected the react loop to call the model"
     joined = "\n".join(
-        str(m.content)
-        for req in router.requests
-        for m in getattr(req, "messages", [])
+        str(m.content) for req in router.requests for m in getattr(req, "messages", [])
     )
     assert persona in joined
     assert "check this diff" in joined
@@ -397,11 +395,7 @@ def test_bus_tool_and_conclude_events_carry_per_child_codename() -> None:
     for ev in events:
         payload = ev.get("payload") or {}
         if ev.get("type") in ("sub_tool_start", "sub_concluded"):
-            assert payload.get("codename") == "Spark-9f2", (
-                f"{ev['type']} lost the child codename"
-            )
-
-
+            assert payload.get("codename") == "Spark-9f2", f"{ev['type']} lost the child codename"
 
 
 def test_bridge_flips_react_loop_default_inside_react_stack(monkeypatch) -> None:
@@ -571,9 +565,7 @@ class TestRestrictedDispatchGate:
             def call(self, req):  # noqa: ARG002
                 return _FakeResponse(text="mini-loop fallback answer")
 
-        runner = make_llm_ephemeral_runner(
-            _Router(), registry=None, default_model="test-model"
-        )
+        runner = make_llm_ephemeral_runner(_Router(), registry=None, default_model="test-model")
         call = EphemeralCall(
             role=BUILTIN_ROLES["reviewer"],
             user_prompt="review",
@@ -606,11 +598,21 @@ class TestRestrictedDispatchGate:
                 "react_stack": _FakeStack(_ScriptedRouter(["x"])),
             }
         )
-        sess = Session(
-            thread_id="t-iso", metadata={"_locked_write_root": "/tmp/wt"}
-        )
+        sess = Session(thread_id="t-iso", metadata={"_locked_write_root": "/tmp/wt"})
         with session_scope(sess):
             assert runner(call) == "mini-loop fallback answer"
+        assert calls == []
+
+    def test_durable_report_session_is_refused_by_react_drive(self, monkeypatch) -> None:
+        calls = self._spy_react_drive(monkeypatch)
+        runner, call = self._make_runner_and_call(
+            {
+                "react_loop_subagent": True,
+                "react_stack": _FakeStack(_ScriptedRouter(["x"])),
+                "subagent_session_id": "session-with-report-lane",
+            }
+        )
+        assert runner(call) == "mini-loop fallback answer"
         assert calls == []
 
     def test_unrestricted_dispatch_still_uses_react_drive(self, monkeypatch) -> None:

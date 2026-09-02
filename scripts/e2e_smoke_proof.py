@@ -30,6 +30,7 @@ def main() -> int:
     args = parser.parse_args()
 
     proof = _read_proof(args.output)
+    proof_root = args.output.parent.resolve()
     now = datetime.now(UTC).isoformat()
     incoming_run_id = str(args.run_id or "").strip()
     existing_run_id = str(proof.get("run_id") or "").strip()
@@ -49,13 +50,16 @@ def main() -> int:
         {
             "suite": args.suite,
             "status": args.status,
-            "state_root": str(args.state_root),
+            "state_root": _portable_artifact_path(args.state_root, proof_root=proof_root),
             "frontend_port": str(args.frontend_port),
             "backend_host": str(args.backend_host),
             "backend_port": str(args.backend_port),
             "test_match": test_match,
             "test_file_count": len(test_match),
-            "playwright_report": str(args.playwright_report or ""),
+            "playwright_report": _portable_artifact_path(
+                args.playwright_report,
+                proof_root=proof_root,
+            ),
             "playwright_report_present": bool(playwright.get("present")),
             "playwright_report_sha256": str(playwright.get("sha256") or ""),
             "playwright_report_bytes": int(playwright.get("bytes") or 0),
@@ -159,6 +163,25 @@ def _empty_playwright_report() -> dict[str, object]:
         "flaky_test_count": 0,
         "skipped_tests": [],
     }
+
+
+def _portable_artifact_path(path: Path | None, *, proof_root: Path) -> str:
+    """Record paths relative to the proof bundle whenever possible.
+
+    CI artifacts are downloaded under a different absolute runner directory at
+    release time.  Absolute producer paths make an otherwise valid proof
+    unverifiable after that move, so paths inside the bundle root must be
+    relocation-safe.  External paths remain absolute and are rejected by the
+    release-proof boundary checks as before.
+    """
+
+    if path is None:
+        return ""
+    resolved = path.resolve()
+    try:
+        return str(resolved.relative_to(proof_root))
+    except ValueError:
+        return str(resolved)
 
 
 def _fallback_run_id(recorded_at: str) -> str:

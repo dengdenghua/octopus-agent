@@ -38,6 +38,7 @@ from runtime.core.cerebrum.react_convergence import (
     build_direct_answer_directive,
     read_only_evidence_convergence,
 )
+from runtime.core.cerebrum.react_execution_receipts import _execution_receipt_trust
 from runtime.core.cerebrum.react_explicit_reads import (
     _narrow_command_direct_answer,
 )
@@ -392,9 +393,14 @@ def _phase_6d_dispatch_and_observe(
                 )
         _model_supplied_update = bool(step.public_update)
         _public_update_key = re.sub(r"\s+", " ", step.public_update).strip().casefold()
+        # Model-supplied ``Update:``/``Progress:`` checkpoints are stripped
+        # from the zero-anchor streamed answer lane (react_model_stream), so
+        # they must be surfaced here even when this iteration has no tool
+        # action — otherwise the checkpoint would be lost entirely. Final
+        # answers still suppress commentary so a checkpoint embedded in a
+        # Final Answer body is not duplicated against the delivered answer.
         if (
             step.public_update
-            and tool_action_requested
             and maybe_final is None
             and _public_update_key != _last_public_update_key
         ):
@@ -443,9 +449,7 @@ def _phase_6d_dispatch_and_observe(
                 if state.repeat_guard is not None:
                     for _r_idx, _r in enumerate(_parallel_results):
                         _r_parsed = _parse_action(step.actions[_r_idx])
-                        _r_name = _r.get("tool_name") or (
-                            _r_parsed[0] if _r_parsed else ""
-                        )
+                        _r_name = _r.get("tool_name") or (_r_parsed[0] if _r_parsed else "")
                         _r_args = (
                             _r_parsed[1]
                             if _r_parsed is not None and isinstance(_r_parsed[1], dict)
@@ -749,9 +753,7 @@ def _phase_6d_dispatch_and_observe(
                                 thread_id=thread_id,
                                 tool_name=resolved_name,
                                 tool_call_id=call_id,
-                                args_preview=(
-                                    str(_input_preview)[:500] if _input_preview else ""
-                                ),
+                                args_preview=(str(_input_preview)[:500] if _input_preview else ""),
                                 detail=_escalation_detail,
                             ),
                             timeout=120.0,
@@ -767,9 +769,7 @@ def _phase_6d_dispatch_and_observe(
                                     _escalation_decision.reason
                                     or "User declined sandbox escalation (run with network)"
                                 ),
-                                "duration_ms": int(
-                                    (time.monotonic() - _tool_started_at) * 1000
-                                ),
+                                "duration_ms": int((time.monotonic() - _tool_started_at) * 1000),
                             }
                             observation = (
                                 "(工具被沙箱拦截，用户拒绝放宽沙箱重跑；"
@@ -933,6 +933,18 @@ def _phase_6d_dispatch_and_observe(
                                     _pi_scan.severity,
                                     ",".join(_pi_scan.labels),
                                 )
+                    _trusted_execution, _execution_source = _execution_receipt_trust(beak_step)
+                    step.action_results = [
+                        {
+                            "tool_name": resolved_name,
+                            "ok": tool_ok,
+                            "observation": observation or "",
+                            "duration_ms": int((time.monotonic() - _tool_started_at) * 1000),
+                            "call_id": call_id,
+                            "trusted_execution": _trusted_execution,
+                            "execution_source": _execution_source,
+                        }
+                    ]
                 else:
                     observation, beak_step = _execute_action_via_beak(
                         stack,

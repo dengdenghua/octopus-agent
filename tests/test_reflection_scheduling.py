@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.usefixtures("bypass_serve_port_guard")
+
 # ═══════════════════════════════════════════════════════════
 # _register_reflection_tasks
 # ═══════════════════════════════════════════════════════════

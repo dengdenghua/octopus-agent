@@ -91,7 +91,6 @@ def _digest_input_files(paths: Any) -> str:
 
 
 def _digest_one_path(p: Any) -> str:
-    from pathlib import Path
 
     try:
         if p.is_file():
@@ -112,7 +111,7 @@ def _digest_one_path(p: Any) -> str:
                         entries.append(_digest_one_path(child))
                 except OSError:
                     entries.append(f"{child}:unreadable")
-            return f"{p}:dir:{"|".join(entries)}"
+            return f"{p}:dir:{'|'.join(entries)}"
     except OSError:
         return f"{p}:unreadable"
     return f"{p}:missing"
@@ -270,8 +269,7 @@ def create_spawn_cache(token: str = "", owner: str | None = None) -> SpawnResult
         while len(_TOKEN_STORE) >= _MAX_TOKENS:
             evicted = _TOKEN_STORE.pop(next(iter(_TOKEN_STORE)))
             _log.warning(
-                "spawn cache store at capacity (%d tokens) — evicting oldest token "
-                "%s (audit F-10)",
+                "spawn cache store at capacity (%d tokens) — evicting oldest token %s (audit F-10)",
                 _MAX_TOKENS,
                 evicted.token[:8],
             )

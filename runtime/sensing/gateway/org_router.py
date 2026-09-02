@@ -122,10 +122,12 @@ def create_org_router(
 
     @router.post("/api/orgs")
     def create_org(body: dict[str, Any] | None, request: Request) -> dict[str, Any]:
-        actor = _auth(request)  # AUTH-OK: org creation is actor-agnostic (owner from body)
+        actor = _auth(request)
         payload = body or {}
         name = str(payload.get("name") or "")
-        owner_id = str(payload.get("owner_id") or "")
+        # In shared mode ownership is identity, not presentation data. A
+        # caller cannot reserve an organization in another actor's name.
+        owner_id = str(actor or "") if require_auth else str(payload.get("owner_id") or "")
         if not name.strip():
             raise HTTPException(400, "name is required")
         if not owner_id:

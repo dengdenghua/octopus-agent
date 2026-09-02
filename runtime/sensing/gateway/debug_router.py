@@ -11,13 +11,14 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from fastapi import APIRouter, Query, Request
+    from fastapi import APIRouter, Depends, Query, Request
     from pydantic import BaseModel
 
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment, misc]
+    Depends = None  # type: ignore[assignment, misc]
     Query = None  # type: ignore[assignment, misc]
     Request = Any  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
@@ -37,32 +38,26 @@ def create_debug_router(
 ) -> Any:
     require_fastapi(__name__)
 
-    router = APIRouter(tags=["debug"])
+    def _operator_dep(request: Request) -> None:
+        from runtime.safety.auth.principal import require_roles
+
+        require_roles(
+            request,
+            identity_store,
+            require_auth,
+            ("admin", "operator"),
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(tags=["debug"], dependencies=[Depends(_operator_dep)])
 
     @router.get("/api/debug/session-info")
     def api_debug_session_info(
-        request: Request,
         thread_id: str = Query(default=""),
         workspace_path: str = Query(default=""),
     ) -> dict[str, Any]:
-        # Auth gate. The endpoint reveals server cwd, python executable,
-        # workspace resolution, and write-scope details — useful
-        # reconnaissance for any other vulnerability. When deployed with
-        # ``require_auth=True`` (any non-toy operator), unauthenticated
-        # callers get 401 before any of that is computed.
-        try:
-            from runtime.sensing.gateway.openai_gateway import _resolve_actor
-
-            _resolve_actor(  # AUTH-OK: actor-agnostic — server-level diagnostic, not per-user
-                request,
-                identity_store,
-                require_auth,
-                jwt_secret=jwt_secret,
-                jwt_issuer=jwt_issuer,
-                jwt_audience=jwt_audience,
-            )
-        except Exception:
-            raise
         info: dict[str, Any] = {
             "thread_id": thread_id,
             "workspace_path": workspace_path,

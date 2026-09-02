@@ -30,6 +30,23 @@ if TYPE_CHECKING:
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
 
 
+def _transient_model_stream_failure(evt: dict[str, Any]) -> bool:
+    signal = f"{evt.get('kind') or ''}\n{evt.get('message') or ''}".casefold()
+    return any(
+        marker in signal
+        for marker in (
+            "remoteprotocolerror",
+            "model_stream_disconnected",
+            "server disconnected",
+            "connection reset",
+            "connection lost",
+            "readtimeout",
+            "connecttimeout",
+            "temporarily unavailable",
+        )
+    )
+
+
 def _start_orchestrator_bridge(
     runtime: CerebrumRuntime,
     turn: Turn,
@@ -418,17 +435,30 @@ async def _apply_react_event(
             emitter,
             status=ItemStatus.FAILED,
         )
+        transient_stream_failure = _transient_model_stream_failure(evt)
+        upstream_message = str(evt.get("message") or evt.get("kind") or "react error")
+        error_code = (
+            "model_stream_disconnected"
+            if transient_stream_failure
+            else str(evt.get("kind") or "react_error")
+        )
         err = ErrorItem(
-            message=str(evt.get("message") or evt.get("kind") or "react error"),
-            will_retry=False,
+            message=(
+                "模型服务连接中断；本轮已完成的步骤与子 Agent 结果已保留，可重试继续。"
+                if transient_stream_failure
+                else upstream_message
+            ),
+            will_retry=transient_stream_failure,
             error_info={
-                "code": str(evt.get("kind") or "react_error"),
+                "code": error_code,
+                "source_kind": str(evt.get("kind") or "react_error"),
+                "upstream_message": upstream_message if transient_stream_failure else None,
                 "terminal_stage": evt.get("terminal_stage"),
                 "task_id": evt.get("task_id") or turn.task_id,
             },
         )
         turn.status = TurnStatus.FAILED
-        turn.outcome_reason = str(evt.get("kind") or "react_error")
+        turn.outcome_reason = error_code
         turn.error = {
             "message": err.message,
             "code": turn.outcome_reason,

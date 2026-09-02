@@ -44,6 +44,10 @@ class _LoopState:
     format_violation_bail_at: int = 2
     final_guard_grounded_source_paths: Any = None
     guard_impasse_state: dict = field(default_factory=dict)
+    # Tool observations from EARLIER turns of this thread (``Observation:``
+    # user messages in the assembled history). Research guards merge this into
+    # their evidence stream so cross-turn facts aren't flagged as fabricated.
+    prior_grounding_text: str = ""
     intent: Any = None
     agent: Any = None
     thread_id: str = ""
@@ -104,6 +108,10 @@ class _LoopState:
     throughput_chars: int = 0
     final_stream_started: bool = False
     force_convergence_next: bool = False
+    # Sticky once repeated trusted verifier environment gaps require a
+    # terminal, tools-disabled synthesis. Unlike the one-shot recovery flag,
+    # this survives guard repair retries so tools cannot reappear.
+    terminal_convergence_active: bool = False
     streamed_final_chars: int = 0
     progress_summary: str = ""
     public_progress_summary: str = ""

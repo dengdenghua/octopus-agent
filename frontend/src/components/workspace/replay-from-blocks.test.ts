@@ -61,6 +61,40 @@ describe("buildReplayFromBlocks", () => {
     });
   });
 
+  it("turns the latest todo list into an auditable replay receipt", () => {
+    const data = buildReplayFromBlocks(
+      [
+        block({ kind: "terminal", title: "Run verification", status: "done" }),
+        block({
+          kind: "todo",
+          title: "Update plan",
+          event: {
+            name: "todo_write",
+            input: {
+              items: [
+                { content: "Inspect the affected component", status: "completed" },
+                { content: "Verify the preview", status: "in_progress" },
+              ],
+            },
+          },
+        }),
+      ],
+      { title: "Run" },
+    );
+
+    expect(data.receipt?.items).toEqual([
+      expect.objectContaining({
+        title: "Inspect the affected component",
+        status: "done",
+      }),
+      expect.objectContaining({
+        title: "Verify the preview",
+        status: "running",
+      }),
+    ]);
+    expect(data.receipt?.verification).toContain("Run verification");
+  });
+
   it("renders a terminal step body as public output without the raw command", () => {
     const data = buildReplayFromBlocks(
       [

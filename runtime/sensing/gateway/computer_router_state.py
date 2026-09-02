@@ -31,6 +31,7 @@ class ComputerRouterState:
     pending: dict[str, dict[str, Any]] = field(default_factory=dict)
     lease: dict[str, Any] = field(default_factory=dict)
     activity: list[dict[str, Any]] = field(default_factory=list)
+    appshots: dict[str, dict[str, Any]] = field(default_factory=dict)
     screenshot_root: Path = field(
         default_factory=lambda: Path("data/computer_automation/screenshots").resolve()
     )
@@ -45,6 +46,11 @@ class ComputerRouterState:
     # ``lease`` dict's check-then-act. Reentrant so the lease helpers can nest
     # (_claim_lease → _cleanup_lease/_public_lease) under one acquisition.
     lease_lock: threading.RLock = field(default_factory=threading.RLock, compare=False, repr=False)
+    appshot_lock: threading.RLock = field(
+        default_factory=threading.RLock,
+        compare=False,
+        repr=False,
+    )
 
 
 __all__ = ["ComputerRouterState", "_PENDING_TTL_SECONDS"]

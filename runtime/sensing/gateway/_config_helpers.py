@@ -15,6 +15,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from runtime.platform.models.custom_model_selection import (
+    custom_model_1m_enabled,
+    custom_model_selection_id,
+    custom_model_upstreams,
+    selections_for_entry,
+)
+
 
 def _entry_model_id(entry: dict[str, Any]) -> str:
     raw = entry.get("id") or entry.get("name")
@@ -26,19 +33,7 @@ def _entry_upstreams(entry: dict[str, Any], model_id: str) -> list[str]:
     # ``model`` + optional ``model_performance`` for entries
     # persisted before the list refactor, so an in-place deploy
     # doesn't lose user config.
-    raw_models = entry.get("models")
-    if isinstance(raw_models, list) and raw_models:
-        upstreams: list[str] = [str(m).strip() for m in raw_models if str(m or "").strip()]
-    else:
-        legacy: list[str] = []
-        primary = entry.get("model")
-        if isinstance(primary, str) and primary.strip():
-            legacy.append(primary.strip())
-        perf = entry.get("model_performance")
-        if isinstance(perf, str) and perf.strip() and perf.strip() != primary:
-            legacy.append(perf.strip())
-        upstreams = legacy or [model_id]
-    return upstreams
+    return custom_model_upstreams(entry, model_id)
 
 
 def _entry_context_window(entry: dict[str, Any], upstreams: list[str]) -> int:
@@ -67,11 +62,7 @@ def _entry_context_window(entry: dict[str, Any], upstreams: list[str]) -> int:
 
 
 def _entry_1m_enabled(entry: dict[str, Any], upstreams: list[str]) -> bool:
-    explicit = entry.get("enable_1m_context")
-    if isinstance(explicit, bool):
-        return explicit
-    probe = " ".join(upstreams).lower()
-    return any(model in probe for model in ("glm-5.2", "deepseek-v4-flash", "deepseek-v4-pro"))
+    return custom_model_1m_enabled(entry, upstreams)
 
 
 def _entry_route_ids(entry: dict[str, Any], fallback_id: str = "") -> list[str]:
@@ -83,6 +74,12 @@ def _entry_route_ids(entry: dict[str, Any], fallback_id: str = "") -> list[str]:
             route_ids.append(route_id)
     if _entry_1m_enabled(entry, _entry_upstreams(entry, model_id)):
         route_ids.extend(f"{route_id}::1m" for route_id in list(route_ids))
+    # Row-level ids are the unambiguous route. Keep every legacy alias above
+    # for stored threads and API clients that have not adopted selection_id.
+    for upstream in _entry_upstreams(entry, model_id):
+        route_ids.append(custom_model_selection_id(model_id, upstream, "default"))
+        if _entry_1m_enabled(entry, _entry_upstreams(entry, model_id)):
+            route_ids.append(custom_model_selection_id(model_id, upstream, "1m"))
     return route_ids
 
 
@@ -189,7 +186,7 @@ def _compat_diagnostic_for_entry(entry: dict[str, Any]) -> dict[str, Any]:
         "provider": provider,
         "base_url": base_url,
         "applicable": True,
-        "has_api_key": bool(entry.get("api_key")),
+        "has_api_key": _entry_has_api_key(entry),
         "default_header_names": header_names,
         "upstreams": rows,
     }
@@ -200,6 +197,18 @@ def _default_header_names(entry: dict[str, Any]) -> list[str]:
     if not isinstance(headers, dict):
         return []
     return sorted(str(name) for name in headers if str(name).strip())
+
+
+def _entry_has_api_key(entry: dict[str, Any]) -> bool:
+    if entry.get("api_key") or entry.get("credential_configured") is True:
+        return True
+    if not entry.get("credential_ref"):
+        return False
+    from runtime.platform.models.model_provider_plugin import (
+        model_provider_entry_has_key,
+    )
+
+    return model_provider_entry_has_key(entry)
 
 
 def _custom_model_wire_entry(entry: dict[str, Any]) -> dict[str, Any]:
@@ -215,7 +224,17 @@ def _custom_model_wire_entry(entry: dict[str, Any]) -> dict[str, Any]:
     This overrides any user-set value to prevent capability mismatches.
     """
     header_names = _default_header_names(entry)
-    safe = {k: v for k, v in entry.items() if k not in {"api_key", "default_headers"}}
+    safe = {
+        k: v
+        for k, v in entry.items()
+        if k
+        not in {
+            "api_key",
+            "credential_ref",
+            "credential_configured",
+            "default_headers",
+        }
+    }
     model_id = _entry_model_id(entry)
     upstreams = _entry_upstreams(entry, model_id)
     safe["context_window"] = _entry_context_window(
@@ -223,9 +242,12 @@ def _custom_model_wire_entry(entry: dict[str, Any]) -> dict[str, Any]:
         upstreams,
     )
     safe["enable_1m_context"] = _entry_1m_enabled(entry, upstreams)
-    safe["has_api_key"] = bool(entry.get("api_key"))
+    safe["has_api_key"] = _entry_has_api_key(entry)
     safe["default_header_names"] = header_names
     safe["has_default_headers"] = bool(header_names)
+    safe["selection_ids"] = [
+        selection.selection_id for selection in selections_for_entry(model_id, entry)
+    ]
     if upstreams:
         safe["reasoning_efforts"] = _entry_supported_efforts(entry, upstreams[0])
 
@@ -233,6 +255,7 @@ def _custom_model_wire_entry(entry: dict[str, Any]) -> dict[str, Any]:
     from runtime.sensing.model_router.openai_compat_providers import (
         resolve_openai_compat_profile,
     )
+
     base_url = str(entry.get("base_url") or "")
     if upstreams and base_url:
         profile = resolve_openai_compat_profile(base_url, upstreams[0])

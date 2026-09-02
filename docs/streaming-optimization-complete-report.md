@@ -401,10 +401,10 @@ Week 4:
 
 ## 📚 参考资源
 
-- [流式架构分析](docs/streaming-workbench-analysis.md) - 10 章节完整剖析
-- [优化提案](docs/streaming-optimization-proposals.md) - 30+ 优化点详解
-- [Phase 1 实施](docs/optimization-implementation-summary.md)
-- [Phase 2 实施](docs/phase2-optimization-summary.md)
+- [流式架构分析](streaming-workbench-analysis.md) - 10 章节完整剖析
+- [优化提案](streaming-optimization-proposals.md) - 30+ 优化点详解
+- [Phase 1 实施](optimization-implementation-summary.md)
+- [Phase 2 实施](phase2-optimization-summary.md)
 
 ---
 

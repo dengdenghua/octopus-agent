@@ -94,9 +94,7 @@ def test_non_json_arguments_do_not_crash() -> None:
 
 
 def test_excluded_tool_is_transparent_to_the_chain() -> None:
-    guard = RepeatToolReminderGuard(
-        RepeatToolReminderConfig(exclude=("todo_write",))
-    )
+    guard = RepeatToolReminderGuard(RepeatToolReminderConfig(exclude=("todo_write",)))
     assert _call(guard, "read_file", {"path": "x"}) is None
     # Bookkeeping interleaved into a loop must not launder it.
     assert _call(guard, "todo_write", {"items": []}) is None
@@ -105,9 +103,7 @@ def test_excluded_tool_is_transparent_to_the_chain() -> None:
 
 
 def test_include_limits_tracking() -> None:
-    guard = RepeatToolReminderGuard(
-        RepeatToolReminderConfig(include=("read_*",))
-    )
+    guard = RepeatToolReminderGuard(RepeatToolReminderConfig(include=("read_*",)))
     assert _call(guard, "grep", {"pattern": "a"}) is None
     assert _call(guard, "grep", {"pattern": "a"}) is None
     assert _call(guard, "read_file", {"path": "x"}) is None
@@ -116,9 +112,7 @@ def test_include_limits_tracking() -> None:
 
 
 def test_wildcard_metacharacters_are_literal() -> None:
-    guard = RepeatToolReminderGuard(
-        RepeatToolReminderConfig(exclude=("mcp.a(b)",))
-    )
+    guard = RepeatToolReminderGuard(RepeatToolReminderConfig(exclude=("mcp.a(b)",)))
     assert guard._tracked("mcp.a(b)") is False  # noqa: SLF001 — unit surface
     assert guard._tracked("mcp.aXb") is True  # noqa: SLF001 — unit surface
 
@@ -149,9 +143,7 @@ def test_reset_clears_the_chain() -> None:
 
 
 def test_preview_cap_bounds_only_the_reminder_not_detection() -> None:
-    guard = RepeatToolReminderGuard(
-        RepeatToolReminderConfig(arguments_preview_chars=20)
-    )
+    guard = RepeatToolReminderGuard(RepeatToolReminderConfig(arguments_preview_chars=20))
     big = {"payload": "x" * 100}
     canonical = canonicalize(big)
     preview = preview_arguments(canonical, 20)
@@ -163,9 +155,7 @@ def test_preview_cap_bounds_only_the_reminder_not_detection() -> None:
     detailed = _call(guard, "write", big)
     assert detailed is not None and "… (+" in detailed and "more chars)" in detailed
     # Two large payloads differing only after the cap are still distinct.
-    guard2 = RepeatToolReminderGuard(
-        RepeatToolReminderConfig(arguments_preview_chars=20)
-    )
+    guard2 = RepeatToolReminderGuard(RepeatToolReminderConfig(arguments_preview_chars=20))
     assert _call(guard2, "write", {"payload": "a" * 100}) is None
     assert _call(guard2, "write", {"payload": "b" * 100}) is None
     assert _call(guard2, "write", {"payload": "b" * 100}) is None
@@ -200,9 +190,7 @@ def test_config_from_mapping_rejects_bad_values() -> None:
 
 
 def test_custom_first_threshold_keeps_gentle_then_detailed() -> None:
-    guard = RepeatToolReminderGuard(
-        RepeatToolReminderConfig(thresholds=(2, 4))
-    )
+    guard = RepeatToolReminderGuard(RepeatToolReminderConfig(thresholds=(2, 4)))
     assert _call(guard, "t", {"a": 1}) is None
     assert _call(guard, "t", {"a": 1}) == GENTLE
     assert _call(guard, "t", {"a": 1}) is None
@@ -221,12 +209,7 @@ def test_builder_defaults_to_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_builder_disables_explicitly(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OCTOPUS_REPEAT_TOOL_REMINDER", raising=False)
-    assert (
-        build_repeat_tool_reminder(
-            {"repeat_tool_reminder": {"enabled": False}}
-        )
-        is None
-    )
+    assert build_repeat_tool_reminder({"repeat_tool_reminder": {"enabled": False}}) is None
     monkeypatch.setenv("OCTOPUS_REPEAT_TOOL_REMINDER", "0")
     assert build_repeat_tool_reminder({}) is None
 
@@ -235,9 +218,7 @@ def test_builder_invalid_client_config_degrades_to_defaults(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("OCTOPUS_REPEAT_TOOL_REMINDER", raising=False)
-    guard = build_repeat_tool_reminder(
-        {"repeat_tool_reminder": {"thresholds": [0]}}
-    )
+    guard = build_repeat_tool_reminder({"repeat_tool_reminder": {"thresholds": [0]}})
     assert guard is not None
     assert guard._thresholds == [3, 5, 8]  # noqa: SLF001 — unit surface
 

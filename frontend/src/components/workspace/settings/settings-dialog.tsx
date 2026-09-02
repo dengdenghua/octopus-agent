@@ -1,8 +1,6 @@
 import {
   ActivityIcon,
   BellIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   InfoIcon,
   BrainIcon,
   CpuIcon,
@@ -16,6 +14,10 @@ import {
   SettingsIcon,
   SearchIcon,
   XIcon,
+  Globe2Icon,
+  MessageSquareTextIcon,
+  MonitorIcon,
+  GitBranchIcon,
 } from "lucide-react";
 import {
   Fragment,
@@ -48,6 +50,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Suspense, lazy } from "react";
 import { getSettingsUxCopy } from "./settings-ux-copy";
 import AppearanceSettingsPage from "./appearance-settings-page";
+import { CodingToolboxPanel } from "./coding-toolbox-panel";
+import type { SettingsSection } from "./settings-sections";
+
+export {
+  SETTINGS_SECTIONS,
+  normalizeSettingsSection,
+  type SettingsSection,
+} from "./settings-sections";
 
 // Lazy load settings pages. Each ``import()`` is kept as a reusable factory
 // so we can preload *all* chunks the moment the dialog opens — see
@@ -73,6 +83,12 @@ const importAutomation = () =>
   import("@/components/workspace/settings/automation-settings-page");
 const importAutomationSecurity = () =>
   import("@/components/workspace/settings/automation-security-settings-page");
+const importBrowserAutomation = () =>
+  import("@/components/workspace/settings/browser-automation-settings-page");
+const importDesktopAutomation = () =>
+  import("@/components/workspace/settings/desktop-automation-settings-page");
+const importConversation = () =>
+  import("@/components/workspace/settings/conversation-settings-page");
 const importMcp = () =>
   import("@/components/workspace/settings/mcp-settings-page").then((mod) => ({
     default: mod.McpSettingsPage,
@@ -86,6 +102,9 @@ const ModelSettingsPage = lazy(importModel);
 const SubscriptionSettingsPage = lazy(importSubscription);
 const PrivacySettingsPage = lazy(importPrivacy);
 const AutomationSecuritySettingsPage = lazy(importAutomationSecurity);
+const BrowserAutomationSettingsPage = lazy(importBrowserAutomation);
+const DesktopAutomationSettingsPage = lazy(importDesktopAutomation);
+const ConversationSettingsPage = lazy(importConversation);
 const McpSettingsPage = lazy(importMcp);
 
 // Run every chunk import in parallel the first time the dialog opens.
@@ -107,6 +126,9 @@ function preloadSettingsPages(): void {
     importPrivacy,
     importAutomation,
     importAutomationSecurity,
+    importBrowserAutomation,
+    importDesktopAutomation,
+    importConversation,
     importMcp,
   ].forEach((fn) => {
     fn().catch((e) => {
@@ -121,38 +143,6 @@ import { useAuth } from "@/providers/AuthProvider";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { octApi } from "@/core/oct/api";
-
-export const SETTINGS_SECTIONS = [
-  "account",
-  "subscription",
-  "appearance",
-  "models",
-  "memory",
-  "notification",
-  "tools",
-  "automationSecurity",
-  "privacy",
-  "observability",
-  "about",
-] as const;
-
-export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
-
-const LEGACY_SETTINGS_SECTIONS: Record<string, SettingsSection> = {
-  mcp: "tools",
-  session: "privacy",
-  conversation: "privacy",
-  personalSpace: "privacy",
-  automation: "automationSecurity",
-  sandbox: "automationSecurity",
-};
-
-export function normalizeSettingsSection(section?: string): SettingsSection {
-  if (section && SETTINGS_SECTIONS.includes(section as SettingsSection)) {
-    return section as SettingsSection;
-  }
-  return (section && LEGACY_SETTINGS_SECTIONS[section]) || "appearance";
-}
 
 type SettingsDialogProps = React.ComponentProps<typeof Dialog> & {
   defaultSection?: SettingsSection;
@@ -316,10 +306,22 @@ export function SettingsDialog(props: SettingsDialogProps) {
     // This allows triggers like "About" to open the dialog directly on that page.
     if (dialogProps.open) {
       setActiveSection(defaultSection);
-      // Kick off parallel preload of every tab's JS chunk so subsequent
-      // tab switches are instant instead of triggering a fresh chunk
-      // download + Suspense fallback each time.
-      preloadSettingsPages();
+      // Let the requested page paint first, then warm the remaining tabs while
+      // the browser is idle. Starting every settings chunk synchronously made
+      // the first dialog open compete with its own rendering work.
+      const preload = () => preloadSettingsPages();
+      const idleWindow = window as Window & {
+        requestIdleCallback?: (
+          callback: IdleRequestCallback,
+          options?: IdleRequestOptions,
+        ) => number;
+        cancelIdleCallback?: (handle: number) => void;
+      };
+      const idleHandle = idleWindow.requestIdleCallback?.(preload, {
+        timeout: 2_000,
+      });
+      const timerHandle =
+        idleHandle === undefined ? window.setTimeout(preload, 500) : undefined;
 
       // Prefetch the oct account bridge; individual account tabs can fetch
       // their own optional data when opened.
@@ -328,6 +330,13 @@ export function SettingsDialog(props: SettingsDialogProps) {
         queryFn: () => octApi.get().catch(() => null),
         staleTime: 30_000,
       });
+
+      return () => {
+        if (idleHandle !== undefined) {
+          idleWindow.cancelIdleCallback?.(idleHandle);
+        }
+        if (timerHandle !== undefined) window.clearTimeout(timerHandle);
+      };
     }
   }, [defaultSection, dialogProps.open, queryClient]);
 
@@ -362,7 +371,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
           ? "도구 및 통합"
           : "Tools & integrations";
     const automationSecurityLabel = locale.toLowerCase().startsWith("zh")
-      ? "自动化与安全"
+      ? "执行与安全"
       : locale.toLowerCase().startsWith("ja")
         ? "自動化とセキュリティ"
         : locale.toLowerCase().startsWith("ko")
@@ -399,7 +408,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
       {
         id: "appearance",
         group: "workspace",
-        label: t.settings.sections.appearance,
+        label: t.settings.sections.general,
         icon: PaletteIcon,
         keywords: [
           "appearance",
@@ -408,6 +417,22 @@ export function SettingsDialog(props: SettingsDialogProps) {
           "glass",
           "density",
           "language",
+          ...t.settings.dialog.sectionKeywords.appearance,
+        ],
+      },
+      {
+        id: "conversation",
+        group: "workspace",
+        label: t.settings.sections.conversation,
+        icon: MessageSquareTextIcon,
+        keywords: [
+          "conversation",
+          "chat",
+          "detail level",
+          "font size",
+          "对话",
+          "细节",
+          "字号",
           ...t.settings.dialog.sectionKeywords.appearance,
         ],
       },
@@ -447,6 +472,24 @@ export function SettingsDialog(props: SettingsDialogProps) {
         ],
       },
       {
+        id: "coding",
+        group: "capabilities",
+        label: locale.toLowerCase().startsWith("zh") ? "编码" : "Coding",
+        icon: GitBranchIcon,
+        keywords: [
+          "coding",
+          "code",
+          "git",
+          "hooks",
+          "worktrees",
+          "编码",
+          "代码",
+          "提交",
+          "工作树",
+          "钩子",
+        ],
+      },
+      {
         id: "tools",
         group: "capabilities",
         label: toolsLabel,
@@ -458,6 +501,43 @@ export function SettingsDialog(props: SettingsDialogProps) {
           "tool",
           "server",
           ...t.settings.dialog.sectionKeywords.mcp,
+        ],
+      },
+      {
+        id: "browserAutomation",
+        group: "capabilities",
+        label: locale.toLowerCase().startsWith("zh")
+          ? "浏览器自动化"
+          : "Browser automation",
+        icon: Globe2Icon,
+        keywords: [
+          "browser",
+          "relay",
+          "extension",
+          "link",
+          "浏览器",
+          "扩展",
+          "链接",
+          ...t.settings.dialog.sectionKeywords.automation,
+        ],
+      },
+      {
+        id: "desktopAutomation",
+        group: "capabilities",
+        label: locale.toLowerCase().startsWith("zh")
+          ? "桌面自动化"
+          : "Desktop automation",
+        icon: MonitorIcon,
+        keywords: [
+          "desktop",
+          "computer",
+          "screen recording",
+          "accessibility",
+          "桌面",
+          "电脑",
+          "屏幕录制",
+          "辅助功能",
+          ...t.settings.dialog.sectionKeywords.automation,
         ],
       },
       {
@@ -524,7 +604,8 @@ export function SettingsDialog(props: SettingsDialogProps) {
   }, [
     t.settings.sections.account,
     t.settings.sections.subscription,
-    t.settings.sections.appearance,
+    t.settings.sections.general,
+    t.settings.sections.conversation,
     t.settings.model.title,
     t.settings.sections.memory,
     locale,
@@ -546,19 +627,6 @@ export function SettingsDialog(props: SettingsDialogProps) {
     );
   }, [normalizedSettingsQuery, sections]);
   const hasSettingsResults = visibleSections.length > 0;
-  const sectionScrollLabels = useMemo(() => {
-    const language = locale.toLowerCase();
-    if (language.startsWith("zh")) {
-      return { before: "查看前面的设置", after: "查看更多设置" };
-    }
-    if (language.startsWith("ja")) {
-      return { before: "前の設定を見る", after: "他の設定を見る" };
-    }
-    if (language.startsWith("ko")) {
-      return { before: "이전 설정 보기", after: "설정 더 보기" };
-    }
-    return { before: "View previous settings", after: "View more settings" };
-  }, [locale]);
 
   useEffect(() => {
     if (!dialogProps.open) return;
@@ -788,7 +856,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                               className={cn(
                                 // Keep the nav quiet: one active tint and a
                                 // slim leading accent are enough for hierarchy.
-                                "group/sec relative flex h-9 w-auto min-w-max items-center gap-1.5 rounded-md px-2.5 text-xs transition-[opacity,background-color] md:h-auto md:min-h-0 md:w-full md:gap-2 md:py-1.5 md:text-sm",
+                                "group/sec relative flex h-12 w-auto min-w-max items-center gap-1.5 rounded-md px-2.5 text-xs transition-[opacity,background-color] md:h-auto md:min-h-0 md:w-full md:gap-2 md:py-1.5 md:text-sm",
                                 disabled
                                   ? "cursor-not-allowed opacity-40"
                                   : "opacity-75 hover:opacity-100 hover:bg-muted/50",
@@ -870,10 +938,44 @@ export function SettingsDialog(props: SettingsDialogProps) {
               {hasSettingsResults && activeSection === "appearance" && (
                 <AppearanceSettingsPage />
               )}
+              {hasSettingsResults && activeSection === "conversation" && (
+                <Suspense fallback={<SettingsPageSkeleton />}>
+                  <ConversationSettingsPage />
+                </Suspense>
+              )}
               {hasSettingsResults && activeSection === "models" && (
                 <Suspense fallback={<SettingsPageSkeleton />}>
                   <ModelSettingsPage />
                 </Suspense>
+              )}
+              {hasSettingsResults && activeSection === "coding" && (
+                <section
+                  aria-labelledby="settings-coding-title"
+                  className="space-y-4"
+                >
+                  <header className="space-y-1.5">
+                    <h2
+                      id="settings-coding-title"
+                      className="text-lg font-semibold tracking-tight"
+                    >
+                      {locale.toLowerCase().startsWith("zh")
+                        ? "编码"
+                        : "Coding"}
+                    </h2>
+                    <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+                      {locale.toLowerCase().startsWith("zh")
+                        ? "管理编码工作流、项目连接、执行环境与并行工作树。"
+                        : "Manage coding workflows, project connections, execution environments, and parallel worktrees."}
+                    </p>
+                  </header>
+                  <CodingToolboxPanel
+                    onOpen={(target) => {
+                      setActiveSection(
+                        target === "tools" ? "tools" : "automationSecurity",
+                      );
+                    }}
+                  />
+                </section>
               )}
               {hasSettingsResults && activeSection === "memory" && (
                 <Suspense fallback={<SettingsPageSkeleton />}>
@@ -888,6 +990,16 @@ export function SettingsDialog(props: SettingsDialogProps) {
               {hasSettingsResults && activeSection === "automationSecurity" && (
                 <Suspense fallback={<SettingsPageSkeleton />}>
                   <AutomationSecuritySettingsPage />
+                </Suspense>
+              )}
+              {hasSettingsResults && activeSection === "browserAutomation" && (
+                <Suspense fallback={<SettingsPageSkeleton />}>
+                  <BrowserAutomationSettingsPage />
+                </Suspense>
+              )}
+              {hasSettingsResults && activeSection === "desktopAutomation" && (
+                <Suspense fallback={<SettingsPageSkeleton />}>
+                  <DesktopAutomationSettingsPage />
                 </Suspense>
               )}
               {hasSettingsResults && activeSection === "privacy" && (

@@ -41,7 +41,11 @@ def _safe_journal_emit(event: dict) -> None:
     except ImportError:
         return
     with contextlib.suppress(Exception):
-        _emit_subagent_lifecycle_event(kind, event)
+        # ``bridge.call_subagent`` publishes the typed event-bus lifecycle
+        # explicitly, with the caller session's stable thread lineage.  This
+        # helper therefore owns journal persistence only; publishing here as
+        # well would duplicate every spawn/finish whenever a journal exists.
+        _emit_subagent_lifecycle_event(kind, event, publish_bus=False)
 
 
 def _clean_trace_value(value: Any, *, limit: int = 256) -> str:

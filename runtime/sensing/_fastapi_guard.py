@@ -29,4 +29,6 @@ def require_fastapi(caller: str = "") -> None:
     """
     if not _FASTAPI_AVAILABLE:
         suffix = f" (required by {caller})" if caller else ""
-        raise RuntimeError(f"fastapi not installed{suffix} — pip install 'octopus-agent[serve]'")
+        raise RuntimeError(
+            f"fastapi not installed{suffix} — pip install 'octopus-agent-runtime[serve]'"
+        )

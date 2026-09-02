@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 
@@ -61,7 +61,21 @@ def create_teach_repeat_router(
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
 ) -> APIRouter:
-    router = APIRouter()
+    def _operator_dep(request: Request) -> None:
+        from runtime.safety.auth.principal import require_operator
+
+        # Recordings and forged templates are process-global today.  Do not
+        # expose unowned legacy objects across principals in shared mode.
+        require_operator(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(dependencies=[Depends(_operator_dep)])
 
     def _auth(request: Request) -> str | None:
         if require_auth and identity_store is None:

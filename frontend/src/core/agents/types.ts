@@ -13,6 +13,23 @@ export interface Agent {
    *  Kept loose-typed so adding a flag server-side doesn't require a
    *  matching type migration on the client. */
   capabilities?: Record<string, unknown>;
+  /** Immutable identity code; display name and profession may change. */
+  identity_code?: string | null;
+  identity_profile?: {
+    code?: string;
+    code_version?: number;
+    immutable?: boolean;
+    derived_for_legacy_profile?: boolean;
+    personality_anchors?: {
+      mode?: "fictional_archetype" | "creator_defined" | string;
+      western_zodiac?: string | null;
+      chinese_zodiac?: string | null;
+      five_elements?: string[];
+      bazi_archetype?: string | null;
+      traits?: string[];
+      note?: string;
+    };
+  };
   /* Implementation note. */
   budget?: {
     max_tokens?: number;
@@ -52,6 +69,8 @@ export interface AgentWorldAgent {
   is_featured: boolean;
   is_official: boolean;
   is_installed: boolean;
+  /** Origin of the local binding, e.g. registry or a built-in persona. */
+  source_kind?: string;
   created_at: string;
   model?: string | null;
   soul?: string | null;

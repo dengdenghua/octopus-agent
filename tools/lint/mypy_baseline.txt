@@ -2,28 +2,3 @@
 # Each line is `<path>\t<code>\t<message>` of an EXISTING mypy error
 # on the checked packages. New errors not on this list fail the gate.
 # Fixing an error? Re-run --write-baseline to ratchet the count down.
-
-runtime/core/nerves/reflex/actions.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "items"
-runtime/core/nerves/reflex/auto_pr.py	assignment	Incompatible types in assignment (expression has type "str | None", variable has type "str")
-runtime/core/nerves/reflex/auto_pr.py	assignment	Incompatible types in assignment (expression has type "str | None", variable has type "str")
-runtime/core/nerves/reflex/rules_loader.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
-runtime/core/nerves/reflex/rules_loader.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
-runtime/core/nerves/reflex/rules_loader.py	union-attr	Item "None" of "Any | dict[Any, Any] | None" has no attribute "get"
-runtime/memory/journal/_journal_parse.py	arg-type	Argument 1 to "get" of "dict" has incompatible type "Any | None"; expected "str"
-runtime/memory/journal/derive.py	misc	List comprehension has incompatible type List[JournalEvent]; expected List[StepEvent]
-runtime/memory/journal/journal.py	attr-defined	Module has no attribute "LK_LOCK"
-runtime/memory/journal/journal.py	attr-defined	Module has no attribute "LK_LOCK"
-runtime/memory/journal/journal.py	attr-defined	Module has no attribute "LK_UNLCK"
-runtime/memory/journal/journal.py	attr-defined	Module has no attribute "LK_UNLCK"
-runtime/memory/journal/journal.py	attr-defined	Module has no attribute "locking"
-runtime/memory/journal/journal.py	attr-defined	Module has no attribute "locking"
-runtime/memory/journal/journal.py	attr-defined	Module has no attribute "locking"
-runtime/memory/journal/journal.py	attr-defined	Module has no attribute "locking"
-runtime/memory/journal/progress_tracker.py	arg-type	Argument 1 to "TaskProgressSnapshot" has incompatible type "**dict[str, object]"; expected "Literal['running', 'completed', 'failed', 'unknown']"
-runtime/memory/journal/progress_tracker.py	arg-type	Argument 1 to "TaskProgressSnapshot" has incompatible type "**dict[str, object]"; expected "datetime | None"
-runtime/memory/journal/progress_tracker.py	arg-type	Argument 1 to "TaskProgressSnapshot" has incompatible type "**dict[str, object]"; expected "float"
-runtime/memory/journal/progress_tracker.py	arg-type	Argument 1 to "TaskProgressSnapshot" has incompatible type "**dict[str, object]"; expected "int | None"
-runtime/memory/journal/progress_tracker.py	arg-type	Argument 1 to "TaskProgressSnapshot" has incompatible type "**dict[str, object]"; expected "int"
-runtime/memory/journal/progress_tracker.py	arg-type	Argument 1 to "TaskProgressSnapshot" has incompatible type "**dict[str, object]"; expected "str | None"
-runtime/memory/journal/progress_tracker.py	arg-type	Argument 1 to "TaskProgressSnapshot" has incompatible type "**dict[str, object]"; expected "str"
-runtime/platform/config/builder.py	arg-type	Argument 1 to "suppress" has incompatible type "tuple[type[OSError], type[OSError]]"; expected "type[BaseException]"

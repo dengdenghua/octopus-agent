@@ -714,22 +714,28 @@ class PauseController:
         """Return the set of thread_ids owned by ``owner_id``.
 
         ``thread_store`` should be a ThreadStateStore with a ``search``
-        method. Threads with ``metadata["owner_id"] is None`` are
-        legacy/unowned and visible to everyone (matches the
-        parallel_agents/team_tasks pattern).
+        method. Legacy/unowned threads are deliberately excluded in
+        authenticated callers; an admin migration surface must opt into them
+        explicitly rather than treating them as public.
         """
         if owner_id is None or thread_store is None:
             return set()
         if not hasattr(thread_store, "search"):
             return set()
         try:
-            owned = thread_store.search(
-                metadata={"owner_id": owner_id},
-                limit=10000,
-            )
+            threads = thread_store.search(limit=10000)
         except (TypeError, ValueError, AttributeError):
             return set()
-        return {t.get("thread_id", "") for t in owned if t.get("thread_id")}
+        return {
+            thread.get("thread_id", "")
+            for thread in threads
+            if thread.get("thread_id")
+            and (
+                (thread.get("metadata") or {}).get("owner_actor_id")
+                or (thread.get("metadata") or {}).get("owner_id")
+            )
+            == owner_id
+        }
 
 
 def get_pause_controller() -> PauseController:

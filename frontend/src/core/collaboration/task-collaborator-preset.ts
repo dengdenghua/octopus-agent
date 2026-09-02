@@ -1,4 +1,5 @@
 import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
+import { primaryPersonaAgentIdOrDefault } from "@/core/agents/persona-policy";
 
 export type TaskCollaboratorMode = "chat" | "cluster" | "swarm";
 
@@ -32,8 +33,11 @@ export function normalizeTaskCollaboratorPreset(
 ): TaskCollaboratorPreset {
   const mode =
     preset.mode === "swarm" || preset.mode === "chat" ? preset.mode : "cluster";
+  const requestedLeaderId = preset.leaderId?.trim() || null;
   return {
-    leaderId: preset.leaderId?.trim() || null,
+    leaderId: requestedLeaderId
+      ? primaryPersonaAgentIdOrDefault(requestedLeaderId)
+      : null,
     collaboratorIds: normalizeIds(preset.collaboratorIds),
     mode,
     label: preset.label?.trim() || undefined,
@@ -72,5 +76,7 @@ export function consumeTaskCollaboratorPreset(): TaskCollaboratorPreset | null {
 export function taskCollaboratorRouteForLeader(
   leaderId?: string | null,
 ): string {
-  return taskWorkspaceRoute({ agentId: leaderId });
+  return taskWorkspaceRoute({
+    agentId: leaderId ? primaryPersonaAgentIdOrDefault(leaderId) : null,
+  });
 }

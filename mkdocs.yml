@@ -78,6 +78,8 @@ nav:
       - 模块地图: architecture/module-map.md
       - 器官分级: architecture/organ-tiering.md
       - 聊天模式: architecture/chat-modes.md
+      - 积木化设计: architecture/blocks.md
+      - 提交清单: architecture/blocks-commit-checklist.md
       - 索引: architecture/README.md
   - 仿生愿景:
       - 架构: vision/biomimetic-architecture.md
@@ -110,6 +112,7 @@ nav:
       - 011 章鱼移动端: adr/011-octopus-mobile.md
       - 009 OKF 知识底床: adr/009-okf-knowledge-substrate.md
       - 010 Swarm 资源争用: adr/010-swarm-resource-contention.md
+      - 012 组合层: adr/012-composition-layer.md
   - 自动文档:
       - 总览: auto/README.md
       - 概览: auto/00-overview.md

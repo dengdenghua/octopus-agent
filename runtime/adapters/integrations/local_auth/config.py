@@ -50,8 +50,39 @@ class LocalAuthConfig(BaseModel):
     users: dict[str, str] = Field(
         default_factory=dict,
         description=(
-            "用户名 → SHA-256 密码哈希。非空时 · 强制密码登录 · allow_any_username 被忽略"
+            "用户名 → bcrypt 密码哈希(兼容旧 SHA-256)。非空时 · 强制密码登录 · "
+            "allow_any_username 被忽略"
         ),
+    )
+    login_max_failures: int = Field(
+        default=5,
+        ge=1,
+        le=100,
+        description="同一直连 IP + 规范化用户名在窗口内触发锁定的失败次数",
+    )
+    login_ip_max_failures: int = Field(
+        default=20,
+        ge=1,
+        le=1_000,
+        description="同一直连 IP 在窗口内跨用户名触发锁定的总失败次数",
+    )
+    login_failure_window_seconds: float = Field(
+        default=300.0,
+        gt=0,
+        le=86_400,
+        description="登录失败计数滑动窗口(秒)",
+    )
+    login_lockout_seconds: float = Field(
+        default=60.0,
+        gt=0,
+        le=86_400,
+        description="达到失败阈值后的短期锁定时长(秒)",
+    )
+    login_rate_limit_max_entries: int = Field(
+        default=10_000,
+        ge=1,
+        le=1_000_000,
+        description="单进程登录限速状态的最大 IP/用户名组合数",
     )
     jwt_secret: str | None = Field(
         default=None,

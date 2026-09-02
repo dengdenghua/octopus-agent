@@ -38,6 +38,7 @@ from runtime.memory.control_sessions_codec import (
     _session_status,
     _surface,
 )
+from runtime.platform.io.sqlite import connect_closing
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS control_sessions (
@@ -142,7 +143,7 @@ class ControlSessionStore:
 
     def _connect(self) -> sqlite3.Connection:
         self._dir.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(self._db), timeout=10.0)
+        conn = connect_closing(str(self._db), timeout=10.0)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.executescript(_SCHEMA)
         return conn
@@ -227,6 +228,7 @@ class ControlSessionStore:
         surface: str | None = None,
         limit: int = 50,
         creator_actor: str | None = None,
+        include_unowned: bool = False,
     ) -> list[dict[str, Any]]:
         # When creator_actor is provided (auth-on multi-tenant), the listing is
         # scoped to that principal so callers cannot enumerate other users'
@@ -238,7 +240,11 @@ class ControlSessionStore:
             clauses.append("surface=?")
             params.append(_surface(surface))
         if creator_actor is not None:
-            clauses.append("creator_actor=?")
+            clauses.append(
+                "(creator_actor=? OR creator_actor IS NULL)"
+                if include_unowned
+                else "creator_actor=?"
+            )
             params.append(_optional_text(creator_actor, max_len=256) or "")
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         with self._lock, self._connect() as conn:

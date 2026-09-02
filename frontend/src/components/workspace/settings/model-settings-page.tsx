@@ -13,7 +13,8 @@ import {
   WifiIcon,
   XCircleIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { RoutedWebLink } from "@/components/ui/routed-web-link";
 import { cn } from "@/lib/utils";
 import { swallow } from "@/core/utils/log";
 import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
@@ -47,6 +49,7 @@ import {
 } from "@/core/settings/local";
 import { registerPageAgentCapability } from "@/core/page-agent-bridge";
 import { ModelCookbook } from "@/components/workspace/model-cookbook";
+import { CoderEngineSettings } from "@/components/workspace/coder-engine-control";
 
 import { MixSettingsSection } from "./mix-settings-section";
 import { SettingsSection } from "./settings-section";
@@ -97,10 +100,18 @@ function clientSideReasoningEfforts(
 ): string[] | null {
   const url = (baseUrl || "").toLowerCase();
   const m = (model || "").toLowerCase();
-  if (url.includes("api.deepseek.com") || m.startsWith("deepseek-") || m.includes("deepseek/")) {
+  if (
+    url.includes("api.deepseek.com") ||
+    m.startsWith("deepseek-") ||
+    m.includes("deepseek/")
+  ) {
     return ["off", "high", "xhigh"];
   }
-  if (url.includes("minimax") || m.startsWith("minimax") || m.startsWith("abab")) {
+  if (
+    url.includes("minimax") ||
+    m.startsWith("minimax") ||
+    m.startsWith("abab")
+  ) {
     return [];
   }
   return null;
@@ -123,8 +134,7 @@ function DefaultEffortSelect({
   const offered = defaultEffortsForCapability(reasoningEfforts);
   // No meaningful tiers → no control to show.
   if (offered && offered.length === 0) return null;
-  const options: DefaultReasoningEffort[] =
-    offered ?? ["off", "high", "max"];
+  const options: DefaultReasoningEffort[] = offered ?? ["off", "high", "max"];
   const labelFor = (v: DefaultReasoningEffort) =>
     v === "off"
       ? t.settings.model.defaultReasoningEffortOff
@@ -148,13 +158,17 @@ function DefaultEffortSelect({
         }}
         className="rounded-md border border-input bg-transparent px-2 py-1 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       >
-        <option value="">{t.settings.model.defaultReasoningEffortFollow}</option>
+        <option value="">
+          {t.settings.model.defaultReasoningEffortFollow}
+        </option>
         {options.map((v) => (
           <option key={v} value={v}>
             {labelFor(v)}
           </option>
         ))}
-        <option value="none">{t.settings.model.defaultReasoningEffortNone}</option>
+        <option value="none">
+          {t.settings.model.defaultReasoningEffortNone}
+        </option>
       </select>
     </div>
   );
@@ -404,6 +418,7 @@ interface ModelConfig {
    *  slot for Auto mode's performance verdict. Backend stores this
    *  as ``models`` on the custom-model entry. */
   models: string[];
+  selection_ids?: string[];
   display_name?: string | null;
   description?: string | null;
   provider?: string | null;
@@ -421,7 +436,7 @@ interface ModelConfig {
 function customModelReferences(model: ModelConfig): string[] {
   return Array.from(
     new Set(
-      [model.name, model.id, ...model.models]
+      [model.name, model.id, ...model.models, ...(model.selection_ids ?? [])]
         .map((value) => value?.trim())
         .filter((value): value is string => Boolean(value)),
     ),
@@ -456,6 +471,7 @@ export function customModelMatchesSelection(
 
 export function customModelPreferredSelection(model: ModelConfig): string {
   return (
+    model.selection_ids?.find((value) => value.trim())?.trim() ||
     model.models.find((value) => value.trim())?.trim() ||
     customModelEntryId(model)
   );
@@ -526,7 +542,6 @@ function parseHeadersText(text: string): Record<string, string> {
   }
   return out;
 }
-
 
 // Mirror of the backend base_url guard (config_router._validate_base_url)
 // for instant feedback before the network round-trip. Loopback / private
@@ -696,17 +711,16 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
   }
 > = {
   zh: {
-    overviewTitle: "模型入口总览",
+    overviewTitle: "当前模型",
     overviewSubtitle:
-      "这里管理 Octopus 对话与自动路由使用的模型，不管理 Codex、Claude、Trae 等外部 CLI。第三方服务从 API 模型连接接入，本机推理通过本地模型扫描。",
-    currentDefault: "当前默认",
+      "选择对话与自动路由使用的模型；新的服务可通过 API 连接或本地扫描接入。",
+    currentDefault: "默认模型",
     noDefault: "未设置",
-    configuredModels: "API 模型连接",
+    configuredModels: "可用资源",
     configuredSummary: (connections, models) =>
       `${connections} 个连接 · ${models} 个模型`,
     connectionsTitle: "API 模型连接",
-    connectionsSubtitle:
-      "一个连接可以包含多个模型。列表首项用于默认选择，末项用于高性能路由。",
+    connectionsSubtitle: "管理已接入的模型服务。展开连接可查看模型与路由角色。",
     gateway: "模型网关",
     gatewayConnected: "已连接",
     gatewayDisconnected: "未连接",
@@ -754,7 +768,7 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
   en: {
     overviewTitle: "Model setup overview",
     overviewSubtitle:
-      "Manage models used by Octopus chat and automatic routing here. External CLIs such as Codex, Claude, and Trae are managed in the Agent Workbench. Add hosted providers as API connections or scan local models.",
+      "Manage models used by Octopus chat and automatic routing here. Add hosted providers through explicitly installed API model adapters or scan local models; external CLIs are not auto-detected.",
     currentDefault: "Current default",
     noDefault: "Not set",
     configuredModels: "API model connections",
@@ -816,7 +830,7 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
   ja: {
     overviewTitle: "モデル設定の概要",
     overviewSubtitle:
-      "ここでは Octopus の会話と自動ルーティング用モデルを管理します。Codex、Claude、Trae などの外部 CLI は Agent Workbench で管理します。外部サービスは API 接続、端末内推論はローカルスキャンから追加できます。",
+      "ここでは Octopus の会話と自動ルーティング用モデルを管理します。外部サービスは明示的にインストールした API モデルアダプター、端末内推論はローカルスキャンから追加します。外部 CLI は自動検出しません。",
     currentDefault: "現在の既定",
     noDefault: "未設定",
     configuredModels: "API モデル接続",
@@ -854,7 +868,8 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     configuredDiagnosticsSubtitle:
       "プロバイダー互換性の問題を調査するときだけ確認してください。",
     connectionToolsTitle: "接続とゲートウェイ診断",
-    connectionToolsSubtitle: "ゲートウェイ状態と接続ごとの互換処理を確認します。",
+    connectionToolsSubtitle:
+      "ゲートウェイ状態と接続ごとの互換処理を確認します。",
     localToolsTitle: "ローカルモデルの推奨",
     localToolsSubtitle: "この端末で動作するモデルと取得候補を確認します。",
     mixToolsTitle: "複数モデル連携",
@@ -873,7 +888,7 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
   ko: {
     overviewTitle: "모델 설정 개요",
     overviewSubtitle:
-      "여기서는 Octopus 대화와 자동 라우팅 모델을 관리합니다. Codex, Claude, Trae 같은 외부 CLI는 Agent Workbench에서 관리합니다. 외부 서비스는 API 연결, 기기 내 추론은 로컬 스캔으로 추가할 수 있습니다.",
+      "여기서는 Octopus 대화와 자동 라우팅 모델을 관리합니다. 외부 서비스는 명시적으로 설치한 API 모델 어댑터로 연결하고 기기 내 추론은 로컬 스캔으로 추가합니다. 외부 CLI는 자동 감지하지 않습니다.",
     currentDefault: "현재 기본값",
     noDefault: "미설정",
     configuredModels: "API 모델 연결",
@@ -912,7 +927,8 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     connectionToolsTitle: "연결 및 게이트웨이 진단",
     connectionToolsSubtitle: "게이트웨이 상태와 연결별 호환 처리를 확인합니다.",
     localToolsTitle: "로컬 모델 추천",
-    localToolsSubtitle: "이 기기에서 실행 가능한 모델과 다운로드 제안을 확인합니다.",
+    localToolsSubtitle:
+      "이 기기에서 실행 가능한 모델과 다운로드 제안을 확인합니다.",
     mixToolsTitle: "다중 모델 협업",
     mixToolsSubtitle: "여러 모델의 초안 작성과 최종 통합을 설정합니다.",
     providerToolsTitle: "제공자 호환성 매트릭스",
@@ -946,6 +962,7 @@ function ModelSettingsOverview({
   gatewayStatus,
   onAddModel,
   onScanLocal,
+  onOpenZen,
 }: {
   copy: ReturnType<typeof modelSettingsPageCopy>;
   defaultModelName: string;
@@ -954,6 +971,7 @@ function ModelSettingsOverview({
   gatewayStatus: "connected" | "disconnected" | "checking";
   onAddModel: () => void;
   onScanLocal: () => void;
+  onOpenZen: () => void;
 }) {
   const gatewayLabel =
     gatewayStatus === "connected"
@@ -963,11 +981,11 @@ function ModelSettingsOverview({
         : copy.gatewayDisconnected;
 
   return (
-    <section className="rounded-lg border border-border bg-card/60 p-4 shadow-sm">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <section className="rounded-lg border border-border bg-card/45 p-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h2 className="text-base font-semibold">{copy.overviewTitle}</h2>
-          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+          <p className="mt-0.5 max-w-3xl text-xs leading-5 text-muted-foreground">
             {copy.overviewSubtitle}
           </p>
         </div>
@@ -985,44 +1003,53 @@ function ModelSettingsOverview({
             <WifiIcon className="mr-1.5 size-3.5" />
             {copy.scanLocalModels}
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full sm:w-auto"
+            onClick={onOpenZen}
+          >
+            OpenCode Zen
+            <ChevronRightIcon className="ml-1 size-3.5" />
+          </Button>
         </div>
       </div>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-3">
-        <div className="rounded-lg border border-border bg-background/65 p-3">
-          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="mt-3 flex flex-col border-t border-border pt-2.5 sm:flex-row sm:items-center sm:divide-x sm:divide-border">
+        <div className="min-w-0 py-1 sm:flex-1 sm:py-0 sm:pr-4">
+          <div className="text-[11px] text-muted-foreground">
             {copy.currentDefault}
           </div>
-          <div className="mt-1 truncate font-mono text-sm text-foreground">
+          <div className="truncate font-mono text-xs font-medium text-foreground">
             {defaultModelName || copy.noDefault}
           </div>
         </div>
-        <div className="rounded-lg border border-border bg-background/65 p-3">
-          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <div className="min-w-0 py-1 sm:flex-1 sm:px-4 sm:py-0">
+          <div className="text-[11px] text-muted-foreground">
             {copy.configuredModels}
           </div>
-          <div className="mt-1 text-sm font-semibold text-foreground">
+          <div className="text-xs font-medium text-foreground">
             {copy.configuredSummary(customModelCount, modelCount)}
           </div>
         </div>
-        <div className="rounded-lg border border-border bg-background/65 p-3">
-          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            {copy.gateway}
-          </div>
-          <div
-            role="status"
-            aria-live="polite"
-            className={cn(
-              "mt-1 inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium",
-              gatewayStatus === "connected" &&
-                "bg-success/10 text-success dark:bg-success/20 dark:text-success",
-              gatewayStatus === "checking" &&
-                "bg-info/15 text-info",
-              gatewayStatus === "disconnected" &&
-                "bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive",
-            )}
-          >
-            {gatewayLabel}
+        <div className="flex items-center justify-between gap-3 py-1 sm:flex-1 sm:py-0 sm:pl-4">
+          <div>
+            <div className="text-[11px] text-muted-foreground">
+              {copy.gateway}
+            </div>
+            <div
+              role="status"
+              aria-live="polite"
+              className={cn(
+                "inline-flex items-center gap-1.5 text-xs font-medium",
+                gatewayStatus === "connected" && "text-success",
+                gatewayStatus === "checking" && "text-info",
+                gatewayStatus === "disconnected" && "text-destructive",
+              )}
+            >
+              <span className="size-1.5 rounded-full bg-current" />
+              {gatewayLabel}
+            </div>
           </div>
         </div>
       </div>
@@ -1033,6 +1060,7 @@ function ModelSettingsOverview({
 // ── Main page ──────────────────────────────────────────────────
 export default function ModelSettingsPage() {
   const { t, locale } = useI18n();
+  const navigate = useNavigate();
   const pageCopy = modelSettingsPageCopy(locale);
   const [models, setModels] = useState<ModelConfig[]>([]);
   const [compatDiagnostics, setCompatDiagnostics] =
@@ -1565,26 +1593,55 @@ export default function ModelSettingsPage() {
     deleteReplacementModel?.name ??
     null;
   const configuredModelCount = models.reduce(
-    (count, model) => count + (Array.isArray(model.models) ? model.models.length : 0),
+    (count, model) =>
+      count + (Array.isArray(model.models) ? model.models.length : 0),
     0,
   );
+  const visibleDefaultModel = useMemo(() => {
+    const matched = models.find((model) =>
+      customModelMatchesSelection(model, defaultModelName),
+    );
+    if (matched) {
+      const configured = Array.isArray(matched.models) ? matched.models : [];
+      const selectedId = defaultModelName?.includes("::")
+        ? defaultModelName.split("::").at(-1)
+        : null;
+      return (
+        (selectedId && configured.includes(selectedId) ? selectedId : null) ||
+        matched.display_name ||
+        matched.name
+      );
+    }
+    if (!defaultModelName) return "";
+    if (defaultModelName.startsWith("octopus-custom-model:v1:")) {
+      return pageCopy.noDefault;
+    }
+    return defaultModelName;
+  }, [defaultModelName, models, pageCopy.noDefault]);
 
   return (
-    <div className="min-w-0 max-w-full space-y-8 overflow-x-hidden">
+    <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden">
       <ModelSettingsOverview
         copy={pageCopy}
-        defaultModelName={defaultModelName ?? ""}
+        defaultModelName={visibleDefaultModel}
         customModelCount={models.length}
         modelCount={configuredModelCount}
         gatewayStatus={gatewayStatus}
         onAddModel={handleOverviewAddModel}
         onScanLocal={handleOverviewScanLocal}
+        onOpenZen={() =>
+          navigate("/workspace/agents?tab=plugins&connect=opencode")
+        }
       />
+
+      <CoderEngineSettings />
 
       {/* ── Models Section ── */}
       <SettingsSection
         className="scroll-mt-6"
-        title={<span id="model-settings-custom">{pageCopy.connectionsTitle}</span>}
+        title={
+          <span id="model-settings-custom">{pageCopy.connectionsTitle}</span>
+        }
         description={pageCopy.connectionsSubtitle}
       >
         {loading ? (
@@ -1618,98 +1675,140 @@ export default function ModelSettingsPage() {
               <ul className="divide-y divide-border rounded-lg border border-border">
                 {models.map((m) => {
                   const modelId = customModelEntryId(m);
+                  const editRegionId = `model-settings-edit-${encodeURIComponent(modelId)}`;
                   const list = Array.isArray(m.models) ? m.models : [];
                   const displayName = m.display_name || m.name;
                   const isDefault = customModelMatchesSelection(
                     m,
                     defaultModelName,
                   );
+                  const modelSlots = (
+                    <ul className="mt-1.5 space-y-0.5 font-mono text-xs text-foreground/80">
+                      {list.map((id, idx) => (
+                        <li
+                          key={`${modelId}:${idx}:${id}`}
+                          className="flex min-w-0 items-center gap-2"
+                        >
+                          <span className="shrink-0 rounded border border-border/70 bg-muted/40 px-1.5 py-0.5 font-sans text-xs font-medium text-muted-foreground">
+                            {idx === 0 && idx === list.length - 1
+                              ? t.settings.model.modelList
+                                  .pickerDefaultAndPerformance
+                              : idx === 0
+                                ? t.settings.model.modelList.pickerDefault
+                                : idx === list.length - 1
+                                  ? t.settings.model.modelList.performanceTier
+                                  : t.settings.model.modelList.fallback}
+                          </span>
+                          <code
+                            className={cn(
+                              "truncate rounded bg-muted/60 px-1.5 py-0.5",
+                              (displayName.includes("免费") ||
+                                /(?:^|[-_])free(?:$|[-_])/i.test(id)) &&
+                                "text-success",
+                            )}
+                          >
+                            {id}
+                          </code>
+                        </li>
+                      ))}
+                    </ul>
+                  );
                   return (
                     <li
                       key={modelId}
                       className={cn(
-                        "flex flex-col items-stretch justify-between gap-4 px-4 py-4 sm:flex-row sm:items-start sm:px-5",
+                        "overflow-hidden",
                         isDefault && "bg-success/50/[0.035]",
                       )}
                     >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex min-w-0 flex-wrap items-center gap-2">
-                          <div className="truncate text-sm font-medium">
-                            {displayName}
+                      <div className="flex flex-col items-stretch justify-between gap-4 px-4 py-4 sm:flex-row sm:items-start sm:px-5">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <div className="truncate text-sm font-medium">
+                              {displayName}
+                            </div>
+                            <span
+                              className="shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground dark:border-muted-foreground/40 dark:bg-muted-foreground/10 dark:text-muted-foreground"
+                              title={t.settings.model.modelList.hint}
+                            >
+                              {t.settings.model.modelCount(list.length)}
+                            </span>
                           </div>
-                          <span
-                            className="shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground dark:border-muted-foreground/40 dark:bg-muted-foreground/10 dark:text-muted-foreground"
-                            title={t.settings.model.modelList.hint}
-                          >
-                            {t.settings.model.modelCount(list.length)}
-                          </span>
+                          {m.name !== displayName && (
+                            <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                              {m.name}
+                            </div>
+                          )}
+                          {list.length === 1 ? modelSlots : null}
+                          {list.length > 1 ? (
+                            <details className="group/models mt-1.5">
+                              <summary className="cursor-pointer select-none text-xs text-muted-foreground hover:text-foreground">
+                                查看 {list.length} 个模型
+                              </summary>
+                              {modelSlots}
+                            </details>
+                          ) : null}
                         </div>
-                        {m.name !== displayName && (
-                          <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                            {m.name}
-                          </div>
-                        )}
-                        {list.length > 0 && (
-                          <ul className="mt-1.5 space-y-0.5 font-mono text-xs text-foreground/80">
-                            {list.map((id, idx) => (
-                              <li
-                                key={`${modelId}:${idx}:${id}`}
-                                className="flex min-w-0 items-center gap-2"
-                              >
-                                <span className="shrink-0 rounded border border-border/70 bg-muted/40 px-1.5 py-0.5 font-sans text-xs font-medium text-muted-foreground">
-                                  {idx === 0 && idx === list.length - 1
-                                    ? t.settings.model.modelList
-                                        .pickerDefaultAndPerformance
-                                    : idx === 0
-                                      ? t.settings.model.modelList.pickerDefault
-                                      : idx === list.length - 1
-                                        ? t.settings.model.modelList
-                                            .performanceTier
-                                        : t.settings.model.modelList.fallback}
-                                </span>
-                                <code className="truncate rounded bg-muted/60 px-1.5 py-0.5">
-                                  {id}
-                                </code>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                      <div className="flex shrink-0 flex-wrap items-center justify-start gap-x-3 gap-y-2 sm:max-w-64 sm:justify-end">
-                        {isDefault ? (
-                          <span className="inline-flex items-center rounded-lg bg-success/10 px-3 py-1 text-xs font-medium text-success dark:bg-success/20 dark:text-success">
-                            {t.settings.model.systemDefault}
-                          </span>
-                        ) : (
+                        <div className="flex shrink-0 flex-wrap items-center justify-start gap-x-3 gap-y-2 sm:max-w-64 sm:justify-end">
+                          {isDefault ? (
+                            <span className="inline-flex items-center rounded-lg bg-success/10 px-3 py-1 text-xs font-medium text-success dark:bg-success/20 dark:text-success">
+                              {t.settings.model.systemDefault}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="text-xs font-medium text-muted-foreground hover:text-foreground"
+                              onClick={() =>
+                                handleSetDefault(
+                                  customModelPreferredSelection(m),
+                                )
+                              }
+                              aria-label={`${t.settings.model.setAsDefault}: ${displayName}`}
+                            >
+                              {t.settings.model.setAsDefault}
+                            </button>
+                          )}
                           <button
-                            className="text-xs font-medium text-muted-foreground hover:text-foreground"
-                            onClick={() =>
-                              handleSetDefault(customModelPreferredSelection(m))
-                            }
-                            aria-label={`${t.settings.model.setAsDefault}: ${displayName}`}
+                            type="button"
+                            className="text-xs font-medium text-chart-7 hover:text-chart-7"
+                            onClick={() => {
+                              setShowAdd(false);
+                              setEditingModel((current) =>
+                                current === modelId ? null : modelId,
+                              );
+                            }}
+                            aria-label={`${t.common.edit}: ${displayName}`}
+                            aria-expanded={editingModel === modelId}
+                            aria-controls={editRegionId}
                           >
-                            {t.settings.model.setAsDefault}
+                            {t.common.edit}
                           </button>
-                        )}
-                        <button
-                          className="text-xs font-medium text-chart-7 hover:text-chart-7"
-                          onClick={() =>
-                            setEditingModel(
-                              editingModel === modelId ? null : modelId,
-                            )
-                          }
-                          aria-label={`${t.common.edit}: ${displayName}`}
-                        >
-                          {t.common.edit}
-                        </button>
-                        <button
-                          className="text-xs font-medium text-chart-7 hover:text-chart-7"
-                          onClick={() => handleDelete(modelId)}
-                          aria-label={`${t.common.delete}: ${displayName}`}
-                        >
-                          {t.common.delete}
-                        </button>
+                          <button
+                            type="button"
+                            className="text-xs font-medium text-chart-7 hover:text-chart-7"
+                            onClick={() => handleDelete(modelId)}
+                            aria-label={`${t.common.delete}: ${displayName}`}
+                          >
+                            {t.common.delete}
+                          </button>
+                        </div>
                       </div>
+                      {editingModel === modelId && (
+                        <div
+                          id={editRegionId}
+                          className="border-t border-border bg-muted/15 px-4 py-4 sm:px-5"
+                        >
+                          <EditModelForm
+                            key={modelId}
+                            modelName={modelId}
+                            onCancel={() => setEditingModel(null)}
+                            onSaved={() => {
+                              setEditingModel(null);
+                              fetchModels();
+                            }}
+                          />
+                        </div>
+                      )}
                     </li>
                   );
                 })}
@@ -1720,20 +1819,6 @@ export default function ModelSettingsPage() {
                 )}
               </ul>
             ) : null}
-
-            {/* Edit form (inline under the list) */}
-            {editingModel && (
-              <div className="mt-4">
-                <EditModelForm
-                  modelName={editingModel}
-                  onCancel={() => setEditingModel(null)}
-                  onSaved={() => {
-                    setEditingModel(null);
-                    fetchModels();
-                  }}
-                />
-              </div>
-            )}
 
             {/* Add form */}
             {showAdd && (
@@ -1899,16 +1984,48 @@ function LocalVisionSection() {
   const [model, setModel] = useState<NASModel | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [serviceState, setServiceState] = useState<
+    "checking" | "available" | "unavailable"
+  >("checking");
+
+  const presentError = useCallback((error: unknown) => {
+    setServiceState("unavailable");
+    const raw = error instanceof Error ? error.message : String(error);
+    if (/403|admin\/operator role required/i.test(raw)) {
+      setMessage("当前账号无权管理本地图片理解，请联系管理员。");
+      return;
+    }
+    setMessage("本地图片理解服务暂时不可用，请稍后重试。");
+  }, []);
 
   const refresh = useCallback(async () => {
+    setServiceState("checking");
+    setMessage(null);
     try {
-      await startNASService();
+      const start = await startNASService();
+      if (!start.ok) {
+        setModel(null);
+        setServiceState("unavailable");
+        if (start.status === "not_found") {
+          setMessage(
+            "本地图片理解服务尚未安装。安装 octopus-storage 后可在这里下载并启用模型。",
+          );
+        } else if (start.status === "started") {
+          setMessage("本地图片理解服务正在启动，请稍后重新检查。");
+        } else {
+          setMessage("本地图片理解服务暂时不可用，请稍后重新检查。");
+        }
+        return;
+      }
       const models = await listNASModels();
-      setModel(models.find((item) => item.model_id === "vision-default") ?? null);
+      setModel(
+        models.find((item) => item.model_id === "vision-default") ?? null,
+      );
+      setServiceState("available");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
+      presentError(error);
     }
-  }, []);
+  }, [presentError]);
 
   useEffect(() => {
     void refresh();
@@ -1924,7 +2041,9 @@ function LocalVisionSection() {
         const timer = window.setInterval(() => {
           void listNASModels()
             .then((models) => {
-              const current = models.find((item) => item.model_id === "vision-default");
+              const current = models.find(
+                (item) => item.model_id === "vision-default",
+              );
               if (current) setModel(current);
               if (current && current.status !== "loading") {
                 window.clearInterval(timer);
@@ -1934,22 +2053,26 @@ function LocalVisionSection() {
             })
             .catch(() => undefined);
         }, 2000);
-        window.setTimeout(() => {
-          window.clearInterval(timer);
-          setBusy(false);
-        }, 15 * 60 * 1000);
+        window.setTimeout(
+          () => {
+            window.clearInterval(timer);
+            setBusy(false);
+          },
+          15 * 60 * 1000,
+        );
       } else {
         setBusy(false);
         setMessage(next.notes);
       }
     } catch (error) {
       setBusy(false);
-      setMessage(error instanceof Error ? error.message : String(error));
+      presentError(error);
     }
   };
 
   const downloaded = model?.provider === "local" && Boolean(model.endpoint);
   const enabled = model?.status === "running";
+  const serviceUnavailable = serviceState === "unavailable";
 
   return (
     <SettingsSection
@@ -1959,25 +2082,77 @@ function LocalVisionSection() {
       <div className="flex flex-col gap-3 rounded-lg border border-border bg-card/40 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-medium">
-            <span className={cn("size-2 rounded-full", enabled ? "bg-success" : "bg-muted-foreground/40")} />
+            <span
+              className={cn(
+                "size-2 rounded-full",
+                enabled ? "bg-success" : "bg-muted-foreground/40",
+              )}
+            />
             {enabled ? "已启用" : downloaded ? "已下载，未启用" : "尚未下载"}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
             sentence-transformers/clip-ViT-B-32 · 约 600MB
           </p>
-          {message ? <p className="mt-1 text-xs text-muted-foreground">{message}</p> : null}
+          {message ? (
+            <p
+              role={message.includes("无权") ? "alert" : undefined}
+              className={cn(
+                "mt-1 text-xs",
+                message.includes("无权")
+                  ? "text-warning"
+                  : "text-muted-foreground",
+              )}
+            >
+              {message}
+            </p>
+          ) : null}
         </div>
         <div className="flex shrink-0 gap-2">
-          {!downloaded ? (
-            <Button size="sm" onClick={() => void run(() => downloadNASModel("vision-default"), "正在下载模型…")} disabled={busy}>
+          {serviceState === "checking" ? (
+            <Button size="sm" variant="outline" disabled>
+              检查中…
+            </Button>
+          ) : serviceUnavailable ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void refresh()}
+              disabled={busy || Boolean(message?.includes("无权"))}
+            >
+              重新检查
+            </Button>
+          ) : !downloaded ? (
+            <Button
+              size="sm"
+              onClick={() =>
+                void run(
+                  () => downloadNASModel("vision-default"),
+                  "正在下载模型…",
+                )
+              }
+              disabled={busy || Boolean(message?.includes("无权"))}
+            >
               {busy ? "下载中…" : "下载并启用"}
             </Button>
           ) : enabled ? (
-            <Button size="sm" variant="outline" onClick={() => void run(() => disableNASModel("vision-default"), "正在关闭…")} disabled={busy}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                void run(() => disableNASModel("vision-default"), "正在关闭…")
+              }
+              disabled={busy}
+            >
               关闭
             </Button>
           ) : (
-            <Button size="sm" onClick={() => void run(() => enableNASModel("vision-default"), "正在启用…")} disabled={busy}>
+            <Button
+              size="sm"
+              onClick={() =>
+                void run(() => enableNASModel("vision-default"), "正在启用…")
+              }
+              disabled={busy}
+            >
               启用
             </Button>
           )}
@@ -2056,8 +2231,7 @@ function GatewayDiagnosticsSection({
                   "bg-success/10 text-success dark:bg-success/20 dark:text-success",
                 gatewayStatus === "disconnected" &&
                   "bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive",
-                gatewayStatus === "checking" &&
-                  "bg-info/15 text-info",
+                gatewayStatus === "checking" && "bg-info/15 text-info",
               )}
             >
               {gatewayStatus === "checking" && (
@@ -2510,7 +2684,7 @@ function OfficialModelsSection() {
   }
 
   // Build rows from the backend catalog. Skip the synthetic "auto"
-  // / "molili" pseudo-model the gateway advertises.
+  // / provider-specific pseudo-models the gateway may advertise.
   const rows = (models ?? [])
     .filter((m) => !/^auto$/i.test(m.id))
     .map((m) => ({ upstream: m }));
@@ -3067,9 +3241,7 @@ function EditModelForm({
                   onCheckedChange={setVision}
                   disabled={visionLocked}
                 />{" "}
-                <span className="text-xs">
-                  {t.settings.model.visionLabel}
-                </span>
+                <span className="text-xs">{t.settings.model.visionLabel}</span>
               </div>
               {visionLocked && (
                 <span
@@ -3530,10 +3702,7 @@ function AddModelForm({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <div className="flex items-center justify-between gap-2">
-            <label
-              htmlFor="add-model-api-key"
-              className="text-sm font-medium"
-            >
+            <label htmlFor="add-model-api-key" className="text-sm font-medium">
               <span className="text-destructive">*</span>{" "}
               {getProviderLabel(provider) || t.settings.model.provider}{" "}
               {t.settings.model.apiKey}
@@ -3545,14 +3714,13 @@ function AddModelForm({
               const preset = PROVIDERS.find((p) => p.value === provider);
               if (!preset?.consoleUrl) return null;
               return (
-                <a
+                <RoutedWebLink
                   href={preset.consoleUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  openTargetSource="model-provider-console"
                   className="text-xs text-primary hover:underline font-normal"
                 >
                   {t.settings.model.getApiKey}
-                </a>
+                </RoutedWebLink>
               );
             })()}
           </div>
@@ -3704,14 +3872,17 @@ function AddModelForm({
       </div>
 
       <DefaultEffortSelect
-    value={defaultReasoningEffort}
-    reasoningEfforts={clientSideReasoningEfforts(baseUrl, models[0] || "")}
-    onChange={setDefaultReasoningEffort}
-  />
+        value={defaultReasoningEffort}
+        reasoningEfforts={clientSideReasoningEfforts(baseUrl, models[0] || "")}
+        onChange={setDefaultReasoningEffort}
+      />
 
       {/* Test status + buttons */}
       <div className="flex flex-col gap-3 rounded-lg border border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div role="status" className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
+        <div
+          role="status"
+          className="flex min-w-0 flex-wrap items-center gap-2 text-sm"
+        >
           {testStatus === "idle" && (
             <>
               <div className="h-2.5 w-2.5 rounded-lg bg-muted-foreground/40" />

@@ -450,7 +450,7 @@ function CapabilityCard({
 // The runtime hot-reloads the file each turn, so a rule added here
 // affects the next tool call without restart.
 
-function ApprovalRulesSection() {
+export function ApprovalRulesSection() {
   const { t } = useI18n();
   const qc = useQueryClient();
   const {

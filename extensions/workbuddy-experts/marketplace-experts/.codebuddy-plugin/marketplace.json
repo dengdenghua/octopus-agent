@@ -1,0 +1,31 @@
+{
+  "name": "experts",
+  "description": "experts marketplace (auto-generated)",
+  "plugins": [
+    {
+      "name": "senior-developer",
+      "source": "./plugins/senior-developer",
+      "description": "Over 10 years of full-stack experience, proficient in multiple languages and frameworks, the technical backbone of the team"
+    },
+    {
+      "name": "seo-content-team",
+      "source": "./plugins/seo-content-team",
+      "description": "Full-stack SEO content marketing team — 7 specialist roles across 5 phases from keyword research to publication"
+    },
+    {
+      "name": "workspace-builder",
+      "source": "./plugins/workspace-builder",
+      "description": "Build custom digital workspaces (HTML) for different user groups: students, professionals, content creators, parents, and lifestyle users, with responsive design and local data persistence."
+    },
+    {
+      "name": "embedded-firmware-engineer",
+      "source": "./plugins/embedded-firmware-engineer",
+      "description": "Expert in microcontroller programming, writing efficient and reliable firmware code on resource-constrained hardware"
+    },
+    {
+      "name": "stock-partner-team",
+      "source": "./plugins/stock-partner-team",
+      "description": "6 stock market experts + 1 lead editor collaborate as an agent team for stock market information analysis and discussion"
+    }
+  ]
+}

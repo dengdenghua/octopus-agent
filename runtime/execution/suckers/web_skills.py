@@ -150,6 +150,11 @@ def _fetch_url(
 # web_search
 # ═══════════════════════════════════════════════════════════
 
+# Snippets were hard-truncated to 400 chars, which silently dropped the
+# exact numbers/figures the model needs (e.g. "17.6 亿美元"). Raise the cap
+# and keep it in one place so every backend stays consistent.
+_SNIPPET_CAP = 2000
+
 
 def _resolve_backend() -> str:
     explicit = (os.environ.get("WEB_SEARCH_BACKEND") or "").strip().lower()
@@ -189,37 +194,93 @@ def _web_search(
         close_after = True
 
     try:
-        if chosen == "doubao":
-            key = os.environ.get("DOUBAO_SEARCH_API_KEY", "")
-            if not key:
-                return {"error": "doubao_missing_key", "results": []}
-            return _doubao_search(client, key, query, max_results)
-        if chosen == "tavily":
-            key = os.environ.get("TAVILY_API_KEY", "")
-            if not key:
-                return {"error": "tavily_missing_key", "results": []}
-            return _tavily_search(client, key, query, max_results)
-        if chosen == "brave":
-            key = os.environ.get("BRAVE_API_KEY", "")
-            if not key:
-                return {"error": "brave_missing_key", "results": []}
-            return _brave_search(client, key, query, max_results)
-        if chosen == "serper":
-            key = os.environ.get("SERPER_API_KEY", "")
-            if not key:
-                return {"error": "serper_missing_key", "results": []}
-            return _serper_search(client, key, query, max_results)
-        if chosen == "searxng":
-            base = os.environ.get("SEARXNG_URL", "")
-            if not base:
-                return {"error": "searxng_missing_url", "results": []}
-            return _searxng_search(client, base, query, max_results)
-        if chosen == "ddg":
-            return _ddg_search(client, query, max_results)
-        return {"error": f"unknown_backend: {chosen}", "results": []}
+        result = _dispatch_search(client, chosen, query, max_results)
+        # Near-miss recovery (Hermes parity): a query that returns nothing is
+        # retried once with a loosened form — quotes / parens / operators
+        # stripped, and the first N words kept. Models often over-qualify a
+        # query with exact phrases that no index matches; the relaxed form
+        # probes whether the topic exists at all. The retry keeps the original
+        # ``query`` on the result so the model can tell the hit is approximate.
+        if not result.get("results") and not result.get("error"):
+            relaxed = _relaxed_query(query)
+            if relaxed and relaxed != query:
+                retry = _dispatch_search(client, chosen, relaxed, max_results)
+                if retry.get("results"):
+                    retry["query"] = relaxed
+                    retry["near_miss_retry"] = True
+                    retry["original_query"] = query
+                    return retry
+        return result
     finally:
         if close_after:
             client.close()
+
+
+def _dispatch_search(
+    client: Any,
+    chosen: str,
+    query: str,
+    max_results: int,
+) -> dict[str, Any]:
+    """Route a web search to the configured backend."""
+    if chosen == "doubao":
+        key = os.environ.get("DOUBAO_SEARCH_API_KEY", "")
+        if not key:
+            return {"error": "doubao_missing_key", "results": []}
+        return _doubao_search(client, key, query, max_results)
+    if chosen == "tavily":
+        key = os.environ.get("TAVILY_API_KEY", "")
+        if not key:
+            return {"error": "tavily_missing_key", "results": []}
+        return _tavily_search(client, key, query, max_results)
+    if chosen == "brave":
+        key = os.environ.get("BRAVE_API_KEY", "")
+        if not key:
+            return {"error": "brave_missing_key", "results": []}
+        return _brave_search(client, key, query, max_results)
+    if chosen == "serper":
+        key = os.environ.get("SERPER_API_KEY", "")
+        if not key:
+            return {"error": "serper_missing_key", "results": []}
+        return _serper_search(client, key, query, max_results)
+    if chosen == "searxng":
+        base = os.environ.get("SEARXNG_URL", "")
+        if not base:
+            return {"error": "searxng_missing_url", "results": []}
+        return _searxng_search(client, base, query, max_results)
+    if chosen == "ddg":
+        return _ddg_search(client, query, max_results)
+    return {"error": f"unknown_backend: {chosen}", "results": []}
+
+
+def _relaxed_query(query: str, max_words: int = 6) -> str:
+    """Loosen an over-qualified search query for a near-miss retry.
+
+    Strips quoted phrases, parentheses, boolean operators and site:/filetype:
+    filters, collapses whitespace, then keeps the first ``max_words`` tokens.
+    Returns an empty string when nothing searchable remains.
+    """
+    import re as _re
+
+    # Quoted phrases: strip the quotes but keep the words — a "near miss"
+    # retry loosens exact-phrase matching, it does not throw the topic away.
+    stripped = _re.sub(r'"([^"]*)"', r" \1 ", query)
+    stripped = _re.sub(r"[()\[\]{}]", " ", stripped)  # grouping
+    # Boolean operators and field filters (site:example.com → drop both).
+    stripped = _re.sub(
+        r"\b(?:AND|OR|NOT)\b",
+        " ",
+        stripped,
+        flags=_re.IGNORECASE,
+    )
+    stripped = _re.sub(
+        r"\b(?:site|filetype|intitle|inurl):\S*",
+        " ",
+        stripped,
+        flags=_re.IGNORECASE,
+    )
+    tokens = [t for t in stripped.split() if t]
+    return " ".join(tokens[:max_words]).strip()
 
 
 def _doubao_search(client: Any, api_key: str, query: str, max_results: int) -> dict[str, Any]:
@@ -236,7 +297,7 @@ def _doubao_search(client: Any, api_key: str, query: str, max_results: int) -> d
             json={
                 "query": query,
                 "doc_count": max_results,
-                "max_snippet_length": 600,
+                "max_snippet_length": _SNIPPET_CAP,
                 "max_image_count_per_doc": 0,
             },
             headers={
@@ -268,7 +329,7 @@ def _doubao_search(client: Any, api_key: str, query: str, max_results: int) -> d
             {
                 "title": item.get("Title") or "",
                 "url": item.get("Url") or "",
-                "snippet": "\n".join(snippets)[:400],
+                "snippet": "\n".join(snippets)[:_SNIPPET_CAP],
                 "host": (item.get("HostInfo") or {}).get("Hostname") or "",
                 "publish_time": doc_info.get("PublishTime") or "",
             }
@@ -291,7 +352,7 @@ def _tavily_search(client: Any, api_key: str, query: str, max_results: int) -> d
         {
             "title": item.get("title", ""),
             "url": item.get("url", ""),
-            "snippet": item.get("content", "")[:400],
+            "snippet": item.get("content", "")[:_SNIPPET_CAP],
         }
         for item in data.get("results", [])[:max_results]
     ]
@@ -318,7 +379,7 @@ def _brave_search(client: Any, api_key: str, query: str, max_results: int) -> di
         {
             "title": item.get("title", ""),
             "url": item.get("url", ""),
-            "snippet": (item.get("description") or "")[:400],
+            "snippet": (item.get("description") or "")[:_SNIPPET_CAP],
         }
         for item in web[:max_results]
     ]
@@ -342,7 +403,7 @@ def _serper_search(client: Any, api_key: str, query: str, max_results: int) -> d
         {
             "title": item.get("title", ""),
             "url": item.get("link", ""),
-            "snippet": (item.get("snippet") or "")[:400],
+            "snippet": (item.get("snippet") or "")[:_SNIPPET_CAP],
         }
         for item in organic[:max_results]
     ]
@@ -371,7 +432,7 @@ def _searxng_search(client: Any, base_url: str, query: str, max_results: int) ->
         {
             "title": item.get("title", ""),
             "url": item.get("url", ""),
-            "snippet": (item.get("content") or "")[:400],
+            "snippet": (item.get("content") or "")[:_SNIPPET_CAP],
         }
         for item in items[:max_results]
     ]
@@ -410,7 +471,7 @@ def _ddg_search(client: Any, query: str, max_results: int) -> dict[str, Any]:
             {
                 "title": _clean(title),
                 "url": url,
-                "snippet": _clean(snippet)[:400],
+                "snippet": _clean(snippet)[:_SNIPPET_CAP],
             }
         )
     return {"query": query, "backend": "ddg", "results": results}

@@ -97,10 +97,7 @@ def save_artifact(
     if len(data) > _MAX_ARTIFACT_CHARS:
         return {
             "ok": False,
-            "error": (
-                f"artifact too large ({len(data)} bytes > "
-                f"{_MAX_ARTIFACT_CHARS})"
-            ),
+            "error": (f"artifact too large ({len(data)} bytes > {_MAX_ARTIFACT_CHARS})"),
         }
 
     d = _artifacts_dir(workspace_path, root_thread_id, sub_thread_id)
@@ -141,7 +138,12 @@ def read_artifact(path: str | os.PathLike[str]) -> dict[str, Any]:
         data = p.read_bytes()
     except OSError as exc:  # noqa: BLE001
         return {"ok": False, "error": f"OSError: {exc}"}
-    return {"ok": True, "content": data.decode("utf-8", errors="replace"), "path": str(p), "size": len(data)}
+    return {
+        "ok": True,
+        "content": data.decode("utf-8", errors="replace"),
+        "path": str(p),
+        "size": len(data),
+    }
 
 
 __all__ = ["read_artifact", "save_artifact"]

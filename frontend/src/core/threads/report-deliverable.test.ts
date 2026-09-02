@@ -56,12 +56,71 @@ describe("liveEventIsReportLike", () => {
     expect(
       liveEventIsReportLike({
         name: "run_orchestration",
-        input: { goal: "分析项目", agent_id: ["critic", "explorer", "researcher"] },
+        input: {
+          goal: "分析项目",
+          agent_id: ["critic", "explorer", "researcher"],
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("does not treat child-agent report telemetry as a parent report deliverable", () => {
+    expect(
+      liveEventIsReportLike({
+        name: "subagent.report",
+        input: { output: "Report the first line of README.md" },
+        output: "Child report completed",
+      }),
+    ).toBe(false);
+    expect(
+      liveEventIsReportLike({
+        name: "runtime.__subagent_finished__",
+        output: "research report summary",
+      }),
+    ).toBe(false);
+    expect(
+      liveEventIsReportLike({
+        name: "report",
+        input: {
+          server: "subagent",
+          tool: "report",
+          arguments: { input: { output: "Report the first line" } },
+        },
+        output: "Report delivered to the parent report lane",
+      }),
+    ).toBe(false);
+  });
+
+  it("does not infer a parent report artifact from delegated worker prompts", () => {
+    expect(
+      liveEventIsReportLike({
+        name: "call_agent_parallel",
+        input: {
+          specs: [
+            {
+              role: "schema_reader",
+              goal: "Read one JSON file, call report once, and end",
+            },
+          ],
+        },
+        output: "Child report completed successfully",
+      }),
+    ).toBe(false);
+  });
+
+  it("does not infer a deliverable from capability discovery metadata", () => {
+    expect(
+      liveEventIsReportLike({
+        name: "query_skill",
+        input: { name: "call_agent_parallel" },
+        output: "Kimi-style swarm for research and report tasks",
       }),
     ).toBe(false);
   });
 
   it("stays false for plain tool events", () => {
-    expect(liveEventIsReportLike({ name: "read_file", input: { path: "a.py" } })).toBe(false);
+    expect(
+      liveEventIsReportLike({ name: "read_file", input: { path: "a.py" } }),
+    ).toBe(false);
   });
 });

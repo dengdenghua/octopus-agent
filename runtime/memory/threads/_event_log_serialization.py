@@ -72,10 +72,11 @@ def coalesce_events(
     transform is replay-equivalent — ``EventLogSnapshot(events=coalesced)``
     replays to the same turns as the raw slice:
 
-    - An item COMPLETED inside this slice carries its full snapshot in the
-      ``item_completed`` event, so its earlier ``item_started`` and all
-      earlier deltas are dropped. Deltas landing AFTER the completion
-      (rare, but legal) are kept verbatim.
+    - An item COMPLETED inside this slice carries its full content snapshot,
+      so earlier deltas are dropped. ``item_started`` remains because its
+      insertion point is observable when sequenced and legacy unsequenced
+      items coexist. Deltas landing AFTER completion (rare, but legal) are
+      kept verbatim.
     - Surviving text deltas for one (turn, item, kind) merge into a single
       concatenated delta at the position of the first — folding N appends
       equals folding one concatenated append.
@@ -99,18 +100,20 @@ def coalesce_events(
     if not events:
         return []
 
-    # Completion boundary per item: anything before it is redundant.
-    completion_seq: dict[str, int] = {}
+    # Item ids are only turn-local. Scope every completion/progress key by the
+    # owning turn so a provider or imported journal may safely reuse an id in
+    # a later turn.
+    completion_seq: dict[tuple[str | None, str], int] = {}
     for sequence, event in events:
         if event.event != "item_completed":
             continue
         item = event.payload.get("item")
         if isinstance(item, dict) and isinstance(item.get("id"), str):
-            completion_seq[item["id"]] = sequence
+            completion_seq[(event.turn_id, item["id"])] = sequence
 
     out: list[tuple[int, LoggedEvent]] = []
     text_group_index: dict[tuple[str | None, str, str], int] = {}
-    progress_index: dict[str, int] = {}
+    progress_index: dict[tuple[str | None, str], int] = {}
     turn_update_index: dict[str, int] = {}
 
     for sequence, event in events:
@@ -118,18 +121,15 @@ def coalesce_events(
         payload = event.payload
 
         if kind == "item_started":
-            item = payload.get("item")
-            item_id = item.get("id") if isinstance(item, dict) else None
-            boundary = completion_seq.get(item_id) if isinstance(item_id, str) else None
-            if boundary is not None and sequence < boundary:
-                continue  # the completed snapshot supersedes this start
             out.append((sequence, event))
             continue
 
         if kind == "item_delta":
             item_id = payload.get("itemId")
             delta_kind = payload.get("kind")
-            boundary = completion_seq.get(item_id) if isinstance(item_id, str) else None
+            boundary = (
+                completion_seq.get((event.turn_id, item_id)) if isinstance(item_id, str) else None
+            )
             if boundary is not None and sequence < boundary:
                 continue  # the completed snapshot carries the full content
             if (
@@ -160,9 +160,10 @@ def coalesce_events(
                 and delta_kind == "mcpToolProgress"
                 and isinstance(payload.get("delta"), dict)
             ):
-                existing = progress_index.get(item_id)
+                progress_key = (event.turn_id, item_id)
+                existing = progress_index.get(progress_key)
                 if existing is None:
-                    progress_index[item_id] = len(out)
+                    progress_index[progress_key] = len(out)
                     out.append((sequence, event))
                 else:
                     first_seq, _first_event = out[existing]

@@ -15,6 +15,14 @@ from runtime.platform.io.atomic import (
     debounced_json_writer,
     read_json_with_backup,
 )
+from runtime.platform.io.transactional import (
+    JsonMutation,
+    TransactionalFileError,
+    create_file_exclusive,
+    mutate_json_file,
+    path_transaction,
+    read_json_file,
+)
 
 __all__ = [
     "AtomicWriteError",
@@ -23,4 +31,10 @@ __all__ = [
     "atomic_write_text",
     "debounced_json_writer",
     "read_json_with_backup",
+    "JsonMutation",
+    "TransactionalFileError",
+    "create_file_exclusive",
+    "mutate_json_file",
+    "path_transaction",
+    "read_json_file",
 ]

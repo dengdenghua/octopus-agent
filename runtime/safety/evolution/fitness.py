@@ -13,6 +13,7 @@ from runtime.memory.learning.turn_scoring import (
 )
 from runtime.platform.io import read_json_with_backup
 from runtime.platform.process.paths import app_paths
+from runtime.safety.auth.scope import TenantScope, tenant_scoped_path
 from runtime.safety.evolution.governance_audit import promotion_audit_signals
 
 _LOG = logging.getLogger("octopus.evolution.fitness")
@@ -28,6 +29,9 @@ def _publish_fitness_event(report: FitnessReport) -> None:
             combined_score=report.combined,
             verdict=report.verdict,
             trend=report.l1.trend,
+            tenant_id=report.tenant_id,
+            owner_actor_id=report.owner_actor_id,
+            scope_mode=report.scope_mode,
         ),
         logger=_LOG,
     )
@@ -89,6 +93,9 @@ class FitnessReport:
     combined: float
     verdict: str
     governance: GovernanceFitness | None = None
+    tenant_id: str = ""
+    owner_actor_id: str = ""
+    scope_mode: str = "legacy"
 
 
 _L2_SYSTEM = """You are a fitness evaluator for an AI agent. Given recent turn
@@ -107,8 +114,37 @@ Schema:
 ```"""
 
 
-def compute_l1(agent_id: str, *, window: int = 20) -> L1Fitness:
-    scores = read_recent_scores(agent_id, limit=window)
+def _promotion_audit_paths(base: Path, scope: TenantScope | None) -> list[Path]:
+    """Return exact governance partitions for one fitness calculation."""
+
+    if scope is None:
+        return [base]
+    if not scope.allow_cross_tenant:
+        return [tenant_scoped_path(base, scope)]
+    out = [base]
+    tenants_dir = base.parent / "tenants"
+    try:
+        partitions = sorted(tenants_dir.iterdir())
+    except OSError:
+        partitions = []
+    for partition in partitions:
+        # ``tenant_scoped_path`` uses the first 32 lowercase hex characters
+        # of SHA-256.  Ignore anything else and never follow file symlinks.
+        if len(partition.name) != 32 or any(ch not in "0123456789abcdef" for ch in partition.name):
+            continue
+        candidate = partition / base.name
+        if candidate.is_file() and not candidate.is_symlink():
+            out.append(candidate)
+    return out
+
+
+def compute_l1(
+    agent_id: str,
+    *,
+    window: int = 20,
+    scope: TenantScope | None = None,
+) -> L1Fitness:
+    scores = read_recent_scores(agent_id, limit=window, scope=scope)
     if not scores:
         return L1Fitness(
             score=0.5,
@@ -137,7 +173,7 @@ def compute_l1(agent_id: str, *, window: int = 20) -> L1Fitness:
         trend = "stable"
 
     raw_score = sum(s.score for s in scores) / len(scores)
-    soul_impact = analyze_soul_impact(agent_id, window=window)
+    soul_impact = analyze_soul_impact(agent_id, window=window, scope=scope)
 
     return L1Fitness(
         score=round(raw_score, 3),
@@ -154,6 +190,7 @@ def compute_l2(
     *,
     model: str | None = None,
     window: int = 20,
+    scope: TenantScope | None = None,
 ) -> L2Fitness | None:
     from runtime.platform.process.service_provider import get_provider
 
@@ -165,7 +202,7 @@ def compute_l2(
     from runtime.platform.llm_infra.llm_caller import LLMCaller
 
     caller = LLMCaller("evolve_router", "evolve_default_model")
-    scores = read_recent_scores(agent_id, limit=window)
+    scores = read_recent_scores(agent_id, limit=window, scope=scope)
 
     rows = "\n".join(
         f"  - {s.ts} score={s.score} reason={s.reason} rounds={s.rounds}" for s in scores[:15]
@@ -215,11 +252,16 @@ def compute_governance_fitness(
     gate_failed_weight: float = 0.08,
     override_weight: float = 0.05,
     failed_apply_weight: float = 0.08,
+    scope: TenantScope | None = None,
 ) -> GovernanceFitness:
-    path = Path(audit_path) if audit_path is not None else app_paths().promotion_audit_path
-    raw = read_json_with_backup(path, default=None)
-    records = raw.get("records") if isinstance(raw, dict) else []
-    rows = [row for row in records if isinstance(row, dict)] if isinstance(records, list) else []
+    base = Path(audit_path) if audit_path is not None else app_paths().promotion_audit_path
+    paths = _promotion_audit_paths(base, scope)
+    rows: list[dict[str, Any]] = []
+    for path in paths:
+        raw = read_json_with_backup(path, default=None)
+        records = raw.get("records") if isinstance(raw, dict) else []
+        if isinstance(records, list):
+            rows.extend(row for row in records if isinstance(row, dict))
     if agent_id:
         wanted_agent = str(agent_id)
         rows = [row for row in rows if str(row.get("agent_id") or "") == wanted_agent]
@@ -290,10 +332,19 @@ def compute_governance_fitness(
 def compute_fitness(
     agent_id: str,
     config: FitnessConfig | None = None,
+    *,
+    publish_event: bool = True,
+    scope: TenantScope | None = None,
 ) -> FitnessReport:
     config = config or FitnessConfig()
-    l1 = compute_l1(agent_id, window=config.window)
-    l2 = compute_l2(agent_id, l1, model=config.l2_model, window=config.window)
+    l1 = compute_l1(agent_id, window=config.window, scope=scope)
+    l2 = compute_l2(
+        agent_id,
+        l1,
+        model=config.l2_model,
+        window=config.window,
+        scope=scope,
+    )
 
     if l2 is not None:
         combined = round(
@@ -312,6 +363,7 @@ def compute_fitness(
         gate_failed_weight=config.governance_gate_failed_weight,
         override_weight=config.governance_override_weight,
         failed_apply_weight=config.governance_failed_apply_weight,
+        scope=scope,
     )
     combined = round(max(0.0, combined - governance.penalty), 3)
 
@@ -332,9 +384,19 @@ def compute_fitness(
         combined=combined,
         verdict=verdict,
         governance=governance,
+        tenant_id=scope.tenant_id if scope is not None and not scope.allow_cross_tenant else "",
+        owner_actor_id=scope.actor_id if scope is not None and not scope.allow_cross_tenant else "",
+        scope_mode=(
+            "cross_tenant"
+            if scope is not None and scope.allow_cross_tenant
+            else "tenant"
+            if scope is not None
+            else "legacy"
+        ),
     )
 
-    _publish_fitness_event(report)
+    if publish_event:
+        _publish_fitness_event(report)
 
     return report
 

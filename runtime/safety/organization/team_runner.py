@@ -69,6 +69,11 @@ class TeamRunResult:
     iterations: int = 1
     total_duration_ms: float = 0.0
     error: str | None = None
+    # ① 失败隔离：记录本轮哪些角色失败但其部分产出被保留继续，便于上游
+    # 在最终交付上标注"降级"而非整体失败。
+    degraded_roles: list[str] = field(default_factory=list)
+    # ③ critic 反驳 → generator 重写：本轮实际发生的修订轮数。
+    revision_rounds: int = 0
 
     @property
     def quality_score(self) -> float | None:
@@ -180,29 +185,92 @@ def _first_role_error(outputs: list[RoleOutput]) -> str | None:
 def _has_fatal_role_error(outputs: list[RoleOutput]) -> bool:
     """Whether an error prevented a valid terminal team deliverable.
 
-    A critic is advisory. If it fails but a later synthesizer completes, the
-    team has a degraded review lane rather than a failed delivery. The error
-    stays attached to the critic's RoleOutput for observability.
+    ① 失败隔离：单个角色失败不再视为整体致命。只要终态交付（synthesizer，
+    否则 evaluator，否则最后一个有产出的角色）存在且成功，就认为团队仍
+    交付了可用结果——先前的角色失败会被记录在 ``degraded_roles``，上游可
+    以标注"降级交付"。只有终态交付本身缺失/失败才算 fatal。
     """
-    successful_synth_index = next(
+    terminal = next(
         (
-            index
-            for index, output in reversed(list(enumerate(outputs)))
-            if output.role == Role.SYNTHESIZER and output.output and not output.error
+            output
+            for output in reversed(outputs)
+            if output.role in (Role.SYNTHESIZER, Role.EVALUATOR)
+            and output.output
+            and not output.error
         ),
         None,
     )
-    for index, output in enumerate(outputs):
-        if not output.error:
-            continue
-        if (
-            output.role == Role.CRITIC
-            and successful_synth_index is not None
-            and index < successful_synth_index
-        ):
-            continue
-        return True
-    return False
+    if terminal is not None:
+        return False
+    # 没有终态角色成功：若任一角色有非空产出（部分交付）也不算致命，
+    # 只有完全没有任何可交付内容才是致命。
+    return not any(output.output and not output.error for output in outputs)
+
+
+def _collect_degraded_roles(outputs: list[RoleOutput]) -> list[str]:
+    """① 失败隔离：列出所有失败角色的 role 名（去重、按顺序）。"""
+    seen: list[str] = []
+    for output in outputs:
+        if output.error and str(output.role) not in seen:
+            seen.append(str(output.role))
+    return seen
+
+
+# ── Critic 问题判定 + 重写 prompt ───────────────────────────
+
+# 3 critic rebut -> generator rewrite: these words mean the critic flagged substantive issues.
+# Pure 'no issues / all fine' verdicts do NOT trigger a rewrite.
+_CRITIC_ISSUE_HINTS = (
+    "问题",
+    "缺失",
+    "缺",
+    "错误",
+    "不准确",
+    "需修正",
+    "需补充",
+    "需要修正",
+    "需要补充",
+    "建议",
+    "风险",
+    "漏洞",
+    "矛盾",
+    "冲突",
+    "遗漏",
+    "不足",
+    "含糊",
+    "无法",
+    "issue",
+    "flaw",
+    "error",
+    "concern",
+    "contradiction",
+    "missing",
+    "gap",
+)
+_CRITIC_CLEAN_HINTS = (
+    "未发现",
+    "没有问题",
+    "一切正常",
+    "没问题",
+    "全部正确",
+    "无需",
+    "no issues",
+    "all good",
+    "no problems",
+    "looks good",
+    "looks correct",
+    "all correct",
+)
+
+
+def _critic_has_issues(text: str) -> bool:
+    # 3 Heuristic: did the critic flag substantive issues worth a rewrite?
+    if not text or not text.strip():
+        return False
+    low = text.lower()
+    if any(hint in low for hint in _CRITIC_CLEAN_HINTS):
+        return False
+    return any(hint in low for hint in _CRITIC_ISSUE_HINTS)
 
 
 # ── Runner ────────────────────────────────────────────────────
@@ -277,6 +345,9 @@ class TeamRunner:
                 result.success = True
             elif result.error is None:
                 result.error = _first_role_error(result.role_outputs)
+            # ① 失败隔离：无论成败都记录降级角色，便于上游标注"降级交付"。
+            if not result.degraded_roles:
+                result.degraded_roles = _collect_degraded_roles(result.role_outputs)
         except Exception as exc:  # noqa: BLE001
             _logger.exception("team_runner: topology %s crashed", topology.name)
             result.error = f"{type(exc).__name__}: {exc}"
@@ -295,11 +366,74 @@ class TeamRunner:
         context: dict[str, Any],
         result: TeamRunResult,
     ) -> None:
+        """① 失败隔离：任一角色失败都不再中断流水线。
+
+        失败角色的部分产出（如果有）与错误信息一起保留并继续传给下游；
+        下游 prompt 里会显式标注"上一步失败/降级"，让角色据此规避垃圾交接。
+        只有完全没有任何可交付内容才算整体失败（见 ``_has_fatal_role_error``）。
+        ③ critic 反驳：若拓扑同时含 critic 与 generator，critic 指出问题后
+        会让 generator 基于批评意见重写一版，再交给 synthesizer，循环受
+        ``max_iterations`` 约束。
+        """
         prior_outputs: list[RoleOutput] = []
+        ran_critic: RoleOutput | None = None
         for role in _SEQUENTIAL_ORDER:
             spec = topology.agents.get(role)
             if spec is None:
                 continue
+            # ③ critic → generator 重写：critic 跑完后，若拓扑里有 generator
+            # 且 critic 提出了实质问题，就让 generator 带着批评意见重写。
+            if role == Role.SYNTHESIZER and ran_critic is not None:
+                gen_spec = topology.agents.get(Role.GENERATOR)
+                if gen_spec is not None and _critic_has_issues(ran_critic.output):
+                    for _ in range(max(1, topology.max_iterations)):
+                        gen_spec2 = topology.agents.get(Role.GENERATOR)
+                        if gen_spec2 is None:
+                            break
+                        self._emit(
+                            {
+                                "type": "team_revision_start",
+                                "topology": topology.name,
+                                "round_no": result.revision_rounds + 1,
+                                "agent_id": gen_spec2.agent_id,
+                            }
+                        )
+                        revision_prompt = self._compose_critic_revision_prompt(
+                            task,
+                            prior_outputs,
+                            ran_critic,
+                            round_no=result.revision_rounds + 1,
+                        )
+                        revised = self._invoke_role(
+                            Role.GENERATOR,
+                            gen_spec2,
+                            revision_prompt,
+                            context,
+                            topology,
+                        )
+                        result.revision_rounds += 1
+                        result.role_outputs.append(revised)
+                        prior_outputs.append(revised)
+                        if revised.error:
+                            # 重写失败也隔离：保留部分产出继续，不中断。
+                            break
+                        # 重写后可选再跑一次 critic 复核（如存在该角色），
+                        # 复核无新问题就收手。
+                        critic_spec = topology.agents.get(Role.CRITIC)
+                        if critic_spec is None:
+                            break
+                        recheck = self._invoke_role(
+                            Role.CRITIC,
+                            critic_spec,
+                            self._compose_prompt(Role.CRITIC, task, prior_outputs),
+                            context,
+                            topology,
+                        )
+                        result.role_outputs.append(recheck)
+                        prior_outputs.append(recheck)
+                        if not _critic_has_issues(recheck.output):
+                            break
+                        ran_critic = recheck
             prompt = self._compose_prompt(role, task, prior_outputs)
             role_out = self._invoke_role(role, spec, prompt, context, topology)
             # Auto-parse score on evaluator outputs so the perf log
@@ -308,18 +442,17 @@ class TeamRunner:
                 role_out.score = _parse_evaluator_score(role_out.output)
             result.role_outputs.append(role_out)
             prior_outputs.append(role_out)
-            if role_out.error:
-                if role == Role.CRITIC and Role.SYNTHESIZER in topology.agents:
-                    # A fact-check/review lane is advisory. Preserve its partial
-                    # output and error in the handoff, then let the synthesizer
-                    # finish and independently verify the final deliverable.
-                    continue
-                # Sequential protocol bails on first hard error to
-                # avoid downstream roles consuming a garbage handoff.
-                return
+            if role == Role.CRITIC:
+                ran_critic = role_out
+            # ① 失败隔离：角色失败不中断——部分产出与错误一起继续传递。
         if prior_outputs:
             # Final output = last successful role.
-            result.final_output = prior_outputs[-1].output
+            last_ok = next(
+                (o for o in reversed(prior_outputs) if o.output and not o.error),
+                None,
+            )
+            result.final_output = (last_ok or prior_outputs[-1]).output
+        result.degraded_roles = _collect_degraded_roles(result.role_outputs)
 
     # ── Evaluator-optimizer protocol ─────────────────────────
 
@@ -411,10 +544,8 @@ class TeamRunner:
                 role_out = self._invoke_role(role, spec, prompt, context, topology)
                 result.role_outputs.append(role_out)
                 prior_outputs.append(role_out)
-                if role_out.error and role != Role.CRITIC:
-                    # A critic lane is advisory; anything else is a hard
-                    # failure that would poison downstream convergence.
-                    return
+                # ① 失败隔离：单副本角色失败不再中断流水线——部分产出与错误
+                # 一起保留并继续传给下游，只有完全无可交付内容才判整体失败。
                 continue
 
             base_prompt = self._compose_prompt(role, task, prior_outputs)
@@ -448,6 +579,35 @@ class TeamRunner:
                     role_out = future.result()
                     result.role_outputs.append(role_out)
                     prior_outputs.append(role_out)
+            # ② 并行副本交叉验证：多副本角色（如研究员池）跑完后，若拓扑里有
+            # critic，就让 critic 对全部副本产出做一次交叉核查（去重/冲突/
+            # 覆盖缺口），把核查结论喂给 synthesizer——副本之间"互相看得见"。
+            if replicas > 1 and Role.CRITIC in topology.agents:
+                critic_spec = topology.agents[Role.CRITIC]
+                cross_prompt = self._compose_cross_check_prompt(
+                    task,
+                    [o for o in prior_outputs if o.role == role],
+                    topology,
+                )
+                self._emit(
+                    {
+                        "type": "team_cross_check_start",
+                        "topology": topology.name,
+                        "role": str(role),
+                        "replicas": replicas,
+                        "agent_id": critic_spec.agent_id,
+                    }
+                )
+                cross_out = self._invoke_role(
+                    Role.CRITIC,
+                    critic_spec,
+                    cross_prompt,
+                    context,
+                    topology,
+                )
+                cross_out.metadata["cross_validation"] = True
+                result.role_outputs.append(cross_out)
+                prior_outputs.append(cross_out)
         self._emit(
             {
                 "type": "team_parallel_end",
@@ -456,7 +616,12 @@ class TeamRunner:
         )
         if prior_outputs:
             # Final output = last successful role (the synthesizer).
-            result.final_output = prior_outputs[-1].output
+            last_ok = next(
+                (o for o in reversed(prior_outputs) if o.output and not o.error),
+                None,
+            )
+            result.final_output = (last_ok or prior_outputs[-1]).output
+        result.degraded_roles = _collect_degraded_roles(result.role_outputs)
 
     # ── Helpers ──────────────────────────────────────────────
 
@@ -716,6 +881,66 @@ class TeamRunner:
             f"{last_eval.output}\n\n"
             f"Address the feedback and produce a revised answer."
         )
+
+    def _compose_cross_check_prompt(
+        self,
+        task: str,
+        replica_outputs: list[RoleOutput],
+        topology: TeamTopology,
+    ) -> str:
+        """② 并行副本交叉验证 prompt：让 critic 对研究员池的全部产出做交叉核查。
+
+        Critic 看到所有副本的结果后，指出重复/冲突/覆盖缺口，供 synthesizer
+        去重与收敛——副本之间通过 critic 这一"裁判"互相可见，而不是各查各的。
+        """
+        bits = ["[role: critic · cross-validation]", f"Task:\n{task}", ""]
+        for i, out in enumerate(replica_outputs, start=1):
+            bits.append(f"--- researcher replica {i} ({out.agent_id}) ---")
+            bits.append(out.output if out.output else "(no output)")
+            bits.append("")
+        bits.append(
+            "以上是同一角色并行副本各自独立调研的全部结果。请做交叉核查：\n"
+            "1) 找出重复/重叠的结论；\n"
+            "2) 找出相互矛盾的地方；\n"
+            "3) 指出还没覆盖到的关键缺口。\n"
+            "只输出核查结论，逐条列出（重复/冲突/缺口），不要复述各副本内容。"
+        )
+        return "\n".join(bits)
+
+    def _compose_critic_revision_prompt(
+        self,
+        task: str,
+        prior: list[RoleOutput],
+        critic: RoleOutput,
+        *,
+        round_no: int = 1,
+    ) -> str:
+        """3 Let the generator rewrite against the critic's specific feedback.
+
+        Hands the previous generator draft plus the critic's concrete criticism
+        back to the generator and asks it to address each point — a real
+        "critic rebuttal -> generator rewrite" loop instead of passing the
+        critic notes as plain text to the synthesizer.
+        """
+        gen_out = next(
+            (o for o in reversed(prior) if o.role == Role.GENERATOR),
+            None,
+        )
+        prev = gen_out.output if gen_out else "(no previous draft)"
+        bits = [
+            "[role: generator · critic-revision]",
+            f"Task:\n{task}",
+            "",
+            f"--- previous generator output (v{max(0, round_no - 1)}) ---",
+            prev,
+            "",
+            f"--- critic's feedback (round {round_no}) ---",
+            critic.output,
+            "",
+            "Please address each point: what you accept, what you keep and why. "
+            "Then produce the revised answer only — do not restate the feedback.",
+        ]
+        return "\n".join(bits)
 
     def _compose_evaluator_prompt(self, task: str, generator_output: str) -> str:
         return (

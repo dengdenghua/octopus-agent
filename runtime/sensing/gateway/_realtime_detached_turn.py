@@ -16,25 +16,26 @@ teardown:
   ``"*"`` wildcard interrupt raised by a socket close is deliberately
   ignored.
 * ``notify`` forwards to the owning connection while it is alive; once
-  it dies, events fan out to connections that resumed this thread
-  (``last_resumed_thread_id``), so a reconnected client picks the live
-  stream back up. Dead sockets are no-ops (``RpcConnection.send``
-  already swallows disconnects).
+  it dies, events fan out to every connection whose ``watched_threads``
+  contains this thread, so event-mode reconnects and connections watching
+  more than one thread pick the live stream back up. Dead sockets are
+  no-ops (``RpcConnection.send`` already swallows disconnects).
 * ``request_approval`` waits for a live connection (owner, then a
   reconnected watcher) until the approval budget runs out, so a user
   who reconnects can still answer a pending approval instead of the
   turn failing the moment the socket drops.
 
 Event durability across reconnects is provided by the per-thread event
-log replay (``thread/resume``); this emitter keeps the LIVE stream
-attached to whoever is watching.
+log replay (``thread/resume`` / ``thread/events``); this emitter keeps the
+LIVE stream attached to whoever is watching in the same gateway process.
+Cross-worker live continuation still requires a shared log tail or pub/sub
+transport; the process-local connection registry cannot provide it.
 """
 
 from __future__ import annotations
 
 import asyncio
 import time
-from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 from runtime.protocol import JsonRpcError, JsonRpcErrorCode, ServerMethod
@@ -59,6 +60,16 @@ class _DetachedTurnEmitter:
         self._thread_id = thread_id
         self._owner = owner
 
+    @property
+    def actor_id(self) -> str | None:
+        """Authenticated actor captured when the resident turn was created."""
+        return getattr(self._owner, "actor_id", None)
+
+    @property
+    def tenant_id(self) -> str | None:
+        """Authenticated tenant captured with ``actor_id`` for the turn."""
+        return getattr(self._owner, "tenant_id", None)
+
     # ── targeting ──────────────────────────────────────────────
 
     @staticmethod
@@ -68,23 +79,44 @@ class _DetachedTurnEmitter:
     def _live_targets(self) -> list[Any]:
         """Owner while alive; otherwise every watcher of this thread."""
         owner = self._owner
-        if owner is not None and self._is_live(owner):
+        can_access = getattr(self._gateway, "_connection_can_access_thread", None)
+        if (
+            owner is not None
+            and self._is_live(owner)
+            and (not callable(can_access) or can_access(self._thread_id, owner))
+        ):
             return [owner]
         return [
             conn
             for conn in list(getattr(self._gateway, "_connections", ()))
-            if getattr(conn, "last_resumed_thread_id", None) == self._thread_id
+            if self._thread_id in getattr(conn, "watched_threads", ())
             and self._is_live(conn)
+            and (not callable(can_access) or can_access(self._thread_id, conn))
         ]
 
     # ── EventEmitter surface ───────────────────────────────────
 
     async def notify(self, method: Any, params: dict[str, Any]) -> None:
-        # Best-effort per target: one wedged or dying socket must not
-        # starve the turn or the other watchers.
-        for target in self._live_targets():
-            with suppress(Exception):
+        # Best-effort per target: RpcConnection bounds every send, so one
+        # wedged socket can delay this projection only until that deadline.
+        # Targets in the same batch run concurrently; otherwise N black-holed
+        # watchers would multiply the per-connection send deadline by N.
+        # Re-evaluate after each batch: when the owner times out and becomes
+        # closed, deliver this same event to reconnected watchers rather than
+        # waiting for the next event to switch targets.
+        async def _notify_safely(target: Any) -> None:
+            try:
                 await target.notify(method, params)
+            except Exception:  # noqa: BLE001 - projection is best-effort per socket
+                return
+
+        attempted: set[int] = set()
+        while True:
+            targets = [target for target in self._live_targets() if id(target) not in attempted]
+            if not targets:
+                return
+            attempted.update(id(target) for target in targets)
+            await asyncio.gather(*(_notify_safely(target) for target in targets))
 
     def is_turn_interrupted(self, turn_id: str) -> bool:
         # Shared registry ONLY: an explicit ``turn/interrupt`` RPC stops
@@ -109,6 +141,13 @@ class _DetachedTurnEmitter:
         if shared is not None:
             shared.unregister(turn_id)
 
+    def request_interrupt(self, turn_id: str) -> None:
+        """Latch a durable cross-worker control in this worker's registry."""
+
+        shared = getattr(self._gateway, "_shared_interrupts", None)
+        if shared is not None:
+            shared.request_interrupt(turn_id)
+
     async def request_approval(
         self,
         method: Any,
@@ -124,15 +163,15 @@ class _DetachedTurnEmitter:
         budget = float(timeout if timeout is not None else fallback)
         deadline = time.monotonic() + budget
         while True:
+            if isinstance(turn_id, str) and self.is_turn_interrupted(turn_id):
+                return {"action": "decline", "reason": "turn interrupted"}
             targets = self._live_targets()
             if targets:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     break
                 try:
-                    return await targets[0].request_approval(
-                        method, params, timeout=remaining
-                    )
+                    return await targets[0].request_approval(method, params, timeout=remaining)
                 except _ApprovalError:
                     # Real approval semantics (timeout/decline) from a
                     # live connection — surface unchanged.

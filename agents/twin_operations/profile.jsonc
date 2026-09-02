@@ -1,0 +1,39 @@
+{
+  "id": "twin_operations",
+  "templateId": "octopus:digital-twin:operations",
+  "templateVersion": "1.0.0",
+  "source_kind": "digital-twin-human-role",
+  "source_plugin": "twin-operations",
+  "expertType": "agent",
+  "name": "运营管理分身",
+  "icon": "📊",
+  "description": "代表运营管理岗的数位分身:经营日报/指标看板/流程清单等文档侧闭环,现场管理与客户处置交给真人,AI 替代不了真实运营现场。",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "digital-twin:human-role",
+  "category": "automation",
+  "tags": [
+    "数字分身",
+    "真人岗位",
+    "真身协同",
+    "运营",
+    "经营",
+    "指标"
+  ],
+  "profession": "运营管理专员",
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true,
+    "includeUserMd": true,
+    "includeMemoryMd": true
+  },
+  "capabilities": {
+    "digital_twin": true,
+    "human_collab": true,
+    "authorization_boundary": true,
+    "handoff_pack": true
+  }
+}

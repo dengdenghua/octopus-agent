@@ -1,13 +1,13 @@
 ---
 type: "AdapterSubsystem"
 title: "Adapters · Integrations"
-description: "Molili 桥接 · Local auth 路由 · 各家第三方集成的 router proxy。"
+description: "Oct 桥接 · Local auth 路由 · 各家第三方集成的 router proxy。"
 tags: ["backend", "adapters"]
 tier: "standard"
 ---
 # Adapters · Integrations
 
-> Molili 桥接 · Local auth 路由 · 各家第三方集成的 router proxy。
+> Oct 桥接 · Local auth 路由 · 各家第三方集成的 router proxy。
 
 **Source**: `runtime/adapters/integrations/`
 
@@ -40,7 +40,7 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def create_local_auth_router(config, identity_store)` |  |
+| func | `def create_local_auth_router(config, identity_store, clock)` |  |
 
 ### `oct/client.py`
 

@@ -1,0 +1,543 @@
+{
+  "generated": "2026-08-19",
+  "source": "WorkBuddy.app 5.3.14 (Tencent)",
+  "experts": [
+    {
+      "name": "seo-content-team",
+      "expertType": "team",
+      "agentName": "seo-content-team-lead",
+      "displayName": {
+        "en": "SEO Content Team",
+        "zh": "SEO 内容营销团队"
+      },
+      "profession": {
+        "en": "SEO Content Team",
+        "zh": "SEO 内容营销团队"
+      },
+      "categoryId": "05-MarketingGrowth",
+      "displayDescription": {
+        "en": "7 specialist roles across 5 phases: keyword research, long-form writing, SEO optimization, content editing, link strategy, and CRO analysis — full-stack SEO content marketing",
+        "zh": "7位专业角色分5阶段协作：关键词研究、SEO长文创作、技术优化、内容编辑、链接策略、转化率分析，全流程自动化产出高质量SEO内容"
+      },
+      "tags": [
+        {
+          "en": "SEO Content",
+          "zh": "SEO内容"
+        },
+        {
+          "en": "Keyword Research",
+          "zh": "关键词研究"
+        },
+        {
+          "en": "Conversion Optimization",
+          "zh": "转化率优化"
+        }
+      ],
+      "quickPrompts": [
+        {
+          "en": "Write an SEO-optimized long-form article to boost organic traffic",
+          "zh": "帮我写一篇提升自然流量的 SEO 长文"
+        },
+        {
+          "en": "Do keyword research and competitive analysis for a topic",
+          "zh": "帮我做一个主题的关键词研究和竞品分析"
+        },
+        {
+          "en": "Optimize an existing article for better search rankings",
+          "zh": "帮我优化现有文章的搜索排名"
+        }
+      ],
+      "agents": [
+        "./agents/seo-content-team-lead.md",
+        "./agents/keyword-researcher.md",
+        "./agents/content-writer.md",
+        "./agents/seo-optimizer.md",
+        "./agents/content-editor.md",
+        "./agents/cro-analyst.md",
+        "./agents/link-strategist.md"
+      ],
+      "skills": [
+        "./skills/seo-analysis",
+        "./skills/content-writing",
+        "./skills/cro-optimization"
+      ],
+      "source": "marketplace-experts",
+      "teamInfo": {
+        "leadAgent": "seo-content-team-lead",
+        "memberAgents": [
+          "keyword-researcher",
+          "content-writer",
+          "seo-optimizer",
+          "content-editor",
+          "cro-analyst",
+          "link-strategist"
+        ]
+      },
+      "members": [
+        {
+          "id": "seo-content-team-lead",
+          "name": {
+            "en": "Sou",
+            "zh": "搜尔文"
+          },
+          "profession": {
+            "en": "Chief Content Strategist",
+            "zh": "首席内容策略官"
+          },
+          "role": "lead"
+        },
+        {
+          "id": "keyword-researcher",
+          "name": {
+            "en": "Guan",
+            "zh": "关宇霖"
+          },
+          "profession": {
+            "en": "Keyword Research & Cluster Strategist",
+            "zh": "关键词研究与主题聚类策略师"
+          },
+          "role": "member"
+        },
+        {
+          "id": "content-writer",
+          "name": {
+            "en": "Wen",
+            "zh": "文笔舒"
+          },
+          "profession": {
+            "en": "SEO Content Writer",
+            "zh": "SEO 内容撰稿人"
+          },
+          "role": "member"
+        },
+        {
+          "id": "seo-optimizer",
+          "name": {
+            "en": "Ou",
+            "zh": "欧化成"
+          },
+          "profession": {
+            "en": "On-Page SEO Specialist",
+            "zh": "页面 SEO 优化师"
+          },
+          "role": "member"
+        },
+        {
+          "id": "content-editor",
+          "name": {
+            "en": "Ai",
+            "zh": "艾笔润"
+          },
+          "profession": {
+            "en": "Content Editor & Humanizer",
+            "zh": "内容编辑与人性化专家"
+          },
+          "role": "member"
+        },
+        {
+          "id": "cro-analyst",
+          "name": {
+            "en": "Lv",
+            "zh": "率可成"
+          },
+          "profession": {
+            "en": "CRO & Landing Page Psychologist",
+            "zh": "CRO 与落地页心理学专家"
+          },
+          "role": "member"
+        },
+        {
+          "id": "link-strategist",
+          "name": {
+            "en": "Lian",
+            "zh": "连乐桥"
+          },
+          "profession": {
+            "en": "Link Strategy & Content Analyst",
+            "zh": "链接策略与内容分析师"
+          },
+          "role": "member"
+        }
+      ]
+    },
+    {
+      "name": "embedded-firmware-engineer",
+      "expertType": "agent",
+      "agentName": "embedded-firmware-engineer",
+      "displayName": {
+        "en": "Owen",
+        "zh": "固件通"
+      },
+      "profession": {
+        "en": "Embedded Firmware Engineer",
+        "zh": "嵌入式固件工程师"
+      },
+      "categoryId": "02-Engineering",
+      "displayDescription": {
+        "en": "Expert in microcontroller programming, writing efficient and reliable firmware code on resource-constrained hardware",
+        "zh": "精通微控制器编程，在资源受限的硬件上编写高效可靠的固件代码"
+      },
+      "tags": [
+        {
+          "zh": "嵌入式固件",
+          "en": "Embedded Firmware"
+        },
+        {
+          "zh": "RTOS开发",
+          "en": "RTOS Development"
+        },
+        {
+          "zh": "物联网硬件",
+          "en": "IoT Hardware"
+        }
+      ],
+      "quickPrompts": [
+        {
+          "zh": "我们需要开发嵌入式设备的固件,对实时性和稳定性要求很高,请嵌入式固件工程师帮我们设计固件架构。",
+          "en": "We need to develop firmware for embedded devices with high requirements for real-time performance and stability. Please, Embedded Firmware Engineer, help us design the firmware architecture."
+        },
+        {
+          "zh": "优化固件性能和功耗方案",
+          "en": "Optimize firmware performance and power consumption plan"
+        },
+        {
+          "zh": "设计固件OTA升级和安全启动方案",
+          "en": "Design firmware OTA update and secure boot plan"
+        }
+      ],
+      "agents": [
+        "./agents/embedded-firmware-engineer.md"
+      ],
+      "skills": null,
+      "source": "marketplace-experts"
+    },
+    {
+      "name": "workspace-builder",
+      "expertType": "agent",
+      "agentName": "workspace-builder",
+      "displayName": {
+        "en": "DeskCraft",
+        "zh": "小台"
+      },
+      "profession": {
+        "en": "Workspace Builder",
+        "zh": "工作台搭建师"
+      },
+      "categoryId": "02-Engineering",
+      "displayDescription": {
+        "en": "Build custom digital workspaces for students, professionals, creators, parents, and lifestyle users. Responsive HTML with local data persistence, one-click deployment.",
+        "zh": "为不同人群定制专属数字工作台，覆盖学习备考、职场效率、自媒体创作、宝妈育儿、生活管理五大场景，PC/移动端双适配，一键部署即用"
+      },
+      "tags": [
+        {
+          "en": "Workspace Builder",
+          "zh": "工作台搭建"
+        },
+        {
+          "en": "Responsive Web",
+          "zh": "响应式网页"
+        },
+        {
+          "en": "Personal Productivity",
+          "zh": "个人效率工具"
+        }
+      ],
+      "quickPrompts": [
+        {
+          "en": "Build a literacy learning workspace for my 4-year-old: 5 new characters daily with pictograph cards, word exercises, and point rewards",
+          "zh": "帮我4岁宝宝做一个识字启蒙工作台，每天学5个字，有象形字卡片、组词练习和闯关积分奖励"
+        },
+        {
+          "en": "Build a health + finance workspace: daily water/sleep/exercise check-in with weekly charts, plus income/expense tracking with monthly budget pie chart",
+          "zh": "做一个健康打卡+记账理财工作台，包含每日饮水/睡眠/运动打卡和周统计图表，加上收支记录和月度预算饼图"
+        },
+        {
+          "en": "Build a goal planning workspace: monthly goals broken into weekly tasks and daily todos, with progress dashboard and overdue auto-carry-forward",
+          "zh": "搭一个计划表+进度看板工作台，月目标拆解到周任务再到每日待办，带完成率仪表盘和逾期自动顺延"
+        }
+      ],
+      "agents": [
+        "./agents/workspace-builder.md"
+      ],
+      "skills": null,
+      "source": "marketplace-experts"
+    },
+    {
+      "name": "stock-partner-team",
+      "expertType": "team",
+      "agentName": "stock-partner-lead",
+      "displayName": {
+        "en": "Tencent WeStock Equity Research Team",
+        "zh": "腾讯自选股股票投研专家团"
+      },
+      "profession": {
+        "en": "Tencent WeStock Equity Research Team",
+        "zh": "腾讯自选股股票投研专家团"
+      },
+      "categoryId": "08-FinanceInvestment",
+      "displayDescription": {
+        "en": "A six-member equity research team skilled in industry strategy, signal hunting, valuation, contrarian plays, fundamentals, and short-term trading — multi-angle insights powered by live market data.",
+        "zh": "六位投研专家团，兼擅产业策略、信号捕捉、估值定价、逆向布局、基本面与短线，基于实时行情多视角研判。"
+      },
+      "tags": [
+        {
+          "zh": "估值定价",
+          "en": "Valuation Pricing"
+        },
+        {
+          "zh": "资金风向",
+          "en": "Capital Flow Direction"
+        },
+        {
+          "zh": "短线节奏",
+          "en": "Short-term Rhythm"
+        }
+      ],
+      "quickPrompts": [
+        {
+          "zh": "算力 VS 人形机器人，2026 下半年哪条主线更值得关注？",
+          "en": "Compute power vs. humanoid robots — which main theme is more worth watching in H2 2026?"
+        },
+        {
+          "zh": "兆易创新、寒武纪这波都翻倍了，当前估值和资金面怎么看？",
+          "en": "GigaDevice and Cambricon have both doubled — how do current valuations and capital flows look?"
+        },
+        {
+          "zh": "创业板创 10 年新高，从估值、资金与情绪看当前处于哪一阶段？",
+          "en": "ChiNext hits a 10-year high — where are we now by valuation, capital flows, and sentiment?"
+        }
+      ],
+      "agents": [
+        "./agents/stock-partner-lead.md",
+        "./agents/industry-strategist.md",
+        "./agents/signal-chief.md",
+        "./agents/valuation-analyst.md",
+        "./agents/contrarian-investor.md",
+        "./agents/fundamental-researcher.md",
+        "./agents/shortterm-surfer.md"
+      ],
+      "skills": [
+        "./skills/westock-data",
+        "./skills/westock-tool",
+        "./skills/md-to-html"
+      ],
+      "source": "marketplace-experts",
+      "teamInfo": {
+        "leadAgent": "stock-partner-lead",
+        "memberAgents": [
+          "industry-strategist",
+          "signal-chief",
+          "valuation-analyst",
+          "contrarian-investor",
+          "fundamental-researcher",
+          "shortterm-surfer"
+        ]
+      },
+      "members": [
+        {
+          "id": "stock-partner-lead",
+          "name": {
+            "en": "Yuan",
+            "zh": "圆汇众"
+          },
+          "profession": {
+            "en": "Research Editor",
+            "zh": "投研主编"
+          },
+          "role": "lead"
+        },
+        {
+          "id": "industry-strategist",
+          "name": {
+            "en": "Xing",
+            "zh": "星望远"
+          },
+          "profession": {
+            "en": "Industry Strategist",
+            "zh": "产业策略师"
+          },
+          "role": "member"
+        },
+        {
+          "id": "signal-chief",
+          "name": {
+            "en": "Zhou",
+            "zh": "洲四方"
+          },
+          "profession": {
+            "en": "Signal Chief",
+            "zh": "信号派首席"
+          },
+          "role": "member"
+        },
+        {
+          "id": "valuation-analyst",
+          "name": {
+            "en": "Wen",
+            "zh": "文衡价"
+          },
+          "profession": {
+            "en": "Valuation Analyst",
+            "zh": "估值分析师"
+          },
+          "role": "member"
+        },
+        {
+          "id": "contrarian-investor",
+          "name": {
+            "en": "Kun",
+            "zh": "坤候底"
+          },
+          "profession": {
+            "en": "Contrarian Investor",
+            "zh": "逆向投资人"
+          },
+          "role": "member"
+        },
+        {
+          "id": "fundamental-researcher",
+          "name": {
+            "en": "Zhao",
+            "zh": "钊审财"
+          },
+          "profession": {
+            "en": "Fundamental Researcher",
+            "zh": "财报研究员"
+          },
+          "role": "member"
+        },
+        {
+          "id": "shortterm-surfer",
+          "name": {
+            "en": "Lei",
+            "zh": "磊追浪"
+          },
+          "profession": {
+            "en": "Shortterm Surfer",
+            "zh": "短线冲浪手"
+          },
+          "role": "member"
+        }
+      ]
+    },
+    {
+      "name": "senior-developer",
+      "expertType": "agent",
+      "agentName": "senior-developer",
+      "displayName": {
+        "en": "Will",
+        "zh": "吴八哥"
+      },
+      "profession": {
+        "en": "Senior Developer",
+        "zh": "高级开发工程师"
+      },
+      "categoryId": "02-Engineering",
+      "displayDescription": {
+        "en": "Over 10 years of full-stack experience, proficient in multiple languages and frameworks, the technical backbone of the team",
+        "zh": "10年以上全栈经验，精通多种语言和框架，是团队的技术中坚"
+      },
+      "tags": [
+        {
+          "zh": "高级开发",
+          "en": "Senior Development"
+        },
+        {
+          "zh": "架构设计",
+          "en": "Architecture Design"
+        },
+        {
+          "zh": "代码质量",
+          "en": "Code Quality"
+        }
+      ],
+      "quickPrompts": [
+        {
+          "zh": "我们的团队技术能力需要提升,需要资深开发者的指导和代码质量把控,请资深开发工程师帮我们提升团队技术水平。",
+          "en": "Our team's technical capabilities need improvement, and we need guidance from senior developers and code quality control. Please, Senior Developer, help us elevate our team's technical level."
+        },
+        {
+          "zh": "集成Three.js实现3D交互效果",
+          "en": "Integrate Three.js for 3D interactive effects"
+        },
+        {
+          "zh": "优化高级CSS布局和动效实现",
+          "en": "Optimize advanced CSS layouts and animation implementation"
+        }
+      ],
+      "agents": [
+        "./agents/senior-developer.md"
+      ],
+      "skills": [
+        "./skills/browser-use",
+        "./skills/capability-evolver",
+        "./skills/frontend-dev",
+        "./skills/fullstack-dev"
+      ],
+      "source": "marketplace-experts"
+    },
+    {
+      "name": "stock-research-report-expert",
+      "expertType": "agent",
+      "agentName": "stock-research-report-expert",
+      "frontmatter": "name: stock-research-report-expert\ndescription: L2 证券/行业研究报告专家。生成专业的行业深度报告、个股研究、动态点评等金融研究文档。内置标准化报告结构框架，覆盖深度研报、常规点评、商业计划书、咨询交付物四档体量。触发关键词：行业研究、深度报告、个股研究、研报、券商报告、产业分析、行业跟踪、投资分析。",
+      "source": "builtin/tencent-docx-experts"
+    },
+    {
+      "name": "poetry-prose-expert",
+      "expertType": "agent",
+      "agentName": "poetry-prose-expert",
+      "frontmatter": "name: poetry-prose-expert\nversion: 1.0.0\ndescription: |\n  诗歌与散文写作专家。精通现代诗、古体诗词、散文、随笔、文学评论等文学创作。\n  基于中国现代诗歌美学和散文艺术理论，帮助作者提升文学表达力。\n  当用户提到「写诗」「写散文」「诗歌」「随笔」「文学评论」时触发。",
+      "source": "builtin/tencent-docx-experts"
+    },
+    {
+      "name": "academic-paper-expert",
+      "expertType": "agent",
+      "agentName": "academic-paper-expert",
+      "frontmatter": "name: academic-paper-expert\nversion: 1.0.0\ndescription: |\n  学术论文写作专家。精通社科/理工科论文结构、APA/GB-T7714引用规范、学术表达范式。\n  提供论文结构设计、文献综述、摘要撰写、学术语言润色等全流程指导。\n  当用户提到「写论文」「学术写作」「文献综述」「论文润色」「摘要」时触发。",
+      "source": "builtin/tencent-docx-experts"
+    },
+    {
+      "name": "work-report-expert",
+      "expertType": "agent",
+      "agentName": "work-report-expert",
+      "frontmatter": "name: work-report-expert\nversion: 1.0.0\ndescription: |\n  年终总结与汇报写作专家。精通工作总结、述职报告、项目汇报、竞聘演讲、周报月报等职场写作。\n  基于金字塔原理和STAR法则，帮助职场人写出结构清晰、数据有力、亮点突出的汇报材料。\n  当用户提到「年终总结」「述职报告」「工作汇报」「竞聘演讲」「周报」「月报」时触发。",
+      "source": "builtin/tencent-docx-experts"
+    },
+    {
+      "name": "science-writing-expert",
+      "expertType": "agent",
+      "agentName": "science-writing-expert",
+      "frontmatter": "name: science-writing-expert\nversion: 1.0.0\ndescription: |\n  科普写作专家。精通面向大众的科学解释、科技评测、深度报道、科普文章等。\n  基于科学传播理论和费曼学习法，将复杂科学概念转化为人人能懂的精彩内容。\n  当用户提到「科普文章」「科学解释」「科技评测」「深度报道」「科普」时触发。",
+      "source": "builtin/tencent-docx-experts"
+    },
+    {
+      "name": "tech-blog-expert",
+      "expertType": "agent",
+      "agentName": "tech-blog-expert",
+      "frontmatter": "name: tech-blog-expert\nversion: 2.0.0\ndescription: |\n  技术博客写作专家。精通技术文章、教程、架构解析、源码分析、开源项目文档。\n  基于 Developer Experience (DX) 和技术传播最佳实践，帮助开发者写出清晰、准确、有深度的技术内容。\n  「写技术文章」「写博客」「写教程」「技术分享」「架构文档」「README」触发。",
+      "source": "builtin/tencent-docx-experts"
+    },
+    {
+      "name": "general-writer",
+      "expertType": "agent",
+      "agentName": "general-writer",
+      "frontmatter": "name: general-writer\ndescription: L1 通用写作兜底专家。覆盖公文、周报、方案、邮件、文案、散文、新媒体稿件等场景，采用 7 维质量评分框架（事实/逻辑/结构/语言/风格/受众/洞察）与 10 种文体适配矩阵。当 L0 路由未命中任何 L2 专家时作为兜底触发。适用于没有特定领域严格规范的通用写作任务。",
+      "source": "builtin/tencent-docx-experts"
+    },
+    {
+      "name": "legal-contract-expert",
+      "expertType": "agent",
+      "agentName": "legal-contract-expert",
+      "frontmatter": "name: legal-contract-expert\ndescription: L2 法律合同专家。覆盖各类合同、协议、条款、契约的起草与审查，包含必备条款完整性检查（标的/价款/违约/争议解决/生效条件）、权利义务对称性审核、高风险点防范（不可抗力/知识产权归属/保密期限）。采用严格 Critic 审查，涉及法律责任任务**强制**走 per-section 模式分章审查。触发关键词：合同、契约、协议、条款、甲乙方、违约金、不可抗力、争议解决。",
+      "source": "builtin/tencent-docx-experts"
+    },
+    {
+      "name": "business-copy-expert",
+      "expertType": "agent",
+      "agentName": "business-copy-expert",
+      "frontmatter": "name: business-copy-expert\nversion: 2.0.0\ndescription: |\n  商业文案写作专家。精通品牌文案、营销邮件、产品描述、广告策划、社交媒体内容。\n  基于 AIDA 模型和广告法合规要求，提供高转化率的文案创作与诊断。\n  「写文案」「营销文案」「品牌Slogan」「广告语」「产品描述」「推广文案」「文案优化」触发。",
+      "source": "builtin/tencent-docx-experts"
+    }
+  ]
+}

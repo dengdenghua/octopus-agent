@@ -109,17 +109,9 @@ export default function SubscriptionSettingsPage() {
                 <SparklesIcon className="size-5" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold">
-                    {currentPlan?.name || t.settings.subscription.free}
-                  </span>
-                  <Badge
-                    variant={effectiveTier === "free" ? "secondary" : "default"}
-                    className="text-xs"
-                  >
-                    {effectiveTier.toUpperCase()}
-                  </Badge>
-                </div>
+                <span className="font-semibold">
+                  {currentPlan?.name || t.settings.subscription.free}
+                </span>
                 <p className="text-muted-foreground text-xs mt-0.5">
                   {effectiveTier === "free"
                     ? t.settings.subscription.freeTierDesc
@@ -304,9 +296,11 @@ function OfficialPricingSection() {
             <div className="flex items-center justify-center gap-2 text-sm">
               <UserIcon className="size-4 text-muted-foreground" />
               <span className="font-medium">{accountLabel}</span>
-              <Badge variant="secondary" className="text-xs">
-                {t.auth.currentAccount}
-              </Badge>
+              {accountLabel !== t.auth.currentAccount ? (
+                <Badge variant="secondary" className="text-xs">
+                  {t.auth.currentAccount}
+                </Badge>
+              ) : null}
             </div>
             <div>
               <p className="text-sm font-medium">

@@ -16,6 +16,7 @@ from runtime.memory.cowork.group import (
     VALID_MODES,
     ContextGrant,
     MemberEvent,
+    normalize_group_mode,
 )
 from runtime.memory.cowork.group_store import GroupStore
 
@@ -57,9 +58,10 @@ def remove_member(store: GroupStore, thread_id: str, *, actor: str, target_id: s
 
 
 def set_mode(store: GroupStore, thread_id: str, *, actor: str, mode: str) -> MemberEvent:
-    if mode not in VALID_MODES:
+    normalized_mode = normalize_group_mode(mode)
+    if normalized_mode is None:
         raise ValueError(f"mode must be one of {sorted(VALID_MODES)}")
     return store.append(
         thread_id,
-        MemberEvent(action="mode", actor=actor or "system", mode=mode),  # type: ignore[arg-type]
+        MemberEvent(action="mode", actor=actor or "system", mode=normalized_mode),
     )

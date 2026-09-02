@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Message } from "@/core/api/types";
 
 import {
+  assistantAnswerRequestsUserInput,
   extractContentFromMessage,
   extractPresentFilesFromMessage,
   extractTextFromMessage,
@@ -15,6 +16,7 @@ import {
   isClarificationToolMessage,
   isLikelyFinalAnswerContent,
   isSettledAssistantAnswer,
+  isAssistantStopTerminalState,
   latestAssistantTerminalState,
   parseUploadedFiles,
   stripInternalToolProtocol,
@@ -31,6 +33,15 @@ describe("legacy guard diagnostics", () => {
     expect(cleaned).toContain("这轮任务没有完成");
     expect(cleaned).toContain("尚未形成可交付结果");
     expect(cleaned).not.toMatch(/guard|Final Answer|Execute the stated/i);
+  });
+
+  it("removes leaked completeness feedback even without a guard label", () => {
+    const cleaned = sanitizeLegacyGuardDiagnostic(
+      "这轮任务没有完成。我已停止重复尝试，并保留了当前进度。\n\n原因：The proposed Final Answer only announces a future inspection or search. It is not a completed answer. Execute the stated read/search action.",
+    );
+
+    expect(cleaned).toContain("尚未形成可交付结果");
+    expect(cleaned).not.toMatch(/The proposed|Execute the stated/i);
   });
 
   it("preserves ordinary source-code discussion", () => {
@@ -122,6 +133,13 @@ describe("settled assistant answer detection", () => {
     expect(latestAssistantTerminalState([ai("complete")])).toBeNull();
   });
 
+  it("treats explicit cancellation and interruption as Stop, not failure", () => {
+    expect(isAssistantStopTerminalState("cancelled")).toBe(true);
+    expect(isAssistantStopTerminalState("interrupted")).toBe(true);
+    expect(isAssistantStopTerminalState("failed")).toBe(false);
+    expect(isAssistantStopTerminalState(null)).toBe(false);
+  });
+
   it("treats blocked (needs user input) as a terminal state", () => {
     expect(
       latestAssistantTerminalState([
@@ -136,9 +154,66 @@ describe("settled assistant answer detection", () => {
       ]),
     ).toBe("blocked");
   });
+
+  it("recovers blocked state from legacy final answers", () => {
+    expect(
+      assistantAnswerRequestsUserInput([
+        ai("我已经检查完现有信息。请提供项目路径，我才能继续。"),
+      ]),
+    ).toBe(true);
+    expect(
+      assistantAnswerRequestsUserInput([
+        ai("I need you to confirm which workspace should be changed."),
+      ]),
+    ).toBe(true);
+    expect(
+      assistantAnswerRequestsUserInput([
+        ai("项目已经完成；如果需要，我可以继续补充测试。"),
+      ]),
+    ).toBe(false);
+  });
 });
 
 describe("public assistant text sanitization", () => {
+  it("removes leaked original-request prompt envelopes from assistant text", () => {
+    const message = {
+      type: "ai",
+      content: [
+        "处理中。",
+        "[original-user-request]",
+        "这是用户原始问题，不应在回答中重复。",
+        "[/original-user-request]",
+        "这是实际回答。",
+      ].join("\n"),
+    } as Message;
+
+    expect(extractContentFromMessage(message)).toBe(
+      "处理中。\n\n这是实际回答。",
+    );
+  });
+
+  it("hides a truncated prompt envelope and its empty provider prefix", () => {
+    const message = {
+      type: "ai",
+      content:
+        "正在整理：[original-user-request]这是被截断的内部请求，尚未收到闭合标签",
+    } as Message;
+
+    expect(extractContentFromMessage(message)).toBe("");
+  });
+
+  it("keeps prompt-envelope syntax inside fenced code examples", () => {
+    const message = {
+      type: "ai",
+      content:
+        "示例：\n```text\n[original-user-request]\nhello\n[/original-user-request]\n```",
+    } as Message;
+
+    expect(extractContentFromMessage(message)).toContain(
+      "[original-user-request]",
+    );
+  });
+
   it("removes internal context-recovery handoffs from the visible answer", () => {
     const text =
       "Resume state: inspected items.py and reducer.ts; continue from the next file.\n\nThe public conclusion follows.";
@@ -239,9 +314,37 @@ describe("public assistant text sanitization", () => {
       ),
     ).toBe("我先检查文件。");
   });
+
+  it("removes bare search and browser tool calls from persisted replies", () => {
+    expect(
+      stripInternalToolProtocol(
+        'web_search({"query":"Eight Sleep patent lawsuit"})',
+      ),
+    ).toBe("");
+    expect(
+      stripInternalToolProtocol('browser_open({"url":"https://example.com"})'),
+    ).toBe("");
+  });
 });
 
 describe("groupMessages", () => {
+  it("keeps recovery-only truncated anchors out of the visible transcript", () => {
+    const result = groupMessages(
+      [
+        { id: "1", type: "human", content: "继续调研" },
+        {
+          id: "2",
+          type: "ai",
+          content: "[上一轮任务进行到：]\n长内容…（后文已省略）",
+          additional_kwargs: { hide_from_ui: true },
+        },
+      ] as Message[],
+      (group) => group,
+    );
+
+    expect(result.map((group) => group.id)).toEqual(["1"]);
+  });
+
   it("returns empty array for empty messages", () => {
     expect(groupMessages([], (group) => group)).toEqual([]);
   });
@@ -365,6 +468,44 @@ describe("groupMessages", () => {
     ]);
     expect(result[1]?.messages.map((message) => message.id)).toEqual(["2"]);
     expect(result[2]?.messages.map((message) => message.id)).toEqual(["3"]);
+  });
+
+  it("keeps a final answer visible when a bookkeeping tool follows it", () => {
+    const answer = {
+      id: "answer-1",
+      type: "ai",
+      content: "项目分析完成。以下是完整分析报告。",
+      additional_kwargs: { message_kind: "answer" },
+    } as Message;
+    const bookkeeping = {
+      id: "todo-1",
+      type: "ai",
+      content: "",
+      tool_calls: [
+        {
+          id: "todo-call-1",
+          name: "todo_write",
+          args: { todos: [{ content: "输出最终报告", status: "completed" }] },
+        },
+      ],
+    } as Message;
+
+    const result = groupMessages(
+      [
+        { id: "user-1", type: "human", content: "分析该项目" } as Message,
+        answer,
+        bookkeeping,
+      ],
+      (group) => group,
+    );
+
+    expect(result.map((group) => group.type)).toEqual([
+      "human",
+      "assistant",
+      "assistant:processing",
+    ]);
+    expect(result[1]?.messages).toEqual([answer]);
+    expect(result[2]?.messages).toEqual([bookkeeping]);
   });
 
   it("routes a short protocol answer beside its process from the first token", () => {
@@ -559,12 +700,46 @@ describe("groupMessages", () => {
             },
           ],
         },
+        {
+          id: "3",
+          type: "tool",
+          content: "files presented",
+          tool_call_id: "tc1",
+        },
       ] as Message[],
       (group) => group,
     );
 
     expect(result).toHaveLength(2);
     expect(result[1]?.type).toBe("assistant:present-files");
+    expect(result[1]?.messages.map((message) => message.id)).toEqual([
+      "2",
+      "3",
+    ]);
+  });
+
+  it("indexes future transcript signals without slicing the remaining array", () => {
+    const messages = [
+      { id: "1", type: "human", content: "Investigate" },
+      { id: "2", type: "ai", content: "I will inspect it." },
+      {
+        id: "3",
+        type: "ai",
+        content: "",
+        tool_calls: [{ id: "read-1", name: "read_file", args: {} }],
+      },
+      { id: "4", type: "tool", content: "done", tool_call_id: "read-1" },
+    ] as Message[];
+    Object.defineProperty(messages, "slice", {
+      configurable: true,
+      value: () => {
+        throw new Error("groupMessages must not copy the remaining transcript");
+      },
+    });
+
+    expect(
+      groupMessages(messages, (group) => group).map((group) => group.type),
+    ).toEqual(["human", "assistant:processing"]);
   });
 
   it("hides superseded approval timeout errors once a later answer exists", () => {

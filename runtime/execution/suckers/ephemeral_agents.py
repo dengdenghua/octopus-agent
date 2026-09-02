@@ -442,6 +442,109 @@ BUILTIN_ROLES: dict[str, EphemeralRoleDef] = {
             "todo_write",
         ),
     ),
+    # Narrative Studio drives these roles with an explicit, bounded context
+    # pack.  They deliberately inherit neither the caller conversation nor
+    # durable memory: story facts must come from cited project context, not an
+    # unrelated chat.  Read-only blackboard access is the entire tool surface;
+    # every output remains a candidate until human governance commits it.
+    "narrative-outline": EphemeralRoleDef(
+        id="narrative-outline",
+        display_name="Narrative Outliner",
+        description="Turns a story objective and cited context pack into a scene-level candidate outline.",
+        system_prompt=(
+            "You are a professional long-form story outliner. Use only the "
+            "facts and source references supplied in the task. Produce a "
+            "candidate outline with: dramatic objective, POV, scene beats, "
+            "turning point, emotional change, continuity dependencies, and "
+            "foreshadowing setup/payoff. Mark unsupported necessities as "
+            "[NEEDS DECISION]; never silently invent canon. Do not write prose "
+            "and never claim that your output is canonical."
+        ),
+        share_context=False,
+        share_memory=False,
+        tool_allowlist=("bb_read", "bb_keys"),
+    ),
+    "narrative-draft": EphemeralRoleDef(
+        id="narrative-draft",
+        display_name="Narrative Drafter",
+        description="Writes candidate prose from an approved outline and bounded story context.",
+        system_prompt=(
+            "You are a fiction drafter. Follow the supplied outline, POV, "
+            "language, voice constraints, and cited story facts exactly. "
+            "Prefer concrete action, sensory specificity, subtext, and causal "
+            "scene progression. Do not add world facts that the context does "
+            "not support; mark an unavoidable gap as [NEEDS DECISION]. Return "
+            "candidate prose only, never a canon declaration."
+        ),
+        share_context=False,
+        share_memory=False,
+        tool_allowlist=("bb_read", "bb_keys"),
+    ),
+    "narrative-continuity": EphemeralRoleDef(
+        id="narrative-continuity",
+        display_name="Continuity Auditor",
+        description="Checks a candidate draft against cited facts, state changes, chronology, and unresolved setup.",
+        system_prompt=(
+            "You are a strict narrative continuity auditor. Compare the draft "
+            "with every supplied source and state record. Report each issue as "
+            "severity (blocking/major/minor), exact draft evidence, conflicting "
+            "source reference, and the smallest safe correction. Also check "
+            "chronology, location, knowledge boundaries, motivation, inventory, "
+            "and foreshadowing. If evidence is absent, say unknown. Do not "
+            "rewrite the chapter and do not promote canon."
+        ),
+        share_context=False,
+        share_memory=False,
+        tool_allowlist=("bb_read", "bb_keys"),
+    ),
+    "narrative-style": EphemeralRoleDef(
+        id="narrative-style",
+        display_name="Style Critic",
+        description="Evaluates voice, pacing, clarity, dialogue, and repetition without changing story facts.",
+        system_prompt=(
+            "You are a literary style critic. Evaluate the candidate against "
+            "the requested audience, language, genre, and voice profile. "
+            "Identify pacing drag, exposition, repetition, vague language, "
+            "dialogue problems, tonal drift, and cliches. Quote only short "
+            "diagnostic fragments and propose targeted edits. Preserve all "
+            "story facts; do not make canon decisions."
+        ),
+        share_context=False,
+        share_memory=False,
+        tool_allowlist=("bb_read", "bb_keys"),
+    ),
+    "narrative-revision": EphemeralRoleDef(
+        id="narrative-revision",
+        display_name="Narrative Reviser",
+        description="Produces a new candidate revision from the draft and structured review findings.",
+        system_prompt=(
+            "You are a senior fiction reviser. Apply the supplied continuity "
+            "and style findings to the candidate draft while preserving POV, "
+            "intent, supported facts, and source traceability. Resolve every "
+            "blocking issue; if one cannot be resolved from evidence, leave a "
+            "clear [NEEDS DECISION] marker. Return the revised candidate prose "
+            "followed by a concise change log. Never claim canon status."
+        ),
+        share_context=False,
+        share_memory=False,
+        tool_allowlist=("bb_read", "bb_keys"),
+    ),
+    "narrative-editorial": EphemeralRoleDef(
+        id="narrative-editorial",
+        display_name="Editorial Judge",
+        description="Scores the revised candidate and recommends approve, revise, or block for human review.",
+        system_prompt=(
+            "You are the final editorial judge, not the canon authority. Review "
+            "the revised candidate and cited evidence. Return: recommendation "
+            "(approve/revise/block), scores from 0-100 for coherence, "
+            "continuity, character, pacing, prose, and originality, unresolved "
+            "blocking items, and a short rationale. Approval only means ready "
+            "for human governance; never commit or announce canon yourself."
+        ),
+        share_context=False,
+        share_memory=False,
+        tool_allowlist=("bb_read", "bb_keys"),
+    ),
 }
 
 
@@ -739,6 +842,25 @@ def _compose_system_prompt(
         <three tiers>
     """
     parts: list[str] = [role.system_prompt]
+
+    # Tool-use contract for multi-agent sub-agents. The single-agent react
+    # loop injects ``_TOOL_USE_CONTRACT`` (react_prompt_assembly_sections.py);
+    # this lane bypasses that assembly (react_stack is None → mini-loop), so
+    # inject an equivalent "default to tools" instruction here. Gated on the
+    # sub-agent actually holding tools (set by ``run_ephemeral_definition``) —
+    # a tool-less role is never told to call tools it doesn't have.
+    if (context or {}).get("_ephemeral_tools_available"):
+        parts.append(
+            "## Tool use contract\n\n"
+            "You have tools available in this turn and are expected to use "
+            "them. Any task that requires searching, reading, computing, "
+            "verifying, retrieving, or acting on information MUST call the "
+            "appropriate tool first and base your answer on its Observation. "
+            "Do not end the turn with an announcement instead of an action — "
+            'phrases like "I will check…", "I\'ll continue…", "Let me look '
+            'into…", or "I\'ll proceed to…" are not answers. If the tools are '
+            "available, use them before you respond."
+        )
     addendum = (context or {}).get("system_addendum")
     if isinstance(addendum, str) and addendum.strip():
         parts.append(
@@ -747,6 +869,18 @@ def _compose_system_prompt(
             "conflict.\n\n"
             f"{addendum.strip()}"
         )
+
+    # Hierarchical delegation guidance: when this sub-agent is allowed to spawn
+    # its own sub-agents, inject role-specific orchestration guidance.
+    delegation_guidance = (context or {}).get("delegation_guidance")
+    if isinstance(delegation_guidance, str) and delegation_guidance.strip():
+        parts.append(
+            "## Hierarchical Orchestration\n\n"
+            "You can delegate work to specialist sub-agents using `call_agent_parallel`. "
+            "Use this capability to decompose your task into parallel dimensions.\n\n"
+            f"{delegation_guidance.strip()}"
+        )
+
     workspace_path = (context or {}).get("workspace_path")
     delivery_roles = {"generator", "implementer", "synthesizer"}
     if role.id in delivery_roles and isinstance(workspace_path, str) and workspace_path.strip():
@@ -873,6 +1007,11 @@ def run_ephemeral_definition(
 
     call_context: dict[str, Any] = dict(context or {})
     effective_tool_policy = _effective_tool_policy(role, call_context)
+    # advertised list keeps the inherit semantics (an empty tuple means "atomic
+    # inherit", which intentionally includes the memory/SOUL skills). Those skills
+    # are blocked at the *execution* gate in ``_ephemeral_tool_exec`` instead of
+    # here, so the legacy "full grant -> []" contract (which the tests assert)
+    # stays intact and a sub-agent still can't mutate the parent's durable memory.
     effective_tool_allowlist = (
         [] if effective_tool_policy.allow_all else list(effective_tool_policy.allowed)
     )
@@ -907,6 +1046,13 @@ def run_ephemeral_definition(
     )
     if grant_note:
         call_context["dynamic_skill_grant_note"] = grant_note
+    # Feed tool availability into ``_compose_system_prompt`` so the tool-use
+    # contract is injected only when the sub-agent actually holds tools.
+    # (This lane bypasses the single-agent react prompt assembly, whose
+    # _TOOL_USE_CONTRACT it mirrors — see _react_prompt_assembly_sections.py.)
+    call_context["_ephemeral_tools_available"] = bool(
+        effective_tool_policy.allow_all or effective_tool_allowlist
+    )
     composed = _compose_system_prompt(role, session, context=call_context)
     call = EphemeralCall(
         role=role,

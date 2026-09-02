@@ -139,11 +139,18 @@ class PersistentStdioMCPClient(MCPClient):
             resolved_process_backend,
         )
 
+        from .client import _connector_env_for
+
+        # config env + connector env(认证编排层,仅已安装+启用+连接)。
+        merged_env = dict(self.config.env) if self.config.env else {}
+        for key, value in _connector_env_for(self.config.name).items():
+            merged_env.setdefault(key, value)
+
         if not process_sandbox_required():
             return parameter_type(
                 command=self.config.command,
                 args=list(self.config.args),
-                env=dict(self.config.env) if self.config.env else None,
+                env=merged_env or None,
             )
 
         if not self.config.sandbox_dir:
@@ -164,7 +171,7 @@ class PersistentStdioMCPClient(MCPClient):
             workspace=workspace,
             allow_network=False,
             timeout_s=self.config.timeout_ms / 1000,
-            extra_env=_sandbox_extra_env(self.config.env),
+            extra_env=_sandbox_extra_env(merged_env),
             # Model inference endpoints stay reachable in a network-denied
             # sandbox (Claude Desktop parity).
             inference_domains=inference_domains(),
@@ -325,17 +332,20 @@ class PersistentStdioMCPClient(MCPClient):
             if request_id is None:
                 return
             try:
-                await self._session.send_notification(
-                    mcp_types.ClientNotification(
-                        mcp_types.CancelledNotification(
-                            params=mcp_types.CancelledNotificationParams(
-                                requestId=request_id,
-                                reason=reason or "turn redirected",
-                            )
-                        )
-                    ),
-                    related_request_id=request_id,
+                cancelled = mcp_types.CancelledNotification(
+                    params=mcp_types.CancelledNotificationParams(
+                        requestId=request_id,
+                        reason=reason or "turn redirected",
+                    )
                 )
+                # MCP 1.x wraps in ``ClientNotification``; 2.x made it a
+                # Union type and accepts the notification directly.
+                if isinstance(mcp_types.ClientNotification, type):
+                    await self._session.send_notification(
+                        mcp_types.ClientNotification(cancelled),
+                    )
+                else:
+                    await self._session.send_notification(cancelled)
             except Exception as exc:  # noqa: BLE001 — remote cancellation is best-effort
                 _LOG.debug("MCP cancel notification failed: %s", exc)
 

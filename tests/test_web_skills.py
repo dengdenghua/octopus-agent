@@ -6,11 +6,13 @@ import pytest
 
 from runtime.execution.suckers import SkillRegistry
 from runtime.execution.suckers.web_skills import (
+    _SNIPPET_CAP,
     HTTPX_AVAILABLE,
     TRAFILATURA_AVAILABLE,
     WEB_SKILL_NAMES,
     _brave_search,
     _ddg_search,
+    _doubao_search,
     _fetch_url,
     _resolve_backend,
     _searxng_search,
@@ -315,6 +317,79 @@ class TestWebSearchRouting:
         assert "error" in result
 
 
+class TestNearMissRetry:
+    def test_relaxed_query_strips_quotes_operators_and_filters(self):
+        from runtime.execution.suckers.web_skills import _relaxed_query
+
+        assert _relaxed_query('"exact phrase" AND site:example.com foo') == "exact phrase foo"
+        assert _relaxed_query('"a b" "c d" e f g h i j') == "a b c d e f"
+        assert _relaxed_query("(foo OR bar) baz") == "foo bar baz"
+        assert _relaxed_query("plain query") == "plain query"
+        assert _relaxed_query('"only quoted"') == "only quoted"
+
+    def test_empty_results_triggers_relaxed_retry(self, monkeypatch):
+        """Zero-result search retries once with a loosened query."""
+        monkeypatch.delenv("WEB_SEARCH_BACKEND", raising=False)
+        monkeypatch.delenv("DOUBAO_SEARCH_API_KEY", raising=False)
+        monkeypatch.setenv("TAVILY_API_KEY", "fake-test-key")
+        monkeypatch.delenv("BRAVE_API_KEY", raising=False)
+        monkeypatch.delenv("SERPER_API_KEY", raising=False)
+        monkeypatch.delenv("SEARXNG_URL", raising=False)
+
+        # First call returns nothing; second (relaxed) call returns a hit.
+        calls: list[dict] = []
+
+        def side_effect(url, **kw):
+            body = kw.get("json", {})
+            query = body.get("query", "")
+            calls.append(query)
+            if "relaxed-only-topic" in query and not query.startswith('"'):
+                return _MockResponse(
+                    status_code=200,
+                    json_data={
+                        "results": [
+                            {
+                                "title": "Relaxed hit",
+                                "url": "https://example.com/r",
+                                "snippet": "found it",
+                            }
+                        ]
+                    },
+                )
+            return _MockResponse(status_code=200, json_data={"results": []})
+
+        client = _MockClient(post_response=None)
+        client.post = side_effect  # type: ignore[method-assign]
+
+        result = _web_search(query='"relaxed-only-topic" AND other words', client=client)
+
+        assert result.get("near_miss_retry") is True
+        assert result["original_query"] == '"relaxed-only-topic" AND other words'
+        assert result["results"][0]["title"] == "Relaxed hit"
+        # Two dispatch attempts: original then relaxed.
+        assert len(calls) == 2
+        assert calls[1] == "relaxed-only-topic other words"
+
+    def test_no_retry_when_relaxed_query_identical(self, monkeypatch):
+        """A query that's already loose does not double-fire."""
+        monkeypatch.delenv("WEB_SEARCH_BACKEND", raising=False)
+        monkeypatch.delenv("DOUBAO_SEARCH_API_KEY", raising=False)
+        monkeypatch.setenv("TAVILY_API_KEY", "fake-test-key")
+
+        calls: list[str] = []
+
+        def side_effect(url, **kw):
+            calls.append(kw.get("json", {}).get("query", ""))
+            return _MockResponse(status_code=200, json_data={"results": []})
+
+        client = _MockClient(post_response=None)
+        client.post = side_effect  # type: ignore[method-assign]
+
+        result = _web_search(query="loose plain query", client=client)
+        assert not result.get("near_miss_retry")
+        assert len(calls) == 1
+
+
 # ═══════════════════════════════════════════════════════════
 # Brave / Serper / SearXNG
 # ═══════════════════════════════════════════════════════════
@@ -390,6 +465,95 @@ class TestSearxngSearch:
         _searxng_search(client, "https://searx.example/", "q", max_results=1)
         method, url, _ = client.calls[0]
         assert url == "https://searx.example/search"
+
+
+# ═══════════════════════════════════════════════════════════
+# Snippet cap — the 400-char truncation silently dropped figures
+# the model needs (e.g. "17.6 亿美元"); the cap is now 2000.
+# ═══════════════════════════════════════════════════════════
+
+
+def _long_snippet(tail: str = "…17.6 亿美元") -> str:
+    # ~900 chars: well past the old 400-char cap but under the new 2000 cap,
+    # so the trailing figure survives only if the truncation was raised.
+    filler = "数据" * 150  # 300 chars of filler
+    return "背景" * 300 + filler + tail
+
+
+class TestSnippetCap:
+    def test_constant_is_raised(self):
+        assert _SNIPPET_CAP >= 2000
+
+    def test_doubao_keeps_long_snippet_and_asks_for_enough(self):
+        text = _long_snippet()
+        payload = {
+            "Result": {
+                "Documents": [
+                    {
+                        "Title": "报告",
+                        "Url": "https://example.com/d",
+                        "Snippet": [{"Type": "text", "Text": text}],
+                        "HostInfo": {"Hostname": "example.com"},
+                        "DocumentInfo": {},
+                    }
+                ]
+            }
+        }
+        client = _MockClient(post_response=_MockResponse(status_code=200, json_data=payload))
+        result = _doubao_search(client, "fake-key", "q", max_results=5)
+        snip = result["results"][0]["snippet"]
+        assert snip.endswith("…17.6 亿美元")
+        assert len(snip) <= _SNIPPET_CAP
+        assert "max_snippet_length" in client.calls[0][2]["json"]
+        assert client.calls[0][2]["json"]["max_snippet_length"] == _SNIPPET_CAP
+
+    def test_tavily_keeps_long_snippet(self):
+        payload = {
+            "results": [{"title": "AI", "url": "https://example.com/a", "content": _long_snippet()}]
+        }
+        client = _MockClient(post_response=_MockResponse(status_code=200, json_data=payload))
+        result = _tavily_search(client, "k", "q", max_results=5)
+        snip = result["results"][0]["snippet"]
+        assert snip.endswith("…17.6 亿美元")
+        assert len(snip) <= _SNIPPET_CAP
+
+    def test_brave_keeps_long_snippet(self):
+        payload = {"web": {"results": [{"title": "B", "url": "u", "description": _long_snippet()}]}}
+        client = _MockClient(get_response=_MockResponse(status_code=200, json_data=payload))
+        result = _brave_search(client, "k", "q", max_results=5)
+        snip = result["results"][0]["snippet"]
+        assert snip.endswith("…17.6 亿美元")
+        assert len(snip) <= _SNIPPET_CAP
+
+    def test_serper_keeps_long_snippet(self):
+        payload = {"organic": [{"title": "S", "link": "u", "snippet": _long_snippet()}]}
+        client = _MockClient(post_response=_MockResponse(status_code=200, json_data=payload))
+        result = _serper_search(client, "k", "q", max_results=5)
+        snip = result["results"][0]["snippet"]
+        assert snip.endswith("…17.6 亿美元")
+        assert len(snip) <= _SNIPPET_CAP
+
+    def test_searxng_keeps_long_snippet(self):
+        payload = {"results": [{"title": "SX", "url": "u", "content": _long_snippet()}]}
+        client = _MockClient(get_response=_MockResponse(status_code=200, json_data=payload))
+        result = _searxng_search(client, "https://searx.example/", "q", max_results=5)
+        snip = result["results"][0]["snippet"]
+        assert snip.endswith("…17.6 亿美元")
+        assert len(snip) <= _SNIPPET_CAP
+
+    def test_ddg_keeps_long_snippet(self):
+        import html as _html
+
+        text = _html.escape(_long_snippet())
+        sample = (
+            '<a class="result__a" href="https://example.com/p1">First</a>'
+            '<a class="result__snippet">' + text + "</a>"
+        )
+        client = _MockClient(post_response=_MockResponse(status_code=200, text=sample))
+        result = _ddg_search(client, "q", max_results=5)
+        snip = result["results"][0]["snippet"]
+        assert snip.endswith("…17.6 亿美元")
+        assert len(snip) <= _SNIPPET_CAP
 
 
 class TestResolveBackend:

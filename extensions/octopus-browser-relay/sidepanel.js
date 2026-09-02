@@ -15,7 +15,21 @@ const state = {
   control: null,
   assistantItems: new Map(),
   authToken: "",
+  authSaving: false,
 };
+
+function websocketAuthProtocols(token) {
+  const value = String(token || "");
+  if (!value) return [];
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  const encoded = btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+  return ["bearer.b64", encoded];
+}
 
 const el = {
   connectionText: document.getElementById("connectionText"),
@@ -35,6 +49,7 @@ const el = {
   authPanel: document.getElementById("authPanel"),
   authForm: document.getElementById("authForm"),
   authTokenInput: document.getElementById("authTokenInput"),
+  authSaveButton: document.getElementById("authSaveButton"),
   authClearButton: document.getElementById("authClearButton"),
   authStatus: document.getElementById("authStatus"),
   pageAgentButton: document.getElementById("pageAgentButton"),
@@ -49,9 +64,9 @@ async function initialize() {
   const stored = await chrome.storage.local.get(AUTH_TOKEN_KEY).catch(() => ({}));
   state.authToken = String(stored?.[AUTH_TOKEN_KEY] || "").trim();
   el.authTokenInput.value = state.authToken;
-  el.authStatus.textContent = state.authToken
-    ? "已配置连接密钥。"
-    : "密钥仅保存在此 Chrome 配置中。";
+  setAuthStatus(
+    state.authToken ? "已配置连接密钥。" : "密钥仅保存在此 Chrome 配置中。",
+  );
   await refreshRelayStatus();
   connectRealtime();
   window.setInterval(() => void refreshRelayStatus(), 1500);
@@ -60,6 +75,7 @@ async function initialize() {
 function wireUi() {
   el.authToggleButton.addEventListener("click", () => {
     el.authPanel.hidden = !el.authPanel.hidden;
+    el.authToggleButton.setAttribute("aria-expanded", String(!el.authPanel.hidden));
     if (!el.authPanel.hidden) el.authTokenInput.focus();
   });
   el.authForm.addEventListener("submit", (event) => {
@@ -85,12 +101,13 @@ function wireUi() {
     state.assistantItems.clear();
     localStorage.setItem(THREAD_KEY, state.threadId);
     el.messages.replaceChildren();
-    appendSystem("已开启新的 Chrome Sidecar 对话。");
+    appendSystem("已开启新的 Chrome 助手对话。");
+    el.promptInput.focus();
   });
   el.pageAgentButton.addEventListener("click", async () => {
     const result = await runtimeMessage({ type: "octopus.openPageAgent" });
     if (!result?.ok) {
-      appendSystem(`页面轻面板打开失败: ${result?.error || "unknown error"}`, true);
+      appendSystem(`页面轻面板打开失败：${result?.error || "未知错误"}`, true);
     }
   });
   el.openAppButton.addEventListener("click", () => {
@@ -105,17 +122,63 @@ function wireUi() {
 }
 
 async function saveGatewayToken(value) {
+  if (state.authSaving) return;
   const token = String(value || "").trim();
-  const result = await runtimeMessage({ type: "octopus.authChanged", token });
-  if (!result?.ok) {
-    el.authStatus.textContent = `连接密钥保存失败: ${result?.error || "unknown error"}`;
-    return;
+  setAuthBusy(true);
+  setAuthStatus(token ? "连接密钥已保存，正在验证连接…" : "正在清除连接密钥…");
+  try {
+    const result = await runtimeMessage({ type: "octopus.authChanged", token });
+    if (!result?.ok) {
+      setAuthBusy(false);
+      setAuthStatus(
+        `连接密钥保存失败：${result?.error || "未知错误"}`,
+        "error",
+      );
+      return;
+    }
+    state.authToken = token;
+    el.authTokenInput.value = token;
+    reconnectRealtime();
+    if (!token) {
+      await refreshRelayStatus();
+      setAuthBusy(false);
+      setAuthStatus("连接密钥已清除。");
+      return;
+    }
+    const connected = await waitForRelayConnection();
+    await refreshRelayStatus();
+    setAuthBusy(false);
+    setAuthStatus(
+      connected
+        ? "连接密钥已验证，Chrome Relay 已连接。"
+        : "密钥已保存，但未能连接。请检查密钥或确认 EchoOS 主控已启动。",
+      connected ? "success" : "error",
+    );
+  } finally {
+    setAuthBusy(false);
   }
-  state.authToken = token;
-  el.authTokenInput.value = token;
-  el.authStatus.textContent = token ? "连接密钥已保存并重新连接。" : "连接密钥已清除。";
-  reconnectRealtime();
-  await refreshRelayStatus();
+}
+
+function setAuthBusy(busy) {
+  state.authSaving = busy;
+  el.authSaveButton.disabled = busy;
+  el.authClearButton.disabled = busy;
+  el.authTokenInput.disabled = busy;
+}
+
+function setAuthStatus(message, tone = "muted") {
+  el.authStatus.textContent = message;
+  el.authStatus.dataset.tone = tone;
+}
+
+async function waitForRelayConnection(timeoutMs = 6_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const status = await runtimeMessage({ type: "octopus.status" });
+    if (status?.ok && status.relay?.push_connected === true) return true;
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
+  }
+  return false;
 }
 
 function makeThreadId() {
@@ -134,7 +197,7 @@ async function runtimeMessage(message) {
 async function refreshRelayStatus() {
   const status = await runtimeMessage({ type: "octopus.status" });
   if (!status?.ok) {
-    setConnectionText("Relay offline");
+    setConnectionText("主控离线");
     el.relayDot.className = "status-dot error";
     return;
   }
@@ -143,17 +206,17 @@ async function refreshRelayStatus() {
   state.control = status.relay?.control || null;
   const relayConnected = status.relay?.connected === true;
   el.relayDot.className = `status-dot ${relayConnected ? "connected" : ""}`;
-  el.tabTitle.textContent = state.activeTab?.title || "No active tab";
-  el.tabUrl.textContent = state.activeTab?.url || "Waiting for Chrome relay";
+  el.tabTitle.textContent = state.activeTab?.title || "尚未连接标签页";
+  el.tabUrl.textContent = state.activeTab?.url || "等待 Chrome Relay";
   renderControl();
   setConnectionText(
     state.connected
       ? relayConnected
-        ? "Realtime + Chrome connected"
-        : "Realtime connected · relay waiting"
+        ? "实时通道与 Chrome 已连接"
+        : "实时通道已连接 · 等待 Chrome"
       : relayConnected
-        ? "Chrome connected · realtime waiting"
-        : "Connecting",
+        ? "Chrome 已连接 · 等待实时通道"
+        : "正在连接",
   );
 }
 
@@ -198,7 +261,7 @@ async function toggleControlStop() {
     reason: action === "stop" ? "operator_stop" : "operator_resume",
   });
   if (!result?.ok) {
-    appendSystem(`控制权切换失败: ${result?.error || "unknown error"}`, true);
+    appendSystem(`控制权切换失败：${result?.error || "未知错误"}`, true);
     return;
   }
   state.control = result.control || null;
@@ -209,7 +272,7 @@ async function toggleControlStop() {
     appendSystem("已恢复 Chrome 页面操作。");
   }
   renderControl();
-  setConnectionText(state.connected ? "Realtime connected" : "Connecting");
+  setConnectionText(state.connected ? "实时通道已连接" : "正在连接");
 }
 
 function connectRealtime() {
@@ -220,17 +283,17 @@ function connectRealtime() {
   ) {
     return;
   }
-  const authQuery = state.authToken
-    ? `?token=${encodeURIComponent(state.authToken)}`
-    : "";
-  const wsUrl = `${state.apiBase.replace(/^http/, "ws")}/api/realtime${authQuery}`;
-  const ws = new WebSocket(wsUrl);
+  const wsUrl = `${state.apiBase.replace(/^http/, "ws")}/api/realtime`;
+  const protocols = websocketAuthProtocols(state.authToken);
+  const ws = protocols.length
+    ? new WebSocket(wsUrl, protocols)
+    : new WebSocket(wsUrl);
   state.ws = ws;
   ws.onopen = () => {
     if (state.ws !== ws) return;
     state.connected = true;
-    setConnectionText("Realtime connected");
-    appendSystem("Realtime 已连接。");
+    setConnectionText("实时通道已连接");
+    appendSystem("实时通道已连接。");
   };
   ws.onmessage = (event) => {
     if (state.ws !== ws) return;
@@ -239,14 +302,14 @@ function connectRealtime() {
   ws.onerror = () => {
     if (state.ws !== ws) return;
     state.connected = false;
-    setConnectionText("Realtime error");
+    setConnectionText("实时通道异常");
   };
   ws.onclose = () => {
     if (state.ws !== ws) return;
     state.connected = false;
-    failPending("realtime websocket closed");
+    failPending("实时通道已断开");
     state.streaming = false;
-    setConnectionText("Realtime reconnecting");
+    setConnectionText("实时通道重连中");
     window.setTimeout(() => {
       state.apiBase =
         state.apiBase === API_BASES[0] ? API_BASES[1] : API_BASES[0];
@@ -273,7 +336,7 @@ function failPending(message) {
 function rpc(method, params = {}) {
   connectRealtime();
   if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
-    return Promise.reject(new Error("realtime websocket is not connected"));
+    return Promise.reject(new Error("实时通道尚未连接"));
   }
   const id = state.nextId++;
   const payload = { jsonrpc: "2.0", id, method, params };
@@ -314,7 +377,7 @@ function handleNotification(method, params) {
   if (method === "item/started") {
     const item = params.item || {};
     if (item.type === "commandExecution") {
-      appendEvent(`工具开始: ${item.command || item.id || "command"}`);
+      appendEvent(`工具开始：${item.command || item.id || "未知命令"}`);
     }
     return;
   }
@@ -323,19 +386,19 @@ function handleNotification(method, params) {
     if (item.type === "agentMessage" && item.text) {
       replaceAssistantText(item.id, String(item.text));
     } else if (item.type === "commandExecution") {
-      appendEvent(`工具完成: ${item.command || item.id || "command"}`);
+      appendEvent(`工具完成：${item.command || item.id || "未知命令"}`);
     }
     return;
   }
   if (method === "turn/completed" || method === "turn/interrupted") {
     state.streaming = false;
-    setConnectionText("Realtime connected");
+    setConnectionText("实时通道已连接");
     return;
   }
   if (method === "error") {
     state.streaming = false;
-    setConnectionText("Realtime connected");
-    appendSystem(params.error?.message || "Agent turn failed", true);
+    setConnectionText("实时通道已连接");
+    appendSystem(params.error?.message || "Agent 任务失败", true);
   }
 }
 
@@ -345,7 +408,7 @@ async function sendPrompt() {
   appendUser(text);
   el.promptInput.value = "";
   state.streaming = true;
-  setConnectionText("Agent working");
+  setConnectionText("Agent 正在工作");
   await runtimeMessage({
     type: "octopus.control",
     action: "resume",
@@ -382,7 +445,7 @@ async function sendPrompt() {
     });
   } catch (error) {
     state.streaming = false;
-    setConnectionText("Realtime connected");
+    setConnectionText("实时通道已连接");
     appendSystem(error instanceof Error ? error.message : String(error), true);
   }
 }

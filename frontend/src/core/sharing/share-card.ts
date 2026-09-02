@@ -18,7 +18,7 @@ export interface ShareCardOptions {
   prompt?: string;
   /** Optional one-line result summary. */
   summary?: string;
-  /** Brand line. Defaults to "Octopus Agent". */
+  /** Brand line. Defaults to "EchoAI". */
   brand?: string;
   /** Footer note (e.g. a date). Caller formats it (no Date.now() here). */
   footer?: string;
@@ -40,7 +40,7 @@ export function buildShareCard(opts: ShareCardOptions): ShareCard {
     title: (opts.title ?? "").trim() || "Untitled task",
     prompt: (opts.prompt ?? "").trim(),
     summary: (opts.summary ?? "").trim(),
-    brand: (opts.brand ?? "Octopus Agent").trim(),
+    brand: (opts.brand ?? "EchoAI").trim(),
     footer: (opts.footer ?? "").trim(),
   };
 }

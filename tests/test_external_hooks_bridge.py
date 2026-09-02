@@ -121,9 +121,7 @@ def test_parse_external_hooks_claude_and_codex() -> None:
                     "hooks": [{"type": "command", "command": "python3 check.py"}],
                 }
             ],
-            "UserPromptSubmit": [
-                {"hooks": [{"type": "command", "command": "python3 prompt.py"}]}
-            ],
+            "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "python3 prompt.py"}]}],
         }
     )
     specs, skipped = parse_external_hooks(raw, "claude-code")
@@ -226,10 +224,7 @@ def test_dispatch_user_prompt_block_via_global_registry(tmp_path: Path) -> None:
 
 
 def test_dispatch_user_prompt_modified_prompt(tmp_path: Path) -> None:
-    script = (
-        "import json,sys;"
-        "print(json.dumps({'decision':'allow','modifiedPrompt':'rewritten'}))"
-    )
+    script = "import json,sys;print(json.dumps({'decision':'allow','modifiedPrompt':'rewritten'}))"
     path = _write_config(
         tmp_path,
         {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": _hook_cmd(script)}]}]},

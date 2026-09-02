@@ -1,12 +1,11 @@
-"""Canonical session URI and inline mention encoding (dsh ``uri.ts``).
+"""Canonical Octopus session URI and inline mention encoding.
 
-Ported from DeepSeek Harness' ``@deepseek-ai/dsh-session-reference``
-``uri.ts``: a host-neutral canonical ``dsh-session:`` URI scheme for
-session snapshots plus the Markdown mention render/parse seam. The URI is
-base64url of the JSON-encoded session id — lossless for any opaque id —
-and decoding re-encodes to verify canonical form, so a malformed or
-non-canonical URI fails loudly with the stable
-``SESSION_REFERENCE_INVALID_REFERENCE`` code.
+The codec originated in DeepSeek Harness' session-reference implementation,
+but the runtime protocol belongs to Octopus Native. New references use the
+host-neutral ``octopus-session:`` scheme. The historical ``dsh-session:``
+scheme remains decode-only compatible so persisted conversations and links do
+not break. The URI is base64url of the JSON-encoded session id — lossless for
+any opaque id — and decoding re-encodes the payload to verify canonical form.
 """
 
 from __future__ import annotations
@@ -19,12 +18,21 @@ from typing import Any
 
 from runtime.execution.tool_engine.session_reference import SessionReferenceError
 
-SESSION_REFERENCE_SCHEME = "dsh-session:"
+SESSION_REFERENCE_SCHEME = "octopus-session:"
+LEGACY_SESSION_REFERENCE_SCHEMES = ("dsh-session:",)
+SUPPORTED_SESSION_REFERENCE_SCHEMES = (
+    SESSION_REFERENCE_SCHEME,
+    *LEGACY_SESSION_REFERENCE_SCHEMES,
+)
 
 _PAYLOAD_RE = re.compile(r"^[A-Za-z0-9_-]+$")
-# dsh: ``@[label](uri)`` or a bare canonical URI in text.
+_SCHEME_PATTERN = (
+    "(?:" + "|".join(re.escape(scheme) for scheme in SUPPORTED_SESSION_REFERENCE_SCHEMES) + ")"
+)
+# ``@[label](uri)`` or a bare canonical/legacy URI in text.
 _MENTION_PATTERN = re.compile(
-    r"@\[((?:\\.|[^\\\]])*)\]\((dsh-session:[^\s)]*)\)|(dsh-session:[A-Za-z0-9_-]+)"
+    rf"@\[((?:\\.|[^\\\]])*)\]\(({_SCHEME_PATTERN}[^\s)]*)\)"
+    rf"|({_SCHEME_PATTERN}[A-Za-z0-9_-]+)"
 )
 _LABEL_ESCAPE_RE = re.compile(r"[\\\]]")
 _LABEL_UNESCAPE_RE = re.compile(r"\\(.)")
@@ -39,16 +47,24 @@ class ParsedSessionReferenceText:
 
 
 def encode_session_reference_uri(session_id: str) -> str:
-    """Encode any session-id string as a canonical lossless ``dsh-session:`` URI."""
+    """Encode any session id as a canonical lossless Octopus session URI."""
     payload = base64.urlsafe_b64encode(json.dumps(session_id).encode("utf-8")).rstrip(b"=")
     return f"{SESSION_REFERENCE_SCHEME}{payload.decode('ascii')}"
 
 
 def decode_session_reference_uri(uri: str) -> str:
-    """Decode and canonicalize one session-reference URI (dsh strict)."""
-    if not uri.startswith(SESSION_REFERENCE_SCHEME):
+    """Decode a current or legacy session URI with strict payload checks."""
+    scheme = next(
+        (
+            candidate
+            for candidate in SUPPORTED_SESSION_REFERENCE_SCHEMES
+            if uri.startswith(candidate)
+        ),
+        None,
+    )
+    if scheme is None:
         raise _invalid_uri(uri)
-    payload = uri[len(SESSION_REFERENCE_SCHEME) :]
+    payload = uri[len(scheme) :]
     if not _PAYLOAD_RE.match(payload):
         raise _invalid_uri(uri)
     try:
@@ -56,7 +72,8 @@ def decode_session_reference_uri(uri: str) -> str:
         parsed: Any = json.loads(raw.decode("utf-8"))
         if not isinstance(parsed, str) or not parsed:
             raise TypeError("decoded session id is not a non-empty string")
-        if encode_session_reference_uri(parsed) != uri:
+        canonical_payload = encode_session_reference_uri(parsed)[len(SESSION_REFERENCE_SCHEME) :]
+        if canonical_payload != payload:
             raise TypeError("URI is not canonical")
         return parsed
     except Exception as exc:  # noqa: BLE001 — wrap every decode failure
@@ -72,7 +89,7 @@ def format_session_reference_mention(session_id: str, label: str | None = None) 
 def parse_session_reference_text(text: str) -> ParsedSessionReferenceText:
     """Extract Markdown mentions and bare canonical URIs from one text value.
 
-    Explicit Markdown mentions fail on any malformed URI (dsh strict);
+    Explicit Markdown mentions fail on any malformed supported URI;
     bare text is treated as a reference only when its payload matches the
     base64url shape and is canonical. Returns the readable text (opaque
     tokens replaced by ``@label`` spans) plus structured references in
@@ -109,7 +126,9 @@ def _invalid_uri(uri: str, cause: BaseException | None = None) -> SessionReferen
 
 __all__ = [
     "ParsedSessionReferenceText",
+    "LEGACY_SESSION_REFERENCE_SCHEMES",
     "SESSION_REFERENCE_SCHEME",
+    "SUPPORTED_SESSION_REFERENCE_SCHEMES",
     "decode_session_reference_uri",
     "encode_session_reference_uri",
     "format_session_reference_mention",

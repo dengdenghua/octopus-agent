@@ -15,6 +15,7 @@
 
 import { nextBackoffDelay } from "@/core/streaming/backoff";
 import { swallow } from "@/core/utils/log";
+import { webSocketAuthProtocols } from "@/core/auth/websocket";
 import {
   type Envelope,
   type JsonRpcError,
@@ -218,6 +219,9 @@ export class RealtimeClient {
     method: string,
     params: Record<string, unknown> = {},
   ): Promise<R> {
+    if (this.closed) {
+      return Promise.reject(new Error("client closed"));
+    }
     const id = this.nextId++;
     const envelope: JsonRpcRequest = { jsonrpc: "2.0", id, method, params };
     return new Promise<R>((resolve, reject) => {
@@ -244,28 +248,21 @@ export class RealtimeClient {
 
   // ── Internal ───────────────────────────────────────────────
 
-  // RFC 7230 token characters — the only values allowed inside a
-  // Sec-WebSocket-Protocol header. JWTs (base64url + dots) and typical
-  // API keys pass; anything exotic falls back to the query-param
-  // convention the gateway still accepts.
-  private static SUBPROTOCOL_SAFE = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
-
   // Credentials ride the ``Sec-WebSocket-Protocol`` handshake header
-  // (``bearer, <token>``) instead of a ``?token=`` query param. Query
-  // strings end up in access logs, proxy logs and browser history;
-  // headers don't. The gateway parses this convention and echoes the
-  // ``bearer`` marker as the accepted subprotocol.
+  // instead of a ``?token=`` query param. Query strings end up in access
+  // logs, proxy logs and browser history. Base64url makes every UTF-8 token
+  // legal inside the subprotocol header, so unusual credentials never need
+  // to fall back to the URL. The gateway decodes the second protocol and
+  // echoes only the non-secret ``bearer.b64`` marker.
   private buildConnection(): { url: string; protocols?: string[] } {
     const token = this.opts.authToken?.() ?? null;
-    if (!token) return { url: this.opts.url };
-    if (RealtimeClient.SUBPROTOCOL_SAFE.test(token)) {
-      return { url: this.opts.url, protocols: ["bearer", token] };
-    }
-    const sep = this.opts.url.includes("?") ? "&" : "?";
-    return { url: `${this.opts.url}${sep}token=${encodeURIComponent(token)}` };
+    return { url: this.opts.url, protocols: webSocketAuthProtocols(token) };
   }
 
   private send(env: Envelope): void {
+    // A deliberately closed client never reconnects. Do not retain late
+    // approval replies/notifications in an outbox that can never flush.
+    if (this.closed) return;
     const text = JSON.stringify(env);
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(text);
@@ -509,9 +506,7 @@ function coalesceDeltaNotifications(batch: Notification[]): Notification[] {
     closeRun();
     merged.push(note);
     if (DELTA_METHODS.has(note.method)) {
-      runParts = [
-        String((note.params as Record<string, unknown>).delta ?? ""),
-      ];
+      runParts = [String((note.params as Record<string, unknown>).delta ?? "")];
     }
   }
   closeRun();

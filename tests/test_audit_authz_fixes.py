@@ -24,7 +24,6 @@ from __future__ import annotations
 import time
 from collections.abc import Iterator
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -124,6 +123,8 @@ def _jwt_secured_app_client(
     *,
     require_auth: bool,
 ) -> TestClient:
+    from runtime.adapters.integrations.local_auth.config import LocalAuthConfig
+
     store = IdentityStore()
     store.add(Identity(actor_id="alice", roles=("admin",)))
     app = create_app(
@@ -132,12 +133,13 @@ def _jwt_secured_app_client(
         stack=obs_stack,
         cocoloop_require_auth=require_auth,
         cocoloop_identity_store=store,
-        molili_config=SimpleNamespace(
-            enabled=False,
+        local_auth_config=LocalAuthConfig(
+            enabled=True,
+            allow_any_username=True,
+            jwt_secret=_JWT_SECRET,
             jwt_issuer=_JWT_ISSUER,
             jwt_audience=_JWT_AUDIENCE,
         ),
-        molili_jwt_secret=_JWT_SECRET,
     )
     return TestClient(app)
 
@@ -373,7 +375,6 @@ def test_legacy_control_plane_requires_auth_when_enabled(
         "/api/plugin-hub/plugins",
         "/api/prompts",
         "/api/remote-backends",
-        "/api/cli-team/status",
         "/api/team/role-models",
         "/api/computer/status",
         "/api/skills/market/installed",
@@ -395,7 +396,6 @@ def test_legacy_control_plane_open_in_dev_mode(
     assert client.get("/api/memory").status_code == 200
     assert client.get("/api/meta-skills").status_code == 200
     assert client.get("/api/plugins").status_code == 200
-    assert client.get("/api/cli-team/status").status_code == 200
     assert client.get("/api/prompts").status_code == 200
     assert client.get("/api/remote-backends").status_code == 200
     assert client.get("/api/team/role-models").status_code == 200
@@ -513,6 +513,11 @@ def test_android_device_ws_requires_token_when_auth_enabled(
     """
     monkeypatch.chdir(tmp_path)
     store, keys = _store_with_actors()
+    store.add(
+        Identity(actor_id="operator", roles=("operator",)),
+        api_key_plaintext="sk-test-operator",
+    )
+    keys["operator"] = "sk-test-operator"
     app = create_app(cocoloop_require_auth=True, cocoloop_identity_store=store)
     client = TestClient(app)
 
@@ -523,10 +528,22 @@ def test_android_device_ws_requires_token_when_auth_enabled(
     ):
         ws.receive_text()
 
-    # Valid token → handshake accepted.
+    # A valid ordinary-user token is authenticated but lacks device-control
+    # authority, so the handshake closes with the distinct role code.
+    with (
+        pytest.raises(WebSocketDisconnect) as exc_info,
+        client.websocket_connect(
+            "/api/android/ws/dev1",
+            headers=_bearer(keys["alice"]),
+        ),
+    ):
+        pass
+    assert exc_info.value.code == 4403
+
+    # Valid operator token → handshake accepted.
     with client.websocket_connect(
         "/api/android/ws/dev1",
-        headers=_bearer(keys["alice"]),
+        headers=_bearer(keys["operator"]),
     ) as ws:
         ws.send_json({"model": "Pixel", "android_version": "14"})
 

@@ -1,4 +1,4 @@
-.PHONY: install install-all quickstart quickstart-serve test test-fast test-unit test-integration test-sharded production-readiness verify-local verify-full-stack lint lint-invariants lint-mypy lint-ruff format fix clean tree \
+.PHONY: install install-all quickstart quickstart-serve test test-fast test-unit test-integration test-sharded production-readiness production-readiness-static verify-local verify-full-stack lint lint-invariants lint-mypy lint-ruff format fix clean tree \
         security \
         dev bootstrap-skills \
         up up-full down logs restart ps rebuild \
@@ -30,7 +30,7 @@ quickstart-serve:  ## Bootstrap local config and start the FastAPI service
 
 # ─── Test ────────────────────────────────────────────
 test:  ## Run pytest with coverage
-	$(PYTHON) -m pytest --cov=runtime --cov=tools -v
+	$(PYTHON) -m pytest --cov=runtime -v
 
 test-fast:  ## Run pytest without coverage
 	$(PYTHON) -m pytest -q
@@ -49,6 +49,15 @@ production-readiness:  ## Run the production readiness gate with isolated runtim
 	OCTOPUS_HOME=$${OCTOPUS_READINESS_HOME:-test-results/production-readiness} \
 	OCTOPUS_DATA_DIR=$${OCTOPUS_READINESS_DATA_DIR:-test-results/production-readiness/data} \
 	$${PYTHON:-$$(if [ -x .venv/bin/python ]; then printf '%s' .venv/bin/python; else printf '%s' python; fi)} -m scripts.production_readiness_gate \
+		--review-queue-path "$${OCTOPUS_READINESS_REVIEW_QUEUE:-test-results/production-readiness/data/review_queue.json}" \
+		--json-output "$${OCTOPUS_READINESS_REPORT:-test-results/production-readiness/readiness_gate.json}"
+
+production-readiness-static:  ## Run deterministic readiness checks (explicitly not release proof)
+	@mkdir -p $${OCTOPUS_READINESS_DATA_DIR:-test-results/production-readiness/data}
+	OCTOPUS_HOME=$${OCTOPUS_READINESS_HOME:-test-results/production-readiness} \
+	OCTOPUS_DATA_DIR=$${OCTOPUS_READINESS_DATA_DIR:-test-results/production-readiness/data} \
+	$${PYTHON:-$$(if [ -x .venv/bin/python ]; then printf '%s' .venv/bin/python; else printf '%s' python; fi)} -m scripts.production_readiness_gate \
+		--static-only \
 		--review-queue-path "$${OCTOPUS_READINESS_REVIEW_QUEUE:-test-results/production-readiness/data/review_queue.json}" \
 		--json-output "$${OCTOPUS_READINESS_REPORT:-test-results/production-readiness/readiness_gate.json}"
 
@@ -86,7 +95,7 @@ fix:  ## Run ruff fixes and formatting
 
 security:  ## Run security scans (bandit + pip-audit)
 	$(PYTHON) -m bandit -r runtime/ -ll -ii
-	$(PYTHON) -m pip_audit --ignore-vuln PYSEC-2026-2858
+	$(PYTHON) -m pip_audit
 
 # ─── Clean ───────────────────────────────────────────
 clean-noise:  ## Remove workspace noise + list stray root entries (audit A-09)
@@ -99,36 +108,31 @@ clean:  ## Clean caches
 	find . -type f -name "*.pyc" -delete
 	rm -rf build/ dist/ *.egg-info .coverage htmlcov/
 
-# Implementation note.
-# Implementation note.
-# Implementation note.
-# Implementation note.
-# ─── Registry · 停止打包(registry 为单一事实源,启动前按 lockfile 同步技能)───
-bootstrap-skills:  ## Sync registry skills from skills.lock.json → skills/public (run before serve)
+# ─── Registry · local/development prompt refresh ─────
+# Production ignores this mutable cache and uses the immutable bundled catalog.
+bootstrap-skills:  ## Refresh local registry skills from skills.lock.json → skills/public
 	$(PYTHON) -m octopus_runtime bootstrap --lockfile skills.lock.json --skills-dir skills/public
 
-# Implementation note.
 dev:  ## Run local development server with config.local.yaml and .env
 	@test -f config.local.yaml || { echo "ERROR: config.local.yaml 不存在 · 先建一份真 LLM 配置（可参考 config.example.yaml 然后改 model + mock_response=null）"; exit 1; }
 	@test -f .env || { echo "ERROR: .env 不存在 · 填 ANTHROPIC_API_KEY + ANTHROPIC_BASE_URL 等"; exit 1; }
 	$(PYTHON) -m runtime serve --config config.local.yaml --port 8000
 
-# Implementation note.
 up:  ## Start the minimal single-container compose stack
-	@test -f config.yaml || cp config.example.yaml config.yaml
+	@if [ ! -f config.yaml ]; then cp config.example.yaml config.yaml; test -f .env || cp .env.example .env; echo "ERROR: created config.yaml/.env; enable oct or local_auth with a strong secret, then rerun make up"; exit 1; fi
 	@test -f .env || cp .env.example .env
 	@mkdir -p data
 	docker compose up -d
 	@echo "→ http://localhost:8000/  ·  logs: make logs"
 
 up-full:  ## Start the full compose stack
-	@test -f config.yaml || cp config.example.yaml config.yaml
+	@if [ ! -f config.yaml ]; then cp config.example.yaml config.yaml; test -f .env || cp .env.example .env; echo "ERROR: created config.yaml/.env; enable oct or local_auth with a strong secret, then rerun make up-full"; exit 1; fi
 	@test -f .env || cp .env.example .env
 	@mkdir -p data data/redis data/grafana
 	docker compose -f docker-compose.full.yml up -d
 	@echo "→ Agent    http://localhost:8000/"
 	@echo "→ Jaeger   http://localhost:16686/"
-	@echo "→ Grafana  http://localhost:3000/   (admin / admin)"
+	@echo "→ Grafana  http://localhost:3000/   (admin / configured GRAFANA_PASSWORD)"
 
 down:  ## Stop and remove containers while keeping ./data
 	-docker compose down
@@ -147,8 +151,8 @@ rebuild:  ## Rebuild image and restart after code changes
 	docker compose build --no-cache octopus-agent
 	docker compose up -d octopus-agent
 
-# Implementation note.
 k8s-apply:  ## Apply deploy/k8s with kustomize
+	@if ! grep -Eq '^[[:space:]]*digest:[[:space:]]*sha256:[0-9a-fA-F]{64}[[:space:]]*$$' deploy/k8s/kustomization.yaml || grep -Eq '^[[:space:]]*digest:[[:space:]]*sha256:0{64}[[:space:]]*$$' deploy/k8s/kustomization.yaml; then echo "ERROR: set images[].digest in deploy/k8s/kustomization.yaml to a non-zero cosign-verified release digest"; exit 1; fi
 	kubectl apply -k deploy/k8s/
 
 k8s-delete:  ## Delete k8s resources; namespace PVCs may need manual cleanup

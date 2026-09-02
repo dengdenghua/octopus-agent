@@ -7,7 +7,8 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { TerminalIcon, XIcon, RotateCcwIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { swallow } from "@/core/utils/log";
-import { getBackendBaseURL } from "@/core/config";
+import { getToken } from "@/core/auth/api";
+import { getBackendBaseURL, getBackendWebSocketBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import "@xterm/xterm/css/xterm.css";
 
@@ -16,6 +17,12 @@ interface TerminalPanelProps {
   cwd?: string;
   className?: string;
   onClose?: () => void;
+}
+
+function terminalShellLabel(platform: string): string {
+  if (/win/i.test(platform)) return "PowerShell";
+  if (/mac|iphone|ipad/i.test(platform)) return "zsh";
+  return "shell";
 }
 
 export function TerminalPanel({
@@ -36,10 +43,13 @@ export function TerminalPanel({
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
-    const base = getBackendBaseURL() || window.location.origin;
-    const wsBase = base.replace(/^http/, "ws");
-    const params = cwd ? `?cwd=${encodeURIComponent(cwd)}` : "";
-    const url = `${wsBase}/api/terminal/ws/${sessionId}${params}`;
+    const wsBase = getBackendWebSocketBaseURL();
+    const params = new URLSearchParams();
+    if (cwd) params.set("cwd", cwd);
+    const token = getToken();
+    if (token) params.set("token", token);
+    const query = params.size ? `?${params.toString()}` : "";
+    const url = `${wsBase}/api/terminal/ws/${sessionId}${query}`;
 
     const ws = new WebSocket(url);
     wsRef.current = ws;
@@ -136,7 +146,7 @@ export function TerminalPanel({
 
   const handleRestart = useCallback(async () => {
     wsRef.current?.close();
-    const base = getBackendBaseURL() || window.location.origin;
+    const base = getBackendBaseURL();
     try {
       await fetch(`${base}/api/terminal/kill/${sessionId}`, { method: "POST" });
     } catch (e) {
@@ -150,7 +160,10 @@ export function TerminalPanel({
 
   return (
     <div
-      className={cn("flex h-full flex-col bg-background text-foreground", className)}
+      className={cn(
+        "flex h-full flex-col bg-background text-foreground",
+        className,
+      )}
     >
       <div className="flex items-center justify-between border-b border-border bg-background px-3 py-2">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -158,7 +171,9 @@ export function TerminalPanel({
           <span className="text-sm font-semibold text-foreground">
             {t.codeMode.terminal}
           </span>
-          <span className="font-medium">powershell</span>
+          <span className="font-medium">
+            {terminalShellLabel(navigator.platform || navigator.userAgent)}
+          </span>
           <span
             className={cn(
               "size-1.5 rounded-full",
@@ -202,3 +217,5 @@ export function TerminalPanel({
     </div>
   );
 }
+
+export const __testing = { terminalShellLabel };

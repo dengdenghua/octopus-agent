@@ -118,7 +118,7 @@ type ReloadResp = {
 
 const POLL_INTERVAL_MS = 2000;
 
-export default function ReflexMonitorPage() {
+export function ReflexMonitorContent() {
   const { t } = useI18n();
   const [stats, setStats] = useState<Stats | null>(null);
   const [rules, setRules] = useState<Rule[]>([]);
@@ -126,6 +126,7 @@ export default function ReflexMonitorPage() {
   const [tiers, setTiers] = useState<TierInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [reloadMsg, setReloadMsg] = useState<string | null>(null);
+  const [reloadHasError, setReloadHasError] = useState(false);
   const [tickedAt, setTickedAt] = useState<Date | null>(null);
 
   const fetchAll = useCallback(async () => {
@@ -150,7 +151,7 @@ export default function ReflexMonitorPage() {
       setTickedAt(new Date());
     } catch (e) {
       swallow(e);
-      setError(e instanceof Error ? e.message : t.reflexPage.fetchFailed);
+      setError(t.reflexPage.fetchFailed);
     }
   }, [t.reflexPage.fetchFailed]);
 
@@ -165,6 +166,7 @@ export default function ReflexMonitorPage() {
   const reload = useCallback(
     async (resetStats: boolean) => {
       setReloadMsg(t.reflexPage.reloadingStatus);
+      setReloadHasError(false);
       try {
         const r = await reflexFetch<ReloadResp>(
           `/api/reflex/reload${resetStats ? "?reset_stats=true" : ""}`,
@@ -175,16 +177,19 @@ export default function ReflexMonitorPage() {
             t.reflexPage.reloadLoaded(r.rules_loaded, r.stats_reset),
           );
         } else {
-          setReloadMsg(t.reflexPage.reloadError(r.error));
+          setReloadMsg(t.reflexPage.reloadFailed);
+          setReloadHasError(true);
         }
         void fetchAll();
       } catch (e) {
         swallow(e);
-        setReloadMsg(
-          e instanceof Error ? e.message : t.reflexPage.reloadFailed,
-        );
+        setReloadMsg(t.reflexPage.reloadFailed);
+        setReloadHasError(true);
       }
-      window.setTimeout(() => setReloadMsg(null), 4000);
+      window.setTimeout(() => {
+        setReloadMsg(null);
+        setReloadHasError(false);
+      }, 4000);
     },
     [fetchAll, t],
   );
@@ -201,227 +206,263 @@ export default function ReflexMonitorPage() {
     () => [...rules].sort((a, b) => b.priority - a.priority),
     [rules],
   );
+  const hasReflexSnapshot = stats !== null && series !== null;
 
   return (
-    <WorkspaceContainer>
-      <WorkspaceBody className="px-4 pb-4">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-          {/* Hero / actions */}
-          <section className="workspace-panel px-4 py-4 sm:px-6 sm:py-5">
-            <div className="flex flex-col items-start gap-4 md:flex-row md:items-center">
-              <div className="flex size-11 items-center justify-center rounded-lg bg-gradient-to-br from-success to-cyan-500 text-white shadow-[var(--shadow-md)] shadow-success/20">
-                <ZapIcon className="size-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h1 className="text-2xl font-bold tracking-tight">
-                  {t.reflexPage.pageTitle}
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  {t.reflexPage.subtitle}
-                  {tickedAt
-                    ? t.reflexPage.lastRefreshPrefix(
-                        tickedAt.toLocaleTimeString(),
-                      )
-                    : ""}
-                </p>
-              </div>
-              <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
-                {/* Gene-lock badge · shows current maturity level +
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+      {/* Hero / actions */}
+      <section className="workspace-panel px-4 py-4 sm:px-6 sm:py-5">
+        <div className="flex flex-col items-start gap-4 md:flex-row md:items-center">
+          <div className="flex size-11 items-center justify-center rounded-lg bg-gradient-to-br from-success to-cyan-500 text-white shadow-[var(--shadow-md)] shadow-success/20">
+            <ZapIcon className="size-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl font-bold tracking-tight">
+              {t.reflexPage.pageTitle}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {t.reflexPage.subtitle}
+              {tickedAt
+                ? t.reflexPage.lastRefreshPrefix(tickedAt.toLocaleTimeString())
+                : ""}
+            </p>
+          </div>
+          <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
+            {/* Gene-lock badge · shows current maturity level +
                     panic state · click to drill into governance
                     controls. Auto-hides when the /api/gene-locks/
                     endpoint isn't available (older backends). */}
-                <GeneLockBadge />
-                <Button asChild variant="outline" size="sm">
-                  <Link to="/workspace/reflex/edit">
-                    <EditIcon className="mr-2 size-4" />
-                    {t.reflexPage.editRulesButton}
-                  </Link>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => reload(false)}
-                >
-                  <RefreshCwIcon className="mr-2 size-4" />
-                  {t.reflexPage.reloadButton}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => reload(true)}
-                >
-                  {t.reflexPage.reloadResetButton}
-                </Button>
-              </div>
-            </div>
-            {(reloadMsg || error) && (
-              <div className="mt-3 text-xs">
-                {reloadMsg && (
-                  <span className="rounded-md bg-success/10 px-2 py-1 text-success">
-                    {reloadMsg}
-                  </span>
+            <GeneLockBadge />
+            <Button asChild variant="outline" size="sm">
+              <Link to="/workspace/reflex/edit">
+                <EditIcon className="mr-2 size-4" />
+                {t.reflexPage.editRulesButton}
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => reload(false)}>
+              <RefreshCwIcon className="mr-2 size-4" />
+              {t.reflexPage.reloadButton}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => reload(true)}>
+              {t.reflexPage.reloadResetButton}
+            </Button>
+          </div>
+        </div>
+        {(reloadMsg || error) && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+            {reloadMsg && (
+              <span
+                role={reloadHasError ? "alert" : "status"}
+                className={cn(
+                  "rounded-md px-2 py-1",
+                  reloadHasError
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-success/10 text-success",
                 )}
-                {error && (
-                  <span className="ml-2 rounded-md bg-destructive/10 px-2 py-1 text-destructive">
-                    {error}
-                  </span>
-                )}
+              >
+                {reloadMsg}
+              </span>
+            )}
+            {error && (
+              <div
+                role="alert"
+                className="flex items-center gap-2 rounded-md bg-destructive/10 px-2 py-1 text-destructive"
+              >
+                <span>
+                  {hasReflexSnapshot
+                    ? t.reflexPage.dataRefreshFailed
+                    : t.reflexPage.dataUnavailable}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => void fetchAll()}
+                >
+                  {t.reflexPage.retryButton}
+                </Button>
               </div>
             )}
-          </section>
+          </div>
+        )}
+      </section>
 
-          {/* Stat cards */}
-          <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-            <StatCard
-              icon={<TargetIcon className="size-4" />}
-              label={t.reflexPage.statTry}
-              value={stats?.try_count ?? 0}
-            />
-            <StatCard
-              icon={<ZapIcon className="size-4" />}
-              label={t.reflexPage.statHit}
-              value={stats?.hit_count ?? 0}
-              tone="good"
-            />
-            <StatCard
-              icon={<BarChart3Icon className="size-4" />}
-              label={t.reflexPage.statHitRate}
-              value={stats ? `${(stats.hit_rate * 100).toFixed(1)}%` : "0%"}
-              tone="good"
-            />
-            <StatCard
-              icon={<ActivityIcon className="size-4" />}
-              label={t.reflexPage.statRules}
-              value={rules.length}
-            />
-            <StatCard
-              icon={<HourglassIcon className="size-4" />}
-              label={t.reflexPage.statStale}
-              value={stats?.coverage?.stale.length ?? 0}
-              tone={
-                (stats?.coverage?.stale.length ?? 0) > 0 ? "warn" : undefined
+      {/* Stat cards */}
+      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <StatCard
+          icon={<TargetIcon className="size-4" />}
+          label={t.reflexPage.statTry}
+          value={stats?.try_count ?? "—"}
+        />
+        <StatCard
+          icon={<ZapIcon className="size-4" />}
+          label={t.reflexPage.statHit}
+          value={stats?.hit_count ?? "—"}
+          tone="good"
+        />
+        <StatCard
+          icon={<BarChart3Icon className="size-4" />}
+          label={t.reflexPage.statHitRate}
+          value={stats ? `${(stats.hit_rate * 100).toFixed(1)}%` : "—"}
+          tone="good"
+        />
+        <StatCard
+          icon={<ActivityIcon className="size-4" />}
+          label={t.reflexPage.statRules}
+          value={stats ? rules.length : "—"}
+        />
+        <StatCard
+          icon={<HourglassIcon className="size-4" />}
+          label={t.reflexPage.statStale}
+          value={stats?.coverage?.stale.length ?? "—"}
+          tone={(stats?.coverage?.stale.length ?? 0) > 0 ? "warn" : undefined}
+        />
+        <StatCard
+          icon={<ClockIcon className="size-4" />}
+          label={t.reflexPage.statLastHourHits}
+          value={series?.total_events ?? "—"}
+        />
+      </div>
+
+      {/* Sparkline */}
+      <Card className="workspace-panel border-white/40 shadow-none dark:border-white/10">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">
+            {t.reflexPage.sparklineTitle}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {series ? (
+            <Sparkline buckets={series.buckets ?? []} />
+          ) : (
+            <DataPlaceholder
+              text={
+                error
+                  ? t.reflexPage.sparklineUnavailable
+                  : t.reflexPage.dataLoading
               }
             />
-            <StatCard
-              icon={<ClockIcon className="size-4" />}
-              label={t.reflexPage.statLastHourHits}
-              value={series?.total_events ?? 0}
-            />
-          </div>
+          )}
+        </CardContent>
+      </Card>
 
-          {/* Sparkline */}
-          <Card className="workspace-panel border-white/40 shadow-none dark:border-white/10">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">
-                {t.reflexPage.sparklineTitle}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Sparkline buckets={series?.buckets ?? []} />
-            </CardContent>
-          </Card>
+      {/* RecipeForge · 7th reflection path · prompt evolution */}
+      <RecipeForgePanel />
 
-          {/* RecipeForge · 7th reflection path · prompt evolution */}
-          <RecipeForgePanel />
-
-          {/* Variant A/B performance · auto-hides when no recipes
+      {/* Variant A/B performance · auto-hides when no recipes
               have manifests (fresh deployments won't see it until
               the operator applies a variant for the first time). */}
-          <VariantPerformancePanel />
+      <VariantPerformancePanel />
 
-          {/* Tiers (fuzzy_cache + slm) */}
-          {tiers.length > 0 && (
-            <Card className="workspace-panel border-white/40 shadow-none dark:border-white/10">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">
-                  {t.reflexPage.responseTiersTitle}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {tiers.map((t) => (
-                    <TierCard key={t.name} tier={t} />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+      {/* Tiers (fuzzy_cache + slm) */}
+      {tiers.length > 0 && (
+        <Card className="workspace-panel border-white/40 shadow-none dark:border-white/10">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">
+              {t.reflexPage.responseTiersTitle}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 md:grid-cols-2">
+              {tiers.map((t) => (
+                <TierCard key={t.name} tier={t} />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-          {/* Rules table */}
-          <Card className="workspace-panel border-white/40 shadow-none dark:border-white/10">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">
-                {t.reflexPage.rulesTableTitle}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-xs uppercase tracking-wide text-muted-foreground">
-                  <tr className="border-b border-border-default">
-                    <th className="pb-2 text-left font-medium">
-                      {t.reflexPage.colRule}
-                    </th>
-                    <th className="pb-2 text-left font-medium">
-                      {t.reflexPage.colKind}
-                    </th>
-                    <th className="pb-2 text-left font-medium">
-                      {t.reflexPage.colPatternType}
-                    </th>
-                    <th className="pb-2 text-right font-medium">
-                      {t.reflexPage.colPrio}
-                    </th>
-                    <th className="pb-2 text-right font-medium">
-                      {t.reflexPage.colTries}
-                    </th>
-                    <th className="pb-2 text-right font-medium">
-                      {t.reflexPage.colHits}
-                    </th>
-                    <th className="pb-2 text-right font-medium">
-                      {t.reflexPage.colRate}
-                    </th>
-                    <th className="pb-2 text-right font-medium">
-                      {t.reflexPage.colLast}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedRules.map((r) => {
-                    const s = stats?.by_rule[r.rule_id] ?? {
-                      tries: 0,
-                      hits: 0,
-                      hit_rate: 0,
-                    };
-                    const pat =
-                      r.pattern ||
-                      r.intent_type ||
-                      (r.kind === "cache" ? `ttl=${r.ttl_seconds}s` : "");
-                    return (
-                      <RuleRow
-                        key={r.rule_id}
-                        rule={r}
-                        stats={s}
-                        pat={pat}
-                        stale={staleSet.has(r.rule_id)}
-                        unexercised={unexercisedSet.has(r.rule_id)}
-                        lastHit={formatLastHit(r.last_hit_at, t)}
-                      />
-                    );
-                  })}
-                  {sortedRules.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={8}
-                        className="py-6 text-center text-xs text-muted-foreground"
-                      >
-                        {t.reflexPage.noRulesLoaded}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
-        </div>
+      {/* Rules table */}
+      <Card className="workspace-panel border-white/40 shadow-none dark:border-white/10">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">
+            {t.reflexPage.rulesTableTitle}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase tracking-wide text-muted-foreground">
+              <tr className="border-b border-border-default">
+                <th className="pb-2 text-left font-medium">
+                  {t.reflexPage.colRule}
+                </th>
+                <th className="pb-2 text-left font-medium">
+                  {t.reflexPage.colKind}
+                </th>
+                <th className="pb-2 text-left font-medium">
+                  {t.reflexPage.colPatternType}
+                </th>
+                <th className="pb-2 text-right font-medium">
+                  {t.reflexPage.colPrio}
+                </th>
+                <th className="pb-2 text-right font-medium">
+                  {t.reflexPage.colTries}
+                </th>
+                <th className="pb-2 text-right font-medium">
+                  {t.reflexPage.colHits}
+                </th>
+                <th className="pb-2 text-right font-medium">
+                  {t.reflexPage.colRate}
+                </th>
+                <th className="pb-2 text-right font-medium">
+                  {t.reflexPage.colLast}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedRules.map((r) => {
+                const s = stats?.by_rule[r.rule_id] ?? {
+                  tries: 0,
+                  hits: 0,
+                  hit_rate: 0,
+                };
+                const pat =
+                  r.pattern ||
+                  r.intent_type ||
+                  (r.kind === "cache"
+                    ? r.ttl_seconds != null
+                      ? `ttl=${r.ttl_seconds}s`
+                      : "默认 TTL"
+                    : "");
+                return (
+                  <RuleRow
+                    key={r.rule_id}
+                    rule={r}
+                    stats={s}
+                    pat={pat}
+                    stale={staleSet.has(r.rule_id)}
+                    unexercised={unexercisedSet.has(r.rule_id)}
+                    lastHit={formatLastHit(r.last_hit_at, t)}
+                  />
+                );
+              })}
+              {sortedRules.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={8}
+                    className="py-6 text-center text-xs text-muted-foreground"
+                  >
+                    {error && !stats
+                      ? t.reflexPage.rulesUnavailable
+                      : !stats
+                        ? t.reflexPage.dataLoading
+                        : t.reflexPage.noRulesLoaded}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export default function ReflexMonitorPage() {
+  return (
+    <WorkspaceContainer>
+      <WorkspaceBody className="px-4 pb-4">
+        <ReflexMonitorContent />
       </WorkspaceBody>
     </WorkspaceContainer>
   );
@@ -453,6 +494,14 @@ function StatCard({
       >
         {value}
       </div>
+    </div>
+  );
+}
+
+function DataPlaceholder({ text }: { text: string }) {
+  return (
+    <div className="flex h-[60px] w-full items-center justify-center rounded-md border border-dashed border-border-default text-xs text-muted-foreground">
+      {text}
     </div>
   );
 }
@@ -581,10 +630,7 @@ function RuleRow({
         <div className="flex flex-wrap items-center gap-1 font-mono">
           <span>{rule.rule_id}</span>
           {(rule.actions ?? []).map((a) => (
-            <Badge
-              key={a}
-              className="bg-info/15 text-info hover:bg-info/15"
-            >
+            <Badge key={a} className="bg-info/15 text-info hover:bg-info/15">
               {a}
             </Badge>
           ))}
@@ -633,9 +679,7 @@ function RuleRow({
           </div>
         )}
       </td>
-      <td className="py-2 pr-3 font-mono text-xs text-chart-3">
-        {rule.kind}
-      </td>
+      <td className="py-2 pr-3 font-mono text-xs text-chart-3">{rule.kind}</td>
       <td className="max-w-[280px] truncate py-2 pr-3 font-mono text-xs text-info">
         {pat}
       </td>

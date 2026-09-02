@@ -1,20 +1,28 @@
 import {
-  GlobeIcon,
+  BookOpenIcon,
+  ExternalLinkIcon,
+  FileIcon,
+  FlagIcon,
+  FolderKanbanIcon,
   ImageIcon,
   LightbulbIcon,
+  ListTodoIcon,
   Loader2Icon,
+  MonitorIcon,
+  PuzzleIcon,
+  SearchIcon,
   SendHorizontalIcon,
+  Settings2Icon,
   ZapIcon,
   MapIcon,
-  MonitorIcon,
   PaperclipIcon,
   PlusIcon,
-  ClipboardCheckIcon,
   SlidersHorizontalIcon,
   SquareIcon,
-  TargetIcon,
+  XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { useMentionAutocomplete } from "../mention-autocomplete";
 
@@ -26,13 +34,15 @@ import {
 } from "@/core/composer-image-inbox";
 import { useI18n } from "@/core/i18n/hooks";
 import { useModels } from "@/core/models/hooks";
+import { usePlugins } from "@/core/plugins/hooks";
+import { useSkills } from "@/core/skills/hooks";
 import {
   loadComposerDraft,
   saveComposerDraft,
 } from "@/core/threads/composer-draft";
 import { EvolutionIndicator } from "../evolution-indicator";
 import { ModelPicker, type PickerModel } from "../model-picker";
-import { PartnerModelControl } from "../partner-model-control";
+import { CoderEngineControl } from "../coder-engine-control";
 import { PreviewRefreshIndicator } from "../preview-refresh-indicator";
 import { tryLocalSlash } from "../local-slash-dispatch";
 import { useSlashTypeahead } from "../use-slash-typeahead";
@@ -44,19 +54,25 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { DesktopPetMascot } from "@/components/desktop-pet";
-import { usePetSettings } from "@/core/pet/pet-settings";
 import { cn } from "@/lib/utils";
 import { normalizePermissionMode } from "@/core/permissions";
-import { uploadFiles } from "@/core/uploads";
+import { captureComputerAppshot } from "@/core/computer/api";
+import { uploadFiles, useAttachmentUploads } from "@/core/uploads";
 import type { ResearchMaterial, ResearchSourceKind } from "@/core/research/api";
 import {
-  codexComposerModeMarker,
-  parseCodexComposerModeMarker,
-  type CodexComposerMode,
-} from "@/core/threads/codex-composer-mode";
+  addComposerCapabilityRef,
+  parseComposerDraft,
+  removeComposerCapabilityRef,
+  serializeComposerDraft,
+  setComposerDraftMode,
+  type ComposerCapabilityRef,
+  type ComposerCommandMode,
+} from "@/core/threads/composer-capability-refs";
 
 import type { ChatInputBoxProps } from "../chat-input-box";
 import {
@@ -76,6 +92,8 @@ import {
 import { MentionPicker } from "./MentionPicker";
 import { FileAttachment } from "./FileAttachment";
 import { ResearchSourcePicker } from "./ResearchSourcePicker";
+import { AutomationTargetControl } from "./AutomationTargetControl";
+import { FileTree } from "../file-tree";
 
 /**
  * The main chat composer card: textarea + file attachments + deep-research
@@ -87,10 +105,18 @@ export function ChatComposer({
   status,
   disabled,
   modelName,
-  petMood = "idle",
-  showPet = true,
   mode = "react",
   threadId,
+  mentionMembers,
+  responseModeControl,
+  automationTarget,
+  onAutomationTargetChange,
+  isGroupConversation = false,
+  groupTaskStrategy = "auto",
+  onGroupTaskStrategyChange,
+  projectCapabilityEnabled = false,
+  onProjectCapabilityAction,
+  onSwitchPanel,
   workDir,
   placeholder,
   autoFocus,
@@ -103,12 +129,12 @@ export function ChatComposer({
   showInspirationToggle = false,
   permissionMode,
   reasoningEffort,
-  partnerId,
-  partnerModel,
-  onPartnerModelChange,
+  modelProfileControl = false,
+  executionEngine = "octopus",
   onPermissionModeChange,
   onReasoningEffortChange,
   onModelChange,
+  onModelSwitchNotice,
   onModeChange,
   onDeepResearch,
   onSubmit,
@@ -118,23 +144,11 @@ export function ChatComposer({
 }: ChatInputBoxProps) {
   const { t } = useI18n();
   const { models } = useModels();
-  const petVisible = usePetSettings().visible;
-  // 同步 Electron 桌面宠物（Godot sidecar）与网页内宠物：开关关闭时一并
-  // 隐藏桌面窗口。浏览器环境无 window.octopus.pet，天然 no-op。
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.octopus?.isElectron) return;
-    const pet = window.octopus.pet;
-    if (!pet) return;
-    if (petVisible) {
-      void pet.start().catch(() => {});
-    } else {
-      void pet.stop().catch(() => {});
-    }
-  }, [petVisible]);
-  const [draft, setDraft] = useState(() =>
-    // A per-thread draft survives thread switches and reloads. defaultValue
-    // (external injection, e.g. "retry this message") wins when present.
-    defaultValue || (loadComposerDraft(threadId) ?? ""),
+  const [draft, setDraft] = useState(
+    () =>
+      // A per-thread draft survives thread switches and reloads. defaultValue
+      // (external injection, e.g. "retry this message") wins when present.
+      defaultValue || (loadComposerDraft(threadId) ?? ""),
   );
   // Restore the stored draft when the composer moves to a different thread
   // (the component is reused across navigation).
@@ -166,12 +180,14 @@ export function ChatComposer({
   const submitLockRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  // Images attached to the next message via paste / drop / image-picker.
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
+  const [skillSearch, setSkillSearch] = useState("");
+  // Images attached to the next message via paste / drop / file-picker.
   // Stored separately from research materials so they ride the
   // multimodal `images` channel into sendMessage rather than going
   // through the artifact-upload pipeline used by research files.
   const [pendingImages, setPendingImages] = useState<File[]>([]);
-  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const [pendingImagePreviews, setPendingImagePreviews] = useState<
     Record<string, string>
   >({});
@@ -179,7 +195,39 @@ export function ChatComposer({
     Record<string, string>
   >({});
   const [pendingFiles, setPendingFiles] = useState<PendingContextFile[]>([]);
+  const [capturingAppshot, setCapturingAppshot] = useState(false);
   const contextFileInputRef = useRef<HTMLInputElement | null>(null);
+  const {
+    plugins,
+    isLoading: pluginsLoading,
+    error: pluginsError,
+  } = usePlugins({ enabled: toolsMenuOpen });
+  const {
+    skills,
+    isLoading: skillsLoading,
+    error: skillsError,
+  } = useSkills({ enabled: toolsMenuOpen });
+  // Attachments upload the moment they land in the composer, not at send.
+  // The ref lets the removal handlers reach the API without taking it as a
+  // dependency — they run inside `setState` updaters.
+  const attachmentUploads = useAttachmentUploads(threadId);
+  const attachmentUploadsRef = useRef(attachmentUploads);
+  attachmentUploadsRef.current = attachmentUploads;
+
+  const parsedComposerDraft = parseComposerDraft(draft);
+  const activeComposerMode = parsedComposerDraft.mode;
+  const activeLongTaskMode =
+    activeComposerMode === "goal" || activeComposerMode === "project"
+      ? activeComposerMode
+      : undefined;
+  const composerRefs = parsedComposerDraft.refs;
+  const visibleDraft = parsedComposerDraft.body;
+  const setVisibleDraft = useCallback((body: string) => {
+    setDraft((current) => {
+      const parsed = parseComposerDraft(current);
+      return serializeComposerDraft({ ...parsed, body });
+    });
+  }, []);
 
   // Slash-command typeahead · shared hook (see use-slash-typeahead).
   // Returns the picker JSX + a keydown handler that we call FIRST in
@@ -187,8 +235,8 @@ export function ChatComposer({
   // consumed before the composer's default Enter-to-submit fires.
   const { picker: slashPicker, handleKeyDown: handleSlashKeyDown } =
     useSlashTypeahead({
-      draft,
-      setDraft,
+      draft: visibleDraft,
+      setDraft: setVisibleDraft,
       focusTextarea: () => textareaRef.current?.focus(),
     });
 
@@ -201,36 +249,80 @@ export function ChatComposer({
     handleKeyDown: handleMentionKeyDown,
     selectItem: selectMentionItem,
   } = useMentionAutocomplete({
-    value: draft,
-    onChange: setDraft,
+    value: visibleDraft,
+    onChange: setVisibleDraft,
     workDir,
     threadId,
     actor: currentActorId(),
+    members: mentionMembers,
   });
 
   const pickerModels: PickerModel[] = useMemo(
     () =>
       models.map((m) => ({
         id: m.id,
-        name: m.id,
-        display_name: (m as { display_name?: string }).display_name ?? m.id,
+        name: m.name || m.id,
+        display_name: m.display_name || m.name || m.id,
+        source_display_name: m.source_display_name,
+        description: m.description,
+        entry_id: m.entry_id,
+        selection_id: m.selection_id,
+        model: m.model,
+        provider: m.provider,
+        reasoning_efforts: m.reasoning_efforts,
+        context_window: m.context_window,
+        supports_thinking: m.supports_thinking,
+        supports_vision: m.supports_vision,
+        supports_tool_use: m.supports_tool_use,
+        is_free: m.is_free,
+        supports_reasoning_effort: m.supports_reasoning_effort,
         // The picker folds a ``::1m`` row into its base model, which it can
         // only detect from context_profile. Dropping the field here made the
         // long-context variant render as a second, identically-labelled row.
-        context_profile: (m as { context_profile?: string }).context_profile,
+        context_profile: m.context_profile,
       })),
     [models],
   );
   const selectedModel =
-    pickerModels.find((m) => m.name === modelName || m.model === modelName) ??
+    pickerModels.find(
+      (m) =>
+        m.selection_id === modelName ||
+        m.entry_id === modelName ||
+        m.name === modelName ||
+        m.model === modelName,
+    ) ??
     (modelName
       ? { name: modelName, display_name: modelName }
       : pickerModels[0]);
+  const applyNativeModelChange = useCallback(
+    (name: string) => {
+      onModelChange?.(name);
+      const model = pickerModels.find((candidate) =>
+        [
+          candidate.selection_id,
+          candidate.entry_id,
+          candidate.name,
+          candidate.model,
+          candidate.id,
+        ].includes(name),
+      );
+      onModelSwitchNotice?.(model?.display_name || model?.name || name);
+    },
+    [onModelChange, onModelSwitchNotice, pickerModels],
+  );
   const resolvedPermissionMode = normalizePermissionMode(permissionMode);
   const canUseDeepResearch =
     allowAgentModes && mode === "deep" && !!onDeepResearch;
   const isDeepResearchMode = canUseDeepResearch && researchConfigOpen;
-  const isBusy = disabled || uploadingMaterials || isUploading;
+  // Attachments have to land before the message can go: sending mid-transfer
+  // is what produced a picture the model never received. A failed attachment
+  // blocks too — silently dropping it is worse than making the user decide.
+  const isBusy =
+    disabled ||
+    uploadingMaterials ||
+    isUploading ||
+    attachmentUploads.isUploading ||
+    attachmentUploads.hasFailed;
   const sendLabel = t.chatInputBox.send;
   const stopLabel = t.chatInputBox.stop;
   const parsedResearchUrls = useMemo(
@@ -243,18 +335,55 @@ export function ChatComposer({
   const showContextCompressor =
     maxContextTokens > 0 &&
     (isCompressingContext || contextTokens / maxContextTokens >= 0.5);
-  const sendableDraftText = parseCodexComposerModeMarker(draft).text.trim();
+  const sendableDraftText = visibleDraft.trim();
+  const enabledPlugins = useMemo(
+    () =>
+      plugins
+        .filter((plugin) => plugin.enabled)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [plugins],
+  );
+  const pluginNameById = useMemo(
+    () => new Map(plugins.map((plugin) => [plugin.id, plugin.name])),
+    [plugins],
+  );
+  const enabledSkills = useMemo(() => {
+    const needle = skillSearch.trim().toLowerCase();
+    return skills
+      .filter((skill) => skill.enabled)
+      .filter(
+        (skill) =>
+          !needle ||
+          skill.name.toLowerCase().includes(needle) ||
+          skill.description.toLowerCase().includes(needle),
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [skillSearch, skills]);
+  const hasBoundWorkDir = Boolean(workDir?.trim());
+  const workspaceLabel = workDir?.trim() ? fileBasename(workDir.trim()) : "";
+  const toolsMenuLabel = isGroupConversation
+    ? t.chatInputBox.groupTaskAddContent
+    : t.chatInputBox.composerInsertions;
+  const toolsMenuTitle = automationTarget?.title?.trim()
+    ? `${toolsMenuLabel} · ${automationTarget.title.trim()}`
+    : toolsMenuLabel;
+
+  useEffect(() => {
+    if (!isGroupConversation) return;
+    const contextChanged =
+      (groupTaskStrategy === "build" && hasBoundWorkDir) ||
+      (groupTaskStrategy === "develop" && !hasBoundWorkDir);
+    if (contextChanged) onGroupTaskStrategyChange?.("auto");
+  }, [
+    groupTaskStrategy,
+    hasBoundWorkDir,
+    isGroupConversation,
+    onGroupTaskStrategyChange,
+  ]);
 
   useEffect(() => {
     if (!canUseDeepResearch) setResearchConfigOpen(false);
   }, [canUseDeepResearch]);
-
-  const openResearchFilePicker = useCallback(() => {
-    if (!allowAgentModes) return;
-    setResearchConfigOpen(true);
-    onModeChange?.("deep");
-    window.setTimeout(() => fileInputRef.current?.click(), 0);
-  }, [allowAgentModes, onModeChange]);
 
   useEffect(() => {
     const handler = (
@@ -354,7 +483,7 @@ export function ChatComposer({
 
   const handleSubmit = useCallback(async () => {
     const text = draft.trim();
-    const sendableText = parseCodexComposerModeMarker(text).text.trim();
+    const sendableText = parseComposerDraft(text).body.trim();
     const hasImages = pendingImages.length > 0;
     const hasFiles = pendingFiles.length > 0;
     if (
@@ -377,16 +506,15 @@ export function ChatComposer({
     if (
       tryLocalSlash(text, {
         onModeChange: onModeChange ? (mode) => onModeChange(mode) : undefined,
-        // Local partners own their model namespace. Preserve `/model ...` as
-        // task text so the partner adapter can translate it to that CLI's
-        // one-shot model flag (or explain why the CLI cannot override it).
-        onModelChange: partnerId ? undefined : onModelChange,
+        // The shared server-side model profile owns its model namespace.
+        onModelChange: modelProfileControl ? undefined : applyNativeModelChange,
         onPermissionModeChange,
         onCompact: onCompressContext
           ? () => {
               void onCompressContext();
             }
           : undefined,
+        onSwitchPanel,
       })
     ) {
       setDraft("");
@@ -452,7 +580,15 @@ export function ChatComposer({
         releaseSubmitLock();
       }
       if (result !== false) {
-        setDraft("");
+        setDraft(
+          activeLongTaskMode
+            ? serializeComposerDraft({
+                mode: activeLongTaskMode,
+                refs: [],
+                body: "",
+              })
+            : "",
+        );
         setPendingFiles([]);
       }
       return;
@@ -460,16 +596,29 @@ export function ChatComposer({
     const browserUploadFiles = pendingFiles
       .map((file) => file.file)
       .filter((file): file is File => file instanceof File);
+    const completedUploads = attachmentUploads.completed();
     try {
       onSubmit?.({
         text: appendReferencedFiles(text, pendingFiles),
         images: pendingImages.length > 0 ? pendingImages : undefined,
         files: browserUploadFiles.length > 0 ? browserUploadFiles : undefined,
+        // Already on the server — the send path matches these by filename and
+        // skips re-uploading the same bytes.
+        uploaded: completedUploads.length > 0 ? completedUploads : undefined,
       });
     } finally {
       releaseSubmitLock();
     }
-    setDraft("");
+    setDraft(
+      activeLongTaskMode
+        ? serializeComposerDraft({
+            mode: activeLongTaskMode,
+            refs: [],
+            body: "",
+          })
+        : "",
+    );
+    attachmentUploads.reset();
     if (pendingFiles.length > 0) {
       setPendingFiles([]);
       if (contextFileInputRef.current) contextFileInputRef.current.value = "";
@@ -486,19 +635,22 @@ export function ChatComposer({
     isDeepResearchMode,
     onDeepResearch,
     onSubmit,
+    onSwitchPanel,
     parsedResearchUrls,
     researchMaterials,
     researchSources,
     maxSearches,
     onModeChange,
-    onModelChange,
-    partnerId,
+    applyNativeModelChange,
+    modelProfileControl,
     onPermissionModeChange,
     onCompressContext,
     pendingImages,
     pendingFiles,
+    attachmentUploads,
     t,
     threadId,
+    activeLongTaskMode,
   ]);
 
   const addMaterial = useCallback((material: Partial<ResearchMaterial>) => {
@@ -586,27 +738,41 @@ export function ChatComposer({
     setResearchMaterials((current) => current.filter((item) => item.id !== id));
   }, []);
 
-  const insertCodexModeMarker = useCallback((mode: CodexComposerMode) => {
-    const marker = codexComposerModeMarker(mode);
-    setDraft((current) => {
-      const body = current
-        .replace(/^\/(?:codex|mode)\s+(?:plan|spec|goal)(?:\s+|$)/i, "")
-        .trimStart();
-      return body ? `${marker}\n${body}` : `${marker}\n`;
-    });
+  const insertCommandModeMarker = useCallback((mode: ComposerCommandMode) => {
+    setDraft((current) => setComposerDraftMode(current, mode));
     window.setTimeout(() => textareaRef.current?.focus(), 0);
   }, []);
 
-  const insertBrowserSurfaceMarker = useCallback(
-    (surface: "Browser" | "Chrome") => {
-      const marker = `@${surface}`;
-      setDraft((current) => {
-        const body = current
-          .replace(/^@(Browser|Chrome)(?:\s+|$)/i, "")
-          .trimStart();
-        return body ? `${marker}\n${body}` : `${marker}\n`;
-      });
-      window.setTimeout(() => textareaRef.current?.focus(), 0);
+  const clearLongTaskMode = useCallback(() => {
+    setDraft((current) => setComposerDraftMode(current, undefined));
+    window.setTimeout(() => textareaRef.current?.focus(), 0);
+  }, []);
+
+  const insertCapabilityRef = useCallback((ref: ComposerCapabilityRef) => {
+    setDraft((current) => addComposerCapabilityRef(current, ref));
+    setToolsMenuOpen(false);
+    window.setTimeout(() => textareaRef.current?.focus(), 0);
+  }, []);
+
+  const insertBrowserSurface = useCallback(() => {
+    insertCapabilityRef({ type: "surface", id: "browser" });
+  }, [insertCapabilityRef]);
+
+  const insertChromeSurface = useCallback(() => {
+    insertCapabilityRef({ type: "surface", id: "chrome" });
+  }, [insertCapabilityRef]);
+
+  const removeCapabilityRef = useCallback((ref: ComposerCapabilityRef) => {
+    setDraft((current) => removeComposerCapabilityRef(current, ref));
+    window.setTimeout(() => textareaRef.current?.focus(), 0);
+  }, []);
+
+  const openHubCatalog = useCallback(
+    (tab: "plugins" | "skills", view?: "installed" | "all") => {
+      const params = new URLSearchParams({ surface: "chat", tab });
+      if (view) params.set("view", view);
+      window.location.hash = `#/workspace/agents?${params.toString()}`;
+      setToolsMenuOpen(false);
     },
     [],
   );
@@ -638,6 +804,11 @@ export function ChatComposer({
       );
       if (arr.length === 0) return;
       const sourceLabel = options?.sourceLabel?.trim() || "图片";
+      // Being in the composer *is* being uploaded: start the transfer now so
+      // the chip can show real progress and send can wait on it.
+      attachmentUploads.start(
+        arr.map((file) => ({ key: uploadFileKey(file), file })),
+      );
       setPendingImages((current) => {
         const known = new Set(current.map((file) => imageFileKey(file)));
         const next = [...current];
@@ -667,13 +838,14 @@ export function ChatComposer({
         return next;
       });
     },
-    [],
+    [attachmentUploads],
   );
   const removePendingImage = useCallback((index: number) => {
     setPendingImages((current) => {
       const removed = current[index];
       if (!removed) return current;
       const key = imageFileKey(removed);
+      attachmentUploadsRef.current?.remove(uploadFileKey(removed));
       setPendingImagePreviews((prev) => {
         const url = prev[key];
         if (url) URL.revokeObjectURL(url);
@@ -693,6 +865,9 @@ export function ChatComposer({
       if (!files) return;
       const arr = Array.from(files);
       if (arr.length === 0) return;
+      attachmentUploads.start(
+        arr.map((file) => ({ key: uploadFileKey(file), file })),
+      );
       setPendingFiles((current) => {
         const known = new Set(current.map((file) => file.id));
         const next = [...current];
@@ -712,10 +887,69 @@ export function ChatComposer({
       });
       window.setTimeout(() => textareaRef.current?.focus(), 0);
     },
-    [],
+    [attachmentUploads],
   );
 
+  const addCurrentWindowAppshot = useCallback(async () => {
+    if (capturingAppshot) return;
+    setCapturingAppshot(true);
+    try {
+      const appshot = await captureComputerAppshot({
+        controlSessionId: `thread:${threadId || "new"}`,
+      });
+      const title =
+        appshot.target.app_name || appshot.target.title || "Current window";
+      const safeTitle = title.replace(/[^\p{L}\p{N}._-]+/gu, "-").slice(0, 72);
+      const screenshot = await dataUrlToFile(
+        appshot.screenshot.data_url || "",
+        `Appshot-${safeTitle || "window"}.png`,
+      );
+      if (!screenshot) throw new Error("Screenshot data is unavailable");
+      const semantic = new File(
+        [
+          JSON.stringify(
+            {
+              schema: appshot.schema,
+              snapshot_id: appshot.snapshot_id,
+              created_at: appshot.created_at,
+              target: appshot.target,
+              accessibility: appshot.accessibility,
+            },
+            null,
+            2,
+          ),
+        ],
+        `Appshot-${safeTitle || "window"}.json`,
+        { type: "application/json" },
+      );
+      addPendingImages([screenshot], {
+        sourceLabel: t.chatInputBox.appshotSource,
+      });
+      addPendingUploadFiles([semantic]);
+      window.setTimeout(() => textareaRef.current?.focus(), 0);
+    } catch (error) {
+      swallow(error);
+      toast.error(
+        error instanceof Error && error.message
+          ? `${t.chatInputBox.appshotFailed}：${error.message}`
+          : t.chatInputBox.appshotFailed,
+      );
+    } finally {
+      setCapturingAppshot(false);
+    }
+  }, [
+    addPendingImages,
+    addPendingUploadFiles,
+    capturingAppshot,
+    t.chatInputBox.appshotFailed,
+    t.chatInputBox.appshotSource,
+    threadId,
+  ]);
+
   const removePendingFile = useCallback((id: string) => {
+    // Context files picked from the workspace have no upload entry; the hook
+    // ignores unknown keys, so this is safe for both kinds of chip.
+    attachmentUploadsRef.current?.remove(id);
     setPendingFiles((current) => current.filter((file) => file.id !== id));
   }, []);
 
@@ -846,9 +1080,36 @@ export function ChatComposer({
     },
     [addPendingImages, addPendingUploadFiles],
   );
+  const handleSelectFiles = useCallback(
+    (files: FileList | null | undefined) => {
+      if (!files || files.length === 0) return;
+      const selected = Array.from(files);
+      const imageFiles = selected.filter((file) =>
+        file.type.toLowerCase().startsWith("image/"),
+      );
+      const otherFiles = selected.filter(
+        (file) => !file.type.toLowerCase().startsWith("image/"),
+      );
+      if (imageFiles.length > 0) addPendingImages(imageFiles);
+      if (otherFiles.length > 0) addPendingUploadFiles(otherFiles);
+    },
+    [addPendingImages, addPendingUploadFiles],
+  );
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Backspace" && visibleDraft.length === 0) {
+        const lastRef = composerRefs[composerRefs.length - 1];
+        if (lastRef) {
+          e.preventDefault();
+          setDraft((current) => removeComposerCapabilityRef(current, lastRef));
+          return;
+        }
+        if (!activeComposerMode) return;
+        e.preventDefault();
+        setDraft((current) => setComposerDraftMode(current, undefined));
+        return;
+      }
       if (handleSlashKeyDown(e)) return;
       if (mentionOpen) {
         handleMentionKeyDown(e);
@@ -867,7 +1128,15 @@ export function ChatComposer({
         handleSubmit();
       }
     },
-    [handleSubmit, handleSlashKeyDown, mentionOpen, handleMentionKeyDown],
+    [
+      activeComposerMode,
+      composerRefs,
+      handleSubmit,
+      handleSlashKeyDown,
+      mentionOpen,
+      handleMentionKeyDown,
+      visibleDraft.length,
+    ],
   );
 
   return (
@@ -875,21 +1144,13 @@ export function ChatComposer({
       data-testid="chat-composer"
       className={cn(
         "group relative",
-        "rounded-lg border border-border-default/80 bg-background/80 shadow-[var(--shadow-xs)] backdrop-blur-sm",
+        "rounded-xl border border-border-subtle bg-background/90 shadow-none backdrop-blur-sm",
         "transition-[background-color,border-color,box-shadow] duration-base ease-out",
-        "hover:border-border-default hover:shadow-[var(--shadow-sm)]",
-        "focus-within:border-primary/25 focus-within:shadow-[0_0_0_3px_rgba(138,127,255,0.08),var(--shadow-sm)]",
+        "hover:border-border-default",
+        "focus-within:border-primary/30 focus-within:shadow-[0_0_0_3px_rgba(138,127,255,0.08)]",
         className,
       )}
     >
-      {showPet && petVisible && (
-        <DesktopPetMascot
-          mood={petMood}
-          size="sm"
-          className="hidden opacity-90 transition-opacity duration-base group-focus-within:opacity-60 md:block"
-          anchor={{ corner: "top-right", gap: { x: -10, y: 72 } }}
-        />
-      )}
       <div className="relative">
         {slashPicker}
         <MentionPicker
@@ -909,25 +1170,124 @@ export function ChatComposer({
         onRemoveFile={removePendingFile}
         onRemoveImage={removePendingImage}
         isUploading={isUploading}
+        uploads={attachmentUploads.uploads}
+        onRetryUpload={attachmentUploads.retry}
         t={t}
       />
-      <textarea
-        data-testid="chat-composer-input"
-        ref={textareaRef}
-        autoFocus={autoFocus}
-        disabled={isBusy}
-        placeholder={placeholder ?? t.inputBox.placeholder}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={onKeyDown}
-        onPaste={handlePasteImages}
-        onDrop={handleDropFiles}
-        onDragOver={(e) => {
-          if (e.dataTransfer?.types?.includes("Files")) e.preventDefault();
-        }}
-        rows={2}
-        className="min-h-[52px] w-full resize-none bg-transparent px-3 py-2.5 text-sm leading-snug outline-none placeholder:text-muted-foreground/75 disabled:opacity-60 sm:min-h-0 sm:py-1.5"
-      />
+      {composerRefs.length > 0 ? (
+        <div
+          data-testid="composer-capability-rail"
+          className="flex min-h-8 items-center gap-1.5 overflow-x-auto px-3 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {composerRefs.map((ref) => {
+            const key = `${ref.type}:${ref.id}`;
+            const isPlugin = ref.type === "plugin";
+            const isSkill = ref.type === "skill";
+            const label = isPlugin
+              ? (pluginNameById.get(ref.id) ?? ref.id)
+              : isSkill
+                ? ref.id
+                : ref.id === "chrome"
+                  ? "Chrome"
+                  : "Browser";
+            return (
+              <span
+                key={key}
+                data-testid={`composer-capability-${ref.type}-${ref.id}`}
+                className={cn(
+                  "inline-flex h-6 max-w-48 shrink-0 items-center gap-1 rounded-md px-1.5 text-xs font-semibold",
+                  isPlugin &&
+                    "bg-violet-500/10 text-violet-700 dark:text-violet-300",
+                  isSkill && "bg-blue-500/10 text-blue-700 dark:text-blue-300",
+                  ref.type === "surface" &&
+                    "bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
+                )}
+              >
+                {isPlugin ? (
+                  <PuzzleIcon className="size-3.5" />
+                ) : isSkill ? (
+                  <BookOpenIcon className="size-3.5" />
+                ) : (
+                  <MonitorIcon className="size-3.5" />
+                )}
+                <span className="truncate">{label}</span>
+                <button
+                  type="button"
+                  className="-mr-0.5 grid size-4 shrink-0 place-items-center rounded-sm opacity-60 transition-opacity hover:bg-current/10 hover:opacity-100"
+                  aria-label={t.chatInputBox.removeCapability(label)}
+                  onClick={() => removeCapabilityRef(ref)}
+                >
+                  <XIcon className="size-3" />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      ) : null}
+      <div className="relative">
+        {activeComposerMode ? (
+          <span
+            data-testid="composer-command-prefix"
+            className={cn(
+              "pointer-events-none absolute left-3 top-2.5 z-10 inline-flex items-center gap-1 text-sm font-bold leading-snug",
+              activeComposerMode === "goal" &&
+                "text-violet-600 dark:text-violet-400",
+              activeComposerMode === "plan" && "text-sky-600 dark:text-sky-400",
+              activeComposerMode === "spec" &&
+                "text-amber-600 dark:text-amber-400",
+              activeComposerMode === "project" &&
+                "text-rose-600 dark:text-rose-400",
+            )}
+          >
+            {activeComposerMode === "project" ? (
+              <FlagIcon className="size-4" />
+            ) : activeComposerMode === "goal" ? (
+              <span className="text-[15px] leading-none" aria-hidden="true">
+                🎯
+              </span>
+            ) : activeComposerMode === "plan" ? (
+              <MapIcon className="size-4" />
+            ) : (
+              <ListTodoIcon className="size-4" />
+            )}
+            {activeComposerMode === "project"
+              ? "Milestone"
+              : activeComposerMode === "goal"
+                ? "Goal"
+                : activeComposerMode === "plan"
+                  ? "Plan"
+                  : "Spec"}
+          </span>
+        ) : null}
+        <textarea
+          key={`${activeComposerMode ?? "plain"}:${composerRefs
+            .map((ref) => `${ref.type}:${ref.id}`)
+            .join(",")}`}
+          data-testid="chat-composer-input"
+          ref={textareaRef}
+          autoFocus={autoFocus}
+          disabled={isBusy}
+          placeholder={placeholder ?? t.inputBox.placeholder}
+          aria-label={placeholder ?? t.inputBox.placeholder}
+          value={visibleDraft}
+          onChange={(e) => setVisibleDraft(e.target.value)}
+          onKeyDown={onKeyDown}
+          onPaste={handlePasteImages}
+          onDrop={handleDropFiles}
+          onDragOver={(e) => {
+            if (e.dataTransfer?.types?.includes("Files")) e.preventDefault();
+          }}
+          rows={1}
+          className={cn(
+            "min-h-11 max-h-40 w-full resize-none overflow-y-auto bg-transparent pb-1.5 pt-2.5 text-sm leading-snug outline-none [field-sizing:content] placeholder:text-muted-foreground/70 disabled:opacity-60",
+            activeComposerMode === "project"
+              ? "pl-[7.5rem] pr-3"
+              : activeComposerMode
+                ? "pl-[5.25rem] pr-3"
+                : "px-3",
+          )}
+        />
+      </div>
       {isDeepResearchMode && researchConfigOpen && (
         <ResearchSourcePicker
           researchUrlText={researchUrlText}
@@ -966,7 +1326,23 @@ export function ChatComposer({
         onChange={(event) => void handleUploadMaterials(event.target.files)}
       />
       <input
+        ref={contextFileInputRef}
+        data-testid="chat-device-file-input"
+        type="file"
+        multiple
+        className="hidden"
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={(event) => {
+          handleSelectFiles(event.target.files);
+          if (contextFileInputRef.current) {
+            contextFileInputRef.current.value = "";
+          }
+        }}
+      />
+      <input
         ref={imageInputRef}
+        data-testid="chat-image-input"
         type="file"
         multiple
         accept="image/*"
@@ -978,33 +1354,31 @@ export function ChatComposer({
           if (imageInputRef.current) imageInputRef.current.value = "";
         }}
       />
-      <input
-        ref={contextFileInputRef}
-        type="file"
-        multiple
-        className="hidden"
-        tabIndex={-1}
-        aria-hidden="true"
-        onChange={(event) => {
-          addPendingUploadFiles(event.target.files);
-          if (contextFileInputRef.current) {
-            contextFileInputRef.current.value = "";
-          }
-        }}
-      />
-      <div className="composer-footer flex items-center justify-between gap-2 border-t border-transparent px-2 py-1 transition-colors group-hover:border-border-subtle">
-        <div className="flex items-center gap-0.5">
-          <DropdownMenu>
+      <div className="composer-footer flex min-h-9 flex-wrap items-center justify-between gap-1 px-2 pb-1.5 pt-0.5 sm:gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-0.5">
+          <DropdownMenu
+            open={toolsMenuOpen}
+            onOpenChange={(open) => {
+              setToolsMenuOpen(open);
+              if (!open) setSkillSearch("");
+            }}
+          >
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
                 data-testid="chat-tools-trigger"
                 disabled={isBusy || status === "streaming"}
-                className="flex size-[42px] items-center justify-center rounded-lg text-muted-foreground/70 transition-all duration-base hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45 sm:size-8 active:scale-95"
-                title={t.chatInputBox.composerInsertions}
-                aria-label={t.chatInputBox.composerInsertions}
+                className="relative flex size-[42px] items-center justify-center rounded-lg text-muted-foreground/70 outline-none transition-all duration-base hover:bg-muted/60 hover:text-foreground focus-visible:bg-muted/60 focus-visible:text-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45 sm:size-8 active:scale-95"
+                title={toolsMenuTitle}
+                aria-label={toolsMenuLabel}
               >
                 <PlusIcon className="size-4" />
+                {automationTarget ? (
+                  <span
+                    data-testid="automation-target-active-indicator"
+                    className="absolute top-1 right-1 size-1.5 rounded-full bg-primary ring-2 ring-background sm:top-0.5 sm:right-0.5"
+                  />
+                ) : null}
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
@@ -1012,108 +1386,398 @@ export function ChatComposer({
               align="start"
               side="top"
               sideOffset={8}
+              aria-label={toolsMenuLabel}
               className="w-60 rounded-lg border-border-default p-1.5 shadow-[var(--shadow-xs)]"
             >
-              <DropdownMenuLabel className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                {t.chatInputBox.composerInsertions}
-              </DropdownMenuLabel>
               <DropdownMenuItem
-                data-testid="chat-insert-codex-plan"
-                onSelect={() => insertCodexModeMarker("plan")}
-                className="gap-2 rounded-lg text-sm"
-              >
-                <MapIcon className="size-4" />
-                {t.chatInputBox.insertCodexPlan}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                data-testid="chat-insert-codex-spec"
-                onSelect={() => insertCodexModeMarker("spec")}
-                className="gap-2 rounded-lg text-sm"
-              >
-                <ClipboardCheckIcon className="size-4" />
-                {t.chatInputBox.insertCodexSpec}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                data-testid="chat-insert-codex-goal"
-                onSelect={() => insertCodexModeMarker("goal")}
-                className="gap-2 rounded-lg text-sm"
-              >
-                <TargetIcon className="size-4" />
-                {t.chatInputBox.insertCodexGoal}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                data-testid="chat-insert-browser-surface"
-                onSelect={() => insertBrowserSurfaceMarker("Browser")}
-                className="gap-2 rounded-lg text-sm"
-              >
-                <MonitorIcon className="size-4" />
-                {t.chatInputBox.insertBrowserSurface}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                data-testid="chat-insert-chrome-surface"
-                onSelect={() => insertBrowserSurfaceMarker("Chrome")}
-                className="gap-2 rounded-lg text-sm"
-              >
-                <GlobeIcon className="size-4" />
-                {t.chatInputBox.insertChromeSurface}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {canUseDeepResearch && (
-                <>
-                  <DropdownMenuItem
-                    onSelect={() => setResearchConfigOpen((open) => !open)}
-                    className="gap-2 rounded-lg text-sm"
-                  >
-                    <SlidersHorizontalIcon className="size-4" />
-                    {t.chatInputBox.deepResearchConfig}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                </>
-              )}
-              {allowAgentModes && (
-                <DropdownMenuItem
-                  onSelect={openResearchFilePicker}
-                  className="gap-2 rounded-lg text-sm"
-                >
-                  <PaperclipIcon className="size-4" />
-                  {t.chatInputBox.addResearchMaterial}
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem
-                onSelect={() => contextFileInputRef.current?.click()}
-                className="gap-2 rounded-lg text-sm"
-              >
-                <PaperclipIcon className="size-4" />
-                {t.chatInputBox.file}
-              </DropdownMenuItem>
-              <DropdownMenuItem
+                data-testid="chat-upload-images"
                 onSelect={() => imageInputRef.current?.click()}
                 className="gap-2 rounded-lg text-sm"
               >
                 <ImageIcon className="size-4" />
-                {t.chatInputBox.addImage}
+                {t.chatInputBox.uploadImages}
               </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger
+                  data-testid="chat-project-files-submenu"
+                  className="gap-2 rounded-lg text-sm"
+                >
+                  <FileIcon className="size-4" />
+                  <span className="min-w-0 flex-1 truncate">
+                    {workspaceLabel
+                      ? t.chatInputBox.workspaceFiles(workspaceLabel)
+                      : t.chatInputBox.projectFiles}
+                  </span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-80 overflow-hidden p-1.5">
+                  {workDir?.trim() ? (
+                    <>
+                      <DropdownMenuLabel className="px-2 py-1 text-xs text-muted-foreground">
+                        {workspaceLabel}
+                      </DropdownMenuLabel>
+                      <FileTree
+                        workDir={workDir.trim()}
+                        threadId={threadId}
+                        className="max-h-72 overflow-y-auto rounded-lg border border-border-subtle bg-muted/10"
+                        onFileClick={(path) => {
+                          addPendingWorkspaceFile({
+                            path,
+                            workDir: workDir.trim(),
+                            threadId,
+                            sourceLabel: workspaceLabel,
+                          });
+                          setToolsMenuOpen(false);
+                        }}
+                      />
+                      <DropdownMenuSeparator />
+                    </>
+                  ) : (
+                    <DropdownMenuLabel className="px-2 py-2 text-xs font-normal text-muted-foreground">
+                      {t.chatInputBox.noWorkspaceFiles}
+                    </DropdownMenuLabel>
+                  )}
+                  <DropdownMenuItem
+                    data-testid="chat-upload-device-files"
+                    onSelect={() => contextFileInputRef.current?.click()}
+                    className="gap-2 rounded-lg text-sm"
+                  >
+                    <PaperclipIcon className="size-4" />
+                    {t.chatInputBox.uploadDeviceFiles}
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              {onAutomationTargetChange ? (
+                <AutomationTargetControl
+                  placement="submenu"
+                  value={automationTarget}
+                  onChange={onAutomationTargetChange}
+                  onAddCurrentWindow={() => void addCurrentWindowAppshot()}
+                  capturingCurrentWindow={capturingAppshot}
+                  disabled={isBusy || status === "streaming"}
+                />
+              ) : (
+                <DropdownMenuItem
+                  data-testid="chat-add-appshot"
+                  disabled={capturingAppshot}
+                  onSelect={() => void addCurrentWindowAppshot()}
+                  className="gap-2 rounded-lg text-sm"
+                >
+                  {capturingAppshot ? (
+                    <Loader2Icon className="size-4 animate-spin" />
+                  ) : (
+                    <MonitorIcon className="size-4" />
+                  )}
+                  {capturingAppshot
+                    ? t.chatInputBox.capturingAppshot
+                    : t.chatInputBox.addAppshot}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger
+                  data-testid="chat-commands-submenu"
+                  className="gap-2 rounded-lg text-sm"
+                >
+                  <ZapIcon className="size-4" />
+                  {t.chatInputBox.commands}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-56 p-1.5">
+                  <DropdownMenuItem
+                    data-testid="chat-insert-codex-spec"
+                    onSelect={() => insertCommandModeMarker("spec")}
+                    className="gap-2 rounded-lg text-sm"
+                  >
+                    <ListTodoIcon className="size-4" />
+                    Spec
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    data-testid="chat-insert-codex-plan"
+                    onSelect={() => insertCommandModeMarker("plan")}
+                    className="gap-2 rounded-lg text-sm"
+                  >
+                    <MapIcon className="size-4" />
+                    Plan
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    data-testid="chat-insert-codex-goal"
+                    onSelect={() => insertCommandModeMarker("goal")}
+                    className="gap-2 rounded-lg text-sm"
+                  >
+                    <span
+                      className="text-[15px] leading-none grayscale opacity-70"
+                      aria-hidden="true"
+                    >
+                      🎯
+                    </span>
+                    Goal
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    data-testid="chat-insert-project-mode"
+                    onSelect={() => insertCommandModeMarker("project")}
+                    className="gap-2 rounded-lg text-sm"
+                  >
+                    <FlagIcon className="size-4" />
+                    Milestone
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    data-testid="chat-insert-browser-surface"
+                    onSelect={insertBrowserSurface}
+                    className="gap-2 rounded-lg text-sm"
+                  >
+                    <MonitorIcon className="size-4" />
+                    Browser
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    data-testid="chat-insert-chrome-surface"
+                    onSelect={insertChromeSurface}
+                    className="gap-2 rounded-lg text-sm"
+                  >
+                    <MonitorIcon className="size-4" />
+                    Chrome
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger
+                  data-testid="chat-plugins-submenu"
+                  className="gap-2 rounded-lg text-sm"
+                >
+                  <PuzzleIcon className="size-4" />
+                  {t.chatInputBox.plugins}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="max-h-[min(70vh,32rem)] w-80 overflow-y-auto p-1.5">
+                  <DropdownMenuLabel className="px-2 py-1 text-xs text-muted-foreground">
+                    {t.chatInputBox.availablePlugins}
+                  </DropdownMenuLabel>
+                  {pluginsLoading ? (
+                    <DropdownMenuItem disabled>
+                      <Loader2Icon className="size-4 animate-spin" />
+                      {t.common.loading}
+                    </DropdownMenuItem>
+                  ) : pluginsError ? (
+                    <DropdownMenuItem disabled>
+                      {t.chatInputBox.capabilityLoadFailed}
+                    </DropdownMenuItem>
+                  ) : enabledPlugins.length === 0 ? (
+                    <DropdownMenuItem disabled>
+                      {t.chatInputBox.noAvailablePlugins}
+                    </DropdownMenuItem>
+                  ) : (
+                    enabledPlugins.map((plugin) => (
+                      <DropdownMenuItem
+                        key={plugin.id}
+                        data-testid={`chat-plugin-${plugin.id}`}
+                        onSelect={() =>
+                          insertCapabilityRef({
+                            type: "plugin",
+                            id: plugin.id,
+                          })
+                        }
+                        className="items-start gap-2 rounded-lg py-2 text-sm"
+                      >
+                        <PuzzleIcon className="mt-0.5 size-4 text-violet-600" />
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">
+                            {plugin.name}
+                          </span>
+                          {plugin.description ? (
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {plugin.description}
+                            </span>
+                          ) : null}
+                        </span>
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    data-testid="chat-manage-plugins"
+                    onSelect={() => openHubCatalog("plugins", "installed")}
+                    className="gap-2 rounded-lg text-sm"
+                  >
+                    <Settings2Icon className="size-4" />
+                    {t.chatInputBox.managePlugins}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    data-testid="chat-explore-plugins"
+                    onSelect={() => openHubCatalog("plugins", "all")}
+                    className="gap-2 rounded-lg text-sm"
+                  >
+                    <ExternalLinkIcon className="size-4" />
+                    {t.chatInputBox.explorePlugins}
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger
+                  data-testid="chat-skills-submenu"
+                  className="gap-2 rounded-lg text-sm"
+                >
+                  <BookOpenIcon className="size-4" />
+                  {t.chatInputBox.skills}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="max-h-[min(72vh,36rem)] w-96 overflow-y-auto p-1.5">
+                  <div className="sticky top-0 z-10 bg-popover px-1 pb-1">
+                    <div className="flex h-9 items-center gap-2 rounded-lg border border-border-default bg-background px-2">
+                      <SearchIcon className="size-4 text-muted-foreground" />
+                      <input
+                        data-testid="chat-skill-search"
+                        value={skillSearch}
+                        onChange={(event) => setSkillSearch(event.target.value)}
+                        onKeyDown={(event) => event.stopPropagation()}
+                        placeholder={t.chatInputBox.searchSkills}
+                        aria-label={t.chatInputBox.searchSkills}
+                        className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                      />
+                    </div>
+                  </div>
+                  {skillsLoading ? (
+                    <DropdownMenuItem disabled>
+                      <Loader2Icon className="size-4 animate-spin" />
+                      {t.common.loading}
+                    </DropdownMenuItem>
+                  ) : skillsError ? (
+                    <DropdownMenuItem disabled>
+                      {t.chatInputBox.capabilityLoadFailed}
+                    </DropdownMenuItem>
+                  ) : enabledSkills.length === 0 ? (
+                    <DropdownMenuItem disabled>
+                      {t.chatInputBox.noAvailableSkills}
+                    </DropdownMenuItem>
+                  ) : (
+                    enabledSkills.map((skill) => (
+                      <DropdownMenuItem
+                        key={skill.name}
+                        data-testid={`chat-skill-${skill.name}`}
+                        onSelect={() =>
+                          insertCapabilityRef({
+                            type: "skill",
+                            id: skill.name,
+                          })
+                        }
+                        className="items-start gap-2 rounded-lg py-2 text-sm"
+                      >
+                        <BookOpenIcon className="mt-0.5 size-4 text-blue-600" />
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">
+                            {skill.name}
+                          </span>
+                          {skill.description ? (
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {skill.description}
+                            </span>
+                          ) : null}
+                        </span>
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    data-testid="chat-manage-skills"
+                    onSelect={() => openHubCatalog("skills")}
+                    className="gap-2 rounded-lg text-sm"
+                  >
+                    <Settings2Icon className="size-4" />
+                    {t.chatInputBox.manageSkills}
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              {(isGroupConversation || canUseDeepResearch) && (
+                <DropdownMenuSeparator />
+              )}
+              {isGroupConversation && onProjectCapabilityAction ? (
+                <DropdownMenuItem
+                  data-testid="group-project-capability-action"
+                  onSelect={onProjectCapabilityAction}
+                  className="gap-2 rounded-lg text-sm"
+                >
+                  <FolderKanbanIcon className="size-4" />
+                  {projectCapabilityEnabled
+                    ? t.projectCapability.openWorkbench
+                    : t.projectCapability.startPlan}
+                </DropdownMenuItem>
+              ) : null}
+              {isGroupConversation && groupTaskStrategy !== "auto" ? (
+                <DropdownMenuItem
+                  data-testid="group-task-clear-action"
+                  onSelect={() => onGroupTaskStrategyChange?.("auto")}
+                  className="gap-2 rounded-lg text-sm"
+                >
+                  <ListTodoIcon className="size-4" />
+                  {t.chatInputBox.groupTaskClear}
+                </DropdownMenuItem>
+              ) : null}
+              {canUseDeepResearch && (
+                <DropdownMenuItem
+                  onSelect={() => setResearchConfigOpen((open) => !open)}
+                  className="gap-2 rounded-lg text-sm"
+                >
+                  <SlidersHorizontalIcon className="size-4" />
+                  {t.chatInputBox.deepResearchConfig}
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
-          <PreviewRefreshIndicator />
-          <PermissionIndicator
-            mode={resolvedPermissionMode}
-            onModeChange={(nextMode) => onPermissionModeChange?.(nextMode)}
-            compact
-          />
+          <div className="composer-footer__secondary contents">
+            <PreviewRefreshIndicator />
+          </div>
+          {(!isGroupConversation || resolvedPermissionMode !== "default") && (
+            <div className="composer-footer__secondary contents">
+              <PermissionIndicator
+                mode={resolvedPermissionMode}
+                onModeChange={(nextMode) => onPermissionModeChange?.(nextMode)}
+                compact
+              />
+            </div>
+          )}
+          {activeLongTaskMode ? (
+            <button
+              type="button"
+              data-testid="composer-long-task-indicator"
+              onClick={clearLongTaskMode}
+              className="flex size-[42px] shrink-0 items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/35 sm:size-8"
+              title={
+                activeLongTaskMode === "goal"
+                  ? "Goal 模式 · 点击退出"
+                  : "里程碑模式 · 点击退出"
+              }
+              aria-label={
+                activeLongTaskMode === "goal"
+                  ? "Goal 模式 · 点击退出"
+                  : "里程碑模式 · 点击退出"
+              }
+            >
+              {activeLongTaskMode === "goal" ? (
+                <span
+                  className="text-[15px] leading-none grayscale opacity-70"
+                  aria-hidden="true"
+                >
+                  🎯
+                </span>
+              ) : (
+                <FlagIcon className="size-4" />
+              )}
+            </button>
+          ) : null}
           {/* 上下文压缩指示器 */}
           {showContextCompressor && (
-            <ContextCompressor
-              currentTokens={contextTokens}
-              maxTokens={maxContextTokens}
-              isCompressing={isCompressingContext}
-              onCompress={onCompressContext}
-              disabled={isBusy || status === "streaming"}
-            />
+            <div className="composer-footer__secondary contents">
+              <ContextCompressor
+                currentTokens={contextTokens}
+                maxTokens={maxContextTokens}
+                isCompressing={isCompressingContext}
+                onCompress={onCompressContext}
+                disabled={isBusy || status === "streaming"}
+              />
+            </div>
           )}
         </div>
-        <div className="flex items-center gap-1">
-          {showInspirationToggle && (
+        <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1">
+          {responseModeControl ? (
+            <div className="composer-footer__response contents">
+              {responseModeControl}
+            </div>
+          ) : showInspirationToggle ? (
             <button
               type="button"
               data-testid="chat-mode-toggle"
@@ -1143,28 +1807,37 @@ export function ChatComposer({
                 />
               </span>
             </button>
-          )}
-          <EvolutionIndicator compact quiet />
-          {partnerId ? (
-            // Local CLI partner: its model comes from the CLI's own config,
-            // not the Octopus picker (which would show a misleading "mimo…").
-            <PartnerModelControl
-              partnerId={partnerId}
-              value={partnerModel}
-              onChange={(m) => onPartnerModelChange?.(m)}
-            />
+          ) : null}
+          <div className="composer-footer__secondary contents">
+            <EvolutionIndicator compact quiet />
+          </div>
+          {modelProfileControl ? (
+            <div className="composer-footer__model contents">
+              <CoderEngineControl
+                systemModels={pickerModels}
+                disabled={disabled || status === "streaming"}
+                executionEngine={executionEngine}
+                value={modelName}
+                onChange={onModelChange}
+                onEffectiveModelChange={onModelSwitchNotice}
+                reasoningEffort={reasoningEffort}
+                onReasoningEffortChange={onReasoningEffortChange}
+              />
+            </div>
           ) : (
-            <ModelPicker
-              models={pickerModels}
-              // Pass the raw modelName so the picker sees the "auto"
-              // sentinel — selectedModel falls back to pickerModels[0]
-              // when name doesn't match, which would mask the auto state.
-              value={modelName ?? selectedModel?.name}
-              onChange={(name) => onModelChange?.(name)}
-              reasoningEffort={reasoningEffort}
-              reasoningEffortDisabled={disabled || status === "streaming"}
-              onReasoningEffortChange={onReasoningEffortChange}
-            />
+            <div className="composer-footer__model contents">
+              <ModelPicker
+                models={pickerModels}
+                // Pass the raw modelName so the picker sees the "auto"
+                // sentinel — selectedModel falls back to pickerModels[0]
+                // when name doesn't match, which would mask the auto state.
+                value={modelName ?? selectedModel?.name}
+                onChange={applyNativeModelChange}
+                reasoningEffort={reasoningEffort}
+                reasoningEffortDisabled={disabled || status === "streaming"}
+                onReasoningEffortChange={onReasoningEffortChange}
+              />
+            </div>
           )}
           {status === "streaming" && sendableDraftText ? (
             <>
@@ -1216,7 +1889,14 @@ export function ChatComposer({
                   : "bg-foreground text-background hover:bg-foreground/90 active:scale-95",
                 "disabled:bg-transparent disabled:text-muted-foreground/50 disabled:cursor-not-allowed disabled:hover:bg-muted/60 disabled:hover:text-muted-foreground",
               )}
-              title={sendLabel}
+              // A disabled send button should say why it is disabled.
+              title={
+                attachmentUploads.isUploading
+                  ? t.uploads.waitingForUpload
+                  : attachmentUploads.hasFailed
+                    ? t.uploads.uploadFailed
+                    : sendLabel
+              }
               aria-label={sendLabel}
             >
               {isBusy ? (

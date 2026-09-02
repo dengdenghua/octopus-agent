@@ -23,11 +23,18 @@
  * - 生产环境性能基线
  */
 
+
+declare global {
+  interface Window {
+    __reportMetric?: (name: string, payload: Record<string, unknown>) => void;
+  }
+}
+
 export interface PerformanceMeasure {
   name: string;
   duration: number;
   startTime: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface FlameGraphNode {
@@ -59,7 +66,7 @@ export class PerformanceTracker {
   measure(
     name: string,
     startMark: string,
-    metadata?: Record<string, any>,
+    metadata?: Record<string, unknown>,
   ): number | null {
     if (!this.enabled) return null;
 
@@ -86,7 +93,7 @@ export class PerformanceTracker {
   async measureAsync<T>(
     name: string,
     fn: () => Promise<T>,
-    metadata?: Record<string, any>,
+    metadata?: Record<string, unknown>,
   ): Promise<T> {
     const markName = `async:${name}:${Date.now()}`;
     this.mark(markName);
@@ -103,7 +110,7 @@ export class PerformanceTracker {
   measureSync<T>(
     name: string,
     fn: () => T,
-    metadata?: Record<string, any>,
+    metadata?: Record<string, unknown>,
   ): T {
     const markName = `sync:${name}:${Date.now()}`;
     this.mark(markName);
@@ -227,7 +234,7 @@ export class PerformanceTracker {
   private reportSlowOperation(
     name: string,
     duration: number,
-    metadata?: Record<string, any>,
+    metadata?: Record<string, unknown>,
   ): void {
     // 仅在开发环境打印警告
     if (import.meta.env.DEV) {
@@ -238,8 +245,8 @@ export class PerformanceTracker {
     }
 
     // 生产环境：上报到监控系统（例如 Sentry、DataDog）
-    if (typeof window !== "undefined" && (window as any).__reportMetric) {
-      (window as any).__reportMetric("slow_operation", {
+    if (typeof window !== "undefined" && window.__reportMetric) {
+      window.__reportMetric("slow_operation", {
         operation: name,
         duration_ms: duration,
         ...metadata,

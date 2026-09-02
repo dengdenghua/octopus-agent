@@ -27,8 +27,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { authHeaders } from "@/core/auth/api";
-import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
+import { globalControlPlaneUrl } from "@/core/observability/api";
 import { swallow } from "@/core/utils/log";
 import { cn } from "@/lib/utils";
 
@@ -408,7 +408,10 @@ function initialGalaxyPosition(
   const lane = Math.floor(index / arms);
   const t = (lane + 1) / Math.max(Math.ceil(total / arms), 1);
   const radius = 70 + Math.pow(t, 0.72) * 560 * settings.spread;
-  const angle = arm * (Math.PI * 2 / arms) + radius * 0.008 + seededUnit(`${id}:angle`) * 0.24;
+  const angle =
+    arm * ((Math.PI * 2) / arms) +
+    radius * 0.008 +
+    seededUnit(`${id}:angle`) * 0.24;
   const jitter = (seededUnit(`${id}:jitter`) - 0.5) * 34;
   return new THREE.Vector3(
     Math.cos(angle) * radius + jitter,
@@ -744,7 +747,7 @@ function KnowledgeGraph3DContent() {
     setLoading(true);
     try {
       const response = await fetch(
-        `${getBackendBaseURL()}/api/knowledge/graph?limit=260`,
+        globalControlPlaneUrl("/api/knowledge/graph?limit=260"),
         { headers: authHeaders() },
       );
       if (!response.ok) return;
@@ -797,7 +800,9 @@ function KnowledgeGraph3DContent() {
     expandedRef.current.add(nodeId);
     try {
       const response = await fetch(
-        `${getBackendBaseURL()}/api/knowledge/neighbors?entity=${encodeURIComponent(nodeId)}&hops=1&limit=48`,
+        globalControlPlaneUrl(
+          `/api/knowledge/neighbors?entity=${encodeURIComponent(nodeId)}&hops=1&limit=48`,
+        ),
         { headers: authHeaders() },
       );
       if (!response.ok) return;
@@ -1116,7 +1121,11 @@ function KnowledgeGraph3DContent() {
         activeNodeId && !active ? "#475569" : node.color,
       );
       const mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(size, sphereDetail, Math.max(10, sphereDetail - 4)),
+        new THREE.SphereGeometry(
+          size,
+          sphereDetail,
+          Math.max(10, sphereDetail - 4),
+        ),
         new THREE.MeshStandardMaterial({
           color,
           emissive: color,
@@ -1209,19 +1218,25 @@ function KnowledgeGraph3DContent() {
         data-knowledge-graph3d-container="true"
         data-knowledge-graph-3d-container
       />
-      <div className={cn(
-        "pointer-events-none absolute inset-0",
-        graphTheme === "aurora"
-          ? "bg-[radial-gradient(circle_at_18%_20%,rgba(45,212,191,0.24),transparent_32%),radial-gradient(circle_at_78%_72%,rgba(59,130,246,0.2),transparent_36%),linear-gradient(180deg,rgba(6,78,59,0.18),rgba(2,44,54,0.5))]"
-          : "bg-[radial-gradient(circle_at_24%_18%,rgba(34,211,238,0.16),transparent_32%),radial-gradient(circle_at_74%_68%,rgba(163,230,53,0.12),transparent_34%),linear-gradient(180deg,rgba(2,6,23,0.16),rgba(2,6,23,0.52))]",
-      )} />
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-0",
+          graphTheme === "aurora"
+            ? "bg-[radial-gradient(circle_at_18%_20%,rgba(45,212,191,0.24),transparent_32%),radial-gradient(circle_at_78%_72%,rgba(59,130,246,0.2),transparent_36%),linear-gradient(180deg,rgba(6,78,59,0.18),rgba(2,44,54,0.5))]"
+            : "bg-[radial-gradient(circle_at_24%_18%,rgba(34,211,238,0.16),transparent_32%),radial-gradient(circle_at_74%_68%,rgba(163,230,53,0.12),transparent_34%),linear-gradient(180deg,rgba(2,6,23,0.16),rgba(2,6,23,0.52))]",
+        )}
+      />
 
       {!loading && !webglError && renderedGraph.nodes.length === 0 && (
         <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center px-6 text-center">
           <div className="max-w-xs rounded-lg border border-white/10 bg-black/25 px-5 py-4 backdrop-blur-sm">
             <NetworkIcon className="mx-auto size-6 text-white/45" />
-            <div className="mt-2 text-sm font-medium text-white/80">暂无图谱数据</div>
-            <div className="mt-1 text-xs leading-5 text-white/50">先扫描本地文档，生成实体与关系后会显示在这里。</div>
+            <div className="mt-2 text-sm font-medium text-white/80">
+              暂无图谱数据
+            </div>
+            <div className="mt-1 text-xs leading-5 text-white/50">
+              先扫描本地文档，生成实体与关系后会显示在这里。
+            </div>
           </div>
         </div>
       )}
@@ -1279,228 +1294,237 @@ function KnowledgeGraph3DContent() {
           variant="outline"
           size="icon"
           className="size-9 border-border-default bg-background/90 text-foreground/90 hover:bg-muted hover:text-foreground"
-          onClick={() => setGraphTheme((theme) => theme === "nebula" ? "aurora" : "nebula")}
+          onClick={() =>
+            setGraphTheme((theme) => (theme === "nebula" ? "aurora" : "nebula"))
+          }
           aria-label="切换图谱主题"
         >
           <PaletteIcon className="size-4" />
         </Button>
       </div>
 
-      {showSettings && <aside className="absolute bottom-3 left-3 right-3 z-10 max-h-[42vh] space-y-3 overflow-y-auto rounded-lg border border-border-default bg-background/80 p-3 text-foreground shadow-2xl backdrop-blur-md sm:bottom-auto sm:left-auto sm:right-4 sm:top-4 sm:max-h-[calc(100%-2rem)] sm:w-[250px]">
-        {focusNode && (
-          <Section icon={InfoIcon} title={controls.focus}>
-            <div className="space-y-2 rounded-md border border-white/10 bg-background/40 p-2">
-              <div className="min-w-0">
-                <div className="truncate text-xs font-semibold text-foreground">
-                  {focusNode.label}
+      {showSettings && (
+        <aside className="absolute bottom-3 left-3 right-3 z-10 max-h-[42vh] space-y-3 overflow-y-auto rounded-lg border border-border-default bg-background/80 p-3 text-foreground shadow-2xl backdrop-blur-md sm:bottom-auto sm:left-auto sm:right-4 sm:top-4 sm:max-h-[calc(100%-2rem)] sm:w-[250px]">
+          {focusNode && (
+            <Section icon={InfoIcon} title={controls.focus}>
+              <div className="space-y-2 rounded-md border border-white/10 bg-background/40 p-2">
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-semibold text-foreground">
+                    {focusNode.label}
+                  </div>
+                  {focusNode.fullName !== focusNode.label && (
+                    <div className="mt-0.5 break-words text-xs leading-4 text-muted-foreground/70">
+                      {shortText(focusNode.fullName, 96)}
+                    </div>
+                  )}
                 </div>
-                {focusNode.fullName !== focusNode.label && (
-                  <div className="mt-0.5 break-words text-xs leading-4 text-muted-foreground/70">
-                    {shortText(focusNode.fullName, 96)}
+                <div className="grid grid-cols-3 gap-1.5 text-center">
+                  <div className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-1">
+                    <div className="text-xs text-muted-foreground/70">
+                      {controls.degree}
+                    </div>
+                    <div className="font-mono text-xs text-foreground/90">
+                      {focusNode.backendDegree || focusEdges.length}
+                    </div>
+                  </div>
+                  <div className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-1">
+                    <div className="text-xs text-muted-foreground/70">
+                      {controls.confidence}
+                    </div>
+                    <div className="font-mono text-xs text-foreground/90">
+                      {formatConfidence(focusNode.confidenceAvg)}
+                    </div>
+                  </div>
+                  <div className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-1">
+                    <div className="text-xs text-muted-foreground/70">
+                      {controls.updated}
+                    </div>
+                    <div className="font-mono text-xs text-foreground/90">
+                      {formatDateTime(focusNode.lastSeen)}
+                    </div>
+                  </div>
+                </div>
+                {focusNode.sources.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {focusNode.sources.slice(0, 3).map((source) => (
+                      <span
+                        key={source}
+                        className="max-w-full truncate rounded bg-info/10 px-1.5 py-0.5 text-xs text-info"
+                      >
+                        {shortText(source, 28)}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {focusEdges.length > 0 && (
+                  <div className="space-y-1 border-t border-white/10 pt-2">
+                    <div className="text-xs font-semibold uppercase tracking-caps text-muted-foreground/70">
+                      {controls.evidence}
+                    </div>
+                    {focusEdges.map((edge) => {
+                      const outbound = edge.source === focusNode.id;
+                      const peer = outbound ? edge.target : edge.source;
+                      return (
+                        <div
+                          key={edge.id}
+                          className="rounded border border-white/10 bg-white/[0.025] px-2 py-1.5"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate text-xs text-foreground/80">
+                              {outbound ? "->" : "<-"}{" "}
+                              {shortText(edge.label, 24)}
+                            </span>
+                            <span className="font-mono text-xs text-muted-foreground/70">
+                              {formatConfidence(edge.confidence)}
+                            </span>
+                          </div>
+                          <div className="mt-0.5 truncate text-xs text-muted-foreground/70">
+                            {shortText(peer, 48)}
+                          </div>
+                          {(edge.sourceRef || edge.status !== "active") && (
+                            <div className="mt-1 flex gap-1 text-xs text-muted-foreground/50">
+                              {edge.status !== "active" && (
+                                <span>{edge.status}</span>
+                              )}
+                              {edge.sourceRef && (
+                                <span>{shortText(edge.sourceRef, 30)}</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
-              <div className="grid grid-cols-3 gap-1.5 text-center">
-                <div className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-1">
-                  <div className="text-xs text-muted-foreground/70">
-                    {controls.degree}
-                  </div>
-                  <div className="font-mono text-xs text-foreground/90">
-                    {focusNode.backendDegree || focusEdges.length}
-                  </div>
-                </div>
-                <div className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-1">
-                  <div className="text-xs text-muted-foreground/70">
-                    {controls.confidence}
-                  </div>
-                  <div className="font-mono text-xs text-foreground/90">
-                    {formatConfidence(focusNode.confidenceAvg)}
-                  </div>
-                </div>
-                <div className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-1">
-                  <div className="text-xs text-muted-foreground/70">
-                    {controls.updated}
-                  </div>
-                  <div className="font-mono text-xs text-foreground/90">
-                    {formatDateTime(focusNode.lastSeen)}
-                  </div>
-                </div>
-              </div>
-              {focusNode.sources.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {focusNode.sources.slice(0, 3).map((source) => (
-                    <span
-                      key={source}
-                      className="max-w-full truncate rounded bg-info/10 px-1.5 py-0.5 text-xs text-info"
-                    >
-                      {shortText(source, 28)}
+            </Section>
+          )}
+
+          <Section icon={FilterIcon} title={controls.filters}>
+            <RangeControl
+              label={controls.confidence}
+              min={0}
+              max={1}
+              step={0.05}
+              value={minConfidence}
+              format={(value) => `${Math.round(value * 100)}%`}
+              onChange={setMinConfidence}
+            />
+          </Section>
+
+          <Section icon={TagsIcon} title={controls.groups}>
+            <div className="grid gap-1.5">
+              {entityGroups.slice(0, 8).map(([entityType, group]) => {
+                const disabled = disabledTypes.has(entityType);
+                return (
+                  <button
+                    key={entityType}
+                    type="button"
+                    onClick={() => toggleType(entityType)}
+                    className={cn(
+                      "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                      disabled
+                        ? "text-muted-foreground/50 hover:bg-background/80"
+                        : "text-foreground/80 hover:bg-muted/70",
+                    )}
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span
+                        className="size-2.5 shrink-0 rounded-full"
+                        style={{
+                          background: disabled
+                            ? "var(--muted-foreground)"
+                            : group.color,
+                        }}
+                      />
+                      <span className="truncate">
+                        {entityTypeLabel(entityType)}
+                      </span>
                     </span>
-                  ))}
-                </div>
-              )}
-              {focusEdges.length > 0 && (
-                <div className="space-y-1 border-t border-white/10 pt-2">
-                  <div className="text-xs font-semibold uppercase tracking-caps text-muted-foreground/70">
-                    {controls.evidence}
-                  </div>
-                  {focusEdges.map((edge) => {
-                    const outbound = edge.source === focusNode.id;
-                    const peer = outbound ? edge.target : edge.source;
-                    return (
-                      <div
-                        key={edge.id}
-                        className="rounded border border-white/10 bg-white/[0.025] px-2 py-1.5"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="truncate text-xs text-foreground/80">
-                            {outbound ? "->" : "<-"} {shortText(edge.label, 24)}
-                          </span>
-                          <span className="font-mono text-xs text-muted-foreground/70">
-                            {formatConfidence(edge.confidence)}
-                          </span>
-                        </div>
-                        <div className="mt-0.5 truncate text-xs text-muted-foreground/70">
-                          {shortText(peer, 48)}
-                        </div>
-                        {(edge.sourceRef || edge.status !== "active") && (
-                          <div className="mt-1 flex gap-1 text-xs text-muted-foreground/50">
-                            {edge.status !== "active" && (
-                              <span>{edge.status}</span>
-                            )}
-                            {edge.sourceRef && (
-                              <span>{shortText(edge.sourceRef, 30)}</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                    <span className="font-mono text-xs text-muted-foreground/70">
+                      {group.count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </Section>
-        )}
 
-        <Section icon={FilterIcon} title={controls.filters}>
-          <RangeControl
-            label={controls.confidence}
-            min={0}
-            max={1}
-            step={0.05}
-            value={minConfidence}
-            format={(value) => `${Math.round(value * 100)}%`}
-            onChange={setMinConfidence}
-          />
-        </Section>
-
-        <Section icon={TagsIcon} title={controls.groups}>
-          <div className="grid gap-1.5">
-            {entityGroups.slice(0, 8).map(([entityType, group]) => {
-              const disabled = disabledTypes.has(entityType);
-              return (
-                <button
-                  key={entityType}
-                  type="button"
-                  onClick={() => toggleType(entityType)}
-                  className={cn(
-                    "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
-                    disabled
-                      ? "text-muted-foreground/50 hover:bg-background/80"
-                      : "text-foreground/80 hover:bg-muted/70",
-                  )}
+          <Section icon={EyeIcon} title={controls.display}>
+            <div className="grid gap-2">
+              {displayToggles.map(([key, label]) => (
+                <label
+                  key={key}
+                  className="flex items-center justify-between gap-3 text-xs text-foreground/80"
                 >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span
-                      className="size-2.5 shrink-0 rounded-full"
-                      style={{
-                        background: disabled
-                          ? "var(--muted-foreground)"
-                          : group.color,
-                      }}
-                    />
-                    <span className="truncate">
-                      {entityTypeLabel(entityType)}
-                    </span>
-                  </span>
-                  <span className="font-mono text-xs text-muted-foreground/70">
-                    {group.count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </Section>
+                  <span>{label}</span>
+                  <Switch
+                    checked={displaySettings[key]}
+                    onCheckedChange={(checked) =>
+                      updateDisplaySettings({ [key]: checked })
+                    }
+                  />
+                </label>
+              ))}
+              <RangeControl
+                label={controls.nodeSize}
+                min={0.65}
+                max={1.7}
+                step={0.05}
+                value={displaySettings.nodeScale}
+                onChange={(value) =>
+                  updateDisplaySettings({ nodeScale: value })
+                }
+              />
+              <RangeControl
+                label={controls.linkWidth}
+                min={0.55}
+                max={1.8}
+                step={0.05}
+                value={displaySettings.linkScale}
+                onChange={(value) =>
+                  updateDisplaySettings({ linkScale: value })
+                }
+              />
+            </div>
+          </Section>
 
-        <Section icon={EyeIcon} title={controls.display}>
-          <div className="grid gap-2">
-            {displayToggles.map(([key, label]) => (
-              <label
-                key={key}
-                className="flex items-center justify-between gap-3 text-xs text-foreground/80"
-              >
-                <span>{label}</span>
-                <Switch
-                  checked={displaySettings[key]}
-                  onCheckedChange={(checked) =>
-                    updateDisplaySettings({ [key]: checked })
-                  }
-                />
-              </label>
-            ))}
-            <RangeControl
-              label={controls.nodeSize}
-              min={0.65}
-              max={1.7}
-              step={0.05}
-              value={displaySettings.nodeScale}
-              onChange={(value) => updateDisplaySettings({ nodeScale: value })}
-            />
-            <RangeControl
-              label={controls.linkWidth}
-              min={0.55}
-              max={1.8}
-              step={0.05}
-              value={displaySettings.linkScale}
-              onChange={(value) => updateDisplaySettings({ linkScale: value })}
-            />
-          </div>
-        </Section>
+          <Section icon={ZapIcon} title={controls.forces}>
+            <div className="grid gap-2">
+              <RangeControl
+                label={controls.linkDistance}
+                min={90}
+                max={260}
+                step={5}
+                value={displaySettings.linkDistance}
+                format={(value) => `${Math.round(value)}`}
+                onChange={(value) =>
+                  updateDisplaySettings({ linkDistance: value })
+                }
+              />
+              <RangeControl
+                label={controls.spread}
+                min={0.72}
+                max={1.9}
+                step={0.04}
+                value={displaySettings.spread}
+                onChange={(value) => updateDisplaySettings({ spread: value })}
+              />
+            </div>
+          </Section>
 
-        <Section icon={ZapIcon} title={controls.forces}>
-          <div className="grid gap-2">
-            <RangeControl
-              label={controls.linkDistance}
-              min={90}
-              max={260}
-              step={5}
-              value={displaySettings.linkDistance}
-              format={(value) => `${Math.round(value)}`}
-              onChange={(value) =>
-                updateDisplaySettings({ linkDistance: value })
-              }
-            />
-            <RangeControl
-              label={controls.spread}
-              min={0.72}
-              max={1.9}
-              step={0.04}
-              value={displaySettings.spread}
-              onChange={(value) => updateDisplaySettings({ spread: value })}
-            />
-          </div>
-        </Section>
-
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 w-full border-border-default bg-transparent text-xs text-foreground/80 hover:bg-muted hover:text-foreground"
-          onClick={resetCamera}
-        >
-          <SlidersHorizontalIcon className="mr-1.5 size-3.5" />
-          {controls.fitGraph}
-        </Button>
-      </aside>}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 w-full border-border-default bg-transparent text-xs text-foreground/80 hover:bg-muted hover:text-foreground"
+            onClick={resetCamera}
+          >
+            <SlidersHorizontalIcon className="mr-1.5 size-3.5" />
+            {controls.fitGraph}
+          </Button>
+        </aside>
+      )}
     </div>
   );
 }

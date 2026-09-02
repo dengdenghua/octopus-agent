@@ -146,6 +146,7 @@ def _call_handler_with_transient_retry(
     be force-killed, so the worker is released (``shutdown(wait=False)``)
     and the caller proceeds instead of pinning its thread forever.
     """
+
     def _run() -> tuple[Any, list[str]]:
         try:
             return handler(**args), []
@@ -160,13 +161,18 @@ def _call_handler_with_transient_retry(
 
     import concurrent.futures as _cf
 
+    # A timed handler still belongs to the current turn/tool call. Copy the
+    # ambient Session, cancellation, parent-tool id and safety ContextVars
+    # into the timeout worker instead of silently turning it into an orphan.
+    import contextvars as _contextvars
+
     pool = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="tool-timeout")
-    fut = pool.submit(_run)
+    fut = pool.submit(_contextvars.copy_context().run, _run)
     try:
         return fut.result(timeout=float(timeout_s))
     except _cf.TimeoutError:
         pool.shutdown(wait=False, cancel_futures=True)
-        raise TimeoutError(f"tool handler exceeded its timeout ({timeout_s:g}s)")
+        raise TimeoutError(f"tool handler exceeded its timeout ({timeout_s:g}s)") from None
     except BaseException:
         pool.shutdown(wait=False, cancel_futures=True)
         raise

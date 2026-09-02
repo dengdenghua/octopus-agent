@@ -65,7 +65,6 @@ from ._delegation_skills_graph import (
     _run_agent_graph,
 )
 from ._delegation_skills_judge import (
-    _run_cli_team,
     _run_tournament,
     _run_verdict_repair,
 )
@@ -255,6 +254,8 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         "memory/shell, plugins?: plugin/package hints, "
         "isolate?: bool}], "
         "timeout_s?: int (per-agent, default 900)}.\n"
+        "Use the canonical keys `agent_id` and `prompt`. Legacy `role` and "
+        "`goal` are accepted for compatibility, but do not prefer them in new calls.\n"
         "\n"
         "`isolate: true` runs that ONE spec inside its own git worktree, so "
         "its writes cannot collide with a sibling's. Set it on every lane that "
@@ -579,54 +580,6 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         replace=True,
     )
 
-    # ── cli_team: a team of the user's external coding CLIs ───────
-    cli_team_description = (
-        "Run a TEAM of the user's OWN external coding-agent CLIs (Claude Code / "
-        "Codex, auto-detected on this machine) on one goal — each in its own "
-        "isolated git worktree (no collisions), each briefed from + harvesting to "
-        "the shared blackboard (team stigmergy), then judge-pick the best diff. "
-        "Uses the user's own logins/subscriptions; NEVER auto-merges (returns the "
-        "winning diff for review). This is best-of-N across DIFFERENT real coding "
-        "agents, not octopus sub-agents.\n"
-        "\n"
-        "Use it when you want several top coding agents to each take a crack at a "
-        "task and keep the best ('have Claude and Codex both implement this, pick "
-        "the better one'). Costly + needs those CLIs installed.\n"
-        "\n"
-        "Args: {goal: string, members?: [{agent_id, partner_id, command}] (default "
-        "auto-detect installed claude-code/codex-cli), judge?: bool (default true "
-        "— vote a winner), judge_n?: int 2-5 voters, repo_root?: path (default "
-        "cwd, must be a git repo)}.\n"
-        "\n"
-        "Returns: {ok, goal, count, succeeded, members:[{agent_id, partner_id, ok, "
-        "files, error}], winner:{agent_id, files, diff, decided_by}, note}. Apply "
-        "the winner's diff yourself."
-    )
-    registry.register(
-        Skill(
-            name="cli_team",
-            description=cli_team_description,
-            affinity=["delegation", "cli", "external_agent", "worktree", "team", "best_of"],
-            cost_profile="high",  # N external coding agents in worktrees + voters
-            trusted_source="skill://public/cli_team",
-            handler=_run_cli_team,
-            tests=[
-                SkillTestCase(
-                    name="missing_goal_returns_error",
-                    tier="golden",
-                    args={"goal": ""},
-                    expect=SkillExpect(schema_keys=["ok", "members", "winner"]),
-                    custom_predicate=lambda r: (
-                        isinstance(r, dict)
-                        and r.get("ok") is False
-                        and "required" in (r.get("error") or "")
-                    ),
-                ),
-            ],
-        ),
-        replace=True,
-    )
-
     # ── pipeline (item-chain, no inter-stage barrier) ─────────────
     pipeline_description = (
         "Process a list of items through ORDERED STAGES without waiting for "
@@ -808,11 +761,11 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         ),
         replace=True,
     )
-    # 9 delegation/orchestration skills registered above (call_agent,
+    # 8 delegation/orchestration skills registered above (call_agent,
     # call_agent_parallel, call_agent_vote, run_orchestration,
-    # verdict_repair, tournament, cli_team, run_pipeline, call_agent_graph).
-    # Bump when adding another — the count had drifted to a stale 5.
-    return 9
+    # verdict_repair, tournament, run_pipeline, call_agent_graph).
+    # External CLI auto-detection is intentionally not exposed here.
+    return 8
 
 
 __all__ = [
@@ -873,7 +826,6 @@ __all__ = [
     "_synthesis_prompt",
     "_synthesis_spec",
     # judge panels
-    "_run_cli_team",
     "_run_tournament",
     "_run_verdict_repair",
     # pipeline
@@ -885,7 +837,71 @@ __all__ = [
     "_resolve_node_prompt",
     "_run_agent_graph",
     # delegation-budget aliases kept visible for monkeypatch / lazy import
+    "register_call_agent_parallel",
     "_check_absolute_cap",
     "_compute_fingerprint",
     "_record_delegation",
 ]
+
+
+def register_call_agent_parallel(
+    registry: SkillRegistry,
+    max_spawns: int = 5,
+    depth: int = 1,
+) -> int:
+    """Register `call_agent_parallel` for hierarchical sub-delegation.
+
+    This is used when ephemeral sub-agents are allowed to spawn their own
+    sub-agents (recursive orchestration). The tool is registered with depth
+    and budget constraints to prevent infinite recursion.
+
+    Parameters
+    ----------
+    registry :
+        SkillRegistry to register into (typically a cloned registry for
+        the sub-agent).
+    max_spawns :
+        Maximum number of parallel spawns this sub-agent can create.
+    depth :
+        Delegation depth (0=planner, 1=ephemeral, 2=ephemeral's child).
+        Used for context propagation.
+
+    Returns
+    -------
+    int
+        Number of skills registered (always 1 for now).
+    """
+    from runtime.execution.suckers._delegation_skills_parallel import (
+        _call_agent_parallel,
+    )
+
+    role_table = _format_role_catalog()
+    description = (
+        f"Spawn up to {max_spawns} sub-agents CONCURRENTLY for tasks "
+        "that decompose cleanly into independent sub-tasks. Use when:\n"
+        "  - The task is genuinely parallel (independent dimensions/modules)\n"
+        "  - Each sub-task fits a specialist role\n"
+        "  - You can integrate the results into a final deliverable\n"
+        "\n"
+        f"You are at delegation depth {depth}. Budget and spawns are "
+        "inherited from your parent.\n"
+        "\n"
+        "Args: {nodes: list of {agent_id, prompt, ...}, context}\n"
+        "\n"
+        "Advertised specialist roles:\n"
+        f"{role_table}"
+    )
+
+    registry.register(
+        Skill(
+            name="call_agent_parallel",
+            description=description,
+            affinity=["delegation", "parallel", "orchestration"],
+            cost_profile="high",
+            trusted_source="skill://public/call_agent_parallel",
+            handler=_call_agent_parallel,
+        ),
+        replace=True,
+    )
+
+    return 1

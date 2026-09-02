@@ -61,8 +61,8 @@ export const agentOperatorZhCN: AgentOperatorCopy = {
   "Competitor scorecard": "竞品评分卡",
   degraded: "降级",
   "Behavioral head-to-head is not certified": "同任务行为对比尚未认证",
-  "Octopus has no tracked effective scorecard gaps":
-    "Octopus 当前没有已跟踪的有效评分差距",
+  "EchoAI has no tracked effective scorecard gaps":
+    "EchoAI 当前没有已跟踪的有效评分差距",
   "Architecture is estimated; static certification and same-task behavioral evidence are tracked separately.":
     "架构分为估算值；静态认证与同任务行为证据会单独跟踪。",
   Architecture: "架构",
@@ -282,8 +282,7 @@ export const agentOperatorZhCN: AgentOperatorCopy = {
     "已重跑 {attempted} 个浏览器/桌面修复方案：{passed} 个通过，{failed} 个失败。源案例仍需人工把关。",
   "Queued {count} repair-route promotion review item(s).":
     "已加入 {count} 个修复路由晋升审核项。",
-  "Queued {count} replay evidence item(s).":
-    "已加入 {count} 个回放证据项。",
+  "Queued {count} replay evidence item(s).": "已加入 {count} 个回放证据项。",
   "Queued {count} real scorecard gap review item(s).":
     "已加入 {count} 个真实评分差距审核项。",
   "Queued {count} {dimension} scorecard remediation item(s).":

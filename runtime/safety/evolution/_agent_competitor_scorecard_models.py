@@ -1,19 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any
-
-
-def _baseline_as_of(now: datetime | None = None) -> str:
-    """Calibration date for the architecture capability estimate.
-
-    Static scores are point-in-time estimates and must carry a date so the
-    radar cannot silently self-inflate as competitors ship. The K3 behavioral
-    bundle is the ground truth; this date only stamps the architecture layer.
-    """
-    return (now or datetime.now(UTC)).strftime("%Y-%m-%d")
-
 
 COMPETITORS: tuple[str, ...] = (
     "codex",
@@ -27,13 +15,19 @@ EXTERNAL_COMPETITORS: tuple[str, ...] = tuple(
     competitor for competitor in COMPETITORS if competitor != OCTOPUS_COMPETITOR
 )
 DEFAULT_TARGET_SCORE = 95
+SCORECARD_CALIBRATION_AS_OF = "2026-08-04"
+SCORECARD_CALIBRATION_SOURCE_REVISION = "a41dc160a4056563891cc069fcbcf6b961cf56d9"
+SCORECARD_CALIBRATION_MAX_AGE_DAYS = 90
 BASELINE_CONTEXT: dict[str, Any] = {
-    "as_of": _baseline_as_of(),
+    "as_of": SCORECARD_CALIBRATION_AS_OF,
+    "source": "git_commit",
+    "source_revision": SCORECARD_CALIBRATION_SOURCE_REVISION,
+    "source_path": "runtime/safety/evolution/_agent_competitor_scorecard_models.py",
+    "max_age_days": SCORECARD_CALIBRATION_MAX_AGE_DAYS,
     "score_kind": "architecture_capability_estimate",
     "score_basis": (
-        "static architecture estimate calibrated against public Codex surface; "
-        "K3 same-task behavioral bundle is ground truth and overrides this layer "
-        "when current (see behavioral_head_to_head)"
+        "version-controlled static architecture estimate calibrated against the public "
+        "Codex surface; it remains separate from behavioral release evidence"
     ),
     "codex_surface": (
         "combined Codex desktop app, CLI, cloud execution, skills/plugins, "
@@ -41,7 +35,7 @@ BASELINE_CONTEXT: dict[str, Any] = {
     ),
     "excludes": "legacy CLI-only comparisons",
     "behavioral_authority": (
-        "same-task behavioral bundle and parity certification, when current and available"
+        "independent commit-bound release authority; it does not mutate static overall scores"
     ),
     "official_references": (
         "https://openai.com/index/introducing-the-codex-app/",
@@ -214,12 +208,12 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         ),
     ),
     ScoreDimension(
-        id="local_cli_partner_interop",
-        title="Local third-party CLI partner interoperability",
+        id="model_provider_plugin_interop",
+        title="Explicit model-provider plugin interoperability",
         weight=5,
         why=(
-            "Detect, register, probe, diagnose, and team-run external coding CLIs "
-            "without forcing users to abandon their native CLI subscriptions or muscle memory."
+            "Install, validate, and hot-register external model gateways without "
+            "handing orchestration, tools, memory, or secrets to an opaque local CLI."
         ),
         scores={
             "codex": 94,
@@ -228,10 +222,10 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
             "hermes": 82,
             "octopus": 98,
         },
-        octopus_evidence_ids=("local_cli_partner_interop", "subagents_parallel_work"),
+        octopus_evidence_ids=("model_provider_plugin_interop", "skills_plugins_hooks"),
         octopus_next_actions=(
-            "Keep CodeBuddy/Codex/Claude/Trae probes release-gated with auth, model, permission, network, and launcher-only failures.",
-            "Add retained health-check receipts and per-provider setup history in the local partner UI.",
+            "Keep credential references, provider probes, and live route teardown release-gated.",
+            "Add retained health-check receipts and setup history in the provider plugin UI.",
         ),
     ),
     ScoreDimension(

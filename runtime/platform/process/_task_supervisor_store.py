@@ -91,6 +91,7 @@ class TaskSupervisorStore:
         thread_id: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        include_unowned: bool = True,
     ) -> _TaskRecordList:
         return self.list_page(
             status=status,
@@ -99,6 +100,7 @@ class TaskSupervisorStore:
             thread_id=thread_id,
             limit=limit,
             offset=offset,
+            include_unowned=include_unowned,
         )["items"]
 
     def list_page(
@@ -110,6 +112,7 @@ class TaskSupervisorStore:
         thread_id: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        include_unowned: bool = True,
     ) -> dict[str, Any]:
         clean_limit = max(1, int(limit or 100))
         clean_offset = max(0, int(offset or 0))
@@ -119,6 +122,7 @@ class TaskSupervisorStore:
                 kind=kind,
                 owner_id=owner_id,
                 thread_id=thread_id,
+                include_unowned=include_unowned,
             )
             return {
                 "items": tasks[clean_offset : clean_offset + clean_limit],
@@ -134,6 +138,7 @@ class TaskSupervisorStore:
         kind: str | None = None,
         owner_id: str | None = None,
         thread_id: str | None = None,
+        include_unowned: bool = True,
     ) -> int:
         with self._lock:
             return len(
@@ -142,6 +147,7 @@ class TaskSupervisorStore:
                     kind=kind,
                     owner_id=owner_id,
                     thread_id=thread_id,
+                    include_unowned=include_unowned,
                 )
             )
 
@@ -152,6 +158,7 @@ class TaskSupervisorStore:
         kind: str | None = None,
         owner_id: str | None = None,
         thread_id: str | None = None,
+        include_unowned: bool = True,
     ) -> _TaskRecordList:
         tasks = self._read_tasks()
         if status:
@@ -159,7 +166,11 @@ class TaskSupervisorStore:
         if kind:
             tasks = [task for task in tasks if task.kind == str(kind)]
         if owner_id is not None:
-            tasks = [task for task in tasks if task.owner_id in (None, "", owner_id)]
+            tasks = [
+                task
+                for task in tasks
+                if task.owner_id == owner_id or (include_unowned and task.owner_id in (None, ""))
+            ]
         if thread_id is not None:
             tasks = [task for task in tasks if task.thread_id == thread_id]
         tasks.sort(key=lambda task: (task.created_at, task.task_id), reverse=True)
@@ -179,6 +190,7 @@ class TaskSupervisorStore:
         thread_id: str | None = None,
         include_monitor: bool = False,
         limit: int = 100,
+        include_unowned: bool = True,
     ) -> dict[str, Any]:
         with self._lock:
             tasks = self._filtered_tasks(
@@ -186,6 +198,7 @@ class TaskSupervisorStore:
                 kind=kind,
                 owner_id=owner_id,
                 thread_id=thread_id,
+                include_unowned=include_unowned,
             )
         return build_task_recovery_queue(
             tasks,

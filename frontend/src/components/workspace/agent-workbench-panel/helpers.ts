@@ -11,6 +11,7 @@ export type WorkbenchRosterSeat = {
   avatarUrl?: string | null;
   icon?: string | null;
   role?: "tl" | "member" | string | null;
+  kind?: "human" | "agent" | "role";
 };
 
 export function rosterSeatRoleLabel(
@@ -66,9 +67,7 @@ export function dockAgentStatusLabel(
  * selected action to the one panel where it adds information instead of
  * opening a second copy of the activity log.
  */
-export function evidenceTabForWorkBlock(
-  block: WorkBlock,
-): AgentWorkbenchTabId {
+export function evidenceTabForWorkBlock(block: WorkBlock): AgentWorkbenchTabId {
   if (block.kind === "terminal") return "terminal";
   if (block.kind === "browser") return "browser";
 
@@ -92,8 +91,7 @@ export function workBlockLabelsFromI18n(t: unknown) {
 
 export function agentStatusTextClass(status: AgentTile["status"]): string {
   if (status === "running") return "text-primary";
-  if (status === "waiting_approval")
-    return "text-warning";
+  if (status === "waiting_approval") return "text-warning";
   if (status === "error") return "text-destructive";
   if (status === "done") return "text-success";
   return "text-muted-foreground";

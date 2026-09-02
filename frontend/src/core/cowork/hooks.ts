@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  applyCollabRoomMessageProjectAction,
   ensureCollabRoom,
   getCollabSession,
   getCoworkGroup,
@@ -9,15 +10,21 @@ import {
   linkCoworkRoom,
   postCollabRoomMessage,
   removeCoworkMember,
+  replaceCoworkRoster,
   searchCowork,
   setCoworkMode,
 } from "./api";
 import type {
   CollabRoomInput,
-  CoworkInviteInput,
-  CoworkMode,
-  CoworkSearchKind,
   CollabRoomMessageInput,
+  CollaborationSession,
+  CoworkInviteInput,
+  CoworkMessageProjectActionInput,
+  CoworkMessageProjectActionResponse,
+  CoworkMode,
+  CoworkRosterInput,
+  CoworkState,
+  CoworkSearchKind,
 } from "./types";
 
 const COWORK_KEY = ["cowork"] as const;
@@ -105,6 +112,29 @@ export function useSetCoworkMode() {
   });
 }
 
+export function useReplaceCoworkRoster() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      threadId,
+      input,
+    }: {
+      threadId: string;
+      input: CoworkRosterInput;
+    }) => replaceCoworkRoster(threadId, input),
+    onSuccess: (response, { threadId }) => {
+      qc.setQueryData<{ state: CoworkState }>(
+        coworkQueryKeys.group(threadId),
+        (group) => (group ? { ...group, state: response.state } : group),
+      );
+      void qc.invalidateQueries({ queryKey: coworkQueryKeys.group(threadId) });
+      void qc.invalidateQueries({
+        queryKey: coworkQueryKeys.session(threadId),
+      });
+    },
+  });
+}
+
 export function useCoworkPresence(
   threadId?: string | null,
   opts: { enabled?: boolean; refetchInterval?: number } = {},
@@ -138,11 +168,48 @@ export function useCoworkSearch(
   });
 }
 
-export function useCollabSession(threadId?: string | null) {
+export type CollabSessionQueryOptions = {
+  /** Skip even the initial session lookup. */
+  enabled?: boolean;
+  /** Keep an explicitly visible collaboration surface live before a room exists. */
+  live?: boolean;
+  refetchInterval?: number;
+};
+
+export function collabSessionRefetchInterval(
+  session: CollaborationSession | undefined,
+  opts: CollabSessionQueryOptions = {},
+): number | false {
+  if (opts.enabled === false) return false;
+  const isCollaborativeSession = Boolean(
+    session?.room_id ||
+    (session && (session.roster.length > 1 || session.mode !== "chat")),
+  );
+  return opts.live || isCollaborativeSession
+    ? (opts.refetchInterval ?? 5_000)
+    : false;
+}
+
+export function useCollabSession(
+  threadId?: string | null,
+  opts: CollabSessionQueryOptions = {},
+) {
+  const enabled =
+    (opts.enabled ?? true) && Boolean(threadId && threadId !== "new");
   return useQuery({
     queryKey: coworkQueryKeys.session(threadId),
     queryFn: () => getCollabSession(threadId!),
-    enabled: Boolean(threadId && threadId !== "new"),
+    enabled,
+    // Team Room messages can be written by another browser, a human member,
+    // or a Project OS action. Keep the central group timeline moving even
+    // when the agent stream itself is idle.
+    // Direct chats need one lookup for persisted collaboration metadata, but
+    // they should not keep waking the backend forever. A linked room, a
+    // multi-member session, or an explicitly visible live surface keeps the
+    // five-second refresh behavior.
+    refetchInterval: (query) =>
+      enabled ? collabSessionRefetchInterval(query.state.data, opts) : false,
+    refetchIntervalInBackground: false,
     staleTime: 2000,
   });
 }
@@ -191,6 +258,64 @@ export function usePostCollabRoomMessage() {
       input: CollabRoomMessageInput;
     }) => postCollabRoomMessage(threadId, input),
     onSuccess: (_data, { threadId }) => {
+      void qc.invalidateQueries({
+        queryKey: coworkQueryKeys.session(threadId),
+      });
+      void qc.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          return (
+            Array.isArray(key) &&
+            key[0] === COWORK_KEY[0] &&
+            key[1] === "search" &&
+            key[2] === threadId
+          );
+        },
+      });
+    },
+  });
+}
+
+/** Merge the authoritative write response into the cached timeline immediately.
+ * A background refetch still follows so Project OS and room projections converge. */
+export function mergeCoworkProjectActionIntoSession(
+  session: CollaborationSession | undefined,
+  response: CoworkMessageProjectActionResponse,
+): CollaborationSession | undefined {
+  if (!session) return session;
+  const replacements = [
+    response.source_message,
+    response.system_card_message ?? undefined,
+  ].filter((message) => message != null);
+  if (replacements.length === 0) return session;
+
+  const bySeq = new Map(
+    session.room_messages.map((message) => [message.seq, message]),
+  );
+  for (const message of replacements) bySeq.set(message.seq, message);
+  return {
+    ...session,
+    room_messages: Array.from(bySeq.values()).sort((a, b) => a.seq - b.seq),
+  };
+}
+
+export function useApplyCollabRoomMessageProjectAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      threadId,
+      messageSeq,
+      input,
+    }: {
+      threadId: string;
+      messageSeq: number;
+      input: CoworkMessageProjectActionInput;
+    }) => applyCollabRoomMessageProjectAction(threadId, messageSeq, input),
+    onSuccess: (response, { threadId }) => {
+      qc.setQueryData<CollaborationSession>(
+        coworkQueryKeys.session(threadId),
+        (session) => mergeCoworkProjectActionIntoSession(session, response),
+      );
       void qc.invalidateQueries({
         queryKey: coworkQueryKeys.session(threadId),
       });

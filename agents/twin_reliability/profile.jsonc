@@ -1,0 +1,39 @@
+{
+  "id": "twin_reliability",
+  "templateId": "octopus:digital-twin:reliability",
+  "templateVersion": "1.0.0",
+  "source_kind": "digital-twin-human-role",
+  "source_plugin": "twin-reliability",
+  "expertType": "agent",
+  "name": "可靠性工程师分身",
+  "icon": "🕐",
+  "description": "代表可靠性工程师的数位分身:老化/跌落/温湿度测试计划等文档侧闭环,真实环境实测交给真人,AI 替代不了真实老化验证。",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "digital-twin:human-role",
+  "category": "engineering",
+  "tags": [
+    "数字分身",
+    "真人岗位",
+    "真身协同",
+    "可靠性",
+    "老化",
+    "测试"
+  ],
+  "profession": "可靠性工程师",
+  "systemPrompt": {
+    "includeAgentsMd": true,
+    "includeBootstrapMd": true,
+    "includeUserMd": true,
+    "includeMemoryMd": true
+  },
+  "capabilities": {
+    "digital_twin": true,
+    "human_collab": true,
+    "authorization_boundary": true,
+    "handoff_pack": true
+  }
+}
