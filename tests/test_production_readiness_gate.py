@@ -720,6 +720,20 @@ def test_ci_runs_production_readiness_gate_with_isolated_state() -> None:
     assert "e2e-release-proof" not in workflow
 
 
+def test_ci_uploads_coverage_data_fail_closed_including_hidden_file() -> None:
+    path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+    workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["lint-and-test"]["steps"]
+    named = {step.get("name"): step for step in steps if step.get("name")}
+
+    upload = named["Upload coverage"]
+    assert upload["uses"] == ACTIONS_UPLOAD_ARTIFACT
+    assert upload["with"]["name"] == "coverage-report"
+    assert upload["with"]["path"] == ".coverage"
+    assert upload["with"]["include-hidden-files"] is True
+    assert upload["with"]["if-no-files-found"] == "error"
+
+
 def test_ci_audits_frontend_production_dependencies_fail_closed() -> None:
     path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
     workflow = yaml.safe_load(path.read_text(encoding="utf-8"))

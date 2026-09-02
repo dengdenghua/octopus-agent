@@ -255,6 +255,8 @@ jobs:
         with:
           name: coverage-report
           path: .coverage
+          include-hidden-files: true
+          if-no-files-found: error
 
   pytest-cross-platform:
     # Catches path-separator, encoding, permission, subprocess, CLI, and
