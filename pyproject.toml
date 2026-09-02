@@ -219,7 +219,7 @@ hearts-etcd = [
     "etcd3-py>=0.1.6,<0.2",
 ]
 skin = [
-    "watchdog>=4.0",
+    "watchdog>=6.0.0",
 ]
 # ── SWE-bench evaluation ─────────────────────────────────
 swebench = [
@@ -282,7 +282,7 @@ all = [
     # Implementation note.
     "paramiko>=5.0.0",
     "redis>=5.0",
-    "watchdog>=4.0",
+    "watchdog>=6.0.0",
     # local-auth
     "bcrypt>=4.0",
     # web content extraction
