@@ -42,6 +42,23 @@ export function StreamingDebugger({
   events,
   className,
 }: StreamingDebuggerProps) {
+  // Keep the disabled production path hook-free: streaming event arrays change
+  // frequently, so even memoized derivations would still rescan them on every
+  // parent render if the gate lived below the hooks.
+  const enabled =
+    import.meta.env.DEV ||
+    (typeof window !== "undefined" &&
+      window.localStorage.getItem("octopus:debug:streaming") === "1");
+
+  if (!enabled) return null;
+
+  return <EnabledStreamingDebugger events={events} className={className} />;
+}
+
+function EnabledStreamingDebugger({
+  events,
+  className,
+}: StreamingDebuggerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [filter, setFilter] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<LiveToolEvent | null>(
@@ -50,12 +67,6 @@ export function StreamingDebugger({
   const [filterType, setFilterType] = useState<"all" | "error" | "running">(
     "all",
   );
-
-  // 仅在开发环境或显式启用时可用
-  const enabled =
-    import.meta.env.DEV ||
-    (typeof window !== "undefined" &&
-      window.localStorage.getItem("octopus:debug:streaming") === "1");
 
   const filteredEvents = useMemo(() => {
     return events.filter((e) => {
@@ -122,8 +133,6 @@ export function StreamingDebugger({
     URL.revokeObjectURL(url);
     toast.success(`已导出 ${events.length} 个事件`);
   };
-
-  if (!enabled) return null;
 
   return (
     <>

@@ -89,7 +89,9 @@ export interface FileInMessage {
 }
 
 /** Full BaseStream shape consumed by workspace pages. */
-type ExposedRealtimeThread = BaseStream<AgentThreadState>;
+type ExposedRealtimeThread = Omit<BaseStream<AgentThreadState>, "stop"> & {
+  stop: () => Promise<void>;
+};
 
 type SendMessageFn = (
   threadId: string,
@@ -1369,13 +1371,35 @@ export function useThreadStreamRealtime(
     }
   }, [state]);
 
-  // Stable `stop` ref so callers can `useRef(thread.stop)` without
-  // tearing on every render (the code page does this around L1195).
-  const stopRef = useRef(() => {
-    void interrupt();
-  });
+  // Stable `stop` ref so callers can `useRef(thread.stop)` without tearing on
+  // every render. Preserve the interrupt promise so callers can await and
+  // surface failures. Concurrent calls share one request; this matters because
+  // a slow acknowledgement otherwise leaves enough time for a double click to
+  // send multiple turn/interrupt requests.
+  const stopInFlightRef = useRef<{
+    interrupt: typeof interrupt;
+    promise: Promise<void>;
+  } | null>(null);
+  const stopRef = useRef<() => Promise<void>>(() => Promise.resolve());
   stopRef.current = () => {
-    void interrupt();
+    const current = stopInFlightRef.current;
+    if (current?.interrupt === interrupt) return current.promise;
+
+    const operation = {
+      interrupt,
+      promise: Promise.resolve(),
+    };
+    operation.promise = (async () => {
+      try {
+        await interrupt();
+      } finally {
+        if (stopInFlightRef.current === operation) {
+          stopInFlightRef.current = null;
+        }
+      }
+    })();
+    stopInFlightRef.current = operation;
+    return operation.promise;
   };
   const stop = useCallback(() => stopRef.current(), []);
 

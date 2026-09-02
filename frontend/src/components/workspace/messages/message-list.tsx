@@ -17,6 +17,7 @@ import {
   useSyncExternalStore,
   memo,
 } from "react";
+import { toast } from "sonner";
 
 import {
   Conversation,
@@ -2466,11 +2467,24 @@ export function MessageList({
         className,
       )}
       data-message-scroll-root="true"
-      role="log"
+      role="presentation"
     >
+      {/* Keep the live status outside the busy log: aria-busy intentionally
+          defers streamed message additions, but reconnect/slow/finished status
+          changes must remain immediately available to assistive technology. */}
+      <PublicThinkingStatus
+        isLoading={showConversationActivity}
+        liveToolEvents={liveToolEvents ?? []}
+        hasStreamingMessage={hasStreamingAnswer}
+        vitals={streamVitals}
+        renderVisual={false}
+      />
       <ConversationContent
         scrollClassName={TURN_SCROLL_VIEWPORT_CLASS}
         data-density={showSenderName ? "compact" : "comfortable"}
+        role="log"
+        aria-busy={showConversationActivity}
+        aria-relevant="additions"
         className={cn(
           "mx-auto w-full max-w-(--container-width-md) px-4 pt-2 pb-0",
           // A work-group timeline contains sender labels, short human turns,
@@ -2497,6 +2511,7 @@ export function MessageList({
                 hasStreamingMessage={hasStreamingAnswer}
                 vitals={streamVitals}
                 className="ml-0"
+                renderAnnouncement={false}
               />
             ),
           })}
@@ -2690,6 +2705,7 @@ export function MessageList({
                         hasStreamingMessage={hasStreamingAnswer}
                         vitals={streamVitals}
                         className="ml-0"
+                        renderAnnouncement={false}
                       />
                     ),
                   })
@@ -2704,6 +2720,7 @@ export function MessageList({
                       hasStreamingMessage={hasStreamingAnswer}
                       vitals={streamVitals}
                       className="ml-0"
+                      renderAnnouncement={false}
                     />
                   </div>
                 ))}
@@ -2804,14 +2821,22 @@ export function MessageList({
                       )}
                   </div>
                 )}
-                {failureReceipt?.kind === "capability" &&
+                {(failureReceipt?.kind === "capability" ||
+                  failureReceipt?.kind === "network" ||
+                  failureReceipt?.kind === "error") &&
                   fallbackRetryPrompt &&
                   onRetryTask && (
                     <div className="mt-2">
                       <button
                         type="button"
                         onClick={() => onRetryTask(fallbackRetryPrompt)}
-                        className="rounded-md border border-warning/80 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/20 dark:border-warning/60"
+                        title={t.message.retryTaskHint}
+                        className={cn(
+                          "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+                          isWarningFailure
+                            ? "border-warning/80 bg-warning/10 text-warning hover:bg-warning/20 dark:border-warning/60"
+                            : "border-destructive/40 bg-destructive/8 text-destructive hover:border-destructive/55 hover:bg-destructive/15 dark:border-destructive/50",
+                        )}
                       >
                         {t.message.retryTask}
                       </button>
@@ -2873,7 +2898,18 @@ export function MessageList({
           </span>
           <button
             type="button"
-            onClick={() => void thread.stop()}
+            onClick={() => {
+              // `stop` can reject when the active worker does not accept the
+              // interrupt. Consume the Promise here so this secondary stop
+              // entry point has the same recoverable feedback as the composer.
+              void (async () => {
+                try {
+                  await thread.stop();
+                } catch {
+                  toast.error(t.chatPage.stopFailed);
+                }
+              })();
+            }}
             className="rounded-md border border-warning/80 px-2 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/10 dark:border-warning/60 dark:hover:bg-warning/70"
           >
             {t.common.stop}

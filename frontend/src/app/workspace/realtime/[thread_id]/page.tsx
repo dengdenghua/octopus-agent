@@ -3479,10 +3479,21 @@ function RealtimePageContent({
     },
     [markSidebarThreadRunning, sendMessage, thread.isLoading, threadId],
   );
+  const retryDispatchGuardRef = useRef<{ key: string; at: number } | null>(
+    null,
+  );
   const handleRetryTask = useCallback(
     (prompt: string) => {
       const text = prompt.trim();
       if (!text || thread.isLoading) return;
+      // React updates the loading flag after this click returns. Guard the
+      // short gap so a double click cannot enqueue a second optimistic row
+      // before the eager outbound ledger becomes visible to the page.
+      const now = Date.now();
+      const key = `${threadId}\u0000${text}`;
+      const previous = retryDispatchGuardRef.current;
+      if (previous?.key === key && now - previous.at < 2_000) return;
+      retryDispatchGuardRef.current = { key, at: now };
       // A retry should actually resume the failed conversation. Sending the
       // recovered objective as a new turn preserves the gathered evidence
       // and avoids leaving the user on a pre-filled, unsent "new task" page.
@@ -3588,23 +3599,55 @@ function RealtimePageContent({
   // Implementation note.
   // Implementation note.
   const pauseTask = usePauseTask();
+  const activeThreadIdRef = useRef(threadId);
+  activeThreadIdRef.current = threadId;
+  const stoppingRef = useRef<{ threadId: string } | null>(null);
+  const [stoppingThreadId, setStoppingThreadId] = useState<string | null>(null);
   const handleStop = useCallback(async () => {
+    if (stoppingRef.current?.threadId === threadId) return;
+    const stopOperation = { threadId };
+    stoppingRef.current = stopOperation;
+    setStoppingThreadId(threadId);
     const activeForThread = (tasks.data?.active ?? []).find(
       (t) => t.thread_id === threadId,
     );
-    await thread.stop();
-    if (activeForThread) {
-      try {
-        await pauseTask.mutateAsync({
-          taskId: activeForThread.task_id,
-          reason: "user_request",
-          note: t.chatPage.stopNote,
-        });
-      } catch (e) {
-        swallow(e);
+    try {
+      await thread.stop();
+      if (activeForThread) {
+        try {
+          await pauseTask.mutateAsync({
+            taskId: activeForThread.task_id,
+            reason: "user_request",
+            note: t.chatPage.stopNote,
+          });
+        } catch (error) {
+          swallow(error);
+        }
+      }
+    } catch (error) {
+      if (
+        stoppingRef.current === stopOperation &&
+        activeThreadIdRef.current === threadId
+      ) {
+        toast.error(t.chatPage.stopFailed);
+      }
+      swallow(error);
+    } finally {
+      // A route-param change reuses this page component. Do not let a late
+      // completion from the previous thread clear a newer thread's stop state.
+      if (stoppingRef.current === stopOperation) {
+        stoppingRef.current = null;
+        setStoppingThreadId(null);
       }
     }
-  }, [thread, threadId, tasks.data, pauseTask, t.chatPage.stopNote]);
+  }, [
+    thread,
+    threadId,
+    tasks.data,
+    pauseTask,
+    t.chatPage.stopNote,
+    t.chatPage.stopFailed,
+  ]);
 
   const hasResearchPanel = showResearch && (!!researchJob || !!researchError);
   const hasSpecialUtilityPanel =
@@ -4371,6 +4414,7 @@ function RealtimePageContent({
                           showInspirationToggle={!embeddedDesignChat}
                           allowAgentModes={!embeddedDesignChat}
                           onStop={handleStop}
+                          isStopping={stoppingThreadId === threadId}
                           isUploading={isUploading}
                           autoFocus={isNewThread}
                           defaultValue={composerSeed}

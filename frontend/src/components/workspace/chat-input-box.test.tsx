@@ -1387,6 +1387,25 @@ describe("<ChatInputBox /> live steering", () => {
       files: undefined,
     });
   });
+
+  it("disables the stop action while a stop request is pending", () => {
+    const onStop = vi.fn();
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-live"
+        status="streaming"
+        onStop={onStop}
+        isStopping
+      />,
+    );
+
+    const stopButton = screen.getByTitle("Stop");
+    expect(stopButton).toBeDisabled();
+    expect(stopButton).toHaveAttribute("aria-busy", "true");
+    fireEvent.click(stopButton);
+    expect(onStop).not.toHaveBeenCalled();
+  });
 });
 
 describe("<ChatInputBox /> send-failure draft restore", () => {

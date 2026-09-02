@@ -67,6 +67,7 @@ function mockThread(
 function renderMessageList(
   thread: BaseStream<AgentThreadState>,
   locale: "en-US" | "zh-CN" = "zh-CN",
+  onRetryTask?: (prompt: string) => void,
 ) {
   return renderWithProviders(
     <SubtasksProvider>
@@ -76,6 +77,7 @@ function renderMessageList(
           thread={thread}
           paddingBottom={0}
           mode="chat"
+          onRetryTask={onRetryTask}
         />
       </ThreadProviders>
     </SubtasksProvider>,
@@ -762,6 +764,7 @@ describe("MessageList failure visibility", () => {
   });
 
   it("falls back to the error banner when the failed turn ends in a processing group", () => {
+    const onRetryTask = vi.fn();
     const messages: Message[] = [
       { id: "user-1", type: "human", content: "first request" },
       { id: "assistant-1", type: "ai", content: "Earlier assistant answer." },
@@ -778,13 +781,42 @@ describe("MessageList failure visibility", () => {
       error: new Error("beak step 3 failed"),
     });
 
-    renderMessageList(thread, "en-US");
+    renderMessageList(thread, "en-US", onRetryTask);
 
     const banner = screen.getByRole("alert");
     expect(banner).toHaveTextContent(
       "This turn stopped before finishing. Continue the chat or retry.",
     );
     expect(banner).not.toHaveTextContent("beak step 3 failed");
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(onRetryTask).toHaveBeenCalledWith("second request");
+  });
+
+  it("offers retry from the fallback banner after a network interruption", () => {
+    const onRetryTask = vi.fn();
+    const messages: Message[] = [
+      { id: "user-network", type: "human", content: "继续审计项目" },
+      {
+        id: "assistant-network",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          { id: "tc-network", name: "web_search", args: { query: "q" } },
+        ],
+      } as AIMessage,
+    ];
+    const thread = mockThread({
+      messages,
+      error: new Error("websocket closed (1006)"),
+    });
+
+    renderMessageList(thread, "zh-CN", onRetryTask);
+
+    const banner = screen.getByRole("alert");
+    expect(banner).toHaveTextContent("模型连接中断");
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(onRetryTask).toHaveBeenCalledWith("继续审计项目");
   });
 
   it("shows a structured terminal handoff instead of replacing it with a generic failure", () => {
@@ -846,6 +878,7 @@ describe("MessageList failure visibility", () => {
     expect(
       screen.queryByTestId("conversation-activity-pulse"),
     ).not.toBeInTheDocument();
+    expect(screen.getByRole("log")).toHaveAttribute("aria-busy", "false");
   });
 
   it("does not contradict a settled answer with a stale generic thread error", () => {

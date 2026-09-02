@@ -2757,6 +2757,7 @@ export const koKR: Translations = {
 
   chatPage: {
     stopNote: "사용자가 채팅 입력에서 중지를 클릭했습니다",
+    stopFailed: "실행을 중지하지 못했습니다. 다시 시도해 주세요.",
   },
 
   // Agents
@@ -6084,6 +6085,7 @@ export const koKR: Translations = {
     firstResponseSlow: "첫 응답이 평소보다 늦어지고 있습니다",
     modelWorking: "생각 중...",
     thinkingCompleted: "생각 완료",
+    runEnded: "처리가 종료되었습니다",
     slowResponse: "계속 진행 중입니다. 조금 더 걸리고 있습니다",
     reconnecting: "연결이 끊겨 다시 돌아오는 중입니다",
     processing: "처리 중",

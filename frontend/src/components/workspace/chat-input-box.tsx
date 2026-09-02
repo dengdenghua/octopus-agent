@@ -141,7 +141,9 @@ export interface ChatInputBoxProps {
     /** Server-side info for attachments already uploaded on attach. */
     uploaded?: UploadedFileInfo[];
   }) => void;
-  onStop?: () => void;
+  onStop?: () => void | Promise<void>;
+  /** Prevent repeated stop requests while the server acknowledges one. */
+  isStopping?: boolean;
   /** True while attachments are being uploaded to the backend. Surfaces
    * a progress hint on the composer so the user knows the send is not
    * finished yet. */

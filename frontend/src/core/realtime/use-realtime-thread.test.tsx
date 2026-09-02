@@ -546,6 +546,204 @@ describe("useRealtimeThread reconnect reconciliation", () => {
     expect(item?.type === "agentMessage" && item.text).toBe("abc");
   });
 
+  it("folds one durable frame once while preserving ids and lifecycle order", async () => {
+    const handles: FakeClientHandles[] = [];
+    let emitBatch:
+      | ((
+          notes: Array<{ method: string; params: Record<string, unknown> }>,
+        ) => void)
+      | undefined;
+    let incrementalEventCalls = 0;
+    const startedItem = {
+      id: "i-batched",
+      type: "agentMessage",
+      status: "inProgress",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      text: "",
+    };
+    const completedItem = {
+      ...startedItem,
+      status: "completed",
+      text: "ab",
+    };
+    const durableEvents = [
+      {
+        sequence: 11,
+        event: "item_started",
+        eventId: "e-start",
+        threadId: "th",
+        turnId: "t-live",
+        ts: "2026-01-01T00:00:00.000Z",
+        payload: { item: startedItem },
+      },
+      {
+        sequence: 12,
+        event: "item_delta",
+        eventId: "e1",
+        threadId: "th",
+        turnId: "t-live",
+        ts: "2026-01-01T00:00:01.000Z",
+        payload: { itemId: "i-batched", kind: "agentMessage", delta: "a" },
+      },
+      {
+        sequence: 13,
+        event: "item_delta",
+        eventId: "e2",
+        threadId: "th",
+        turnId: "t-live",
+        ts: "2026-01-01T00:00:02.000Z",
+        payload: { itemId: "i-batched", kind: "agentMessage", delta: "b" },
+      },
+      {
+        sequence: 14,
+        event: "item_completed",
+        eventId: "e-complete",
+        threadId: "th",
+        turnId: "t-live",
+        ts: "2026-01-01T00:00:03.000Z",
+        payload: { item: completedItem },
+      },
+    ];
+    const factory = (deps: {
+      onIncomingRequest: IncomingRequestFn;
+      onNotificationBatch?: (
+        notes: Array<{ method: string; params: Record<string, unknown> }>,
+      ) => void;
+      onOpen?: () => void;
+      onClose?: (code: number, reason: string) => void;
+    }) => {
+      emitBatch = deps.onNotificationBatch;
+      handles.push({
+        emitRequest: (req) => deps.onIncomingRequest(req),
+        emitOpen: () => deps.onOpen?.(),
+        emitClose: (code, reason) => deps.onClose?.(code, reason),
+      });
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string, params?: Record<string, unknown>) => {
+          if (method === "thread/events") {
+            if (params?.afterSequence === 10 && params?.mode === undefined) {
+              incrementalEventCalls += 1;
+            }
+            return Promise.resolve({
+              thread: { id: "th" },
+              events: durableEvents,
+              cursor: 14,
+              streamId: "stream-a",
+              requiresReset: false,
+              hasMore: false,
+              turnCount: 1,
+              lastTurnId: "t-live",
+              lastTurnStatus: "inProgress",
+            });
+          }
+          if (method !== "thread/resume") return Promise.resolve({});
+          return Promise.resolve({
+            thread: { id: "th" },
+            turns: [turn("t-live", "inProgress")],
+            hasMore: false,
+            incremental: false,
+            nextEventSequence: 10,
+            eventStreamId: "stream-a",
+          });
+        },
+      };
+    };
+
+    let renderCount = 0;
+    const rendered = renderHook(() => {
+      renderCount += 1;
+      return useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+      });
+    });
+    await waitFor(() =>
+      expect(rendered.result.current.state.resumeState).toBe("resumed"),
+    );
+
+    const rendersBeforeFrame = renderCount;
+    act(() => {
+      emitBatch?.([
+        {
+          method: "item/started",
+          params: {
+            threadId: "th",
+            turnId: "t-live",
+            eventId: "e-start",
+            item: startedItem,
+          },
+        },
+        {
+          method: "item/agentMessage/delta",
+          params: {
+            threadId: "th",
+            turnId: "t-live",
+            itemId: "i-batched",
+            eventId: "e1",
+            delta: "a",
+          },
+        },
+        // Same-id duplicate in the same transport frame must be rejected
+        // before accepted deltas are merged for the reducer.
+        {
+          method: "item/agentMessage/delta",
+          params: {
+            threadId: "th",
+            turnId: "t-live",
+            itemId: "i-batched",
+            eventId: "e1",
+            delta: "a",
+          },
+        },
+        {
+          method: "item/agentMessage/delta",
+          params: {
+            threadId: "th",
+            turnId: "t-live",
+            itemId: "i-batched",
+            eventId: "e2",
+            delta: "b",
+          },
+        },
+        {
+          method: "item/completed",
+          params: {
+            threadId: "th",
+            turnId: "t-live",
+            eventId: "e-complete",
+            item: completedItem,
+          },
+        },
+      ]);
+    });
+
+    expect(renderCount - rendersBeforeFrame).toBe(1);
+    expect(rendered.result.current.state.turns[0]?.items[0]).toMatchObject({
+      id: "i-batched",
+      status: "completed",
+      text: "ab",
+    });
+
+    // A later authoritative slice overlaps every live event. Since all ids
+    // were recorded before the frame was folded, none is appended again.
+    act(() => {
+      handles[0]!.emitClose(1006, "network lost");
+      handles[0]!.emitOpen();
+    });
+    await waitFor(() => expect(incrementalEventCalls).toBe(1));
+    await waitFor(() =>
+      expect(rendered.result.current.state.resumeState).toBe("resumed"),
+    );
+    expect(rendered.result.current.state.turns[0]?.items[0]).toMatchObject({
+      id: "i-batched",
+      status: "completed",
+      text: "ab",
+    });
+  });
+
   it("falls back to a snapshot resume when the event fold diverges", async () => {
     const handles: FakeClientHandles[] = [];
     let resumeCount = 0;

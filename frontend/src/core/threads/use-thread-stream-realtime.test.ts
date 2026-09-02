@@ -950,6 +950,67 @@ describe("useThreadStreamRealtime permissions", () => {
     expect(result.current[0].isThreadLoading).toBe(false);
   });
 
+  it("returns the interrupt promise and deduplicates a slow stop request", async () => {
+    let resolveInterrupt!: () => void;
+    const interrupt = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveInterrupt = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(undefined);
+    vi.mocked(useRealtimeThread).mockReturnValue({
+      state: makeConversation([]),
+      connected: true,
+      startTurn: vi.fn().mockResolvedValue(undefined),
+      resolveApproval: vi.fn(),
+      resume: vi.fn().mockResolvedValue(undefined),
+      interrupt,
+      compact: vi.fn().mockResolvedValue({ compacted: false }),
+      decideHunk: vi.fn().mockResolvedValue(undefined),
+    });
+    const { result } = renderHook(() =>
+      useThreadStreamRealtime({ threadId: "th-test" }),
+    );
+
+    const firstStop = result.current[0].stop();
+    const secondStop = result.current[0].stop();
+
+    expect(firstStop).toBe(secondStop);
+    expect(interrupt).toHaveBeenCalledTimes(1);
+
+    resolveInterrupt();
+    await expect(firstStop).resolves.toBeUndefined();
+    await expect(result.current[0].stop()).resolves.toBeUndefined();
+    expect(interrupt).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps interrupt rejections observable to the stop caller", async () => {
+    const interrupt = vi
+      .fn()
+      .mockRejectedValue(new Error("interrupt was rejected"));
+    vi.mocked(useRealtimeThread).mockReturnValue({
+      state: makeConversation([]),
+      connected: true,
+      startTurn: vi.fn().mockResolvedValue(undefined),
+      resolveApproval: vi.fn(),
+      resume: vi.fn().mockResolvedValue(undefined),
+      interrupt,
+      compact: vi.fn().mockResolvedValue({ compacted: false }),
+      decideHunk: vi.fn().mockResolvedValue(undefined),
+    });
+    const { result } = renderHook(() =>
+      useThreadStreamRealtime({ threadId: "th-test" }),
+    );
+
+    await expect(result.current[0].stop()).rejects.toThrow(
+      "interrupt was rejected",
+    );
+    expect(interrupt).toHaveBeenCalledTimes(1);
+  });
+
   it("shows a new-turn human message immediately and reconciles it by stable item id", async () => {
     const startTurn = vi.fn(() => new Promise<void>(() => undefined));
     const steer = vi.fn().mockResolvedValue(undefined);

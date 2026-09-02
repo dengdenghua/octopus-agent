@@ -2809,6 +2809,7 @@ export const jaJP: Translations = {
 
   chatPage: {
     stopNote: "ユーザーがチャット入力で停止をクリックしました",
+    stopFailed: "実行を停止できませんでした。もう一度お試しください。",
   },
 
   // Agents
@@ -6173,6 +6174,7 @@ export const jaJP: Translations = {
     firstResponseSlow: "最初の応答に時間がかかっています",
     modelWorking: "思考中...",
     thinkingCompleted: "思考完了",
+    runEnded: "処理が終了しました",
     slowResponse: "続けています。少し時間がかかっています",
     reconnecting: "接続が切れました。戻っています",
     processing: "処理中",

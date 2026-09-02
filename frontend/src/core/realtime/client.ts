@@ -32,6 +32,10 @@ export interface RealtimeClientOptions {
   url: string;
   onIncomingRequest: (request: JsonRpcRequest) => Promise<unknown>;
   onNotification: (note: Notification) => void;
+  /** Receive one coalesced animation-frame batch in a single callback.
+   * When omitted, buffered notifications retain the legacy one-callback-per-
+   * notification behaviour through ``onNotification``. */
+  onNotificationBatch?: (notes: Notification[]) => void;
   onOpen?: () => void;
   onClose?: (code: number, reason: string) => void;
   onError?: (err: Event | Error) => void;
@@ -49,8 +53,16 @@ interface PendingRequest {
   reject: (reason: JsonRpcError | Error) => void;
 }
 
+interface OutboxEntry {
+  text: string;
+  // Only caller-originated JSON-RPC requests participate in ``pending``.
+  // Notifications and replies can be dropped without a Promise to settle.
+  requestId?: JsonRpcId;
+}
+
 const DEFAULT_INITIAL_BACKOFF = 500;
 const DEFAULT_MAX_BACKOFF = 15_000;
+const OUTBOX_CAPACITY = 256;
 
 // Delta notification methods that participate in delta-coalescing.
 // Used by the coalesce step (which merges N consecutive deltas with the
@@ -102,7 +114,7 @@ export class RealtimeClient {
   private closed = false;
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private outbox: string[] = [];
+  private outbox: OutboxEntry[] = [];
   // Backoff bounds, captured once so changing the option after construct
   // doesn't behave inconsistently mid-flight.
   private readonly initialBackoff: number;
@@ -170,7 +182,7 @@ export class RealtimeClient {
       this.opts.onOpen?.();
     };
     ws.onmessage = (ev) => {
-      this.dispatch(typeof ev.data === "string" ? ev.data : "");
+      this.dispatch(typeof ev.data === "string" ? ev.data : "", ws);
     };
     ws.onerror = (ev) => {
       this.opts.onError?.(ev);
@@ -182,14 +194,10 @@ export class RealtimeClient {
       this.failPending(
         new Error(`websocket closed (${ev.code} ${ev.reason || "no reason"})`),
       );
-      // Clear the outbox on disconnect. Anything that was buffered
-      // for "send on next open" was a request whose Promise has now
-      // been rejected by failPending; replaying those frames after a
-      // reconnect would re-send turn/start (or an interrupt, etc.)
-      // with no caller listening for the response — duplicate work
-      // on the server, ghost UI on the client. Leave the buffer
-      // empty so callers re-issue requests explicitly when they want
-      // them.
+      // Clear the outbox on disconnect. Pending requests have just been
+      // rejected, and queued notifications/replies belong to the dead
+      // transport epoch. Replaying any of them after reconnect could start
+      // duplicate work or deliver stale control messages.
       this.outbox.length = 0;
       this.ws = null;
       if (!this.closed) {
@@ -270,21 +278,35 @@ export class RealtimeClient {
     }
     // Buffer; flushed on next ``onopen``. Bound the buffer so a
     // perpetually-disconnected client doesn't grow without limit.
-    if (this.outbox.length >= 256) {
-      this.outbox.shift();
+    if (this.outbox.length >= OUTBOX_CAPACITY) {
+      const evicted = this.outbox.shift();
+      if (evicted?.requestId !== undefined) {
+        const handler = this.pending.get(evicted.requestId);
+        if (handler) {
+          this.pending.delete(evicted.requestId);
+          handler.reject(
+            new Error(
+              "realtime backpressure: outbox capacity exceeded; request dropped before send",
+            ),
+          );
+        }
+      }
     }
-    this.outbox.push(text);
+    this.outbox.push({
+      text,
+      ...(isRequest(env) ? { requestId: env.id } : {}),
+    });
   }
 
   private flushOutbox(): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     const pending = this.outbox.splice(0, this.outbox.length);
-    for (const text of pending) {
-      this.ws.send(text);
+    for (const entry of pending) {
+      this.ws.send(entry.text);
     }
   }
 
-  private dispatch(text: string): void {
+  private dispatch(text: string, sourceSocket: WebSocket): void {
     if (!text) return;
     let env: Envelope;
     try {
@@ -308,13 +330,19 @@ export class RealtimeClient {
     if (isRequest(env)) {
       // Server-initiated. Route to the caller and reply with the
       // decision. Errors are translated to a JSON-RPC error response so
-      // the server's awaiting future doesn't hang.
+      // the server's awaiting future doesn't hang. The response belongs to
+      // this exact transport epoch: if the handler settles after the socket
+      // closes, never enqueue it for a later connection (the request id is
+      // scoped to the dead server session).
       this.opts
         .onIncomingRequest(env)
-        .then((result) => this.reply(env.id, result))
+        .then((result) => this.replyOnSocket(sourceSocket, env.id, result))
         .catch((err: unknown) => {
           const message = err instanceof Error ? err.message : String(err);
-          this.reply(env.id, null, { code: -32603, message });
+          this.replyOnSocket(sourceSocket, env.id, null, {
+            code: -32603,
+            message,
+          });
         });
       return;
     }
@@ -368,6 +396,15 @@ export class RealtimeClient {
     this.deltaFlushPending = false;
     if (this.deltaBuffer.length === 0) return;
     const batch = coalesceDeltaNotifications(this.deltaBuffer.splice(0));
+    if (this.opts.onNotificationBatch) {
+      try {
+        this.opts.onNotificationBatch(batch);
+      } catch (err) {
+        swallow(err);
+        this.opts.onError?.(err as Error);
+      }
+      return;
+    }
     for (const note of batch) {
       // A single bad notification (reducer bug, listener throw) used
       // to abort the whole RAF batch and silently drop subsequent
@@ -381,6 +418,25 @@ export class RealtimeClient {
         this.opts.onError?.(err as Error);
       }
     }
+  }
+
+  private replyOnSocket(
+    sourceSocket: WebSocket,
+    id: JsonRpcId,
+    result: unknown,
+    error?: JsonRpcError,
+  ): void {
+    if (
+      this.closed ||
+      this.ws !== sourceSocket ||
+      sourceSocket.readyState !== WebSocket.OPEN
+    ) {
+      return;
+    }
+    const env: JsonRpcResponse = error
+      ? { jsonrpc: "2.0", id, error }
+      : { jsonrpc: "2.0", id, result };
+    sourceSocket.send(JSON.stringify(env));
   }
 
   private startHeartbeat(): void {
@@ -439,6 +495,7 @@ export function createDefaultClient(args: {
   authToken?: () => string | null;
   onIncomingRequest: RealtimeClientOptions["onIncomingRequest"];
   onNotification: RealtimeClientOptions["onNotification"];
+  onNotificationBatch?: RealtimeClientOptions["onNotificationBatch"];
   onOpen?: RealtimeClientOptions["onOpen"];
   onClose?: RealtimeClientOptions["onClose"];
   onError?: RealtimeClientOptions["onError"];
@@ -449,6 +506,7 @@ export function createDefaultClient(args: {
     authToken: args.authToken,
     onIncomingRequest: args.onIncomingRequest,
     onNotification: args.onNotification,
+    onNotificationBatch: args.onNotificationBatch,
     onOpen: args.onOpen,
     onClose: args.onClose,
     onError: args.onError,
@@ -524,6 +582,14 @@ function canMergeDeltaNotifications(
   if (!DELTA_METHODS.has(left.method)) return false;
   const leftParams = left.params as Record<string, unknown>;
   const rightParams = right.params as Record<string, unknown>;
+  // Durable deltas must reach the replay-dedupe ledger one envelope per
+  // event id. Merging them would keep only the seed's eventId, so a later
+  // thread/events fetch could apply every swallowed id again. Matching ids
+  // must stay separate too: they are duplicate deliveries for the ledger to
+  // reject, not text fragments that should be concatenated twice.
+  if (leftParams.eventId !== undefined || rightParams.eventId !== undefined) {
+    return false;
+  }
   if (left.method === "item/reasoning/textDelta") {
     return (
       leftParams.threadId === rightParams.threadId &&

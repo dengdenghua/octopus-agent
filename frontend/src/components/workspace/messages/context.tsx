@@ -54,7 +54,7 @@ export const ThreadStatusContext = createContext<
 
 // Context for thread actions (stable references)
 export interface ThreadActionsContextType {
-  stop: () => void;
+  stop: BaseStream<AgentThreadState>["stop"];
   submit: BaseStream<AgentThreadState>["submit"];
 }
 

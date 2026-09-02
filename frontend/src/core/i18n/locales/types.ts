@@ -2373,6 +2373,7 @@ export interface Translations {
 
   chatPage: {
     stopNote: string;
+    stopFailed: string;
   };
 
   // Agents
@@ -5327,6 +5328,7 @@ export interface Translations {
     firstResponseSlow: string;
     modelWorking: string;
     thinkingCompleted: string;
+    runEnded: string;
     slowResponse: string;
     reconnecting: string;
     processing: string;

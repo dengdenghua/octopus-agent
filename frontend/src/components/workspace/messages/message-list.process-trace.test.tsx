@@ -770,6 +770,14 @@ describe("MessageList process trace lifecycle", () => {
     expect(
       screen.getByTestId("conversation-activity-pulse"),
     ).toBeInTheDocument();
+    expect(screen.getByRole("log")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("log")).toHaveAttribute(
+      "aria-relevant",
+      "additions",
+    );
+    expect(screen.getByRole("log")).not.toContainElement(
+      screen.getByRole("status"),
+    );
     expect(screen.getAllByAltText("Eve")).toHaveLength(1);
 
     const planning: AIMessage = {
@@ -868,6 +876,13 @@ describe("MessageList process trace lifecycle", () => {
     expect(
       screen.queryByTestId("conversation-activity-pulse"),
     ).not.toBeInTheDocument();
+    // Keep the navigable log semantics, but release its queued additions only
+    // after the streamed turn has settled.
+    expect(screen.getByRole("log")).toHaveAttribute("aria-busy", "false");
+    expect(screen.getByRole("log")).toHaveAttribute(
+      "aria-relevant",
+      "additions",
+    );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getAllByAltText("Eve")).toHaveLength(1);
   });

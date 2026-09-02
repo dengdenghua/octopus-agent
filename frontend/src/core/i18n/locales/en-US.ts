@@ -2826,6 +2826,7 @@ export const enUS: Translations = {
 
   chatPage: {
     stopNote: "User clicked Stop in the chat input",
+    stopFailed: "Failed to stop the run. Please try again.",
   },
 
   // Agents
@@ -6191,6 +6192,7 @@ Strategy:
     firstResponseSlow: "First response is taking longer",
     modelWorking: "Thinking...",
     thinkingCompleted: "Thinking complete",
+    runEnded: "Run ended",
     slowResponse: "Still on it — slower than usual",
     reconnecting: "Connection dropped — reconnecting",
     processing: "Working",

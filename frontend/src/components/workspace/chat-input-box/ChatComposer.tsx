@@ -139,6 +139,7 @@ export function ChatComposer({
   onDeepResearch,
   onSubmit,
   onStop,
+  isStopping = false,
   isUploading = false,
   className,
 }: ChatInputBoxProps) {
@@ -1854,22 +1855,34 @@ export function ChatComposer({
               <button
                 type="button"
                 onClick={onStop}
-                className="flex size-[42px] items-center justify-center rounded-lg border border-border bg-muted/60 text-muted-foreground transition-all duration-base hover:border-destructive/25 hover:bg-destructive/10 hover:text-destructive active:scale-95 sm:size-8"
+                disabled={isStopping}
+                aria-busy={isStopping}
+                className="flex size-[42px] items-center justify-center rounded-lg border border-border bg-muted/60 text-muted-foreground transition-all duration-base hover:border-destructive/25 hover:bg-destructive/10 hover:text-destructive active:scale-95 disabled:cursor-wait disabled:opacity-70 sm:size-8"
                 title={stopLabel}
                 aria-label={stopLabel}
               >
-                <SquareIcon className="size-3" fill="currentColor" />
+                {isStopping ? (
+                  <Loader2Icon className="size-3.5 animate-spin" />
+                ) : (
+                  <SquareIcon className="size-3" fill="currentColor" />
+                )}
               </button>
             </>
           ) : status === "streaming" ? (
             <button
               type="button"
               onClick={onStop}
-              className="flex size-[42px] items-center justify-center rounded-lg border border-border bg-muted/60 text-muted-foreground transition-all duration-base hover:border-destructive/25 hover:bg-destructive/10 hover:text-destructive active:scale-95 sm:size-8"
+              disabled={isStopping}
+              aria-busy={isStopping}
+              className="flex size-[42px] items-center justify-center rounded-lg border border-border bg-muted/60 text-muted-foreground transition-all duration-base hover:border-destructive/25 hover:bg-destructive/10 hover:text-destructive active:scale-95 disabled:cursor-wait disabled:opacity-70 sm:size-8"
               title={stopLabel}
               aria-label={stopLabel}
             >
-              <SquareIcon className="size-3" fill="currentColor" />
+              {isStopping ? (
+                <Loader2Icon className="size-3.5 animate-spin" />
+              ) : (
+                <SquareIcon className="size-3" fill="currentColor" />
+              )}
             </button>
           ) : (
             <button

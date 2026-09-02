@@ -21,7 +21,7 @@ import type { SandboxPolicy } from "@/core/permissions";
 import type { ReasoningEffort } from "@/core/threads";
 
 import { createDefaultClient, type RealtimeClient } from "./client";
-import type { JsonRpcRequest } from "./envelope";
+import type { JsonRpcRequest, Notification } from "./envelope";
 import {
   type Conversation,
   emptyConversation,
@@ -67,6 +67,78 @@ const WORK_ITEM_TYPES = new Set<string>([
   "plan",
 ]);
 
+type WireNotification = Notification<Record<string, unknown>>;
+
+const LIVE_DELTA_METHODS = new Set([
+  "item/agentMessage/delta",
+  "item/reasoning/textDelta",
+  "item/plan/delta",
+  "item/commandExecution/outputDelta",
+]);
+
+/** Coalesce only after every durable id and per-envelope side effect has been
+ * observed. At this point folding adjacent text deltas together is safe: the
+ * replay ledger already remembers every constituent envelope. */
+function coalesceAcceptedLiveDeltas(
+  notifications: WireNotification[],
+): WireNotification[] {
+  const merged: WireNotification[] = [];
+  let runParts: string[] = [];
+  const closeRun = (): void => {
+    if (runParts.length <= 1) {
+      runParts = [];
+      return;
+    }
+    const seed = merged[merged.length - 1];
+    if (seed) {
+      merged[merged.length - 1] = {
+        ...seed,
+        params: { ...seed.params, delta: runParts.join("") },
+      };
+    }
+    runParts = [];
+  };
+
+  for (const notification of notifications) {
+    const previous = merged[merged.length - 1];
+    if (
+      previous &&
+      runParts.length > 0 &&
+      canMergeAcceptedLiveDelta(previous, notification)
+    ) {
+      runParts.push(String(notification.params.delta ?? ""));
+      continue;
+    }
+    closeRun();
+    merged.push(notification);
+    if (LIVE_DELTA_METHODS.has(notification.method)) {
+      runParts = [String(notification.params.delta ?? "")];
+    }
+  }
+  closeRun();
+  return merged;
+}
+
+function canMergeAcceptedLiveDelta(
+  left: WireNotification,
+  right: WireNotification,
+): boolean {
+  if (left.method !== right.method || !LIVE_DELTA_METHODS.has(left.method)) {
+    return false;
+  }
+  if (
+    left.params.threadId !== right.params.threadId ||
+    left.params.turnId !== right.params.turnId ||
+    left.params.itemId !== right.params.itemId
+  ) {
+    return false;
+  }
+  return (
+    left.method !== "item/reasoning/textDelta" ||
+    left.params.contentIndex === right.params.contentIndex
+  );
+}
+
 export interface UseRealtimeThreadArgs {
   threadId: string;
   /** Local replay cache (IndexedDB in the app, in-memory in tests).
@@ -77,10 +149,8 @@ export interface UseRealtimeThreadArgs {
   // transport URL (the packaged renderer uses a custom origin for HTTP only).
   clientFactory?: (deps: {
     onIncomingRequest: (req: JsonRpcRequest) => Promise<unknown>;
-    onNotification: (n: {
-      method: string;
-      params: Record<string, unknown>;
-    }) => void;
+    onNotification: (n: WireNotification) => void;
+    onNotificationBatch?: (notifications: WireNotification[]) => void;
   }) => RealtimeClient;
 }
 
@@ -315,7 +385,7 @@ export function useRealtimeThread(
 
   // Reducer anomalies feed the per-turn vitals marks so the turn's
   // telemetry record carries them. Keep the callback stable — it sits
-  // in ``applyEvent``'s dependency list.
+  // in the batched event applier's dependency list.
   const onReducerDiagnostic = useCallback(
     (diagnostic: ReducerDiagnostic): void => {
       if (diagnostic.type !== "lateDeltaDropped") return;
@@ -343,22 +413,34 @@ export function useRealtimeThread(
     [args.threadId],
   );
 
-  const applyEvent = useCallback(
-    (evt: ConversationEvent) => {
+  const applyNotificationEvents = useCallback(
+    (notifications: WireNotification[]) => {
+      if (notifications.length === 0) return;
       setState((prev) => {
-        // Second line of defense: reject events that belong to a different
-        // thread than the one currently held in state. This guards against
-        // any in-flight notifications from a previous thread's WebSocket
-        // that slip through between cleanup and the socket actually closing.
-        const eventThreadId =
-          "threadId" in evt.params ? evt.params.threadId : evt.params.thread.id;
-        if (
-          typeof eventThreadId === "string" &&
-          eventThreadId !== prev.threadId
-        ) {
-          return prev;
+        let next = prev;
+        for (const notification of notifications) {
+          // Second line of defense: reject events that belong to a different
+          // thread than the one currently held in state. This guards against
+          // any in-flight notifications from a previous thread's WebSocket
+          // that slip through between cleanup and the socket actually closing.
+          const nestedThread = notification.params.thread as
+            | { id?: unknown }
+            | undefined;
+          const eventThreadId =
+            notification.params.threadId ?? nestedThread?.id;
+          if (
+            typeof eventThreadId === "string" &&
+            eventThreadId !== next.threadId
+          ) {
+            continue;
+          }
+          const reduced = reduce(
+            next,
+            notification as unknown as ConversationEvent,
+            onReducerDiagnostic,
+          );
+          next = reduced.next;
         }
-        const { next } = reduce(prev, evt, onReducerDiagnostic);
         stateRef.current = next;
         return next;
       });
@@ -995,11 +1077,10 @@ export function useRealtimeThread(
       }
     };
 
-    const onNotification = (note: {
-      method: string;
-      params: Record<string, unknown>;
-    }): void => {
-      if (cancelled) return;
+    const prepareNotification = (
+      note: WireNotification,
+    ): WireNotification | null => {
+      if (cancelled) return null;
       const belongsToThread = note.params?.threadId === args.threadId;
       // Live-first ids stay unconfirmed until a fetched cursor includes the
       // same persisted event. This prevents a long recovered turn from
@@ -1010,7 +1091,7 @@ export function useRealtimeThread(
           seenEventIdsRef.current.has(eventId) ||
           unconfirmedLiveEventIdsRef.current.has(eventId)
         ) {
-          return;
+          return null;
         }
         unconfirmedLiveEventIdsRef.current.add(eventId);
         if (
@@ -1084,10 +1165,6 @@ export function useRealtimeThread(
           }
         }
       }
-      // ``ConversationEvent`` is a discriminated union over a closed
-      // method set. Cast through ``unknown`` because the wire side is
-      // open-ended; the reducer no-ops anything it doesn't recognize.
-      applyEvent(note as unknown as ConversationEvent);
       const turn = note.params?.turn as { status?: unknown } | undefined;
       const terminalObserved =
         belongsToThread &&
@@ -1102,6 +1179,22 @@ export function useRealtimeThread(
         const activeClient = clientRef.current;
         if (activeClient) observeTailTerminal(activeClient);
       }
+      return note;
+    };
+
+    const onNotification = (note: WireNotification): void => {
+      const accepted = prepareNotification(note);
+      if (accepted) applyNotificationEvents([accepted]);
+    };
+
+    const onNotificationBatch = (notifications: WireNotification[]): void => {
+      if (cancelled || notifications.length === 0) return;
+      const accepted: WireNotification[] = [];
+      for (const notification of notifications) {
+        const prepared = prepareNotification(notification);
+        if (prepared) accepted.push(prepared);
+      }
+      applyNotificationEvents(coalesceAcceptedLiveDeltas(accepted));
     };
 
     const onClose = (_code: number, _reason: string): void => {
@@ -1163,10 +1256,8 @@ export function useRealtimeThread(
       args.clientFactory ??
       ((deps: {
         onIncomingRequest: (req: JsonRpcRequest) => Promise<unknown>;
-        onNotification: (n: {
-          method: string;
-          params: Record<string, unknown>;
-        }) => void;
+        onNotification: (n: WireNotification) => void;
+        onNotificationBatch?: (notifications: WireNotification[]) => void;
         onOpen?: () => void;
         onClose?: (code: number, reason: string) => void;
       }) =>
@@ -1175,6 +1266,7 @@ export function useRealtimeThread(
           authToken: () => getToken(),
           onIncomingRequest: deps.onIncomingRequest,
           onNotification: deps.onNotification,
+          onNotificationBatch: deps.onNotificationBatch,
           onOpen: deps.onOpen,
           onClose: deps.onClose,
         }));
@@ -1182,6 +1274,7 @@ export function useRealtimeThread(
     const client = factory({
       onIncomingRequest,
       onNotification,
+      onNotificationBatch,
       onOpen,
       onClose,
     });
@@ -1257,7 +1350,7 @@ export function useRealtimeThread(
     args.threadId,
     args.clientFactory,
     replayCache,
-    applyEvent,
+    applyNotificationEvents,
     persistTurnTelemetry,
   ]);
 

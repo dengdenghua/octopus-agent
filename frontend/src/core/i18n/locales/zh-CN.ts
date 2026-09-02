@@ -2630,6 +2630,7 @@ export const zhCN: Translations = {
 
   chatPage: {
     stopNote: "用户从聊天输入框点击停止",
+    stopFailed: "停止运行失败，请重试",
   },
 
   // Agents
@@ -5841,6 +5842,7 @@ export const zhCN: Translations = {
     firstResponseSlow: "首个响应较慢，任务仍在等待",
     modelWorking: "思考中...",
     thinkingCompleted: "思考已完成",
+    runEnded: "处理已结束",
     slowResponse: "还在继续，稍慢一些",
     reconnecting: "连接断开，正在回来",
     processing: "正在处理",

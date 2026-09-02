@@ -35,7 +35,7 @@ function vitals(overrides: Partial<StreamVitals> = {}): StreamVitals {
 }
 
 describe("PublicThinkingStatus", () => {
-  test("stays hidden when the turn is idle", () => {
+  test("keeps the stable live region empty on an initially idle turn", () => {
     renderWithProviders(
       <PublicThinkingStatus isLoading={false} liveToolEvents={[]} />,
       { locale: "zh-CN" },
@@ -44,6 +44,7 @@ describe("PublicThinkingStatus", () => {
     expect(
       screen.queryByTestId("conversation-activity-pulse"),
     ).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
   test("shows a neutral processing label once the task is underway", () => {
@@ -53,10 +54,13 @@ describe("PublicThinkingStatus", () => {
     );
 
     const status = screen.getByRole("status");
+    const pulse = screen.getByTestId("conversation-activity-pulse");
     // Mid-task pauses are NOT "thinking" — that label is reserved for the
     // pre-first-response window of a fresh turn (see the waiting case).
     expect(status).toHaveTextContent("正在处理");
-    expect(status).toHaveTextContent("8s");
+    expect(status).not.toHaveTextContent("8s");
+    expect(pulse).toHaveTextContent("8s");
+    expect(pulse).toHaveAttribute("aria-hidden", "true");
     expect(status).not.toHaveTextContent("思考中");
     expect(status).not.toHaveTextContent("理解");
     expect(status).not.toHaveTextContent("规划");
@@ -74,8 +78,10 @@ describe("PublicThinkingStatus", () => {
     );
 
     const status = screen.getByRole("status");
+    const pulse = screen.getByTestId("conversation-activity-pulse");
     expect(status).toHaveTextContent("思考中");
-    expect(status).toHaveTextContent("18s");
+    expect(status).not.toHaveTextContent("18s");
+    expect(pulse).toHaveTextContent("18s");
     expect(status).not.toHaveTextContent("模型处理中");
     expect(status).not.toHaveTextContent("模型");
   });
@@ -144,7 +150,7 @@ describe("PublicThinkingStatus", () => {
   });
 
   test("gets out of the way while answer tokens are flowing", () => {
-    renderWithProviders(
+    const { rerender } = renderWithProviders(
       <PublicThinkingStatus
         isLoading
         hasStreamingMessage
@@ -159,6 +165,38 @@ describe("PublicThinkingStatus", () => {
     expect(
       screen.queryByTestId("conversation-activity-pulse"),
     ).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("正在处理");
+
+    rerender(
+      <PublicThinkingStatus
+        isLoading
+        hasStreamingMessage
+        vitals={vitals({ phase: "streaming", elapsedMs: 9_000 })}
+        liveToolEvents={[]}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(/^正在处理$/);
+    expect(screen.getByRole("status")).not.toHaveTextContent("9s");
+
+    rerender(
+      <PublicThinkingStatus
+        isLoading={false}
+        hasStreamingMessage={false}
+        vitals={vitals({ phase: "idle" })}
+        liveToolEvents={[]}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("处理已结束");
+
+    rerender(
+      <PublicThinkingStatus
+        isLoading={false}
+        hasStreamingMessage={false}
+        vitals={vitals({ phase: "idle", elapsedMs: 20_000 })}
+        liveToolEvents={[]}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(/^处理已结束$/);
   });
 
   test("reports measured silence without inventing a process stage", () => {
@@ -177,9 +215,11 @@ describe("PublicThinkingStatus", () => {
     );
 
     const status = screen.getByRole("status");
+    const pulse = screen.getByTestId("conversation-activity-pulse");
     expect(status).toHaveTextContent("还在继续，稍慢一些");
-    expect(status).toHaveTextContent("31s");
-    expect(status).toHaveAttribute("data-phase", "slow");
+    expect(status).not.toHaveTextContent("31s");
+    expect(pulse).toHaveTextContent("31s");
+    expect(pulse).toHaveAttribute("data-phase", "slow");
   });
 
   test("shows a waiting lane before turn vitals are seeded", () => {
@@ -220,5 +260,6 @@ describe("PublicThinkingStatus", () => {
       "data-first-response-delayed",
       "true",
     );
+    expect(screen.getByRole("status")).not.toHaveTextContent("1m 44s");
   });
 });
