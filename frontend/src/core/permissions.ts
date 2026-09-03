@@ -57,7 +57,9 @@ export function normalizePermissionMode(value: unknown): PermissionMode {
   return "default";
 }
 
-export function normalizeNetworkAccess(value: unknown): NetworkAccessMode | undefined {
+export function normalizeNetworkAccess(
+  value: unknown,
+): NetworkAccessMode | undefined {
   if (value === true) return "full";
   if (value === false) return "deny";
   if (typeof value === "string") {
@@ -72,17 +74,17 @@ export function permissionRuntimeConfig(
   networkAccess?: NetworkAccessMode | boolean,
 ): PermissionRuntimeConfig {
   const mode = normalizePermissionMode(value);
-  // Network access is an independent axis the user controls from the
-  // sandbox settings page. When unset, follow the safest default: only
-  // full-access (local, auto-approved) turns get network; everything else
-  // stays network-denied — matching the backend's default
-  // ``TurnParams.sandbox_policy`` (``networkAccess: false``).
+  // Full access is the product's inclusive maximum-permission preset: local
+  // execution, automatic approval, unrestricted filesystem access and full
+  // network access.  A stale explicit deny/common value must not narrow this
+  // preset; selecting a narrower network tier requires leaving full access.
+  // Other permission modes continue to honour the independently selected
+  // network tier, defaulting to denied.
   const effectiveNetwork =
-    normalizeNetworkAccess(networkAccess) ??
-    (mode === "bypassPermissions" ? "full" : "deny");
-  const sandboxPolicy = (
-    type: SandboxPolicy["type"],
-  ): SandboxPolicy => {
+    mode === "bypassPermissions"
+      ? "full"
+      : (normalizeNetworkAccess(networkAccess) ?? "deny");
+  const sandboxPolicy = (type: SandboxPolicy["type"]): SandboxPolicy => {
     if (effectiveNetwork === "full") {
       return { type, networkAccess: true };
     }

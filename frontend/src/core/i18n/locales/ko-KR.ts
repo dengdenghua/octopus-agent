@@ -449,7 +449,7 @@ export const koKR: Translations = {
       "파일 변경은 자동으로 실행되며, 명령 실행 전에는 확인합니다.",
     permissionModeBypass: "완전 액세스",
     permissionModeBypassDesc:
-      "모든 작업을 확인 없이 자동 실행합니다. 최대 권한입니다.",
+      "로컬 실행과 전체 네트워크를 포함하며 모든 작업을 확인 없이 실행합니다.",
     permissionModeBypassConfirmTitle: "완전 액세스로 전환할까요?",
     permissionModeBypassConfirmDesc:
       "명령, 파일 변경 및 Git 작업의 일반 확인을 건너뜁니다. 안전 차단은 유지되지만 오작동 위험이 높아집니다.",
@@ -7952,7 +7952,7 @@ export const koKR: Translations = {
   sandboxSettings: {
     title: "샌드박스 및 실행 권한",
     description:
-      "실행 환경과 권한 수준은 독립적인 두 축으로 자유롭게 조합할 수 있습니다. 예: '샌드박스 + 완전 액세스'는 격리 환경에서 완전 자동, '로컬 + 편집 수락'은 이 머신에서 실행하되 명령은 확인을 요청합니다.",
+      "실행 환경, 확인 및 네트워크는 보통 별도로 설정할 수 있지만 완전 액세스는 로컬 실행과 전체 네트워크를 켜는 포함 프리셋입니다.",
     activeTag: "현재",
     scopeNote:
       "변경 사항은 로컬 설정에 저장되며 이후의 모든 새 작업에 적용됩니다. 실행 중인 작업에는 영향을 주지 않습니다.",
@@ -8003,7 +8003,8 @@ export const koKR: Translations = {
       },
       bypassPermissions: {
         label: "완전 액세스",
-        description: "모든 작업을 확인 없이 자동 실행합니다. 최대 권한입니다.",
+        description:
+          "로컬 실행과 전체 네트워크를 포함하며 모든 작업을 확인 없이 실행합니다.",
       },
     },
     networkTitle: "네트워크 액세스",

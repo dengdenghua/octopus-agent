@@ -3,7 +3,10 @@ import { toast } from "sonner";
 
 import { useI18n } from "@/core/i18n/hooks";
 import { useLocalSettings } from "@/core/settings";
-import { normalizeNetworkAccess, normalizePermissionMode } from "@/core/permissions";
+import {
+  normalizeNetworkAccess,
+  normalizePermissionMode,
+} from "@/core/permissions";
 import { cn } from "@/lib/utils";
 
 import { SettingsSection } from "./settings-section";
@@ -67,10 +70,16 @@ export default function SandboxSettingsPage() {
     guardian_review_enabled?: boolean;
     guardian_review_model?: string;
   };
-  const environment: ExecutionEnvironment =
-    context.execution_environment === "local" ? "local" : "sandbox";
   const permission = normalizePermissionMode(context.permission_mode);
-  const networkTier: NetworkTier = normalizeNetworkAccess(context.network_access) ?? "deny";
+  const isFullAccess = permission === "bypassPermissions";
+  const environment: ExecutionEnvironment = isFullAccess
+    ? "local"
+    : context.execution_environment === "local"
+      ? "local"
+      : "sandbox";
+  const networkTier: NetworkTier = isFullAccess
+    ? "full"
+    : (normalizeNetworkAccess(context.network_access) ?? "deny");
   const guardianEnabled = context.guardian_review_enabled === true;
   // Empty = follow the conversation's own model (the user's chosen model
   // is always available); only a non-empty override switches reviewer.
@@ -100,10 +109,18 @@ export default function SandboxSettingsPage() {
     (next: SandboxPermissionMode) => {
       const label = copy.permission[next].label;
       try {
+        const fullAccess = next === "bypassPermissions";
         setSettings("context", {
           ...context,
           permission_mode: next,
-          approval_policy: next === "bypassPermissions" ? "never" : "on-request",
+          approval_policy: fullAccess ? "never" : "on-request",
+          ...(fullAccess
+            ? {
+                execution_environment: "local" as const,
+                sandbox_mode: "full" as const,
+                network_access: "full" as const,
+              }
+            : {}),
         } as Partial<typeof settings.context>);
         toast.success(copy.toastPermissionSwitched(label));
       } catch {
@@ -132,7 +149,7 @@ export default function SandboxSettingsPage() {
   return (
     <div className="flex flex-col gap-6 text-sm">
       <SettingsSection title={copy.title} description={copy.description}>
-        {/* ─── Execution environment (independent axis) ─── */}
+        {/* ─── Execution environment ─── */}
         <div>
           <h3 className="text-sm font-semibold text-foreground">
             {copy.envTitle}
@@ -146,7 +163,7 @@ export default function SandboxSettingsPage() {
                   key={id}
                   type="button"
                   onClick={() => applyEnvironment(id)}
-                  disabled={active}
+                  disabled={active || (isFullAccess && id === "sandbox")}
                   aria-pressed={active}
                   className={cn(
                     "flex flex-col gap-2 rounded-lg border p-4 text-left transition",
@@ -174,7 +191,7 @@ export default function SandboxSettingsPage() {
           </div>
         </div>
 
-        {/* ─── Permission level (independent axis) ─── */}
+        {/* ─── Permission level ─── */}
         <div className="mt-8">
           <h3 className="text-sm font-semibold text-foreground">
             {copy.permissionTitle}
@@ -183,43 +200,43 @@ export default function SandboxSettingsPage() {
             {copy.permissionDesc}
           </p>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {(
-              ["default", "acceptEdits", "bypassPermissions"] as const
-            ).map((id) => {
-              const active = permission === id;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => applyPermission(id)}
-                  disabled={active}
-                  aria-pressed={active}
-                  className={cn(
-                    "flex flex-col gap-2 rounded-lg border p-4 text-left transition",
-                    active
-                      ? "border-primary bg-primary/5 ring-1 ring-primary/40"
-                      : "border-border-default hover:border-primary/40",
-                    id === "bypassPermissions" &&
-                      !active &&
-                      "text-warning/90 hover:text-warning",
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium">
-                      {copy.permission[id].label}
-                    </span>
-                    {active && (
-                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
-                        {copy.activeTag}
-                      </span>
+            {(["default", "acceptEdits", "bypassPermissions"] as const).map(
+              (id) => {
+                const active = permission === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => applyPermission(id)}
+                    disabled={active}
+                    aria-pressed={active}
+                    className={cn(
+                      "flex flex-col gap-2 rounded-lg border p-4 text-left transition",
+                      active
+                        ? "border-primary bg-primary/5 ring-1 ring-primary/40"
+                        : "border-border-default hover:border-primary/40",
+                      id === "bypassPermissions" &&
+                        !active &&
+                        "text-warning/90 hover:text-warning",
                     )}
-                  </div>
-                  <p className="text-xs leading-snug text-muted-foreground">
-                    {copy.permission[id].description}
-                  </p>
-                </button>
-              );
-            })}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium">
+                        {copy.permission[id].label}
+                      </span>
+                      {active && (
+                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
+                          {copy.activeTag}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs leading-snug text-muted-foreground">
+                      {copy.permission[id].description}
+                    </p>
+                  </button>
+                );
+              },
+            )}
           </div>
         </div>
 
@@ -287,7 +304,7 @@ export default function SandboxSettingsPage() {
           )}
         </div>
 
-        {/* ─── Network access (independent axis) ─── */}
+        {/* ─── Network access ─── */}
         <div className="mt-8">
           <h3 className="text-sm font-semibold text-foreground">
             {copy.networkTitle}
@@ -303,7 +320,7 @@ export default function SandboxSettingsPage() {
                   key={id}
                   type="button"
                   onClick={() => applyNetwork(id)}
-                  disabled={active}
+                  disabled={active || (isFullAccess && id !== "full")}
                   aria-pressed={active}
                   className={cn(
                     "flex flex-col gap-2 rounded-lg border p-4 text-left transition",
@@ -348,7 +365,9 @@ export default function SandboxSettingsPage() {
           )}
         </div>
 
-        <p className="mt-4 text-xs text-muted-foreground/80">{copy.scopeNote}</p>
+        <p className="mt-4 text-xs text-muted-foreground/80">
+          {copy.scopeNote}
+        </p>
         <p className="mt-1.5 text-xs text-warning">{copy.restartHint}</p>
       </SettingsSection>
     </div>

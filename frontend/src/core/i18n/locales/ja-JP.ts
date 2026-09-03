@@ -452,7 +452,7 @@ export const jaJP: Translations = {
       "ファイルの変更は自動的に実行されますが、コマンド実行前には確認します。",
     permissionModeBypass: "フルアクセス",
     permissionModeBypassDesc:
-      "すべての操作を確認なしで自動実行します。最大権限です。",
+      "ローカル実行と全ネットワークを含み、すべての操作を確認なしで実行します。",
     permissionModeBypassConfirmTitle: "フルアクセスに切り替えますか？",
     permissionModeBypassConfirmDesc:
       "コマンド、ファイル変更、Git 操作の通常確認を省略します。安全ブロックは有効ですが、誤操作のリスクが高まります。",
@@ -8061,7 +8061,7 @@ export const jaJP: Translations = {
   sandboxSettings: {
     title: "サンドボックスと実行権限",
     description:
-      "実行環境と権限レベルは独立した2つの軸で、自由に組み合わせられます。例：「サンドボックス + フルアクセス」は隔離内で全自動、「ローカル + 編集を受け入れる」は本機で実行しつつコマンドは確認を求めます。",
+      "実行環境、確認、ネットワークは通常個別に設定できますが、フルアクセスはローカル実行と全ネットワークを有効にする包括プリセットです。",
     activeTag: "現在",
     scopeNote:
       "変更はローカル設定に保存され、以降のすべての新しいタスクに適用されます。実行中のタスクには影響しません。",
@@ -8112,7 +8112,8 @@ export const jaJP: Translations = {
       },
       bypassPermissions: {
         label: "フルアクセス",
-        description: "すべての操作を確認なしで自動実行します。最大権限です。",
+        description:
+          "ローカル実行と全ネットワークを含み、すべての操作を確認なしで実行します。",
       },
     },
     networkTitle: "ネットワークアクセス",

@@ -3267,6 +3267,56 @@ def test_non_audit_intent_does_not_set_audit_mode() -> None:
     assert intent.user_context.get("audit_mode") is None
 
 
+def test_full_access_backend_includes_local_execution_and_full_network() -> None:
+    from runtime.protocol.items import TurnParams
+    from runtime.sensing.gateway.realtime_cerebrum import _build_intent
+
+    params = TurnParams.model_validate(
+        {
+            "threadId": "th-full-access",
+            "input": [
+                {
+                    "type": "text",
+                    "text": "run the project checks",
+                    "metadata": {
+                        "context": {
+                            "mode": "code",
+                            "permission_mode": "bypassPermissions",
+                            # Simulate stale settings from before full access
+                            # became an inclusive preset.
+                            "execution_environment": "sandbox",
+                            "sandbox_mode": "sandbox",
+                            "network_access": "deny",
+                        },
+                    },
+                },
+            ],
+            "approvalPolicy": "never",
+            "sandboxPolicy": {
+                "type": "workspaceWrite",
+                "networkAccess": False,
+                "egressAllowCommon": True,
+            },
+        }
+    )
+
+    intent = _build_intent(
+        "run the project checks",
+        params,
+        allow_client_auto_approve=True,
+    )
+
+    assert intent.user_context["permission_mode"] == "bypassPermissions"
+    assert intent.user_context["approval_policy"] == "never"
+    assert intent.user_context["execution_environment"] == "local"
+    assert intent.user_context["sandbox_mode"] == "full"
+    assert intent.user_context["network_access"] == "full"
+    assert intent.user_context["sandbox_policy"] == {
+        "type": "dangerFullAccess",
+        "networkAccess": True,
+    }
+
+
 def test_code_capability_without_project_gets_personal_workspace(tmp_path: Path) -> None:
     from runtime.platform.runtime_policy.workspaces import WorkspaceManager
     from runtime.protocol.items import TurnParams

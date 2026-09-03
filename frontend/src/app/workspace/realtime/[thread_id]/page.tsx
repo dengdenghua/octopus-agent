@@ -4034,14 +4034,21 @@ function RealtimePageContent({
 
   const handlePermissionModeChange = useCallback(
     (permissionMode: PermissionMode) => {
-      // The composer shortcut changes ONLY the permission axis; the execution
-      // environment stays independent (controlled in Settings → Sandbox). A
-      // bypass mode implies auto-approval, anything else asks on request.
+      // Full access is an inclusive preset rather than only an approval
+      // toggle. Keep the persisted settings page in sync with the effective
+      // runtime contract shown in the composer.
+      const fullAccess = permissionMode === "bypassPermissions";
       setSettings("context", {
         ...settings.context,
         permission_mode: permissionMode,
-        approval_policy:
-          permissionMode === "bypassPermissions" ? "never" : "on-request",
+        approval_policy: fullAccess ? "never" : "on-request",
+        ...(fullAccess
+          ? {
+              execution_environment: "local" as const,
+              sandbox_mode: "full" as const,
+              network_access: "full" as const,
+            }
+          : {}),
       });
     },
     [setSettings, settings.context],

@@ -435,7 +435,8 @@ export const zhCN: Translations = {
     permissionModeAcceptEdits: "接受编辑",
     permissionModeAcceptEditsDesc: "修改文件自动执行，执行命令前仍会问你。",
     permissionModeBypass: "完全访问",
-    permissionModeBypassDesc: "所有操作自动执行、不再询问，最高权限。",
+    permissionModeBypassDesc:
+      "包含本地运行和全部网络；所有操作自动执行、不再询问。",
     permissionModeBypassConfirmTitle: "切换到完全访问？",
     permissionModeBypassConfirmDesc:
       "此模式会跳过命令、文件修改和 Git 操作的常规确认。安全拦截仍有效，但误操作风险会明显提高。",
@@ -7648,7 +7649,7 @@ export const zhCN: Translations = {
   sandboxSettings: {
     title: "沙箱与执行权限",
     description:
-      "执行环境与权限粒度是两个独立维度，可自由组合：例如「沙箱 + 完全访问」在隔离环境内全自动，或「本地 + 接受编辑」在本机执行但命令仍需确认。",
+      "执行环境、权限与网络通常可独立设置；「完全访问」是包含档位，会自动启用本地运行和全部网络。",
     activeTag: "当前",
     scopeNote:
       "改动保存到本地设置，对之后发起的所有新任务生效；当前正在运行的任务不受影响。",
@@ -7692,7 +7693,7 @@ export const zhCN: Translations = {
       },
       bypassPermissions: {
         label: "完全访问",
-        description: "所有操作自动执行、不再询问，最高权限。",
+        description: "包含本地运行和全部网络；所有操作自动执行、不再询问。",
       },
     },
     networkTitle: "网络访问",

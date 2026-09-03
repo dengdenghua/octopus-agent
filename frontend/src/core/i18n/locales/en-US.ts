@@ -459,7 +459,7 @@ export const enUS: Translations = {
       "File changes run automatically; commands still ask for approval.",
     permissionModeBypass: "Full access",
     permissionModeBypassDesc:
-      "Every action runs automatically with no questions. Maximum permissions.",
+      "Includes local execution and full network; every action runs without confirmation.",
     permissionModeBypassConfirmTitle: "Switch to Full access?",
     permissionModeBypassConfirmDesc:
       "This mode skips routine confirmation for commands, file changes, and Git operations. Safety blocks remain active, but accidental changes are more likely.",
@@ -8082,7 +8082,7 @@ Strategy:
   sandboxSettings: {
     title: "Sandbox & Execution Permissions",
     description:
-      "Execution environment and permission level are two independent dimensions you can combine freely — e.g. “Sandbox + Full access” for full automation inside isolation, or “Local + Accept edits” to run on this machine while commands still ask for confirmation.",
+      "Execution, approvals, and network are normally configurable separately; Full access is an inclusive preset that enables Local and Allowed network.",
     activeTag: "Current",
     scopeNote:
       "Changes are saved to local settings and apply to all future tasks; tasks already running are unaffected.",
@@ -8135,7 +8135,7 @@ Strategy:
       bypassPermissions: {
         label: "Full access",
         description:
-          "Every action runs automatically with no questions. Maximum permissions.",
+          "Includes local execution and full network; every action runs without confirmation.",
       },
     },
     networkTitle: "Network access",
