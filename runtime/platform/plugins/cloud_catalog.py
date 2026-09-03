@@ -2170,7 +2170,9 @@ class CloudCatalog:
         transaction_path = lifecycle / "transactions" / f"{transaction_id}.json"
         trust_path = lifecycle / "trust" / f"{plugin_id}.json"
         previous_trust = backup.parent / "trust.json"
-        operation = "update" if target.exists() else "install"
+        had_target = target.exists()
+        operation = "update" if had_target else "install"
+        previous_valid = False
         try:
             staging_container.mkdir(parents=True, exist_ok=False)
             shutil.copytree(source, staging)
@@ -2181,25 +2183,43 @@ class CloudCatalog:
                 manifest,
                 require_trusted=require_trusted,
             )
-            if target.exists():
+            if had_target:
                 backup.parent.mkdir(parents=True, exist_ok=False)
                 if trust_path.is_file():
-                    shutil.copy2(trust_path, previous_trust)
+                    try:
+                        WorkbenchPackageStore(
+                            dest,
+                            require_integrity=True,
+                        ).load_manifest(plugin_id)
+                    except (FileNotFoundError, ValueError):
+                        # A repair must still be able to replace an installed
+                        # generation that the current manifest or integrity
+                        # rules reject. Keep it as forensic backup, but never
+                        # advertise that broken generation as rollback-safe.
+                        pass
+                    else:
+                        shutil.copy2(trust_path, previous_trust)
+                        previous_valid = True
                 else:
-                    previous_manifest = WorkbenchPackageStore(dest).load_manifest(plugin_id)
-                    previous_record = verify_workbench_package_trust(
-                        target,
-                        previous_manifest,
-                        require_trusted=False,
-                    )
-                    previous_record.update(
-                        {
-                            "source": "legacy_local",
-                            "installed_at": None,
-                            "transaction_id": None,
-                        }
-                    )
-                    atomic_write_json(previous_trust, previous_record, sort_keys=True)
+                    try:
+                        previous_manifest = WorkbenchPackageStore(dest).load_manifest(plugin_id)
+                        previous_record = verify_workbench_package_trust(
+                            target,
+                            previous_manifest,
+                            require_trusted=False,
+                        )
+                    except (FileNotFoundError, ValueError):
+                        pass
+                    else:
+                        previous_record.update(
+                            {
+                                "source": "legacy_local",
+                                "installed_at": None,
+                                "transaction_id": None,
+                            }
+                        )
+                        atomic_write_json(previous_trust, previous_record, sort_keys=True)
+                        previous_valid = True
                 target.replace(backup)
             try:
                 staging.replace(target)
@@ -2221,7 +2241,7 @@ class CloudCatalog:
             "destination": str(target),
             "backup": str(backup) if backup.exists() else "",
             "committed_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-            "rollback_available": True,
+            "rollback_available": not had_target or previous_valid,
         }
         trust.update(
             {
