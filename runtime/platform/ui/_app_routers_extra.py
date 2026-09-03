@@ -12,13 +12,21 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
 from runtime.platform.process.paths import app_paths
 
 from ._app_context import AppContext
+
+
+def _plugin_hub_roots() -> tuple[Path, Path]:
+    """Return the shared mutable package root and immutable bundled root."""
+
+    return (
+        app_paths().data_dir / "plugins",
+        Path(__file__).resolve().parents[1] / "plugins" / "bundled",
+    )
 
 
 def _register_plugin_hub_lifecycle(app: Any, hub: Any) -> None:
@@ -621,15 +629,14 @@ def mount_routers_b(
         )
         app.state.service_bus = _service_bus
 
+        plugin_dir, bundled_plugin_dir = _plugin_hub_roots()
         _hub = PluginHub(
-            # Cloud workbench packages are installed below the runtime data
-            # root.  Appliance deployments set ``OCTOPUS_DATA_DIR`` to an
-            # isolated writable volume, so PluginHub must discover external
-            # packages there instead of falling back to the developer's
-            # ``~/.octopus/plugins`` directory.
-            plugin_dir=app_paths().data_dir / "plugins"
-            if os.environ.get("OCTOPUS_DATA_DIR")
-            else None,
+            # CloudCatalog always installs workbenches below the active app
+            # data root. PluginHub must use that same root in source checkouts
+            # as well as packaged deployments or newly installed runtime
+            # plugins cannot be discovered and activated.
+            plugin_dir=plugin_dir,
+            bundled_plugin_dir=bundled_plugin_dir,
             skill_registry=state.registry,
             channel_manager=ctx.channel_manager,
             fastapi_app=app,

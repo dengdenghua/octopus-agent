@@ -185,6 +185,31 @@ def test_remote_install_materializes_frontend_and_backend_and_uninstall_keeps_wo
     assert catalog.plugin_statuses()["narrative_studio"]["lifecycle_state"] == "available"
 
 
+def test_remote_alias_without_runtime_identity_cannot_shadow_official_workbench(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    catalog, plugin_root = _catalog(tmp_path, monkeypatch)
+    catalog._store = {
+        "items": [
+            {
+                "id": "workbench_narrative_studio",
+                "plugin": "narrative_studio",
+                "source": "octopus",
+                "kind": "workbench",
+                "version": "0.2.0",
+            }
+        ]
+    }
+
+    aliases = [item for item in catalog.items() if item.get("plugin") == "narrative_studio"]
+    installed = catalog.install_plugin("narrative_studio", plugin_kind="workbench")
+
+    assert [item["id"] for item in aliases] == ["workbench_narrative"]
+    assert aliases[0]["runtime_plugin"] == "narrative_studio"
+    assert installed["runtime_plugin"] == "narrative_studio"
+    assert (plugin_root / "workbench" / "narrative_studio" / "dist" / "index.html").is_file()
+
+
 def test_remote_trash_is_confirmed_recoverable_and_reinstall_can_restore(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

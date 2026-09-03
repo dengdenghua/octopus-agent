@@ -373,17 +373,25 @@ class CloudCatalog:
                 # defaults when an id happens to be absent.
                 defaults = (*_REMOTE_SURFACE_PLUGINS, *_WORKBENCH_APPS)
                 defaults_by_id = {str(item["id"]): item for item in defaults}
+                workbench_defaults_by_package = {
+                    str(item["plugin"]): item
+                    for item in _WORKBENCH_APPS
+                    if item.get("kind") == "workbench"
+                }
                 merged: list[dict[str, Any]] = []
                 emitted_defaults: set[str] = set()
                 for item in items:
                     item_id = str(item.get("id") or "")
                     official = defaults_by_id.get(item_id)
+                    if official is None and item.get("kind") == "workbench":
+                        official = workbench_defaults_by_package.get(str(item.get("plugin") or ""))
                     if official is None:
                         merged.append(item)
                         continue
-                    if item_id not in emitted_defaults:
+                    official_id = str(official["id"])
+                    if official_id not in emitted_defaults:
                         merged.append(dict(official))
-                        emitted_defaults.add(item_id)
+                        emitted_defaults.add(official_id)
                 for official in defaults:
                     item_id = str(official["id"])
                     if item_id not in emitted_defaults:
@@ -2770,11 +2778,20 @@ class CloudCatalog:
         official = next(
             (
                 item
-                for item in self.items()
+                for item in _WORKBENCH_APPS
                 if item.get("kind") == "workbench" and item.get("plugin") == manifest.id
             ),
             None,
         )
+        if official is None:
+            official = next(
+                (
+                    item
+                    for item in self.items()
+                    if item.get("kind") == "workbench" and item.get("plugin") == manifest.id
+                ),
+                None,
+            )
         if official is not None:
             expected_version = str(official.get("version") or "").strip()
             if expected_version and manifest.version != expected_version:
