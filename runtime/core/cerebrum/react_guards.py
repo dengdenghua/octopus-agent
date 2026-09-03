@@ -207,19 +207,15 @@ def _invoke_answer_item_count(ctx: GuardContext) -> str | None:
 
 
 def _invoke_false_no_tool(ctx: GuardContext) -> str | None:
-    if not ctx.is_code_mode:
-        return None
     return _code_mode_false_no_tool_guard(
         ctx.steps,
         ctx.final_answer,
         goal=ctx.goal,
-        tools_active=ctx.file_inspection_tools_visible,
+        tools_active=ctx.tools_active,
     )
 
 
 def _invoke_false_tool_result(ctx: GuardContext) -> str | None:
-    if not ctx.is_code_mode:
-        return None
     return _code_mode_false_tool_result_guard(
         ctx.steps,
         ctx.final_answer,

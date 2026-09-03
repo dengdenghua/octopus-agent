@@ -718,8 +718,13 @@ def _format_skill_catalog(
         or _personal_mode == "research"
         or _delegation_mode in {"deep", "deep_research", "research"}
     )
+    _media_cap = "media-generation" in _labels
 
     priority = [
+        # Native media execution — keep these out of catalog truncation for
+        # direct image/video requests. The skill-pack entries with similar
+        # names are documentation adapters, not the executable path.
+        *(["generate_image", "generate_video"] if _media_cap else []),
         # Planning + tool discovery (always on — the model needs these to
         # discover anything, including tools omitted below).
         "todo_write",

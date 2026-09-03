@@ -346,15 +346,15 @@ def _resume_turns(
                 log.turn_completed(turn.thread_id, turn.id, turn.status)
                 runtime._record_task_run_finished(turn, recover_stale_lease=True)
                 continue
-            turn.status = TurnStatus.FAILED
+            turn.status = TurnStatus.INTERRUPTED
             turn.error = {
-                "message": "上次执行在后端重启或连接中断时未完成，已自动结束。请重新发送或点击重试。",
+                "message": "上次执行因后端重启或连接中断而中止，未判定为任务失败。请重新发送或点击重试。",
                 "code": "stale_in_progress_turn",
             }
             turn.completed_at = now_utc()
             for item in turn.items:
                 if item.status == ItemStatus.IN_PROGRESS:
-                    item.status = ItemStatus.FAILED
+                    item.status = ItemStatus.INTERRUPTED
             log.turn_completed(turn.thread_id, turn.id, turn.status, error=turn.error)
             runtime._record_task_run_finished(turn, recover_stale_lease=True)
         return turns

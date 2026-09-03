@@ -50,6 +50,39 @@ _OBS_FAILURE_MARKERS = (
 )
 
 
+def _compact_media_observation(text: str) -> str | None:
+    """Keep complete generated-media URLs while dropping duplicate payload fields."""
+
+    start = text.find("{")
+    if start < 0:
+        return None
+    try:
+        payload = json.loads(text[start:])
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    media_url = payload.get("url") or payload.get("video_url") or payload.get("audio_url")
+    if not isinstance(media_url, str) or not media_url.startswith(("https://", "http://")):
+        return None
+    if not (payload.get("model") or payload.get("provider")):
+        return None
+    keys = (
+        "ok",
+        "url",
+        "video_url",
+        "audio_url",
+        "model",
+        "provider",
+        "status",
+        "task_id",
+        "fallback_from",
+        "error",
+    )
+    compact = {key: payload[key] for key in keys if key in payload}
+    return text[:start] + json.dumps(compact, ensure_ascii=False)
+
+
 def _summarize_observation(text: str) -> str:
     if not text:
         return text
@@ -66,6 +99,13 @@ def _summarize_observation(text: str) -> str:
             t = t[:idx] + "}"  # Implementation note.
 
     if len(t) > _OBS_DISPLAY_MAX:
+        media_summary = _compact_media_observation(t)
+        if media_summary is not None:
+            # A generated-media URL is itself the artifact handoff. Truncating
+            # it makes the model emit a broken Markdown image even though the
+            # provider call succeeded, so allow this compact form to exceed the
+            # ordinary observation cap when the URL itself is long.
+            return media_summary
         lowered = t.lower()
         if any(marker in lowered for marker in _OBS_FAILURE_MARKERS):
             # Failure diagnostics commonly put the assertion/traceback summary

@@ -3,11 +3,14 @@ from __future__ import annotations
 import base64
 import hashlib
 import html
+import importlib.util
 import json
 import os
 import re
 import shutil
+import sys
 import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +44,17 @@ except ImportError:  # pragma: no cover
 
 _HTTP_TIMEOUT_S = 12.0
 _MAX_IMAGE_RESULTS = 30
+
+_BUNDLED_MEDIA_SCRIPTS = {
+    "image": (
+        "agnes-image-generate",
+        "agnes_image_generate.py",
+    ),
+    "video": (
+        "agnes-video-generate",
+        "agnes_video_generate.py",
+    ),
+}
 
 
 def _client(timeout_s: float = _HTTP_TIMEOUT_S) -> Any:
@@ -105,6 +119,104 @@ def _openai_media_config() -> tuple[str, str]:
     return base_url, api_key
 
 
+def _bundled_media_configured() -> bool:
+    """Whether the bundled Volcano/Agnes adapters have usable credentials."""
+
+    return any(
+        str(os.environ.get(name) or "").strip()
+        for name in (
+            "VOLCENGINE_API_KEY",
+            "ARK_API_KEY",
+            "AGNES_API_KEY",
+        )
+    )
+
+
+@lru_cache(maxsize=2)
+def _load_bundled_media_module(kind: str) -> Any:
+    """Load a fixed bundled media adapter without exposing arbitrary imports."""
+
+    try:
+        skill_dir, script_name = _BUNDLED_MEDIA_SCRIPTS[kind]
+    except KeyError as exc:
+        raise ValueError(f"unsupported bundled media kind: {kind}") from exc
+    script = (
+        Path(__file__).resolve().parent.parent
+        / "all_skills"
+        / skill_dir
+        / "scripts"
+        / script_name
+    )
+    module_name = f"_octopus_bundled_{kind}_media"
+    spec = importlib.util.spec_from_file_location(module_name, script)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load bundled {kind} media adapter")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _bundled_provider_overrides(provider: str) -> dict[str, str]:
+    """Resolve an explicitly selected bundled provider without returning keys."""
+
+    selected = provider.strip().lower()
+    if selected in {"agnes", "agnes-ai"}:
+        return {
+            "api_key": str(os.environ.get("AGNES_API_KEY") or "").strip(),
+            "base_url": str(
+                os.environ.get("AGNES_BASE_URL") or "https://apihub.agnes-ai.com/v1"
+            ).strip(),
+        }
+    if selected in {"volcano", "volcengine", "ark", "火山"}:
+        return {
+            "api_key": str(
+                os.environ.get("VOLCENGINE_API_KEY") or os.environ.get("ARK_API_KEY") or ""
+            ).strip(),
+            "base_url": str(
+                os.environ.get("VOLCENGINE_BASE_URL")
+                or "https://ark.cn-beijing.volces.com/api/plan/v3"
+            ).strip(),
+        }
+    return {}
+
+
+def _bundled_provider_candidates(provider: str = "") -> list[tuple[str, dict[str, str]]]:
+    """Return configured media providers in deterministic fallback order."""
+
+    selected = provider.strip().lower()
+    aliases = {
+        "agnes": "agnes",
+        "agnes-ai": "agnes",
+        "volcano": "volcano",
+        "volcengine": "volcano",
+        "ark": "volcano",
+        "火山": "volcano",
+    }
+    if selected:
+        canonical = aliases.get(selected)
+        if canonical is None:
+            return []
+        overrides = _bundled_provider_overrides(canonical)
+        return [(canonical, overrides)] if overrides.get("api_key") else []
+
+    candidates: list[tuple[str, dict[str, str]]] = []
+    for name in ("volcano", "agnes"):
+        overrides = _bundled_provider_overrides(name)
+        if overrides.get("api_key"):
+            candidates.append((name, overrides))
+    return candidates
+
+
+def _compact_media_result(result: dict[str, Any], *, provider: str) -> dict[str, Any]:
+    """Return stable tool output without echoing bulky provider payloads."""
+
+    compact = {key: value for key, value in result.items() if key != "raw"}
+    compact["provider"] = provider
+    compact["ok"] = not bool(compact.get("error"))
+    return compact
+
+
 def _media_output_path(kind: str, suffix: str, output_path: str = "") -> Path:
     if output_path:
         return Path(output_path)
@@ -118,6 +230,9 @@ def _generate_image(
     *,
     model: str | None = None,
     size: str = "1024x1024",
+    n: int = 1,
+    image: str | list[str] | None = None,
+    provider: str = "",
     output_path: str = "",
     **_: Any,
 ) -> dict[str, Any]:
@@ -127,9 +242,45 @@ def _generate_image(
         return {"error": "httpx not installed"}
     base_url, api_key = _openai_media_config()
     if not api_key:
+        if _bundled_media_configured():
+            module = _load_bundled_media_module("image")
+            failures: list[str] = []
+            candidates = _bundled_provider_candidates(provider)
+            if not candidates:
+                return _provider_missing(
+                    "generate_image",
+                    f"Requested provider {provider!r} is unknown or not configured.",
+                )
+            for selected, overrides in candidates:
+                try:
+                    result = module.generate_image(
+                        prompt,
+                        model=model,
+                        size=size,
+                        n=n,
+                        image=image,
+                        **overrides,
+                    )
+                    if not result.get("url") and not result.get("urls"):
+                        failures.append(f"{selected}: empty response")
+                        continue
+                    compact = _compact_media_result(result, provider=selected)
+                    if failures:
+                        compact["fallback_from"] = [
+                            item.split(":", 1)[0] for item in failures
+                        ]
+                    return compact
+                except Exception as exc:  # noqa: BLE001
+                    failures.append(f"{selected}: {type(exc).__name__}: {exc}")
+            return {
+                "ok": False,
+                "error": "generate_image_all_providers_failed: " + "; ".join(failures),
+                "providers": [name for name, _ in candidates],
+            }
         return _provider_missing(
             "generate_image",
-            "Set OPENAI_API_KEY or OPENAI_MEDIA_API_KEY, plus optional OPENAI_MEDIA_BASE_URL.",
+            "Set OPENAI_API_KEY / OPENAI_MEDIA_API_KEY, VOLCENGINE_API_KEY / "
+            "ARK_API_KEY, or AGNES_API_KEY.",
         )
     image_model = model or os.environ.get("OPENAI_IMAGE_MODEL") or "gpt-image-1"
     try:
@@ -163,13 +314,69 @@ def _generate_image(
     return {"error": "generate_image_empty_response", "response": data}
 
 
-def _generate_video(prompt: str = "", **_: Any) -> dict[str, Any]:
-    if not prompt.strip():
+def _generate_video(
+    prompt: str = "",
+    *,
+    task_id: str = "",
+    model: str | None = None,
+    provider: str = "",
+    width: int = 1152,
+    height: int = 768,
+    num_frames: int = 49,
+    frame_rate: int = 24,
+    seconds: str | int = "5",
+    image: str | list[str] | None = None,
+    wait: bool = True,
+    max_wait_seconds: int = 600,
+    **_: Any,
+) -> dict[str, Any]:
+    if not prompt.strip() and not task_id.strip():
         return {"error": "missing prompt"}
-    return _provider_missing(
-        "generate_video",
-        "Connect a video generation backend such as Veo/Runway/Kling before use.",
-    )
+    if not _bundled_media_configured():
+        return _provider_missing(
+            "generate_video",
+            "Set VOLCENGINE_API_KEY / ARK_API_KEY or AGNES_API_KEY.",
+        )
+    module = _load_bundled_media_module("video")
+    failures: list[str] = []
+    candidates = _bundled_provider_candidates(provider)
+    if not candidates:
+        return _provider_missing(
+            "generate_video",
+            f"Requested provider {provider!r} is unknown or not configured.",
+        )
+    for selected, overrides in candidates:
+        try:
+            if task_id.strip():
+                result = module.poll_video(task_id.strip(), **overrides)
+            else:
+                result = module.generate_video(
+                    prompt,
+                    model=model,
+                    width=width,
+                    height=height,
+                    num_frames=num_frames,
+                    frame_rate=frame_rate,
+                    seconds=seconds,
+                    image=image,
+                    wait=wait,
+                    max_wait_seconds=max_wait_seconds,
+                    **overrides,
+                )
+            compact = _compact_media_result(result, provider=selected)
+            if compact.get("ok") is False:
+                failures.append(f"{selected}: {compact.get('error') or 'failed'}")
+                continue
+            if failures:
+                compact["fallback_from"] = [item.split(":", 1)[0] for item in failures]
+            return compact
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"{selected}: {type(exc).__name__}: {exc}")
+    return {
+        "ok": False,
+        "error": "generate_video_all_providers_failed: " + "; ".join(failures),
+        "providers": [name for name, _ in candidates],
+    }
 
 
 def _generate_speech(
@@ -700,7 +907,7 @@ def register_kimi_compat_skills(registry: SkillRegistry) -> int:
     specs: list[tuple[str, str, list[str], Any, list[SkillTestCase]]] = [
         (
             "generate_image",
-            "Generate an image via a configured image provider.",
+            "Directly generate an image with the trusted Agnes/Volcano media provider; use this executable tool for image creation instead of activating an image skill pack.",
             ["media", "image", "generate"],
             _generate_image,
             [
@@ -714,7 +921,7 @@ def register_kimi_compat_skills(registry: SkillRegistry) -> int:
         ),
         (
             "generate_video",
-            "Generate a video via a configured video provider.",
+            "Directly generate a video with the trusted Agnes/Volcano media provider; use this executable tool for video creation instead of activating a video skill pack.",
             ["media", "video", "generate"],
             _generate_video,
             [

@@ -13,7 +13,7 @@ aliases: [agnes_video, generate_video_agnes, volcano_video, generate_video_volca
   - 创建：`POST {base}/contents/generations/tasks`
   - 查询：`GET {base}/contents/generations/tasks/{id}`
   - 成功状态：`succeeded`；视频 URL 位于 `content.video_url`
-- **Agnes AI Gateway**：`https://apihub.agnes-ai.com/v1`，模型 `agnes-video-v2.0`
+- **Agnes AI Gateway**：`https://apihub.agnes-ai.com/v1`，模型 `agnes-video-2.5-flash`
   - 创建：`POST {base}/videos`；查询：`GET {base}/videos/{id}`
   - 成功状态：`completed`
 
@@ -22,11 +22,13 @@ aliases: [agnes_video, generate_video_agnes, volcano_video, generate_video_volca
 | Provider | ID | 用途 |
 |----------|----|----|
 | 火山 | `doubao-seedance-1.5-pro` | 文/图→视频（默认） |
-| Agnes | `agnes-video-v2.0` | 文/图→视频（回退） |
+| Agnes | `agnes-video-2.5-flash` | 文/图→视频（回退） |
 
 ## Constraints
 
-- **Agnes**：`num_frames` 必须满足 **8n+1**（49, 81, 121, ...）；`frame_rate` ∈ [1,60]
+- **Agnes 2.5**：新版 `/videos` 请求使用 `model`、`prompt`、`seconds`、`mode`、
+  `size`、`aspect_ratio`；不发送旧版 `width` / `height` / `num_frames` / `frame_rate`
+- **旧版 Agnes 模型**：显式选择旧模型时，`num_frames` 仍需满足 **8n+1**
 - **火山 Seedance**：`num_frames/frame_rate` 会换算为 `duration`（秒，≥1）；`width,height` 换算为最接近的 `ratio`；分辨率默认 `1080p`
 
 ## Configuration
@@ -49,10 +51,7 @@ from agnes_video_generate import generate_video
 
 result = generate_video(
     prompt="一只戴黑色围巾的拟人化小章鱼在书桌上踱步，皮克斯风，透明背景",
-    width=1152,
-    height=768,
-    num_frames=49,
-    frame_rate=24,
+    seconds="5",
     wait=True,          # 默认；阻塞到 succeeded 并返回 video_url
 )
 # {"task_id": "...", "status": "succeeded", "video_url": "https://..."}

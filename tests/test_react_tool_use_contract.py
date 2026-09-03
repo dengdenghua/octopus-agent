@@ -18,6 +18,7 @@ from runtime.core.cerebrum._react_prompt_assembly_sections import (
     _TOOL_USE_CONTRACT,
     _assemble_early_sections,
 )
+from runtime.core.cerebrum._react_prompt_assembly_guidance import _assemble_tool_sections
 from runtime.core.cerebrum._react_prompt_assembly_state import _AssemblyState
 
 
@@ -60,6 +61,8 @@ def _make_state(
 
 def _system_text(state: _AssemblyState) -> str:
     _assemble_early_sections(state)
+    if not state.tools_active:
+        _assemble_tool_sections(state)
     return "\n".join(str(part) for part in state.system_parts)
 
 
@@ -96,9 +99,36 @@ def test_audit_mode_skips_tool_use_contract() -> None:
 
 
 def test_no_tool_turn_skips_tool_use_contract() -> None:
-    text = _system_text(_make_state(goal="直接回答，不要使用任何工具", no_tool_turn=True))
+    text = _system_text(
+        _make_state(
+            goal="直接回答，不要使用任何工具",
+            tools_active=False,
+            no_tool_turn=True,
+        )
+    )
     assert "<tool-use-contract>" not in text
     assert "<direct-answer-contract>" in text
+    assert "不能据此推断或宣称整个会话没有工具" in text
+    assert "重试该轮" in text
+
+
+def test_non_code_tool_active_turn_rejects_session_wide_no_tool_claim() -> None:
+    from runtime.core.cerebrum.react_guard_types import GuardContext
+    from runtime.core.cerebrum.react_guards import evaluate_guards
+
+    finding = evaluate_guards(
+        GuardContext(
+            steps=[],
+            final_answer="当前会话没有工具，无法执行视频生成。",
+            is_code_mode=False,
+            tools_active=True,
+            goal="生成一个视频",
+        )
+    )
+
+    assert finding is not None
+    assert finding[0] == "tool-availability guard"
+    assert "per-call problem" in finding[1]
 
 
 def test_short_diagnostic_turn_gets_read_only_contract() -> None:

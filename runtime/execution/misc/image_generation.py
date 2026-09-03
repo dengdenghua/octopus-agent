@@ -141,7 +141,7 @@ def _generate_with_agnes(
     clean_reference_images = [
         image.strip() for image in (reference_images or []) if image and image.strip()
     ][:3]
-    # agnes-image-2.1-flash supports both text→image and image→image,
+    # agnes-image-2.5-flash supports text→image, image→image and multi-image composition,
     # so we use the same model regardless of whether reference images are present.
     # AGNES_IMAGE_REFERENCE_MODEL remains as an escape hatch for explicit overrides.
     model = os.getenv("AGNES_IMAGE_REFERENCE_MODEL", "").strip() or agnes_config["model"]
@@ -205,7 +205,7 @@ def _resolve_agnes_config() -> dict[str, str]:
     config = {
         "api_key": env_key,
         "base_url": env_base_url,
-        "model": env_model or "agnes-image-2.1-flash",
+        "model": env_model or "agnes-image-2.5-flash",
     }
     if config["api_key"]:
         return config

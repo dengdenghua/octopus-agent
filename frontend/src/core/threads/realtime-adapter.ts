@@ -1068,6 +1068,12 @@ function isPostFinalStatusOnlyMessage(
 
 function normalizeStatusOnlyText(value: string): string {
   return value
+    // URLs are machine identifiers, not narrative status words. In
+    // particular, generated-media URLs commonly contain `/task_<id>`;
+    // letting that token participate in the completion heuristic made a
+    // perfectly valid image answer look like post-final todo bookkeeping
+    // whenever the accompanying reasoning mentioned "final answer".
+    .replace(/https?:\/\/[^\s)>\]]+/gi, " ")
     .replace(/[`*_~>#-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim()

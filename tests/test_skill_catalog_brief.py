@@ -216,6 +216,31 @@ def test_goal_activation_promotes_relevant_catalog_entries() -> None:
     assert "\n  - deep-research:" in out
 
 
+def test_media_request_keeps_native_generator_first_under_catalog_limit() -> None:
+    names = [
+        *(f"filler_{i}" for i in range(120)),
+        "search_capabilities",
+        "query_capability",
+        "use_capability",
+        "generate_image",
+        "generate_video",
+        "agnes-image-generate",
+    ]
+    reg = _FakeRegistry([_FakeSkill(name=name, summary=f"{name} summary") for name in names])
+
+    out = _format_skill_catalog(
+        reg,
+        max_skills=8,
+        goal="生成一张戴黑色围巾的小章鱼，3D 插画，1:1",
+        user_context={"mode": "code"},
+    )
+    lines = [line for line in out.splitlines() if line.startswith("  - ")]
+    visible_names = [line.split(":", 1)[0].replace("  - ", "") for line in lines]
+
+    assert visible_names[:2] == ["generate_image", "generate_video"]
+    assert "agnes-image-generate" not in visible_names
+
+
 def test_no_description_at_all_falls_back_to_marker() -> None:
     reg = _FakeRegistry(
         [

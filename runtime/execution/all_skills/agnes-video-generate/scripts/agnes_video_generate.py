@@ -9,7 +9,7 @@ Provider is auto-detected from ``base_url``:
   Request body uses a ``content`` array (text / image_url). Terminal success
   status is ``succeeded``; the video URL lives under ``content.video_url``.
 - **Agnes AI Gateway** — ``https://apihub.agnes-ai.com/v1``,
-  model ``agnes-video-v2.0``:
+  model ``agnes-video-2.5-flash``:
     POST  {base}/videos        — create task
     GET   {base}/videos/{id}   — poll status
   Terminal success status is ``completed``; video URL is top-level.
@@ -43,12 +43,14 @@ VOLC_MODEL = "doubao-seedance-1.5-pro"
 
 # Agnes AI Gateway — OpenAI 兼容
 AGNES_URL = "https://apihub.agnes-ai.com/v1"
-AGNES_MODEL = "agnes-video-v2.0"
+AGNES_MODEL = "agnes-video-2.5-flash"
 
 DEFAULT_BASE_URL = VOLC_URL
 DEFAULT_MODEL = VOLC_MODEL
 
-# Per Agnes docs: agnes-video-v2.0 frame_rule = "8n+1", max_frames = 441
+# Legacy Agnes video models used explicit frame controls. The 2.5 `/videos`
+# endpoint rejects width, height, num_frames and frame_rate; keep this limit
+# only for backward-compatible callers selecting an older model explicitly.
 _AGNES_MAX_FRAMES = 441
 
 
@@ -110,6 +112,7 @@ def generate_video(
     height: int = 768,
     num_frames: int = 49,
     frame_rate: int = 24,
+    seconds: str | int = "5",
     image: str | list[str] | None = None,
     seed: int | None = None,
     wait: bool = True,
@@ -127,7 +130,7 @@ def generate_video(
         Text instruction for the desired video. Required.
     model
         Default ``doubao-seedance-1.5-pro`` (Volcano) if base URL is Volcano,
-        else ``agnes-video-v2.0``.
+        else ``agnes-video-2.5-flash``.
     width, height
         Output resolution hint. Used to derive ratio for Volcano.
     num_frames
@@ -195,19 +198,45 @@ def generate_video(
         if seed is not None:
             payload["seed"] = int(seed)
     else:
-        _validate_agnes_frames(int(num_frames))
-        payload = {
-            "model": model,
-            "prompt": str(prompt).strip(),
-            "width": int(width),
-            "height": int(height),
-            "num_frames": int(num_frames),
-            "frame_rate": int(frame_rate),
-        }
-        if seed is not None:
-            payload["seed"] = int(seed)
-        if image is not None:
-            payload.setdefault("extra_body", {})["image"] = image
+        if str(model).lower() == AGNES_MODEL.lower():
+            try:
+                seconds_value = int(seconds)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"seconds must be an integer string from 4 to 12; got {seconds}") from exc
+            if not 4 <= seconds_value <= 12:
+                raise ValueError(f"seconds must be 4..12; got {seconds_value}")
+            payload = {
+                "model": model,
+                "prompt": str(prompt).strip(),
+                "seconds": str(seconds_value),
+                "mode": "text",
+                "size": "720P",
+                "aspect_ratio": _ratio_from_size(width, height),
+            }
+            if seed is not None:
+                payload["seed"] = int(seed)
+            if image is not None:
+                frames = [image] if isinstance(image, str) else list(image)
+                if not frames or len(frames) > 2:
+                    raise ValueError("keyframe mode requires one or two image URLs")
+                payload["mode"] = "keyframe"
+                payload["first_frame"] = frames[0]
+                if len(frames) == 2:
+                    payload["last_frame"] = frames[1]
+        else:
+            _validate_agnes_frames(int(num_frames))
+            payload = {
+                "model": model,
+                "prompt": str(prompt).strip(),
+                "width": int(width),
+                "height": int(height),
+                "num_frames": int(num_frames),
+                "frame_rate": int(frame_rate),
+            }
+            if seed is not None:
+                payload["seed"] = int(seed)
+            if image is not None:
+                payload.setdefault("extra_body", {})["image"] = image
 
     if extra:
         for key, value in extra.items():
@@ -252,12 +281,18 @@ def generate_video(
         )
 
     data = resp.json()
-    task_id = str(data.get("task_id") or data.get("id") or "")
-    if not task_id:
+    provider_task_id = str(data.get("task_id") or data.get("id") or "")
+    video_id = str(data.get("video_id") or "")
+    poll_id = video_id or provider_task_id
+    if not poll_id:
         raise RuntimeError(f"video create returned no task_id: {data!r}")
 
     initial = {
-        "task_id": task_id,
+        # Keep task_id as the value callers should pass back to poll_video.
+        # Agnes 2.5 queries by video_id, while Volcano uses its task id.
+        "task_id": poll_id,
+        "video_id": video_id or None,
+        "provider_task_id": provider_task_id or None,
         "status": str(data.get("status") or "queued"),
         "model": data.get("model") or model,
         "video_url": None,
@@ -270,9 +305,10 @@ def generate_video(
         return initial
 
     return _poll_until_done(
-        task_id,
+        poll_id,
         api_key=api_key,
         base_url=base_url,
+        model_name=str(model),
         initial=initial,
         max_wait_seconds=int(max_wait_seconds),
         poll_interval_seconds=float(poll_interval_seconds),
@@ -284,6 +320,7 @@ def poll_video(
     *,
     api_key: str | None = None,
     base_url: str | None = None,
+    model_name: str | None = None,
 ) -> dict[str, Any]:
     """One-shot status poll for a previously-submitted task."""
     if not task_id:
@@ -293,14 +330,20 @@ def poll_video(
         api_key = api_key or cfg.api_key
         base_url = (base_url or cfg.base_url).rstrip("/")
 
-    poll_url = (
-        f"{base_url}/contents/generations/tasks/{task_id}"
-        if _is_volcano(base_url)
-        else f"{base_url}/videos/{task_id}"
-    )
+    volcano = _is_volcano(base_url)
+    if volcano:
+        poll_url = f"{base_url}/contents/generations/tasks/{task_id}"
+        params = None
+    else:
+        api_root = base_url[:-3] if base_url.endswith("/v1") else base_url
+        poll_url = f"{api_root}/agnesapi"
+        params = {
+            "video_id": task_id,
+            "model_name": model_name or AGNES_MODEL,
+        }
     headers = {"Authorization": f"Bearer {api_key}"}
     try:
-        resp = requests.get(poll_url, headers=headers, timeout=30)
+        resp = requests.get(poll_url, headers=headers, params=params, timeout=30)
     except requests.RequestException as exc:
         raise RuntimeError(
             f"video poll failed: {type(exc).__name__}: {exc}",
@@ -318,6 +361,7 @@ def _poll_until_done(
     *,
     api_key: str,
     base_url: str,
+    model_name: str,
     initial: dict[str, Any],
     max_wait_seconds: int,
     poll_interval_seconds: float,
@@ -329,7 +373,12 @@ def _poll_until_done(
         time.sleep(interval)
         interval = min(15.0, interval * 1.2)
         try:
-            last = poll_video(task_id, api_key=api_key, base_url=base_url)
+            last = poll_video(
+                task_id,
+                api_key=api_key,
+                base_url=base_url,
+                model_name=model_name,
+            )
         except RuntimeError as exc:
             _LOG.warning("video poll transient error: %s", exc)
             continue
@@ -356,10 +405,12 @@ def _normalize_poll_response(
     status = str(data.get("status") or "").lower() or "unknown"
     # Volcano: video_url lives under content.video_url; Agnes: top-level.
     content = data.get("content") if isinstance(data.get("content"), dict) else {}
+    metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
     video_url = (
         data.get("video_url")
         or data.get("url")
         or content.get("video_url")
+        or metadata.get("url")
         or _extract_video_url(data.get("output"))
     )
     error = data.get("error")
@@ -367,6 +418,7 @@ def _normalize_poll_response(
         error = error.get("message") or error.get("code") or error
     return {
         "task_id": task_id,
+        "video_id": data.get("video_id") or task_id,
         "status": status,
         "model": data.get("model"),
         "video_url": video_url,
@@ -412,7 +464,7 @@ def _ratio_from_size(width: int, height: int) -> str:
 
 
 def _validate_agnes_frames(num_frames: int) -> None:
-    """Enforce the 8n+1 frame rule documented for agnes-video-v2.0."""
+    """Enforce the 8n+1 frame rule documented for agnes-video-2.5-flash."""
     if num_frames <= 0 or num_frames > _AGNES_MAX_FRAMES:
         raise ValueError(
             f"num_frames must be 1..{_AGNES_MAX_FRAMES}; got {num_frames}",

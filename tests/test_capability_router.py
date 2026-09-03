@@ -73,6 +73,32 @@ def test_order_skill_names_keeps_edge_distance_relevant_tools_first() -> None:
     assert ordered[:3] == ["query_skill", "web_search", "deep-research"]
 
 
+def test_media_generation_routes_directly_to_native_tool() -> None:
+    names = [
+        "search_capabilities",
+        "query_capability",
+        "use_capability",
+        "generate_image",
+        "generate_video",
+        "agnes-image-generate",
+    ]
+    reg = _FakeRegistry(names)
+
+    activation = activate_capabilities(
+        "生成一张戴黑色围巾的小章鱼，3D 插画，1:1",
+        user_context={"mode": "code"},
+        registry=reg,
+    )
+    ordered = order_skill_names(names, activation=activation)
+
+    assert "media-generation" in activation.labels
+    assert activation.priority_skills[:2] == ("generate_image", "generate_video")
+    assert ordered[0] == "generate_image"
+    prompt = activation.render_prompt()
+    assert "call the native `generate_image` or `generate_video` tool immediately" in prompt
+    assert "exec_shell" in prompt
+
+
 def test_code_ui_regression_excludes_desktop_bridge_from_activation() -> None:
     names = [
         "live_browser_navigate",

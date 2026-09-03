@@ -884,6 +884,38 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     });
   });
 
+  it("keeps a generated-media answer when its URL contains a task id", () => {
+    const mediaAnswer = [
+      "图片已生成 ✅",
+      "",
+      "![戴黑色围巾的小章鱼](https://platform-outputs.agnes-ai.space/images/t2i/task_abc123/output.png)",
+      "",
+      "**实际模型**：`agnes-image-2.5-flash`（Agnes 图像生成服务）",
+    ].join("\n");
+    const state = conversationToAgentThreadState(
+      makeConv([
+        makeTurn([
+          userMsg("生成一张小章鱼图片"),
+          agentMsg("我来直接生成这张戴黑色围巾的小章鱼 3D 插画。", "checkpoint"),
+          cmd("generate_image", "image-tool"),
+          reasoning(
+            "The image was generated successfully. I need to present it in the final answer with the actual model used.",
+            "media-reasoning",
+          ),
+          agentMsg(mediaAnswer, "media-final"),
+        ]),
+      ]),
+    );
+
+    expect(state.messages.map((message) => message.id)).toEqual([
+      "u1",
+      "checkpoint",
+      "image-tool",
+      "media-final",
+    ]);
+    expect(state.messages.at(-1)?.content).toBe(mediaAnswer);
+  });
+
   it("merges post-final trace items back into the delivered answer", () => {
     const state = conversationToAgentThreadState(
       makeConv([

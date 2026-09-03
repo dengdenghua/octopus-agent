@@ -108,7 +108,9 @@ Observation: <由系统填入,每个观察会标 [n/N tool_name]>
 """
 
 REACT_NO_TOOLS_NOTE = """
-(本会话未启用真实工具,Action 仅作思考标注,填 "none" 即可。)
+(本轮未暴露真实工具，Action 仅作思考标注，填 "none" 即可。
+这只描述当前回合，不能据此推断或宣称整个会话没有工具；若历史中已有真实工具 Observation，
+必须承认这些执行记录。上一轮若因重启或中断未完成，应说明需要重试该轮，而不是要求用户新建会话。)
 """
 
 REACT_OBSERVATION_FOLLOWUP = (

@@ -177,6 +177,18 @@ class CapabilityActivation:
                 "When spawning subagents, pass explicit `skill_packs`, `skills`, or `plugins` in the delegation spec so workers get the same relevant capabilities.\n"
                 "</active-capability-router>",
             )
+            if "media-generation" in self.labels:
+                sections.append(
+                    "<media-generation-routing>\n"
+                    "For a direct image or video creation request, call the native "
+                    "`generate_image` or `generate_video` tool immediately. Do not "
+                    "search for or activate `agnes-*-generate` skill packs first: "
+                    "those packages are adapter documentation, while the native tools "
+                    "are the executable entry points and resolve provider credentials "
+                    "inside the trusted tool host. An `exec_shell` environment check is "
+                    "not evidence that the native media tool lacks credentials.\n"
+                    "</media-generation-routing>",
+                )
         if (
             self.pinned_skills
             or self.pinned_plugins
@@ -230,6 +242,35 @@ class CapabilityActivation:
 
 
 _RULES: tuple[dict[str, Any], ...] = (
+    {
+        "label": "media-generation",
+        "modes": {"media", "image", "video"},
+        "keywords": (
+            "generate image",
+            "create image",
+            "draw an image",
+            "generate video",
+            "create video",
+            "text to image",
+            "text-to-image",
+            "image to video",
+            "image-to-video",
+            "生图",
+            "生成图片",
+            "生成一张",
+            "画一张",
+            "画图",
+            "插画",
+            "生视频",
+            "生成视频",
+            "图生视频",
+            "文生图",
+        ),
+        "skills": (
+            "generate_image",
+            "generate_video",
+        ),
+    },
     {
         "label": "research",
         "modes": {"research", "deep", "deep_research"},
@@ -825,9 +866,14 @@ def order_skill_names(
         "search_skills",
         "query_skill",
     )
+    candidates = (
+        (*activation.priority_skills, *anchors)
+        if "media-generation" in activation.labels
+        else (*anchors, *activation.priority_skills)
+    )
     front = [
         name
-        for name in (*anchors, *pinned_plugin_actions, *activation.priority_skills)
+        for name in (*pinned_plugin_actions, *candidates)
         if name in available
     ]
     ordered_front = _dedupe(front)

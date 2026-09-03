@@ -3980,11 +3980,11 @@ def test_thread_resume_closes_stale_in_progress_turn(tmp_path: Path) -> None:
 
     assert isinstance(msg, JsonRpcResponse)
     resumed_turn = msg.result["turns"][0]
-    assert resumed_turn["status"] == "failed"
+    assert resumed_turn["status"] == "interrupted"
     assert resumed_turn["error"]["code"] == "stale_in_progress_turn"
 
     replayed = log.replay()
-    assert replayed[0].status.value == "failed"
+    assert replayed[0].status.value == "interrupted"
 
 
 def test_full_turn_dispatches_session_start_and_stop(

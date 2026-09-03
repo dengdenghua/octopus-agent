@@ -89,6 +89,16 @@ def test_resolve_config_raises_without_key(monkeypatch: pytest.MonkeyPatch) -> N
     assert cfg["model"] == "agnes-2.5-flash"
 
 
+def test_vision_model_picker_skips_agnes_image_generation_models() -> None:
+    from runtime.platform.plugins.bundled.whale_eye import service as whale_eye_service
+
+    picked = whale_eye_service._pick_vision_model(
+        {"models": ["agnes-image-2.5-flash", "agnes-2.5-flash"]}
+    )
+
+    assert picked == "agnes-2.5-flash"
+
+
 def test_image_to_data_url_encodes_png(tmp_path: Path) -> None:
     shot = tmp_path / "shot.png"
     shot.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)

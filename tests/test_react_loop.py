@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -3550,6 +3551,35 @@ def test_observation_short_unchanged() -> None:
 
     assert _summarize_observation("ok") == "ok"
     assert _summarize_observation("") == ""
+
+
+def test_observation_preserves_complete_generated_media_url() -> None:
+    from runtime.core.cerebrum.react_loop import _summarize_observation
+
+    url = (
+        "https://platform-outputs.agnes-ai.space/images/t2i/"
+        "task_trI4AboL1s1VMB1awAFs3kZ6OBG5rGv4/"
+        "output_919fd6ce96ff4a96bd929395c33e97e3.png"
+    )
+    observation = "(real tool execution succeeded) generate_image\n" + json.dumps(
+        {
+            "url": url,
+            "urls": [url],
+            "model": "agnes-image-2.5-flash",
+            "created": 1788347887,
+            "usage": {},
+            "provider": "agnes",
+            "ok": True,
+            "fallback_from": ["volcano"],
+        }
+    )
+
+    out = _summarize_observation(observation)
+
+    assert url in out
+    assert '"urls"' not in out
+    assert '"model": "agnes-image-2.5-flash"' in out
+    assert "已截断" not in out
 
 
 def test_trace_stays_closed_for_long_self_contained_answer() -> None:
