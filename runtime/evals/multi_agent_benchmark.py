@@ -40,6 +40,7 @@ _THRESHOLDS = {
     "durable_subtree_concurrency": 1.0,
     "actual_usage_breaker": 1.0,
     "durable_collector": 1.0,
+    "collector_retry_retention": 1.0,
     "channel_claim_winners": 1,
     "wall_time_ms": 2_000.0,
 }
@@ -243,8 +244,7 @@ def _collector_metrics(root: Path) -> dict[str, Any]:
     store.create_collaboration_collector(
         run_id="benchmark-collector",
         child_ids=["architect", "coder", "reviewer"],
-        completion_policy="quorum",
-        quorum=2,
+        completion_policy="all",
     )
     store.record_collaboration_collector_result(
         "benchmark-collector",
@@ -253,6 +253,19 @@ def _collector_metrics(root: Path) -> dict[str, Any]:
         result={"answer": "A"},
     )
     restarted = CollaborationStore(root / "collector-cowork")
+    restarted.record_collaboration_collector_result(
+        "benchmark-collector",
+        child_id="coder",
+        status="failed",
+        result={"error": "transient"},
+    )
+    restarted.record_collaboration_collector_result(
+        "benchmark-collector",
+        child_id="reviewer",
+        status="success",
+        result={"answer": "C"},
+    )
+    reopened = restarted.reopen_collaboration_collector("benchmark-collector")
     settled = restarted.record_collaboration_collector_result(
         "benchmark-collector",
         child_id="coder",
@@ -270,10 +283,27 @@ def _collector_metrics(root: Path) -> dict[str, Any]:
         "durable_collector": (
             1.0
             if settled["status"] == "completed"
-            and settled["success_count"] == 2
-            and settled["cancellation_requested_child_ids"] == ["reviewer"]
+            and settled["success_count"] == 3
+            and settled["cancellation_requested_child_ids"] == []
             and duplicate == settled
             and len(restarted.collaboration_run_events("benchmark-collector")) == event_count
+            else 0.0
+        ),
+        "collector_retry_retention": (
+            1.0
+            if reopened["active_retry_child_ids"] == ["coder"]
+            and reopened["remaining_child_ids"] == ["coder"]
+            and settled["attempt_count"] == 4
+            and [
+                (item["child_id"], item["attempt"], item["status"])
+                for item in restarted.collaboration_collector_attempts("benchmark-collector")
+            ]
+            == [
+                ("architect", 1, "success"),
+                ("coder", 1, "failed"),
+                ("coder", 2, "success"),
+                ("reviewer", 1, "success"),
+            ]
             else 0.0
         ),
     }
@@ -331,6 +361,8 @@ def run_multi_agent_benchmark(*, workspace: Path | str | None = None) -> dict[st
         >= _THRESHOLDS["actual_usage_breaker"],
         "durable_collector": metrics["durable_collector"]
         >= _THRESHOLDS["durable_collector"],
+        "collector_retry_retention": metrics["collector_retry_retention"]
+        >= _THRESHOLDS["collector_retry_retention"],
         "channel_ingress_dedup": metrics["channel_claim_winners"]
         == _THRESHOLDS["channel_claim_winners"]
         and metrics["channel_duplicate_executions"] == 0,
