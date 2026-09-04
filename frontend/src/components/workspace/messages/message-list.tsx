@@ -1,4 +1,4 @@
-import type { AIMessage, Message } from "@/core/api/types";
+import type { AIMessage, Message, ToolCall } from "@/core/api/types";
 import type { BaseStream } from "@/core/api/use-stream-types";
 import type { ComponentProps, ReactNode } from "react";
 import {
@@ -105,6 +105,26 @@ export const MESSAGE_LIST_DEFAULT_PADDING_BOTTOM = 160;
 export const MESSAGE_LIST_FOLLOWUPS_EXTRA_PADDING_BOTTOM = 80;
 export const MESSAGE_LIST_TIMEOUT_WARNING_MS = 300_000;
 type SubtaskUpdate = Partial<Subtask> & { id: string };
+
+/**
+ * Return task-call ids that have not been rendered in this subagent lane.
+ * Replayed/streaming AI frames can repeat a call id; the live task card owns
+ * the state for that id, so a second card is always a duplicate presentation.
+ */
+export function takeUnseenTaskIds(
+  toolCalls: readonly ToolCall[] | undefined,
+  seen: Set<string>,
+): string[] {
+  const ids: string[] = [];
+  for (const toolCall of toolCalls ?? []) {
+    const id = toolCall.name === "task" ? toolCall.id?.trim() : "";
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
 export interface TurnMarker {
   key: string;
   kind: "dot" | "phase";
@@ -2421,6 +2441,8 @@ export function MessageList({
         }
       }
       const results: React.ReactNode[] = [];
+      const renderedTaskIds = new Set<string>();
+      let renderedTaskCount = false;
       for (const message of group.messages.filter((m) => m.type === "ai")) {
         if (hasReasoning(message)) {
           results.push(
@@ -2435,20 +2457,25 @@ export function MessageList({
             />,
           );
         }
-        results.push(
-          <div
-            key={"subtask-count-" + message.id}
-            className="text-muted-foreground font-normal pt-2 text-sm"
-          >
-            {t.subagents.executing(taskIds.size)}
-          </div>,
+        // A streamed/replayed delegation can arrive as several AI messages
+        // carrying the same task tool call. The SubtaskCard is already live
+        // by task id, so mounting it once prevents duplicate reports while
+        // preserving later status updates through its own subscription.
+        if (!renderedTaskCount && taskIds.size > 0) {
+          renderedTaskCount = true;
+          results.push(
+            <div
+              key="subtask-count"
+              className="text-muted-foreground font-normal pt-2 text-sm"
+            >
+              {t.subagents.executing(taskIds.size)}
+            </div>,
+          );
+        }
+        const validTaskIds = takeUnseenTaskIds(
+          (message as AIMessage).tool_calls,
+          renderedTaskIds,
         );
-        const validTaskIds = ((message as AIMessage).tool_calls ?? []).reduce<
-          string[]
-        >((ids, toolCall) => {
-          if (toolCall.name === "task" && toolCall.id) ids.push(toolCall.id);
-          return ids;
-        }, []);
         if (validTaskIds.length > 1) {
           results.push(
             <ParallelSubtasksGrid
