@@ -182,6 +182,7 @@ def create_remote_backends_router(
         payload = body or {}
         name = str(payload.get("name") or "").strip()
         url = str(payload.get("url") or "").strip()
+        auth_token = str(payload.get("auth_token") or "").strip() or None
         if not name:
             raise HTTPException(400, "name is required")
         if not url:
@@ -197,9 +198,31 @@ def create_remote_backends_router(
                 )
         _assert_safe_backend_url(url)
         try:
-            backend = registry.add(name=name, url=url, ssh=ssh)
+            backend = registry.add(
+                name=name,
+                url=url,
+                ssh=ssh,
+                auth_token=auth_token,
+            )
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        return {"backend": _safe_dict(backend)}
+
+    @router.put("/api/remote-backends/{backend_id}/credentials")
+    def update_backend_credentials(
+        backend_id: str,
+        request: Request,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        _operator_http(request)
+        _require_flag()
+        token = str((body or {}).get("auth_token") or "").strip() or None
+        try:
+            backend = registry.set_auth_token(backend_id, token)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if backend is None:
+            raise HTTPException(404, f"backend {backend_id!r} not found")
         return {"backend": _safe_dict(backend)}
 
     @router.delete("/api/remote-backends/{backend_id}")
@@ -218,7 +241,10 @@ def create_remote_backends_router(
         if backend is None:
             raise HTTPException(404, f"backend {backend_id!r} not found")
         _assert_safe_backend_url(backend.url)
-        status, detail = health_check(backend)
+        status, detail = health_check(
+            backend,
+            auth_token=registry.auth_token(backend_id),
+        )
         registry.update_health(backend_id, status=status, detail=detail)
         return {
             "status": status,
@@ -251,6 +277,7 @@ def create_remote_backends_router(
                 path=path,
                 json=json_body,
                 timeout_seconds=float(payload.get("timeout_seconds") or 30.0),
+                auth_token=registry.auth_token(backend_id),
             )
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
@@ -304,7 +331,11 @@ def create_remote_backends_router(
             await ws.close(code=1008)
             return
 
-        await proxy_websocket(backend, ws)
+        await proxy_websocket(
+            backend,
+            ws,
+            auth_token=registry.auth_token(backend_id),
+        )
 
     return router
 

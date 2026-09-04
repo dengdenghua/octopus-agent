@@ -39,6 +39,7 @@ _THRESHOLDS = {
     "visible_duplicate_count": 0,
     "durable_subtree_concurrency": 1.0,
     "actual_usage_breaker": 1.0,
+    "durable_collector": 1.0,
     "channel_claim_winners": 1,
     "wall_time_ms": 2_000.0,
 }
@@ -229,6 +230,55 @@ def _governance_metrics(root: Path) -> dict[str, Any]:
     }
 
 
+def _collector_metrics(root: Path) -> dict[str, Any]:
+    """Prove fan-out children converge after a coordinator restart."""
+
+    store = CollaborationStore(root / "collector-cowork")
+    store.create_collaboration_run(
+        run_id="benchmark-collector",
+        session_id="benchmark-thread",
+        kind="group_fanout",
+    )
+    store.claim_collaboration_run("benchmark-collector", worker_id="benchmark-worker")
+    store.create_collaboration_collector(
+        run_id="benchmark-collector",
+        child_ids=["architect", "coder", "reviewer"],
+        completion_policy="quorum",
+        quorum=2,
+    )
+    store.record_collaboration_collector_result(
+        "benchmark-collector",
+        child_id="architect",
+        status="success",
+        result={"answer": "A"},
+    )
+    restarted = CollaborationStore(root / "collector-cowork")
+    settled = restarted.record_collaboration_collector_result(
+        "benchmark-collector",
+        child_id="coder",
+        status="success",
+        result={"answer": "B"},
+    )
+    event_count = len(restarted.collaboration_run_events("benchmark-collector"))
+    duplicate = restarted.record_collaboration_collector_result(
+        "benchmark-collector",
+        child_id="coder",
+        status="success",
+        result={"answer": "B"},
+    )
+    return {
+        "durable_collector": (
+            1.0
+            if settled["status"] == "completed"
+            and settled["success_count"] == 2
+            and settled["cancellation_requested_child_ids"] == ["reviewer"]
+            and duplicate == settled
+            and len(restarted.collaboration_run_events("benchmark-collector")) == event_count
+            else 0.0
+        ),
+    }
+
+
 def _channel_ingress_metrics(root: Path) -> dict[str, Any]:
     path = root / "channel-operations.json"
     stores = [ChannelOperationsStore(path), ChannelOperationsStore(path)]
@@ -258,6 +308,7 @@ def run_multi_agent_benchmark(*, workspace: Path | str | None = None) -> dict[st
         **_fanout_metrics(),
         **_recovery_metrics(root),
         **_governance_metrics(root),
+        **_collector_metrics(root),
         **_channel_ingress_metrics(root),
     }
     checks = {
@@ -278,6 +329,8 @@ def run_multi_agent_benchmark(*, workspace: Path | str | None = None) -> dict[st
         >= _THRESHOLDS["durable_subtree_concurrency"],
         "actual_usage_breaker": metrics["actual_usage_breaker"]
         >= _THRESHOLDS["actual_usage_breaker"],
+        "durable_collector": metrics["durable_collector"]
+        >= _THRESHOLDS["durable_collector"],
         "channel_ingress_dedup": metrics["channel_claim_winners"]
         == _THRESHOLDS["channel_claim_winners"]
         and metrics["channel_duplicate_executions"] == 0,

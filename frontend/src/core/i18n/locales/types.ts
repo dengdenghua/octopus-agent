@@ -1474,6 +1474,9 @@ export interface Translations {
     nameAria: string;
     urlPlaceholder: string;
     urlAria: string;
+    tokenPlaceholder: string;
+    tokenAria: string;
+    authConfigured: string;
     add: string;
     adding: string;
     loading: string;

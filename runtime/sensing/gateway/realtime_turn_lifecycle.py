@@ -114,6 +114,25 @@ _AGENT_VERIFY_ROUND_LIMIT = 1
 _UNPAIRED_ITEM_MARKERS = frozenset({"__subagent_spawned__"})
 
 
+async def _notify_terminal(
+    emitter: EventEmitter,
+    method: ServerMethod,
+    params: dict[str, Any],
+) -> None:
+    """Send a terminal event through the emitter's convergence path.
+
+    Detached resident turns expose ``notify_terminal`` so an exception or
+    cancellation reaches sibling tabs while the owner is still alive.  The
+    fallback preserves the public EventEmitter contract for standalone
+    runtimes that only implement ``notify``.
+    """
+    terminal = getattr(emitter, "notify_terminal", None)
+    if callable(terminal):
+        await terminal(method, params)
+    else:
+        await emitter.notify(method, params)
+
+
 def _item_outlives_turn(item: Any) -> bool:
     """True when this item is *meant* to still be running at turn end.
 
@@ -1858,7 +1877,8 @@ async def _start_turn(
         # The connection is usually already dead here; send failures
         # must not mask the cancellation. Notify the current connection.
         with contextlib.suppress(Exception):
-            await emitter.notify(
+            await _notify_terminal(
+                emitter,
                 ServerMethod.TURN_INTERRUPTED,
                 {
                     "threadId": thread_id,
@@ -1867,19 +1887,14 @@ async def _start_turn(
                 },
             )
         with contextlib.suppress(Exception):
-            await emitter.notify(
+            await _notify_terminal(
+                emitter,
                 ServerMethod.TURN_COMPLETED,
                 {
                     "threadId": thread_id,
                     "turn": turn.model_dump(by_alias=True, mode="json"),
                 },
             )
-        # TODO(P1): Fan out terminal events to sibling connections (same
-        # thread_id) matching the normal completion path in
-        # realtime_gateway.py:716-720. Without this, sibling tabs see the turn
-        # stuck in inProgress until their next thread/resume. Requires passing
-        # the gateway instance to _start_turn() or adding a broadcast callback
-        # to EventEmitter protocol.
         raise
     except Exception as exc:
         # Failures between turn/started and the driver try (intent
@@ -1911,7 +1926,8 @@ async def _start_turn(
         with contextlib.suppress(Exception):
             runtime._snapshot_to_thread_store(thread_id, log, intent)
         with contextlib.suppress(Exception):
-            await emitter.notify(
+            await _notify_terminal(
+                emitter,
                 ServerMethod.TURN_COMPLETED,
                 {
                     "threadId": thread_id,

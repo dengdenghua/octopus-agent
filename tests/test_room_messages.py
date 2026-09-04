@@ -127,9 +127,25 @@ def test_message_receipts_are_monotonic_and_durable(tmp_path) -> None:
         status="delivered",
         seq=1,
     )
+    advanced = store.record_receipt(
+        "r1",
+        message_id="room-msg-receipt",
+        participant_id="reader",
+        status="read",
+        seq=4,
+    )
+    stale_cursor = store.record_receipt(
+        "r1",
+        message_id="room-msg-receipt",
+        participant_id="reader",
+        status="delivered",
+        seq=2,
+    )
 
     assert delivered["status"] == "delivered"
     assert read["status"] == regressed["status"] == "read"
+    assert advanced["status"] == stale_cursor["status"] == "read"
+    assert advanced["seq"] == stale_cursor["seq"] == 4
     assert RoomMessageStore(base_dir=tmp_path).receipts("r1")[0]["status"] == "read"
 
 
@@ -396,3 +412,34 @@ def test_ws_receipt_is_projected_to_canonical_store(tmp_path) -> None:
         (room_id, event["message_id"]),
     ).fetchone()
     assert canonical_receipt[0] == "read"
+
+
+def test_canonical_receipts_keep_read_status_and_cursor_monotonic(tmp_path) -> None:
+    canonical = CollaborationStore(base_dir=tmp_path)
+    room_id = "room-receipt-monotonic"
+    canonical.upsert_room("thread-receipt-monotonic", {"id": room_id, "name": "Room"})
+    canonical.append_message_for_room(
+        room_id,
+        text="hello",
+        participant_id="sender",
+        display_name="Sender",
+        metadata={"message_id": "room-msg-monotonic"},
+    )
+
+    first = canonical.record_receipt_for_room(
+        room_id,
+        message_id="room-msg-monotonic",
+        participant_id="reader",
+        status="read",
+        seq=4,
+    )
+    stale = canonical.record_receipt_for_room(
+        room_id,
+        message_id="room-msg-monotonic",
+        participant_id="reader",
+        status="delivered",
+        seq=2,
+    )
+
+    assert first["status"] == stale["status"] == "read"
+    assert first["seq"] == stale["seq"] == 4

@@ -44,6 +44,7 @@ export function RemoteBackendsPanel({ baseUrl }: RemoteBackendsPanelProps) {
 
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
+  const [authToken, setAuthToken] = useState("");
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
@@ -51,11 +52,16 @@ export function RemoteBackendsPanel({ baseUrl }: RemoteBackendsPanelProps) {
     e.preventDefault();
     setAdding(true);
     setAddError(null);
-    const result = await add({ name: name.trim(), url: url.trim() });
+    const result = await add({
+      name: name.trim(),
+      url: url.trim(),
+      authToken: authToken.trim() || undefined,
+    });
     setAdding(false);
     if (result.ok) {
       setName("");
       setUrl("");
+      setAuthToken("");
     } else {
       setAddError(result.error || t.remoteBackendsPanel.addFailed);
     }
@@ -107,6 +113,15 @@ export function RemoteBackendsPanel({ baseUrl }: RemoteBackendsPanelProps) {
                 required
                 className="border-border bg-background flex-1 rounded border px-2 py-1 text-sm"
                 aria-label={t.remoteBackendsPanel.urlAria}
+              />
+              <input
+                type="password"
+                placeholder={t.remoteBackendsPanel.tokenPlaceholder}
+                value={authToken}
+                onChange={(e) => setAuthToken(e.target.value)}
+                className="border-border bg-background flex-1 rounded border px-2 py-1 text-sm"
+                aria-label={t.remoteBackendsPanel.tokenAria}
+                autoComplete="new-password"
               />
               <Button
                 type="submit"
@@ -209,6 +224,9 @@ function BackendRow({ backend, disabled, onPing, onRemove }: BackendRowProps) {
           </Badge>
           {backend.ssh && (
             <Badge variant="outline">ssh {backend.ssh.host}</Badge>
+          )}
+          {backend.has_auth && (
+            <Badge variant="outline">{t.remoteBackendsPanel.authConfigured}</Badge>
           )}
         </div>
         <code className="text-muted-foreground text-xs">{backend.url}</code>

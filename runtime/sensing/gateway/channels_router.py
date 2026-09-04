@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import logging
@@ -470,7 +471,7 @@ def create_channels_router(
             replace = getattr(manager, "replace", None)
             if callable(replace):
                 try:
-                    replace(channel)
+                    await asyncio.to_thread(replace, channel)
                 except (ConnectionError, TimeoutError, OSError, RuntimeError) as e:
                     raise HTTPException(502, f"channel connection failed: {e}") from e
                 channel = None
@@ -479,7 +480,7 @@ def create_channels_router(
                     manager._channels.pop(safe_channel_id, None)  # noqa: SLF001
         if channel is not None:
             try:
-                manager.register(channel)
+                await asyncio.to_thread(manager.register, channel)
             except (ConnectionError, TimeoutError, OSError, RuntimeError) as e:
                 raise HTTPException(502, f"channel connection failed: {e}") from e
 

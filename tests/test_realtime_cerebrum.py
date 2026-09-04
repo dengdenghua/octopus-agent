@@ -2401,12 +2401,14 @@ def test_cowork_group_request_drives_pattern_fanout(
     monkeypatch: pytest.MonkeyPatch,
     room_mode: str,
 ) -> None:
+    from runtime.memory.cowork.collaboration_store import CollaborationStore
     from runtime.memory.cowork.group_store import GroupStore
     from runtime.memory.cowork.service import invite_member, set_mode
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
     from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
 
     store = GroupStore(base_dir=tmp_path / "cowork")
+    collaboration = CollaborationStore(base_dir=tmp_path / "cowork")
     invite_member(store, "th-cowork", actor="u", target_id="db-agent", kind="agent")
     invite_member(store, "th-cowork", actor="u", target_id="ui-agent", kind="agent")
     set_mode(store, "th-cowork", actor="u", mode=room_mode)
@@ -2444,6 +2446,19 @@ def test_cowork_group_request_drives_pattern_fanout(
                 agent_id=member["name"],
                 prompt=f"fanout prompt for {member['name']}",
             )
+        callback = _kwargs.get("on_reply")
+        if callable(callback):
+            for index, member in enumerate(members):
+                callback(
+                    {
+                        "response_id": f"fake:resp:{index}:{member['name']}",
+                        "agent_id": member["name"],
+                        "display_name": member["display_name"],
+                        "ok": True,
+                        "reply": f"{member['name']} replied",
+                        "round": 1,
+                    }
+                )
         return {
             "ok": True,
             "count": len(members),
@@ -2506,6 +2521,7 @@ def test_cowork_group_request_drives_pattern_fanout(
         agent=object(),
         logs_root=str(tmp_path / "threads"),
         cowork_group_store=store,
+        collaboration_store=collaboration,
     )
     gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
     app = FastAPI()
@@ -2632,6 +2648,16 @@ def test_cowork_group_request_drives_pattern_fanout(
     assert "use_primary_and_retry_failed_members" in audit_items[0]["content"]
     assert "octopus.group_fanout_capacity.v1" in audit_items[0]["content"]
     assert "parallel_roundtable" in audit_items[0]["content"]
+    runs = collaboration.collaboration_runs_for_session("th-cowork")
+    assert len(runs) == 1
+    collector = collaboration.collaboration_collector(runs[0]["run_id"])
+    assert collector is not None
+    assert collector["status"] == "completed"
+    assert collector["success_count"] == 2
+    assert [item["child_id"] for item in collector["results"]] == [
+        "db-agent",
+        "ui-agent",
+    ]
 
 
 def test_cowork_presence_question_uses_roster_without_starting_agents(

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -165,6 +167,32 @@ async def test_proxy_websocket_sends_error_on_upstream_failure() -> None:
 
     await proxy_websocket(backend, client, upstream_factory=factory)
     assert any("upstream failed" in m for m in client.received)
+
+
+@pytest.mark.asyncio
+async def test_proxy_websocket_forwards_remote_auth_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backend = RemoteBackend(id="x", name="x", url="https://example.com")
+    client = _FakeClientWs([])
+    upstream = _FakeUpstream([])
+    captured: dict[str, Any] = {}
+
+    def connect(url: str, **kwargs: Any) -> _FakeUpstream:
+        captured.update({"url": url, **kwargs})
+        return upstream
+
+    monkeypatch.setattr(
+        "runtime.safety.auth.url_guard.check_url",
+        lambda *_args, **_kwargs: SimpleNamespace(allow=True, resolved_ip=None),
+    )
+    monkeypatch.setitem(sys.modules, "websockets", SimpleNamespace(connect=connect))
+
+    await proxy_websocket(backend, client, auth_token="remote-secret")
+
+    assert captured["additional_headers"] == {
+        "Authorization": "Bearer remote-secret",
+    }
 
 
 # ─── /api/remote-backends/{id}/realtime endpoint ────────────

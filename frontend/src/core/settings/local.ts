@@ -102,7 +102,7 @@ export interface LocalSettings {
     /** Default folder used by new personal-space tasks. */
     default_folder: string;
     /** Default operating contract for unbound personal-space tasks. */
-    default_mode: "general" | "build" | "research";
+    default_mode: "general" | "uxui";
     /** When enabled, a composer mode pick becomes the next task's default. */
     remember_last_mode: boolean;
     /** User-authored operating preferences appended to personal turns. */
@@ -129,10 +129,10 @@ function mergeLocalSettings(settings?: Partial<LocalSettings>): LocalSettings {
     context.model_name = "auto";
   }
   const rawPersonalMode = settings?.personal_space?.default_mode;
-  const personalMode =
-    rawPersonalMode === "build" || rawPersonalMode === "research"
-      ? rawPersonalMode
-      : "general";
+  // Personal and project spaces now share General / Design.  Older installs
+  // may still have Build or Research here; migrate those values to General
+  // so a refresh cannot reintroduce the retired third-mode selector.
+  const personalMode = rawPersonalMode === "uxui" ? "uxui" : "general";
   return {
     ...DEFAULT_LOCAL_SETTINGS,
     context,

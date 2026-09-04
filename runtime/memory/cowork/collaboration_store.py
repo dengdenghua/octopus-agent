@@ -40,6 +40,10 @@ from runtime.memory.cowork._collaboration_session_writes import (
     append_message as _append_message,
 )
 from runtime.memory.cowork._collaboration_session_writes import upsert_task as _upsert_task
+from runtime.memory.cowork.collaboration_collectors import (
+    COLLABORATION_COLLECTOR_SCHEMA,
+    CollaborationCollectorStoreMixin,
+)
 from runtime.memory.cowork.collaboration_deliveries import (
     COLLABORATION_DELIVERY_SCHEMA,
     CollaborationDeliveryStoreMixin,
@@ -232,7 +236,7 @@ CREATE TABLE IF NOT EXISTS collaboration_pinned_messages (
 );
 CREATE INDEX IF NOT EXISTS idx_collab_pinned_messages_session
 ON collaboration_pinned_messages(session_id, created_at DESC);
-""" + COLLABORATION_RUN_SCHEMA + COLLABORATION_DELIVERY_SCHEMA
+""" + COLLABORATION_RUN_SCHEMA + COLLABORATION_DELIVERY_SCHEMA + COLLABORATION_COLLECTOR_SCHEMA
 
 
 def _default_dir() -> Path:
@@ -514,6 +518,7 @@ def _normalize_task_payload(
 
 
 class CollaborationStore(
+    CollaborationCollectorStoreMixin,
     CollaborationDeliveryStoreMixin,
     CollaborationRunStoreMixin,
     CollaborationProjectActionStoreMixin,
@@ -1051,28 +1056,55 @@ class CollaborationStore(
         if normalized_seq is not None and normalized_seq < 1:
             raise ValueError("receipt seq must be >= 1")
         updated_at = _now()
+        rank = {"delivered": 1, "read": 2}
         with self._lock, self._connect() as conn:
             existing = conn.execute(
                 "SELECT status, seq, updated_at FROM collaboration_message_receipts "
                 "WHERE room_id=? AND message_id=? AND participant_id=?",
                 (room_id, message_id, participant_id),
             ).fetchone()
-            if existing and existing[0] == "read":
-                status = "read"
+            effective_status = status
+            effective_seq = normalized_seq
+            if existing:
+                # Keep both dimensions monotonic so delayed websocket frames
+                # cannot make a member appear unread or move its cursor back.
+                if rank.get(str(existing[0]), 0) >= rank[status]:
+                    effective_status = str(existing[0])
+                if existing[1] is not None:
+                    effective_seq = max(int(existing[1]), normalized_seq or 0)
+                if (
+                    effective_status == str(existing[0])
+                    and effective_seq == existing[1]
+                ):
+                    return {
+                        "room_id": room_id,
+                        "message_id": message_id,
+                        "participant_id": participant_id,
+                        "status": effective_status,
+                        "seq": existing[1],
+                        "updated_at": str(existing[2]),
+                    }
             conn.execute(
                 "INSERT INTO collaboration_message_receipts "
                 "(room_id,message_id,participant_id,status,seq,updated_at) VALUES (?,?,?,?,?,?) "
                 "ON CONFLICT(room_id,message_id,participant_id) DO UPDATE SET "
                 "status=excluded.status, seq=COALESCE(excluded.seq, collaboration_message_receipts.seq), "
                 "updated_at=excluded.updated_at",
-                (room_id, message_id, participant_id, status, normalized_seq, updated_at),
+                (
+                    room_id,
+                    message_id,
+                    participant_id,
+                    effective_status,
+                    effective_seq,
+                    updated_at,
+                ),
             )
         return {
             "room_id": room_id,
             "message_id": message_id,
             "participant_id": participant_id,
-            "status": status,
-            "seq": normalized_seq,
+            "status": effective_status,
+            "seq": effective_seq,
             "updated_at": updated_at,
         }
 

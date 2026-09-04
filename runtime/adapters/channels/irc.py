@@ -5,6 +5,7 @@ import re
 import socket
 import ssl
 import threading
+import time
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
@@ -152,6 +153,7 @@ class IRCChannel(Channel):
         self._reconnect_max_s = max(self._reconnect_min_s, float(reconnect_max_s))
         self._socket_factory = socket_factory
         self._socket: socket.socket | None = None
+        self._read_buffer = b""
         self._reader: threading.Thread | None = None
         self._dispatch_pool: ThreadPoolExecutor | None = None
         self._stop_event = threading.Event()
@@ -251,11 +253,52 @@ class IRCChannel(Channel):
         try:
             for line in self._registration_lines():
                 self._send_line_locked(line)
+            self._read_buffer = self._await_welcome_locked(sock)
         except Exception:
             self._socket = None
             sock.close()
             raise
         self._connected.set()
+
+    def _await_welcome_locked(self, sock: socket.socket) -> bytes:
+        """Require a server welcome so TCP reachability cannot masquerade as login health."""
+        deadline = time.monotonic() + self._connect_timeout_s
+        buffer = b""
+        while time.monotonic() < deadline and not self._stop_event.is_set():
+            try:
+                payload = sock.recv(4096)
+            except TimeoutError:
+                continue
+            if not payload:
+                raise IRCError("IRC connection closed during registration")
+            buffer += payload
+            while b"\n" in buffer:
+                raw_line, buffer = buffer.split(b"\n", 1)
+                parsed = parse_irc_line(raw_line.rstrip(b"\r").decode("utf-8", errors="replace"))
+                if parsed.command == "PING":
+                    token = parsed.params[-1] if parsed.params else ""
+                    self._send_line_locked(f"PONG :{token}")
+                    continue
+                if parsed.command == "001":
+                    return buffer
+                if parsed.command == "ERROR" or parsed.command in {
+                    "431",
+                    "432",
+                    "433",
+                    "436",
+                    "451",
+                    "461",
+                    "462",
+                    "464",
+                    "465",
+                }:
+                    detail = parsed.params[-1] if parsed.params else parsed.command
+                    raise IRCError(f"IRC registration rejected: {detail}")
+                if parsed.command == "NOTICE":
+                    detail = parsed.params[-1].lower() if parsed.params else ""
+                    if "authentication failed" in detail or "improperly formatted auth" in detail:
+                        raise IRCError("IRC registration rejected: authentication failed")
+        raise IRCError("IRC registration timed out before server welcome")
 
     def _registration_lines(self) -> list[str]:
         lines: list[str] = []
@@ -274,7 +317,7 @@ class IRCChannel(Channel):
         return lines
 
     def _reader_loop(self) -> None:
-        buffer = b""
+        buffer = self._read_buffer
         backoff = self._reconnect_min_s
         while not self._stop_event.is_set():
             with self._socket_lock:
@@ -285,7 +328,7 @@ class IRCChannel(Channel):
                 try:
                     with self._socket_lock:
                         self._connect_locked()
-                    buffer = b""
+                    buffer = self._read_buffer
                     backoff = self._reconnect_min_s
                 except (OSError, IRCError):
                     backoff = min(self._reconnect_max_s, backoff * 2)
@@ -375,7 +418,7 @@ class IRCChannel(Channel):
         if (
             self._socket is None
             or not self._connected.is_set()
-            and not line.startswith(("PASS ", "NICK ", "USER ", "CAP ", "JOIN "))
+            and not line.startswith(("PASS ", "NICK ", "USER ", "CAP ", "JOIN ", "PONG "))
         ):
             raise IRCError("IRC channel is not connected")
         self._socket.sendall(encoded)

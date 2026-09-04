@@ -391,11 +391,36 @@ def create_cowork_group_router(
             raise HTTPException(400, str(exc)) from exc
         if run is None or str(run.get("session_id") or "") != thread_id:
             raise HTTPException(404, "collaboration run not found")
+        read_collector = getattr(store, "collaboration_collector", None)
         return {
             "thread_id": thread_id,
             "run": run,
             "events": store.collaboration_run_events(run_id),
+            "collector": read_collector(run_id) if callable(read_collector) else None,
         }
+
+    @router.get("/api/collab/{thread_id}/runs/{run_id}/collector")
+    def get_collaboration_collector(
+        thread_id: str,
+        run_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        """Polling-safe durable child results for one multi-agent run."""
+
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
+        store = _collaboration_store()
+        try:
+            run = store.collaboration_run(run_id)
+            collector = store.collaboration_collector(run_id)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if run is None or str(run.get("session_id") or "") != thread_id:
+            raise HTTPException(404, "collaboration run not found")
+        if collector is None:
+            raise HTTPException(404, "collaboration collector not found")
+        return {"thread_id": thread_id, "collector": collector}
 
     @router.get("/api/collab/{thread_id}/deliveries")
     def list_collaboration_deliveries(

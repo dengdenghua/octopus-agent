@@ -168,6 +168,8 @@ class TestListChannels:
         # Implementation note.
         platforms = {d["platform"] for d in data}
         assert {"wechat", "dingtalk", "feishu", "telegram", "discord"} <= platforms
+        assert {"irc", "twitch"} <= platforms
+        assert len(platforms) == 26
 
         # Implementation note.
         for d in data:

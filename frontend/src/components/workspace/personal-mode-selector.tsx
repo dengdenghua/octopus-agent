@@ -1,12 +1,13 @@
 /**
  * Personal-space work mode selector.
  *
- * The project ModeSelector only applies once a workspace folder is bound. This is
- * its personal-space counterpart — the agent's own sandbox/conversation space:
- *   - general:  normal agent (default)
- *   - build:    the agent actively produces runnable artifacts in its own sandbox
- *   - research: reuses the existing deep-research behaviour (the backend treats
- *               personal_mode="research" as a research turn)
+ * Personal and project spaces share the same two user-facing work modes:
+ *   - general: normal agent (default)
+ *   - uxui: design/canvas work
+ *
+ * ``build`` and ``research`` remain accepted as compatibility values because
+ * old saved tasks and group contracts may still contain them. They are
+ * intentionally projected to General instead of leaking a third selector.
  *
  * Labels are kept self-contained here (not in the shared i18n bundle) so this
  * feature stays decoupled from concurrently-edited locale files.
@@ -14,8 +15,7 @@
 
 import {
   ChevronDownIcon,
-  FlaskConicalIcon,
-  HammerIcon,
+  PaletteIcon,
   SparklesIcon,
 } from "lucide-react";
 import {
@@ -31,7 +31,7 @@ import { createPortal } from "react-dom";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
-export type PersonalMode = "general" | "build" | "research";
+export type PersonalMode = "general" | "uxui" | "build" | "research";
 
 type PanelRect = {
   left: number;
@@ -49,7 +49,7 @@ type ModeMeta = {
 
 type Labels = { label: string; desc: string };
 
-const PERSONAL_MODES: [ModeMeta, ModeMeta, ModeMeta] = [
+const PERSONAL_MODES: [ModeMeta, ModeMeta] = [
   {
     name: "general",
     icon: SparklesIcon,
@@ -57,16 +57,10 @@ const PERSONAL_MODES: [ModeMeta, ModeMeta, ModeMeta] = [
       "bg-info/15 text-info dark:bg-info/40 dark:text-info ring-1 ring-info/20",
   },
   {
-    name: "build",
-    icon: HammerIcon,
+    name: "uxui",
+    icon: PaletteIcon,
     activeTone:
-      "bg-warning/15 text-warning dark:bg-warning/40 dark:text-warning ring-1 ring-warning/20",
-  },
-  {
-    name: "research",
-    icon: FlaskConicalIcon,
-    activeTone:
-      "bg-chart-1/15 text-chart-1 dark:bg-chart-1/40 dark:text-chart-1 ring-1 ring-chart-1/20",
+      "bg-chart-3/15 text-chart-3 dark:bg-chart-3/40 dark:text-chart-3 ring-1 ring-chart-3/20",
   },
 ];
 
@@ -79,6 +73,12 @@ const LABELS: Record<
     en: { label: "General", desc: "Everyday chat and tasks" },
     ja: { label: "汎用", desc: "日常の対話とタスク" },
     ko: { label: "일반", desc: "일상 대화와 작업" },
+  },
+  uxui: {
+    zh: { label: "设计", desc: "界面、视觉与画布工作" },
+    en: { label: "Design", desc: "Interface, visual, and canvas work" },
+    ja: { label: "デザイン", desc: "UI・ビジュアル・キャンバス作業" },
+    ko: { label: "디자인", desc: "UI·비주얼·캔버스 작업" },
   },
   build: {
     zh: { label: "构建", desc: "在自己工作区造可运行成果" },
@@ -101,6 +101,11 @@ function labelsFor(mode: PersonalMode, locale: string): Labels {
   if (lang === "ja") return byLang.ja;
   if (lang === "ko") return byLang.ko;
   return byLang.en;
+}
+
+/** Map pre-unification personal modes to the single General contract. */
+export function canonicalPersonalMode(mode: PersonalMode): "general" | "uxui" {
+  return mode === "uxui" ? "uxui" : "general";
 }
 
 const PANEL_WIDTH = 300;
@@ -134,8 +139,9 @@ export function PersonalModeSelector({
   const listboxId = `${baseId}-listbox`;
   const [panelRect, setPanelRect] = useState<PanelRect | null>(null);
 
+  const visibleMode = canonicalPersonalMode(mode);
   const activeOption =
-    PERSONAL_MODES.find((o) => o.name === mode) ?? PERSONAL_MODES[0];
+    PERSONAL_MODES.find((o) => o.name === visibleMode) ?? PERSONAL_MODES[0];
   const ActiveIcon = activeOption.icon;
   const activeLabels = labelsFor(activeOption.name, locale);
 
@@ -312,7 +318,7 @@ export function PersonalModeSelector({
       >
         <ActiveIcon className="size-3" />
         <span className="max-w-[72px] truncate">
-          {labelOverrides?.[mode]?.trim() || activeLabels.label}
+          {labelOverrides?.[visibleMode]?.trim() || activeLabels.label}
         </span>
         <ChevronDownIcon className="size-3 opacity-35 transition-opacity group-hover:opacity-60" />
       </button>
@@ -355,11 +361,11 @@ export function PersonalModeSelector({
                         key={option.name}
                         type="button"
                         role="option"
-                        aria-selected={mode === option.name}
+                        aria-selected={visibleMode === option.name}
                         onClick={() => handlePick(option.name)}
                         className={cn(
                           "flex w-full items-center gap-2 px-3 py-2 text-xs transition-colors",
-                          mode === option.name
+                          visibleMode === option.name
                             ? option.activeTone
                             : "text-muted-foreground hover:bg-muted",
                         )}

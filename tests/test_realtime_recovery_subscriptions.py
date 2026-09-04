@@ -249,3 +249,25 @@ def test_event_resume_watch_is_idempotent_and_receives_live_and_terminal_fanout(
     for thread_id in list(watcher.watched_threads):
         gateway._unwatch_thread(thread_id)  # noqa: SLF001
     assert gateway._wake_watch_refs == {}  # noqa: SLF001
+
+
+def test_detached_terminal_notify_converges_owner_and_sibling_watchers(
+    recovery_gateway: tuple[CerebrumRuntime, RealtimeGateway],
+) -> None:
+    """Failures/cancellations must close every live tab, not only the owner."""
+    _runtime, gateway = recovery_gateway
+    thread_id = "thread-terminal-convergence"
+    owner = _RecordingConnection(gateway)
+    watcher = _RecordingConnection(gateway)
+    watcher.watched_threads.add(thread_id)
+    gateway._connections.update({owner, watcher})  # noqa: SLF001
+
+    emitter = _DetachedTurnEmitter(gateway, thread_id, owner)  # type: ignore[arg-type]
+    params = {
+        "threadId": thread_id,
+        "turn": {"id": "turn-terminal", "status": "failed"},
+    }
+    asyncio.run(emitter.notify_terminal(ServerMethod.TURN_COMPLETED, params))
+
+    assert owner.notifications == [(ServerMethod.TURN_COMPLETED.value, params)]
+    assert watcher.notifications == [(ServerMethod.TURN_COMPLETED.value, params)]

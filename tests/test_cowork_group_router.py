@@ -84,6 +84,16 @@ def test_collaboration_run_timeline_is_exposed_without_cross_thread_leakage(tmp_
         input={"message": "评审"},
     )
     collaboration.claim_collaboration_run("run-visible", worker_id="worker-a")
+    collaboration.create_collaboration_collector(
+        run_id="run-visible",
+        child_ids=["raven", "zero"],
+    )
+    collaboration.record_collaboration_collector_result(
+        "run-visible",
+        child_id="raven",
+        status="success",
+        result={"reply": "先完成一条"},
+    )
 
     listed = client.get("/api/collab/thread-runs/runs")
     assert listed.status_code == 200, listed.text
@@ -94,8 +104,18 @@ def test_collaboration_run_timeline_is_exposed_without_cross_thread_leakage(tmp_
     assert [event["event_type"] for event in detail.json()["events"]] == [
         "created",
         "claimed",
+        "collector_created",
+        "collector_child_recorded",
     ]
+    assert detail.json()["collector"]["completed_count"] == 1
+    collector = client.get("/api/collab/thread-runs/runs/run-visible/collector")
+    assert collector.status_code == 200, collector.text
+    assert collector.json()["collector"]["remaining_child_ids"] == ["zero"]
     assert client.get("/api/collab/other-thread/runs/run-visible").status_code == 404
+    assert (
+        client.get("/api/collab/other-thread/runs/run-visible/collector").status_code
+        == 404
+    )
     assert client.get(
         "/api/collab/thread-runs/runs", params={"status": "made-up"}
     ).status_code == 400

@@ -8,6 +8,7 @@ import pytest
 from runtime.adapters.channels import (
     InboundMessage,
     IRCChannel,
+    IRCError,
     OutboundMessage,
     TwitchChannel,
     parse_irc_line,
@@ -16,9 +17,10 @@ from runtime.sensing.gateway._channels_constructors import _construct_channel
 
 
 class _FakeSocket:
-    def __init__(self) -> None:
+    def __init__(self, incoming: list[bytes] | None = None) -> None:
         self.sent: list[bytes] = []
         self.closed = False
+        self.incoming = list(incoming or [b":irc.example.com 001 octopus :Welcome\r\n"])
 
     def settimeout(self, _timeout: float) -> None:
         pass
@@ -29,6 +31,8 @@ class _FakeSocket:
         self.sent.append(payload)
 
     def recv(self, _size: int) -> bytes:
+        if self.incoming:
+            return self.incoming.pop(0)
         raise TimeoutError
 
     def shutdown(self, _how: int) -> None:
@@ -137,6 +141,23 @@ def test_control_line_injection_is_rejected() -> None:
             channels="#agents",
             password="secret\r\nOPER root",
         )
+
+
+def test_connection_is_not_healthy_until_server_welcomes_login() -> None:
+    sock = _FakeSocket([b":irc.example.com 464 octopus :Password incorrect\r\n"])
+    channel = IRCChannel(
+        server="irc.example.com",
+        nickname="octopus",
+        channels="#agents",
+        connect_timeout_s=0.1,
+        socket_factory=lambda *_args: sock,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(IRCError, match="registration rejected"):
+        channel.start()
+
+    assert channel.health_check() is False
+    assert sock.closed is True
 
 
 def test_twitch_uses_tls_oauth_and_twitch_capabilities() -> None:

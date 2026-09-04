@@ -22066,6 +22066,60 @@
         ]
       }
     },
+    "/api/collab/{thread_id}/runs/{run_id}/collector": {
+      "get": {
+        "description": "Polling-safe durable child results for one multi-agent run.",
+        "operationId": "get_collaboration_collector_api_collab__thread_id__runs__run_id__collector_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Collaboration Collector Api Collab  Thread Id  Runs  Run Id  Collector Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Collaboration Collector",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
     "/api/collab/{thread_id}/tasks": {
       "get": {
         "description": "List heavyweight room tasks through the canonical session path.",
@@ -43138,6 +43192,65 @@
           }
         },
         "summary": "Remove Backend"
+      }
+    },
+    "/api/remote-backends/{backend_id}/credentials": {
+      "put": {
+        "operationId": "update_backend_credentials_api_remote_backends__backend_id__credentials_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "backend_id",
+            "required": true,
+            "schema": {
+              "title": "Backend Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Backend Credentials Api Remote Backends  Backend Id  Credentials Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Backend Credentials"
       }
     },
     "/api/remote-backends/{backend_id}/health": {

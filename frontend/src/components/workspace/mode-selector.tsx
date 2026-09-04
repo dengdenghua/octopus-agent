@@ -224,18 +224,24 @@ export function ModeSelector({
   const storageKey = workDir.trim() || PERSONAL_MODE_STORAGE_KEY;
 
   const modeOptions = getModeOptions(t);
-  const activeOption = modeOptions.find((option) => option.name === mode) ?? {
-    name: "develop",
-    icon: CodeIcon,
-    tone: "bg-info/15 text-info hover:bg-info/25 dark:bg-info/30 dark:text-info",
-    activeTone:
-      "bg-info/15 text-info dark:bg-info/40 dark:text-info ring-1 ring-info/20",
-    ring: "ring-info/20",
-    label: t.modes.develop,
-    desc: t.modes.developDesc,
-    effect: t.modes.developEffect,
-    tooltip: t.modes.developTooltip,
-  };
+  // ``audit`` is a retained storage/backend alias. Canonicalize at the
+  // rendering boundary so an old thread never paints a transient third label
+  // before hydration migrates it to General.
+  const visibleMode = canonicalUserMode(mode);
+  const activeOption =
+    modeOptions.find((option) => option.name === visibleMode) ?? {
+      name: "develop",
+      icon: CodeIcon,
+      tone:
+        "bg-info/15 text-info hover:bg-info/25 dark:bg-info/30 dark:text-info",
+      activeTone:
+        "bg-info/15 text-info dark:bg-info/40 dark:text-info ring-1 ring-info/20",
+      ring: "ring-info/20",
+      label: t.modes.develop,
+      desc: t.modes.developDesc,
+      effect: t.modes.developEffect,
+      tooltip: t.modes.developTooltip,
+    };
 
   useEffect(() => {
     const workspaceChanged = prevWorkDir.current !== storageKey;
@@ -479,8 +485,9 @@ export function ModeSelector({
     manualOverride || Boolean(autoMode && autoMode !== mode);
   const busy = detecting || switching;
   const ActiveIcon = busy ? LoaderIcon : activeOption.icon;
-  const activeLabel = labelOverrides?.[mode]?.trim() || activeOption.label;
-  const modeInfo = modes.find((item) => item.name === mode);
+  const activeLabel =
+    labelOverrides?.[visibleMode]?.trim() || activeOption.label;
+  const modeInfo = modes.find((item) => item.name === visibleMode);
   const workspaceLabel = compactWorkspaceLabel(workDir);
 
   return (
@@ -574,12 +581,12 @@ export function ModeSelector({
                         key={option.name}
                         type="button"
                         role="option"
-                        aria-selected={mode === option.name}
+                        aria-selected={visibleMode === option.name}
                         onClick={() => handleToggle(option.name)}
                         className={cn(
                           "flex w-full items-center gap-2 rounded-lg py-2 text-xs transition-colors duration-base",
                           "px-3",
-                          mode === option.name
+                          visibleMode === option.name
                             ? option.activeTone
                             : "text-muted-foreground hover:bg-muted",
                         )}

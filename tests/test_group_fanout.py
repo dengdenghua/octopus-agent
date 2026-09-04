@@ -50,6 +50,28 @@ def test_every_member_replies_in_parallel() -> None:
     assert out["synthesis"]["supporting_agent_ids"] == ["coder", "market_researcher"]
 
 
+def test_each_reply_is_reported_to_durable_collector_callback_as_it_finishes() -> None:
+    collected: list[dict] = []
+
+    out = run_group_fanout(
+        "新项目启动，大家说说",
+        _MEMBERS,
+        agent_caller=_caller_ok,
+        turn_id="turn-callback",
+        on_reply=collected.append,
+    )
+
+    assert len(collected) == len(_MEMBERS)
+    assert {item["agent_id"] for item in collected} == {
+        "aoi",
+        "coder",
+        "market_researcher",
+    }
+    assert {item["response_id"] for item in collected} == {
+        item["response_id"] for item in out["replies"]
+    }
+
+
 def test_one_member_failure_is_isolated() -> None:
     def caller(*, agent_id, prompt, **_kw):
         if agent_id == "coder":

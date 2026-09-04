@@ -239,7 +239,7 @@ tier: "standard"
 | `recorder_store.py` | Durable, privacy-aware event store for the optional Echo REC plugin. |
 | `registry_consumer_router.py` | 资产 Registry 消费路由(母体接 registry · 只读浏览 + 安装 prompt-skill)。 |
 | `remote_backends_router.py` | Remote backends router · ``/api/remote-backends/*``. |
-| `remote_transport.py` | Remote Transport · connect a desktop session to a remote octopus-agent runtime over SSH-tunneled HTTP. |
+| `remote_transport.py` | Remote Transport · connect a desktop session to a remote octopus-agent runtime over authenticated HTTP and WebSocket. |
 | `retrieve_router.py` | Retrieval router · ``/api/retrieve/rank``. |
 | `skill_market_router.py` | — |
 | `slash_command_expansion.py` | Slash-command expansion for realtime chat input. |
@@ -1205,9 +1205,9 @@ tier: "standard"
 | class | `class SshTunnel` | SSH transport descriptor. Mirrors ``SshBackend`` config so an existing SSH-trusted host can be reused without re-entering credentials. |
 | class | `class RemoteBackend` | One named remote octopus-agent runtime. |
 | class | `class BackendRegistry` | Process-wide cache of registered remote backends, persisted to ``<data>/remote_backends.json``. |
-| func | `def health_check(backend, timeout_seconds, http_client)` | Hit ``<url>/api/health`` and return (status, detail). |
-| func | `def proxy_request(backend, method, path, json, timeout_seconds, http_client)` | Forward a request to a remote backend. |
-| func | `async def proxy_websocket(backend, client_ws, path, upstream_factory)` | Bidirectionally relay a WebSocket session to the remote backend's realtime gateway. |
+| func | `def health_check(backend, timeout_seconds, http_client, auth_token)` | Hit ``<url>/api/health`` and return (status, detail). |
+| func | `def proxy_request(backend, method, path, json, timeout_seconds, http_client, auth_token)` | Forward a request to a remote backend. |
+| func | `async def proxy_websocket(backend, client_ws, path, upstream_factory, auth_token)` | Bidirectionally relay a WebSocket session to the remote backend's realtime gateway. |
 
 ### `retrieve_router.py`
 

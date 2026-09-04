@@ -119,6 +119,23 @@ describe("ModeSelector.onManualOverrideChange", () => {
     expect(onUserModeChange).not.toHaveBeenCalled();
   });
 
+  it("renders a legacy audit prop as General without exposing a third option", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModeSelector
+        workDir="/workspace/a"
+        sessionId="s1"
+        mode="audit"
+        onModeChange={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /编程/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { haspopup: "listbox" }));
+    expect(await screen.findAllByRole("option")).toHaveLength(2);
+    expect(screen.queryByText("审查")).not.toBeInTheDocument();
+  });
+
   it("persists a mode only after the server accepts it", async () => {
     await persistModeSelection("audit", "s1", "/workspace/a");
 

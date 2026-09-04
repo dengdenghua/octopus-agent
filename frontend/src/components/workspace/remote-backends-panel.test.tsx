@@ -19,6 +19,7 @@ const ENABLED_LIST = {
       last_health: "ok" as const,
       last_health_at: "2026-05-08T10:00:00Z",
       health_detail: null,
+      has_auth: true,
     },
   ],
 };
@@ -61,6 +62,7 @@ describe("RemoteBackendsPanel", () => {
     });
     expect(screen.getByText("reachable")).toBeInTheDocument();
     expect(screen.getByText("https://api.example.com")).toBeInTheDocument();
+    expect(screen.getByText("authenticated")).toBeInTheDocument();
   });
 
   it("Add form submits POST /api/remote-backends", async () => {
@@ -75,6 +77,9 @@ describe("RemoteBackendsPanel", () => {
     });
     fireEvent.change(screen.getByLabelText("Backend URL"), {
       target: { value: "https://stage.example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Backend access token"), {
+      target: { value: "remote-secret" },
     });
 
     mockOnce({
@@ -96,6 +101,11 @@ describe("RemoteBackendsPanel", () => {
       );
       expect(post).toBeDefined();
       expect(post![0]).toContain("/api/remote-backends");
+      expect(JSON.parse(String((post![1] as RequestInit).body))).toMatchObject({
+        name: "stage",
+        url: "https://stage.example.com",
+        auth_token: "remote-secret",
+      });
     });
   });
 

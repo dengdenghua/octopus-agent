@@ -266,14 +266,27 @@ class RoomMessageStore:
                 "WHERE room_id=? AND message_id=? AND participant_id=?",
                 (room_id, message_id, participant_id),
             ).fetchone()
-            if existing and rank.get(str(existing[0]), 0) >= rank[status]:
-                return {
-                    "room_id": room_id,
-                    "message_id": message_id,
-                    "participant_id": participant_id,
-                    "status": str(existing[0]),
-                    "seq": existing[1],
-                }
+            effective_status = status
+            effective_seq = normalized_seq
+            if existing:
+                # Receipts are a monotonic state machine. A delayed
+                # ``delivered`` packet must not downgrade ``read``, and a
+                # stale cursor must not move a member's read position back.
+                if rank.get(str(existing[0]), 0) >= rank[status]:
+                    effective_status = str(existing[0])
+                if existing[1] is not None:
+                    effective_seq = max(int(existing[1]), normalized_seq or 0)
+                if (
+                    effective_status == str(existing[0])
+                    and effective_seq == existing[1]
+                ):
+                    return {
+                        "room_id": room_id,
+                        "message_id": message_id,
+                        "participant_id": participant_id,
+                        "status": effective_status,
+                        "seq": existing[1],
+                    }
             conn.execute(
                 "INSERT INTO room_message_receipts "
                 "(room_id, message_id, participant_id, status, seq, updated_at) "
@@ -281,14 +294,14 @@ class RoomMessageStore:
                 "ON CONFLICT(room_id, message_id, participant_id) DO UPDATE SET "
                 "status=excluded.status, seq=COALESCE(excluded.seq, room_message_receipts.seq), "
                 "updated_at=excluded.updated_at",
-                (room_id, message_id, participant_id, status, normalized_seq, now),
+                (room_id, message_id, participant_id, effective_status, effective_seq, now),
             )
         return {
             "room_id": room_id,
             "message_id": message_id,
             "participant_id": participant_id,
-            "status": status,
-            "seq": normalized_seq,
+            "status": effective_status,
+            "seq": effective_seq,
         }
 
     def receipts(self, room_id: str, *, message_id: str | None = None) -> list[dict[str, Any]]:

@@ -94,6 +94,34 @@ class _DetachedTurnEmitter:
             and (not callable(can_access) or can_access(self._thread_id, conn))
         ]
 
+    def _terminal_targets(self) -> list[Any]:
+        """Return every live, authorized target for a terminal snapshot.
+
+        Normal deltas intentionally have one live destination: the owner, or
+        the connections that resumed the thread after the owner disappeared.
+        A terminal event is different.  It is the authoritative state change
+        that closes the spinner, so every same-thread watcher must receive it
+        even when the owner is still connected (for example, a pre-driver
+        exception or a cancellation during shutdown).
+        """
+        can_access = getattr(self._gateway, "_connection_can_access_thread", None)
+        targets: list[Any] = []
+        seen: set[int] = set()
+
+        def add(target: Any) -> None:
+            if target is None or id(target) in seen or not self._is_live(target):
+                return
+            if callable(can_access) and not can_access(self._thread_id, target):
+                return
+            seen.add(id(target))
+            targets.append(target)
+
+        add(self._owner)
+        for conn in list(getattr(self._gateway, "_connections", ())):
+            if self._thread_id in getattr(conn, "watched_threads", ()):
+                add(conn)
+        return targets
+
     # ── EventEmitter surface ───────────────────────────────────
 
     async def notify(self, method: Any, params: dict[str, Any]) -> None:
@@ -117,6 +145,23 @@ class _DetachedTurnEmitter:
                 return
             attempted.update(id(target) for target in targets)
             await asyncio.gather(*(_notify_safely(target) for target in targets))
+
+    async def notify_terminal(self, method: Any, params: dict[str, Any]) -> None:
+        """Broadcast a terminal event to owner and all same-thread watchers.
+
+        This is deliberately separate from :meth:`notify`: streaming deltas
+        should not be duplicated across tabs, while a terminal state must
+        converge every tab immediately.  Delivery remains best-effort per
+        socket; durable event-log replay covers clients that reconnect after
+        this live fan-out.
+        """
+        async def _notify_safely(target: Any) -> None:
+            try:
+                await target.notify(method, params)
+            except Exception:  # noqa: BLE001 - one dead socket must not block peers
+                return
+
+        await asyncio.gather(*(_notify_safely(target) for target in self._terminal_targets()))
 
     def is_turn_interrupted(self, turn_id: str) -> bool:
         # Shared registry ONLY: an explicit ``turn/interrupt`` RPC stops

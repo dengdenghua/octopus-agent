@@ -1,6 +1,6 @@
 """
 Remote Transport · connect a desktop session to a remote
-octopus-agent runtime over SSH-tunneled HTTP.
+octopus-agent runtime over authenticated HTTP and WebSocket.
 
 The desktop binary runs locally but routes every API call to a backend
 process running on a different host. The user sees the same UI;
@@ -14,15 +14,15 @@ This is the **scaffold**. It provides:
     SSH params + cached health status).
   * A ``BackendRegistry`` that persists the list to disk via
     ``atomic_write_json``.
-  * An ``HTTPProxy`` helper that makes outbound calls to a remote
-    backend's HTTP/SSE endpoint, optionally tunneled through SSH.
+  * HTTP and bidirectional WebSocket proxy helpers for a remote runtime.
+  * Encrypted-at-rest bearer credentials forwarded only to that runtime.
   * Health-check helpers (one-shot + periodic).
 
 What this module does NOT do (yet)
 ----------------------------------
-  * Bidirectional SSE/WebSocket streaming. SSE proxy is sketched
-    via httpx streaming but the existing routers haven't been
-    rewired to use it.
+  * SSE relay. Realtime turns use the implemented WebSocket relay.
+  * Opening the configured SSH tunnel. The descriptor is persisted,
+    but endpoints must currently be directly reachable.
   * SSH key generation / host enrollment workflow. Remote setup is
     user's responsibility for now (point at an existing
     reachable HTTP endpoint).
@@ -40,6 +40,7 @@ Storage
         { "id": "...", "name": "...", "url": "https://host:8000",
           "ssh": null | { "host": "...", "user": "...", "port": 22,
                           "identity_file": "..." },
+          "has_auth": true | false,
           "added_at": "...", "last_health": "ok" | "error" | null,
           "last_health_at": "..." }
       ]
@@ -49,7 +50,9 @@ Storage
 from __future__ import annotations
 
 import contextlib
+import json as _json
 import logging
+import re
 import threading
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -122,6 +125,7 @@ class RemoteBackend:
     last_health: str | None = None  # "ok" | "error" | None (untested)
     last_health_at: str | None = None
     health_detail: str | None = None  # last error message
+    has_auth: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -147,6 +151,7 @@ class RemoteBackend:
                 last_health=raw.get("last_health"),
                 last_health_at=raw.get("last_health_at"),
                 health_detail=raw.get("health_detail"),
+                has_auth=bool(raw.get("has_auth", False)),
             )
         except (KeyError, TypeError, ValueError):
             return None
@@ -186,11 +191,25 @@ class BackendRegistry:
     UI), no need for fine-grained concurrency.
     """
 
-    def __init__(self, store_path: str | Path) -> None:
+    def __init__(self, store_path: str | Path, *, credential_store: Any = None) -> None:
         self._path = Path(store_path)
         self._lock = threading.RLock()
         self._backends: dict[str, RemoteBackend] = {}
+        self._credential_store = credential_store
         self._load()
+
+    def _secrets(self) -> Any:
+        if self._credential_store is None:
+            from runtime.platform.connectors.credential_store import CredentialStore
+
+            self._credential_store = CredentialStore(
+                root=self._path.parent / ".remote-backend-credentials",
+            )
+        return self._credential_store
+
+    @staticmethod
+    def _credential_id(backend_id: str) -> str:
+        return f"remote-backend:{backend_id}"
 
     @property
     def path(self) -> Path:
@@ -233,11 +252,17 @@ class BackendRegistry:
         name: str,
         url: str,
         ssh: SshTunnel | None = None,
+        auth_token: str | None = None,
     ) -> RemoteBackend:
         canonical_url = _validate_url(url)
         clean_name = (name or "").strip()
         if not clean_name:
             raise ValueError("name is required")
+        clean_token = (auth_token or "").strip()
+        if clean_token and (
+            len(clean_token) > 16_384 or re.search(r"[\x00-\x1f\x7f]", clean_token)
+        ):
+            raise ValueError("auth_token is invalid")
         with self._lock:
             if any(b.name == clean_name for b in self._backends.values()):
                 raise ValueError(f"backend named {clean_name!r} already exists")
@@ -247,18 +272,60 @@ class BackendRegistry:
                 url=canonical_url,
                 ssh=ssh,
                 added_at=_now_iso(),
+                has_auth=bool(clean_token),
             )
+            if clean_token:
+                self._secrets().set_secret(
+                    self._credential_id(backend.id),
+                    "auth_token",
+                    clean_token,
+                )
             self._backends[backend.id] = backend
             self._flush()
             return backend
 
     def remove(self, backend_id: str) -> bool:
         with self._lock:
-            if backend_id not in self._backends:
+            backend = self._backends.get(backend_id)
+            if backend is None:
                 return False
             del self._backends[backend_id]
             self._flush()
+            if backend.has_auth:
+                with contextlib.suppress(Exception):
+                    self._secrets().clear_connector(self._credential_id(backend_id))
             return True
+
+    def auth_token(self, backend_id: str) -> str | None:
+        with self._lock:
+            backend = self._backends.get(backend_id)
+            if backend is None or not backend.has_auth:
+                return None
+            return self._secrets().get_secret(
+                self._credential_id(backend_id),
+                "auth_token",
+            )
+
+    def set_auth_token(self, backend_id: str, auth_token: str | None) -> RemoteBackend | None:
+        clean_token = (auth_token or "").strip()
+        if clean_token and (
+            len(clean_token) > 16_384 or re.search(r"[\x00-\x1f\x7f]", clean_token)
+        ):
+            raise ValueError("auth_token is invalid")
+        with self._lock:
+            backend = self._backends.get(backend_id)
+            if backend is None:
+                return None
+            credential_id = self._credential_id(backend_id)
+            if clean_token:
+                self._secrets().set_secret(credential_id, "auth_token", clean_token)
+                backend.has_auth = True
+            else:
+                if backend.has_auth:
+                    self._secrets().clear_connector(credential_id)
+                backend.has_auth = False
+            self._flush()
+            return backend
 
     def update_health(
         self,
@@ -290,6 +357,7 @@ def health_check(
     *,
     timeout_seconds: float = 5.0,
     http_client: Any = None,
+    auth_token: str | None = None,
 ) -> tuple[str, str | None]:
     """Hit ``<url>/api/health`` and return (status, detail).
 
@@ -299,15 +367,21 @@ def health_check(
     executor as needed.
     """
     target = backend.url.rstrip("/") + "/api/health"
+    headers = {"Authorization": f"Bearer {auth_token}"} if auth_token else None
     try:
         if http_client is None:
             from runtime.safety.auth.url_guard import safe_httpx_request
 
-            resp = safe_httpx_request("GET", target, timeout=timeout_seconds)
+            resp = safe_httpx_request(
+                "GET",
+                target,
+                timeout=timeout_seconds,
+                headers=headers,
+            )
             ok = 200 <= resp.status_code < 300
             detail = None if ok else f"HTTP {resp.status_code}"
         else:
-            resp = http_client.get(target, timeout=timeout_seconds)
+            resp = http_client.get(target, timeout=timeout_seconds, headers=headers)
             ok = 200 <= getattr(resp, "status_code", 0) < 300
             detail = None if ok else f"HTTP {resp.status_code}"
     except (ConnectionError, TimeoutError) as exc:
@@ -328,23 +402,20 @@ def proxy_request(
     json: Any = None,
     timeout_seconds: float = 30.0,
     http_client: Any = None,
+    auth_token: str | None = None,
 ) -> dict[str, Any]:
     """Forward a request to a remote backend.
 
     Returns ``{"status_code": int, "body": dict | str}``.
 
-    Streaming endpoints (SSE, WebSocket) are intentionally NOT
-    handled here — those need a different proxy (buffer-free
-    pump) and live behind the ``ui.remote_transport`` flag until
-    that landing happens. Routes that need streaming should fall
-    through to the local handler when the backend is remote and
-    surface a "streaming over remote backend not yet supported"
-    error in the UI.
+    Realtime WebSocket traffic is handled by ``proxy_websocket``;
+    this helper intentionally remains a one-shot HTTP request.
     """
     method = (method or "GET").upper()
     if method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
         raise ValueError(f"unsupported method {method!r}")
     target = backend.url.rstrip("/") + "/" + path.lstrip("/")
+    headers = {"Authorization": f"Bearer {auth_token}"} if auth_token else None
     try:
         if http_client is None:
             from runtime.safety.auth.url_guard import safe_httpx_request
@@ -353,6 +424,7 @@ def proxy_request(
                 method,
                 target,
                 json=json,
+                headers=headers,
                 timeout=timeout_seconds,
             )
         else:
@@ -360,6 +432,7 @@ def proxy_request(
                 method,
                 target,
                 json=json,
+                headers=headers,
                 timeout=timeout_seconds,
             )
         status = int(getattr(resp, "status_code", 0) or 0)
@@ -367,7 +440,7 @@ def proxy_request(
             body: Any = resp.json() if hasattr(resp, "json") else resp.text
             if callable(body):
                 body = body()
-        except (json.JSONDecodeError, AttributeError):
+        except (_json.JSONDecodeError, AttributeError):
             body = getattr(resp, "text", "") if hasattr(resp, "text") else ""
         return {"status_code": status, "body": body}
     except (ConnectionError, TimeoutError) as exc:
@@ -433,6 +506,7 @@ async def proxy_websocket(
     *,
     path: str = "/api/realtime",
     upstream_factory: Any = None,
+    auth_token: str | None = None,
 ) -> None:
     """Bidirectionally relay a WebSocket session to the remote
     backend's realtime gateway.
@@ -479,6 +553,10 @@ async def proxy_websocket(
             await client_ws.close(code=1011)
             raise RuntimeError("websockets package required") from exc
         connect_kwargs: dict[str, Any] = {"max_size": None, "proxy": None}
+        if auth_token:
+            connect_kwargs["additional_headers"] = {
+                "Authorization": f"Bearer {auth_token}",
+            }
         if verdict.resolved_ip:
             # websockets uses ``host`` for the TCP dial target while retaining
             # the URI hostname for the WebSocket Host/SNI identity. This pins

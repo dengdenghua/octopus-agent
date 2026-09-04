@@ -537,6 +537,23 @@ async def _drive_group_fanout(
         if not callable(transition):
             return
         try:
+            read_collector = getattr(store, "collaboration_collector", None)
+            close_collector = getattr(store, "close_collaboration_collector", None)
+            collector = (
+                read_collector(collaboration_run_id) if callable(read_collector) else None
+            )
+            if (
+                isinstance(collector, dict)
+                and collector.get("status") == "collecting"
+                and callable(close_collector)
+            ):
+                close_collector(
+                    collaboration_run_id,
+                    status="failed",
+                    reason=(
+                        "parent fanout terminated before every registered member result arrived"
+                    ),
+                )
             transition(
                 collaboration_run_id,
                 status=status,
@@ -547,6 +564,56 @@ async def _drive_group_fanout(
             )
         except Exception as exc:  # noqa: BLE001 — trace persistence is best effort
             _logger.warning("cowork collaboration run finalization failed: %s", exc, exc_info=True)
+
+    def _start_persistent_collector(group_members: list[dict[str, Any]]) -> None:
+        """Register first-round member lanes before any worker can finish."""
+
+        if not collaboration_run_id:
+            return
+        store = _run_store()
+        create_collector = getattr(store, "create_collaboration_collector", None)
+        if not callable(create_collector):
+            return
+        child_ids = [str(member.get("name") or "") for member in group_members]
+        child_ids = [child_id for child_id in child_ids if child_id]
+        if not child_ids:
+            return
+        try:
+            create_collector(
+                run_id=collaboration_run_id,
+                child_ids=child_ids,
+                completion_policy="all",
+            )
+        except Exception as exc:  # noqa: BLE001 - execution remains authoritative
+            _logger.warning("cowork collaboration collector setup failed: %s", exc, exc_info=True)
+
+    def _record_persistent_reply(reply: dict[str, Any]) -> None:
+        """Persist a member result as soon as its first-round lane settles."""
+
+        if not collaboration_run_id or int(reply.get("round") or 1) != 1:
+            return
+        store = _run_store()
+        record = getattr(store, "record_collaboration_collector_result", None)
+        if not callable(record):
+            return
+        child_id = str(reply.get("agent_id") or "")
+        if not child_id:
+            return
+        record(
+            collaboration_run_id,
+            child_id=child_id,
+            status="success" if bool(reply.get("ok")) else "failed",
+            result={
+                "response_id": reply.get("response_id"),
+                "agent_id": child_id,
+                "display_name": reply.get("display_name"),
+                "reply": str(reply.get("reply") or "")[:16_000],
+                "error": str(reply.get("error") or "")[:4_000] or None,
+                "validation": reply.get("validation"),
+                "pattern_role": reply.get("pattern_role"),
+                "round": 1,
+            },
+        )
 
     async def _start_group_trace(
         group_members: list[dict[str, Any]],
@@ -995,6 +1062,7 @@ async def _drive_group_fanout(
                 max_concurrency=fanout_concurrency,
                 scale_mode=scale_mode,
             )
+            _start_persistent_collector(chat_members[:fanout_limit])
             debate_rounds = _wants_debate()
             mentioned = _mentioned_names()
             result = await asyncio.to_thread(
@@ -1021,6 +1089,7 @@ async def _drive_group_fanout(
                     else None
                 ),
                 semantic_reviewer_agent_id=verifier_agent_id or None,
+                on_reply=_record_persistent_reply,
             )
             if context_plan is not None:
                 result["context_plan"] = context_plan.audit_dict()

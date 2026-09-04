@@ -85,6 +85,52 @@ def test_add_persists_across_instances(store_path: Path) -> None:
     assert backends[0].name == "staging"
 
 
+def test_auth_token_is_encrypted_and_survives_reload(store_path: Path) -> None:
+    token = "secret-remote-token"
+    reg = BackendRegistry(store_path)
+    backend = reg.add(
+        name="secured",
+        url="https://secured.example.com",
+        auth_token=token,
+    )
+
+    assert backend.has_auth is True
+    assert reg.auth_token(backend.id) == token
+    assert token not in store_path.read_text(encoding="utf-8")
+    credentials_file = store_path.parent / ".remote-backend-credentials" / "credentials.v1.json"
+    assert credentials_file.exists()
+    assert token not in credentials_file.read_text(encoding="utf-8")
+
+    reloaded = BackendRegistry(store_path)
+    assert reloaded.get(backend.id).has_auth is True  # type: ignore[union-attr]
+    assert reloaded.auth_token(backend.id) == token
+
+
+def test_set_and_clear_auth_token(store_path: Path) -> None:
+    reg = BackendRegistry(store_path)
+    backend = reg.add(name="secured", url="https://secured.example.com")
+
+    updated = reg.set_auth_token(backend.id, "replacement-token")
+    assert updated is not None and updated.has_auth is True
+    assert reg.auth_token(backend.id) == "replacement-token"
+
+    cleared = reg.set_auth_token(backend.id, None)
+    assert cleared is not None and cleared.has_auth is False
+    assert reg.auth_token(backend.id) is None
+
+
+def test_remove_clears_auth_token(store_path: Path) -> None:
+    reg = BackendRegistry(store_path)
+    backend = reg.add(
+        name="secured",
+        url="https://secured.example.com",
+        auth_token="temporary-token",
+    )
+
+    assert reg.remove(backend.id) is True
+    assert reg.auth_token(backend.id) is None
+
+
 def test_add_rejects_duplicate_name(store_path: Path) -> None:
     reg = BackendRegistry(store_path)
     reg.add(name="dup", url="https://a.example.com")
@@ -159,13 +205,16 @@ class _StubResponse:
 class _StubClient:
     def __init__(self, response: _StubResponse | Exception) -> None:
         self._response = response
+        self.calls: list[tuple[str, str, dict[str, Any]]] = []
 
     def get(self, url: str, **kwargs: Any) -> _StubResponse:
+        self.calls.append(("GET", url, kwargs))
         if isinstance(self._response, Exception):
             raise self._response
         return self._response
 
     def request(self, method: str, url: str, **kwargs: Any) -> _StubResponse:
+        self.calls.append((method, url, kwargs))
         if isinstance(self._response, Exception):
             raise self._response
         return self._response
@@ -176,6 +225,15 @@ def test_health_check_ok() -> None:
     status, detail = health_check(backend, http_client=_StubClient(_StubResponse(200)))
     assert status == "ok"
     assert detail is None
+
+
+def test_health_check_forwards_auth_token() -> None:
+    backend = RemoteBackend(id="x", name="x", url="https://example.com")
+    stub = _StubClient(_StubResponse(200))
+    health_check(backend, http_client=stub, auth_token="remote-secret")
+    assert stub.calls[0][2]["headers"] == {
+        "Authorization": "Bearer remote-secret",
+    }
 
 
 def test_health_check_non_2xx() -> None:
@@ -207,6 +265,21 @@ def test_proxy_returns_status_and_body() -> None:
     )
     assert result["status_code"] == 201
     assert result["body"] == {"ok": True}
+
+
+def test_proxy_forwards_auth_token() -> None:
+    backend = RemoteBackend(id="x", name="x", url="https://example.com")
+    stub = _StubClient(_StubResponse(200, json_data={"ok": True}))
+    proxy_request(
+        backend,
+        method="GET",
+        path="/api/echo",
+        auth_token="remote-secret",
+        http_client=stub,
+    )
+    assert stub.calls[0][2]["headers"] == {
+        "Authorization": "Bearer remote-secret",
+    }
 
 
 def test_proxy_rejects_unsupported_method() -> None:
@@ -317,6 +390,78 @@ def test_post_then_get_with_flag_on(
     assert any(b["id"] == bid for b in listing["backends"])
 
 
+def test_post_stores_auth_without_returning_secret(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    store_path: Path,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_FF_UI_REMOTE_TRANSPORT", "1")
+    ff.reload()
+    token = "top-secret-remote-token"
+    response = client.post(
+        "/api/remote-backends",
+        json={
+            "name": "secured",
+            "url": "https://secured.example.com",
+            "auth_token": token,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["backend"]["has_auth"] is True
+    assert token not in response.text
+    assert token not in store_path.read_text(encoding="utf-8")
+
+
+def test_credentials_endpoint_sets_and_clears_auth(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_FF_UI_REMOTE_TRANSPORT", "1")
+    ff.reload()
+    backend_id = client.post(
+        "/api/remote-backends",
+        json={"name": "secured", "url": "https://secured.example.com"},
+    ).json()["backend"]["id"]
+
+    updated = client.put(
+        f"/api/remote-backends/{backend_id}/credentials",
+        json={"auth_token": "new-secret"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["backend"]["has_auth"] is True
+    assert "new-secret" not in updated.text
+
+    cleared = client.put(
+        f"/api/remote-backends/{backend_id}/credentials",
+        json={"auth_token": ""},
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["backend"]["has_auth"] is False
+
+
+def test_credentials_endpoint_rejects_invalid_or_unknown(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_FF_UI_REMOTE_TRANSPORT", "1")
+    ff.reload()
+    unknown = client.put(
+        "/api/remote-backends/missing/credentials",
+        json={"auth_token": "secret"},
+    )
+    assert unknown.status_code == 404
+
+    backend_id = client.post(
+        "/api/remote-backends",
+        json={"name": "secured", "url": "https://secured.example.com"},
+    ).json()["backend"]["id"]
+    invalid = client.put(
+        f"/api/remote-backends/{backend_id}/credentials",
+        json={"auth_token": "line-one\nline-two"},
+    )
+    assert invalid.status_code == 400
+
+
 def test_post_validates_payload(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -378,10 +523,11 @@ def test_health_endpoint_records_status(
     with patch(
         "runtime.sensing.gateway.remote_backends_router.health_check",
         return_value=("ok", None),
-    ):
+    ) as mocked_health:
         r = client.post(f"/api/remote-backends/{bid}/health")
     assert r.status_code == 200
     assert r.json()["status"] == "ok"
+    assert mocked_health.call_args.kwargs["auth_token"] is None
 
     listing = client.get("/api/remote-backends").json()
     assert listing["backends"][0]["last_health"] == "ok"
@@ -395,19 +541,24 @@ def test_proxy_endpoint_forwards(
     ff.reload()
     bid = client.post(
         "/api/remote-backends",
-        json={"name": "x", "url": "https://x.com"},
+        json={
+            "name": "x",
+            "url": "https://x.com",
+            "auth_token": "remote-secret",
+        },
     ).json()["backend"]["id"]
 
     with patch(
         "runtime.sensing.gateway.remote_backends_router.proxy_request",
         return_value={"status_code": 200, "body": {"echo": True}},
-    ):
+    ) as mocked_proxy:
         r = client.post(
             f"/api/remote-backends/{bid}/proxy",
             json={"method": "GET", "path": "/api/health"},
         )
     assert r.status_code == 200
     assert r.json()["body"] == {"echo": True}
+    assert mocked_proxy.call_args.kwargs["auth_token"] == "remote-secret"
 
 
 def test_proxy_404_for_unknown_backend(

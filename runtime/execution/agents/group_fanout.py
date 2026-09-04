@@ -23,6 +23,7 @@ that persistent team rooms have onto our one-shot fan-out.
 from __future__ import annotations
 
 import concurrent.futures as _cf
+import logging
 import re
 from collections.abc import Callable
 from typing import Any
@@ -58,6 +59,7 @@ _ROOM_TIER_MEMBERS = 2
 
 # Hard bound on debate rounds so a hostile cue can't spin up unbounded LLM cost.
 _MAX_DEBATE_ROUNDS = 3
+_LOG = logging.getLogger(__name__)
 
 _ERROR_OUTPUT_PREFIXES = (
     "[planner error]",
@@ -402,6 +404,7 @@ def run_group_fanout(
     max_quality_retries: int = 1,
     semantic_reviewer: Callable[..., dict[str, Any]] | None = None,
     semantic_reviewer_agent_id: str | None = None,
+    on_reply: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Fan ``message`` out to each member in parallel; collect persona replies.
 
@@ -488,6 +491,11 @@ def run_group_fanout(
                     pattern_role=pattern_role,
                 )
             rec: dict[str, Any] = {
+                "response_id": _response_id(
+                    turn_id,
+                    (round_no - 1) * len(clean) + index,
+                    agent_id,
+                ),
                 "agent_id": agent_id,
                 "display_name": display,
                 "reply": "",
@@ -568,7 +576,13 @@ def run_group_fanout(
         with _cf.ThreadPoolExecutor(max_workers=workers, thread_name_prefix="group-fanout") as pool:
             futures = [pool.submit(_one, index, member) for index, member in enumerate(clean)]
             for fut in _cf.as_completed(futures):
-                results.append(fut.result())
+                reply = fut.result()
+                results.append(reply)
+                if on_reply is not None:
+                    try:
+                        on_reply(dict(reply))
+                    except Exception as exc:  # noqa: BLE001 - observability must not fail work
+                        _LOG.warning("group fanout reply collector failed: %s", exc, exc_info=True)
 
         order = {str(m.get("name") or m.get("agent_id")): i for i, m in enumerate(clean)}
         results.sort(key=lambda r: order.get(r["agent_id"], len(order)))
@@ -578,14 +592,6 @@ def run_group_fanout(
     transcript: list[dict[str, Any]] = []
     for round_no in range(1, rounds + 1):
         round_replies = _run_round(round_no, transcript)
-        # Stable global response ids across rounds.
-        response_offset = len(all_replies)
-        for index, reply in enumerate(round_replies):
-            reply["response_id"] = _response_id(
-                turn_id,
-                response_offset + index,
-                str(reply.get("agent_id") or ""),
-            )
         all_replies.extend(round_replies)
         # Feed the next round only the successful, non-empty replies.
         transcript = [
