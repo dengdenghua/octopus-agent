@@ -77,6 +77,7 @@ graph LR
   cli_core.py -- 4 --> execution
   cli_run.py -- 4 --> execution
   cli_serve.py -- 4 --> adapters
+  cli_serve.py -- 4 --> platform
   execution -- 4 --> protocol
   platform -- 4 --> tentacle
   projectos -- 4 --> platform
@@ -86,7 +87,6 @@ graph LR
   cli_core.py -- 3 --> core
   cli_reflect.py -- 3 --> platform
   cli_run.py -- 3 --> platform
-  cli_serve.py -- 3 --> platform
   execution -- 3 --> sensing
   platform -- 3 --> cli
   projectos -- 3 --> execution

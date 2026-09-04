@@ -19,6 +19,7 @@ tier: "standard"
 - `Channel`
 - `ChannelManager`
 - `ChannelMetadata`
+- `ChannelOperationsStore`
 - `ChannelRoutingError`
 - `DingTalkChannel`
 - `DingTalkError`
@@ -106,6 +107,7 @@ tier: "standard"
 | `mattermost.py` | — |
 | `ntfy.py` | — |
 | `open_webui.py` | — |
+| `operations.py` | — |
 | `qqbot.py` | — |
 | `signal.py` | — |
 | `simplex.py` | — |
@@ -233,6 +235,12 @@ tier: "standard"
 | --- | --- | --- |
 | class | `class OpenWebUIError(RuntimeError)` |  |
 | class | `class OpenWebUIChannel(Channel)` |  |
+
+### `operations.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class ChannelOperationsStore` | Durable, bounded operational state for external message channels. |
 
 ### `qqbot.py`
 
