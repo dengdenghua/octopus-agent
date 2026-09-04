@@ -268,12 +268,57 @@ def test_team_room_websocket_presence_and_events(tmp_path: Path) -> None:
             assert cursor["participant_id"] == "bob"
             assert cursor["position"] == {"x": 12, "y": 34}
 
-            bob.send_json({"type": "message", "text": "Can you review this?"})
+            sent = {
+                "type": "message",
+                "text": "Can you review this?",
+                "client_message_id": "client-bob-review-1",
+            }
+            bob.send_json(sent)
             message = alice.receive_json()
+            receipt = bob.receive_json()
             assert message["type"] == "message"
             assert message["thread_id"] == "thread-a"
             assert message["participant_id"] == "bob"
             assert message["text"] == "Can you review this?"
+            assert message["client_message_id"] == "client-bob-review-1"
+            assert message["message_id"] == receipt["message_id"]
+            assert message["seq"] == receipt["seq"] == 1
+            assert receipt["delivery_status"] == "sent"
+
+            alice.send_json(
+                {
+                    "type": "message:delivered",
+                    "message_id": message["message_id"],
+                    "seq": message["seq"],
+                }
+            )
+            assert alice.receive_json()["type"] == "message:receipt"
+            delivered = bob.receive_json()
+            assert delivered["type"] == "message:receipt"
+            assert delivered["status"] == "delivered"
+            assert delivered["participant_id"] == "alice"
+
+            alice.send_json(
+                {
+                    "type": "message:read",
+                    "message_id": message["message_id"],
+                    "seq": message["seq"],
+                }
+            )
+            assert alice.receive_json()["type"] == "message:receipt"
+            read = bob.receive_json()
+            assert read["type"] == "message:receipt"
+            assert read["status"] == "read"
+
+            # A reconnect/retry with the same client id reuses the canonical
+            # message instead of creating a duplicate transcript entry.
+            bob.send_json(sent)
+            retried_for_alice = alice.receive_json()
+            retried_receipt = bob.receive_json()
+            assert retried_for_alice["message_id"] == message["message_id"]
+            assert retried_receipt["message_id"] == message["message_id"]
+            history = client.get(f"/api/teams/{team['id']}/messages").json()["messages"]
+            assert [item["text"] for item in history] == ["Can you review this?"]
 
             bob.send_json({"type": "thread:update", "reason": "finished"})
             update = alice.receive_json()

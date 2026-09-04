@@ -353,6 +353,12 @@ async def drive_codex_app_server(
             # object rather than the production Pydantic model.
             turn.params.model = request.model
     turn.execution_engine = "codex"
+    # ``TurnParams`` deliberately does not accept a client-supplied agent id.
+    # Preserve the server-resolved roster identity on the runtime-only turn so
+    # terminal scoring and trace records remain attributable to this member.
+    resolved_agent_id = str(getattr(agent, "agent_id", None) or "").strip()
+    if resolved_agent_id:
+        turn.execution_agent_id = resolved_agent_id
     raw_context = getattr(intent, "user_context", None)
     context = dict(raw_context) if isinstance(raw_context, dict) else {}
     trusted_parent = _trusted_realtime_parent(turn, agent, context, request.workspace)

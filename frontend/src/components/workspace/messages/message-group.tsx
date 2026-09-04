@@ -1,4 +1,5 @@
 import { swallow } from "@/core/utils/log";
+import { builtinPersonaDisplayName } from "@/core/agents/persona-display";
 import type { AIMessage, Message } from "@/core/api/types";
 import {
   BrainIcon,
@@ -175,14 +176,14 @@ function subagentIdentityFromArgs(args: Record<string, unknown>): {
   // ``role_display_name`` / ``codename`` come from the sub-agent lifecycle
   // markers and are already display-ready.
   const pickDisplay = (source: Record<string, unknown>): string => {
-    return (
+    const value =
       (typeof source.agent_name === "string" && source.agent_name.trim()) ||
       (typeof source.display_name === "string" && source.display_name.trim()) ||
       (typeof source.role_display_name === "string" &&
         source.role_display_name.trim()) ||
       (typeof source.codename === "string" && source.codename.trim()) ||
-      ""
-    );
+      "";
+    return builtinPersonaDisplayName(value) ?? value;
   };
 
   // Helper to pick the raw identity key and map it to a human-readable role.

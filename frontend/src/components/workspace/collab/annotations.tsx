@@ -85,9 +85,12 @@ export function AnnotationThread({
     const text = replyText.trim();
     if (!text) return;
     setReplying(true);
-    await replyToAnnotation(annotation.annotation_id, text);
-    setReplyText("");
-    setReplying(false);
+    try {
+      await replyToAnnotation(annotation.annotation_id, text);
+      setReplyText("");
+    } finally {
+      setReplying(false);
+    }
   }, [replyText, annotation.annotation_id, replyToAnnotation]);
 
   const handleKeyDown = useCallback(
@@ -360,10 +363,13 @@ export function AddAnnotationButton({
     const body = text.trim();
     if (!body) return;
     setSubmitting(true);
-    await addAnnotation(messageId, body);
-    setText("");
-    setOpen(false);
-    setSubmitting(false);
+    try {
+      await addAnnotation(messageId, body);
+      setText("");
+      setOpen(false);
+    } finally {
+      setSubmitting(false);
+    }
   }, [text, messageId, addAnnotation]);
 
   if (!open) {

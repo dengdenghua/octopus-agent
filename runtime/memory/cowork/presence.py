@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS read_state (
     thread_id    TEXT NOT NULL,
     member_id    TEXT NOT NULL,
     last_read    INTEGER NOT NULL DEFAULT 0,
+    last_read_message_seq INTEGER NOT NULL DEFAULT 0,
     last_seen_at TEXT,
     updated_at   TEXT NOT NULL,
     PRIMARY KEY (thread_id, member_id)
@@ -54,11 +55,13 @@ class MemberPresence:
     last_seen_at: str | None
     online: bool
     unread: int
+    last_read_message_seq: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "member_id": self.member_id,
             "last_read": self.last_read,
+            "last_read_message_seq": self.last_read_message_seq,
             "last_seen_at": self.last_seen_at,
             "online": self.online,
             "unread": self.unread,
@@ -82,14 +85,28 @@ class PresenceStore:
         self._db = self._dir / "presence.db"
         self._lock = threading.Lock()
         with self._lock, self._connect() as conn:
+            # Create the legacy table first; the column migration below also
+            # handles databases written before message-level cursors existed.
             conn.executescript(_SCHEMA)
+            columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(read_state)").fetchall()}
+            if "last_read_message_seq" not in columns:
+                conn.execute(
+                    "ALTER TABLE read_state ADD COLUMN last_read_message_seq INTEGER NOT NULL DEFAULT 0"
+                )
 
     def _connect(self) -> sqlite3.Connection:
         conn = connect_closing(str(self._db), timeout=10.0)
         conn.execute("PRAGMA journal_mode=WAL")
         return conn
 
-    def mark_read(self, thread_id: str, member_id: str, position: int) -> None:
+    def mark_read(
+        self,
+        thread_id: str,
+        member_id: str,
+        position: int,
+        *,
+        coordinate: str = "event",
+    ) -> None:
         """Record that ``member_id`` has caught up to ``position`` (monotonic —
         a lower position never rewinds the marker)."""
         thread_id = require_cowork_id(thread_id, label="thread_id")
@@ -97,14 +114,26 @@ class PresenceStore:
         position = int(position)
         if position < 0:
             raise ValueError("position must be >= 0")
+        if coordinate not in {"event", "message"}:
+            raise ValueError("coordinate must be event or message")
         with self._lock, self._connect() as conn:
-            conn.execute(
-                "INSERT INTO read_state(thread_id, member_id, last_read, updated_at) "
-                "VALUES (?, ?, ?, ?) "
-                "ON CONFLICT(thread_id, member_id) DO UPDATE SET "
-                "last_read=MAX(last_read, excluded.last_read), updated_at=excluded.updated_at",
-                (thread_id, member_id, position, _now_iso()),
-            )
+            if coordinate == "message":
+                conn.execute(
+                    "INSERT INTO read_state(thread_id, member_id, last_read_message_seq, updated_at) "
+                    "VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(thread_id, member_id) DO UPDATE SET "
+                    "last_read_message_seq=MAX(last_read_message_seq, excluded.last_read_message_seq), "
+                    "updated_at=excluded.updated_at",
+                    (thread_id, member_id, position, _now_iso()),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO read_state(thread_id, member_id, last_read, updated_at) "
+                    "VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(thread_id, member_id) DO UPDATE SET "
+                    "last_read=MAX(last_read, excluded.last_read), updated_at=excluded.updated_at",
+                    (thread_id, member_id, position, _now_iso()),
+                )
 
     def heartbeat(self, thread_id: str, member_id: str, *, now: str | None = None) -> None:
         """Presence ping — stamps ``last_seen_at`` for the member."""
@@ -126,22 +155,34 @@ class PresenceStore:
         member_id = require_cowork_id(member_id, label="member_id")
         with self._lock, self._connect() as conn:
             row = conn.execute(
-                "SELECT last_read, last_seen_at FROM read_state WHERE thread_id=? AND member_id=?",
+                "SELECT last_read, last_read_message_seq, last_seen_at FROM read_state WHERE thread_id=? AND member_id=?",
                 (thread_id, member_id),
             ).fetchone()
         if not row:
-            return {"last_read": 0, "last_seen_at": None}
-        return {"last_read": int(row[0]), "last_seen_at": row[1]}
+            return {"last_read": 0, "last_read_message_seq": 0, "last_seen_at": None}
+        return {
+            "last_read": int(row[0]),
+            "last_read_message_seq": int(row[1]),
+            "last_seen_at": row[2],
+        }
 
     def all(self, thread_id: str) -> dict[str, dict[str, Any]]:
         """Every recorded member's ``{last_read, last_seen_at}`` for the thread."""
         thread_id = require_cowork_id(thread_id, label="thread_id")
         with self._lock, self._connect() as conn:
             rows = conn.execute(
-                "SELECT member_id, last_read, last_seen_at FROM read_state WHERE thread_id=?",
+                "SELECT member_id, last_read, last_read_message_seq, last_seen_at FROM read_state WHERE thread_id=?",
                 (thread_id,),
             ).fetchall()
-        return {r[0]: {"last_read": int(r[1]), "last_seen_at": r[2]} for r in rows}
+        result: dict[str, dict[str, Any]] = {}
+        for r in rows:
+            value: dict[str, Any] = {"last_read": int(r[1]), "last_seen_at": r[3]}
+            # Keep the legacy shape stable for members who have never used the
+            # message cursor; expose the new field once it carries information.
+            if int(r[2]) > 0:
+                value["last_read_message_seq"] = int(r[2])
+            result[r[0]] = value
+        return result
 
 
 def _is_online(last_seen_at: str | None, now: datetime, window_s: int) -> bool:
@@ -174,6 +215,7 @@ def group_presence(
     thread_id: str,
     *,
     online_window_s: int = DEFAULT_ONLINE_WINDOW_S,
+    message_head: int | None = None,
     now: datetime | None = None,
 ) -> list[MemberPresence]:
     """Presence + unread for every member in the thread's folded roster.
@@ -190,15 +232,24 @@ def group_presence(
 
     out: list[MemberPresence] = []
     for member in state.roster:
-        rec = recorded.get(member.id, {"last_read": 0, "last_seen_at": None})
-        floor = max(int(rec["last_read"]), join_seq.get(member.id, 0))
+        rec = recorded.get(
+            member.id,
+            {"last_read": 0, "last_read_message_seq": 0, "last_seen_at": None},
+        )
+        if message_head is not None:
+            floor = int(rec.get("last_read_message_seq", 0))
+            unread = max(0, int(message_head) - floor)
+        else:
+            floor = max(int(rec["last_read"]), join_seq.get(member.id, 0))
+            unread = max(0, head - floor)
         out.append(
             MemberPresence(
                 member_id=member.id,
                 last_read=int(rec["last_read"]),
                 last_seen_at=rec["last_seen_at"],
                 online=_is_online(rec["last_seen_at"], current, online_window_s),
-                unread=max(0, head - floor),
+                unread=unread,
+                last_read_message_seq=int(rec.get("last_read_message_seq", 0)),
             )
         )
     return out

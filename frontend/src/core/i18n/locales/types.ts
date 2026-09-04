@@ -161,11 +161,17 @@ export interface Translations {
       completed: number,
       errors: number,
     ) => string;
+    agentResponseSummary: (
+      total: number,
+      responded: number,
+      errors: number,
+    ) => string;
     processDetails: string;
     completedSteps: (n: number) => string;
     completedThings: (n: number) => string;
     statusViewing: string;
     statusCompleted: string;
+    statusResponded: string;
     statusError: string;
     statusWaiting: string;
     assistant: string;
@@ -446,6 +452,13 @@ export interface Translations {
     kindRoomMessage: string;
     kindRoomTask: string;
     linkedRoom: string;
+    deliveryPending: (n: number) => string;
+    deliveryWaiting: string;
+    deliveryFailed: string;
+    deliveryRetry: string;
+    deliveryDismiss: string;
+    deliveryUnknownMember: string;
+    deliveryMonitorUnavailable: string;
   };
 
   // Collaboration capability
@@ -5607,6 +5620,10 @@ export interface Translations {
     status: string;
     nonTextContent: string;
     binaryContent: string;
+    taskHistory: string;
+    noTasks: string;
+    refreshTask: string;
+    cancelTask: string;
   };
 
   // Live Tool Timeline

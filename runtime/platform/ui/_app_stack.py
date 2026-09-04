@@ -408,6 +408,51 @@ def wire_stack(
         app.state.cowork_group_store = cowork_runtime.group_store
         app.state.cowork_async_store = cowork_runtime.async_store
         app.state.collaboration_store = cowork_runtime.collaboration_store
+
+        def _reconcile_collaboration_runs() -> None:
+            try:
+                result = cowork_runtime.collaboration_store.reconcile_expired_collaboration_runs()
+                if result.get("interrupted"):
+                    logging.getLogger(__name__).info(
+                        "cowork collaboration reconciled orphaned runs: %s",
+                        result,
+                    )
+            except Exception as exc:  # noqa: BLE001 — startup remains available for recovery UI
+                logging.getLogger(__name__).warning(
+                    "cowork collaboration run reconciliation failed: %s",
+                    exc,
+                )
+            try:
+                from runtime.sensing.gateway.collaboration_delivery_outbox import (
+                    drain_collaboration_delivery_outbox,
+                )
+
+                delivery_recovery = (
+                    cowork_runtime.collaboration_store.reconcile_collaboration_deliveries()
+                )
+                delivery_result = drain_collaboration_delivery_outbox(
+                    cowork_runtime.collaboration_store,
+                    logs_root=_paths.data_dir / "threads",
+                    limit=1000,
+                )
+                if (
+                    delivery_recovery.get("reclaimed")
+                    or delivery_recovery.get("failed")
+                    or delivery_result.get("delivered")
+                    or delivery_result.get("deferred")
+                ):
+                    logging.getLogger(__name__).info(
+                        "cowork collaboration delivery recovery: %s / %s",
+                        delivery_recovery,
+                        delivery_result,
+                    )
+            except Exception as exc:  # noqa: BLE001 — retain rows for a later retry
+                logging.getLogger(__name__).warning(
+                    "cowork collaboration delivery recovery failed: %s",
+                    exc,
+                )
+
+        app.router.add_event_handler("startup", _reconcile_collaboration_runs)
         if (
             stack is not None
             and cowork_runtime.runner_enabled

@@ -155,6 +155,7 @@ def test_react_tool_event_records_normalized_trace_payload():
         "name": "read_file",
         "tool_call_id": "call_1",
         "tool": "read_file",
+        "engine": "octopus",
         "origin": "react_compat",
         "iteration": 1,
         "status": "error",

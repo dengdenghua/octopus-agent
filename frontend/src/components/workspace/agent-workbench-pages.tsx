@@ -31,6 +31,7 @@ import {
   type WorkBlockStatus,
 } from "./work-blocks";
 import { cn } from "@/lib/utils";
+import { builtinPersonaDisplayName } from "@/core/agents/persona-display";
 import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales/types";
 import type { OutlineRound } from "@/core/threads/progress-outline";
@@ -122,7 +123,7 @@ function SummaryDiffEntryList({
   const { t } = useI18n();
   const Icon = kind === "artifact" ? FilePlus2Icon : FileTextIcon;
   return (
-    <ul className="stable-scroll-viewport max-h-48 overflow-y-auto">
+    <ul className="stable-scroll-viewport max-h-48 overflow-x-hidden overflow-y-auto">
       {entries.map((entry) => (
         <li key={entry.id}>
           <button
@@ -1313,8 +1314,11 @@ export function AgentSummaryPage({
     totalReferenceItems === 0;
 
   return (
-    <div className="stable-scroll-viewport flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
-      <div className="mx-auto w-full max-w-2xl px-5 py-4 pb-8">
+    <div
+      data-testid="agent-summary-scroll-viewport"
+      className="stable-scroll-viewport flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto bg-background/35"
+    >
+      <div className="mx-auto w-full min-w-0 max-w-2xl px-5 py-4 pb-8">
         {/* 思考/执行详情均在对话框内完整展示，右侧不再重复渲染。
             The task plan stays visible even when a transcript process event is
             focused: selecting evidence must not erase the user's todo list. */}
@@ -1368,7 +1372,7 @@ export function AgentSummaryPage({
               (phases.length > 0 ? (
                 <ul
                   className={cn(
-                    "stable-scroll-viewport mt-3 overflow-y-auto pr-0.5",
+                    "stable-scroll-viewport mt-3 overflow-x-hidden overflow-y-auto pr-0.5",
                     hasTodoPlan ? "max-h-72 space-y-0.5" : "space-y-1",
                   )}
                   data-testid={
@@ -1826,7 +1830,10 @@ export function AgentSummaryPage({
                   </div>
                 </div>
                 {/* 上下文列表 */}
-                <ul className="stable-scroll-viewport mt-2 max-h-64 space-y-1 overflow-y-auto pr-0.5">
+                <ul
+                  data-testid="workbench-reference-list"
+                  className="mt-2 space-y-1 overflow-x-hidden pr-0.5"
+                >
                   {observedReferenceTabs.length === 0 ? (
                     <li className="py-4 text-center text-xs text-muted-foreground">
                       {t.agentWorkbenchPages.noObservableReferences}
@@ -2122,6 +2129,8 @@ export function findAgentTileByFocusId(
 export function friendlyRoleName(role: string | undefined | null): string {
   const value = role?.trim();
   if (!value) return "Task Agent";
+  const personaName = builtinPersonaDisplayName(value);
+  if (personaName) return personaName;
   const lower = value.toLowerCase();
   const map: Record<string, string> = {
     architect: "Architect",

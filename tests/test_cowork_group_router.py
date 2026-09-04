@@ -15,6 +15,7 @@ from runtime.memory.cowork.group import MemberEvent
 from runtime.memory.cowork.group_store import GroupStore
 from runtime.memory.threads import ThreadStateStore
 from runtime.platform.ui.app import create_app
+from runtime.protocol import AgentMessageItem, ItemStatus
 from runtime.safety.auth import Identity, IdentityStore
 from runtime.sensing.gateway.cowork_group_router import create_cowork_group_router
 from runtime.sensing.gateway.team_rooms_router import create_team_rooms_router
@@ -65,6 +66,234 @@ def test_full_wechat_like_flow(tmp_path) -> None:
     after = c.get(f"/api/cowork/{t}").json()
     assert {m["id"] for m in after["state"]["roster"]} == {"user", "bob"}
     assert after["blackboard"]["plan"] == ["a", "b"]
+
+
+def test_collaboration_run_timeline_is_exposed_without_cross_thread_leakage(tmp_path) -> None:
+    group_store = GroupStore(base_dir=tmp_path / "groups")
+    collaboration = CollaborationStore(base_dir=tmp_path / "collaboration")
+    app = FastAPI()
+    app.include_router(
+        create_cowork_group_router(store=group_store, collaboration_store=collaboration)
+    )
+    client = TestClient(app)
+    collaboration.create_collaboration_run(
+        run_id="run-visible",
+        session_id="thread-runs",
+        turn_id="turn-1",
+        kind="group_fanout",
+        input={"message": "评审"},
+    )
+    collaboration.claim_collaboration_run("run-visible", worker_id="worker-a")
+
+    listed = client.get("/api/collab/thread-runs/runs")
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["runs"][0]["run_id"] == "run-visible"
+
+    detail = client.get("/api/collab/thread-runs/runs/run-visible")
+    assert detail.status_code == 200, detail.text
+    assert [event["event_type"] for event in detail.json()["events"]] == [
+        "created",
+        "claimed",
+    ]
+    assert client.get("/api/collab/other-thread/runs/run-visible").status_code == 404
+    assert client.get(
+        "/api/collab/thread-runs/runs", params={"status": "made-up"}
+    ).status_code == 400
+
+
+def test_collaboration_delivery_recovery_api_is_scoped_and_actionable(tmp_path) -> None:
+    group_store = GroupStore(base_dir=tmp_path / "groups")
+    collaboration = CollaborationStore(base_dir=tmp_path / "collaboration")
+    app = FastAPI()
+    app.include_router(
+        create_cowork_group_router(store=group_store, collaboration_store=collaboration)
+    )
+    client = TestClient(app)
+    item = AgentMessageItem(id="reply-1", text="result", status=ItemStatus.COMPLETED)
+    collaboration.enqueue_collaboration_delivery(
+        delivery_id="delivery-visible",
+        session_id="thread-deliveries",
+        turn_id="turn-1",
+        payload={"item": item.model_dump(by_alias=True, mode="json")},
+    )
+
+    listed = client.get("/api/collab/thread-deliveries/deliveries")
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["deliveries"][0]["delivery_id"] == "delivery-visible"
+    detail = client.get("/api/collab/thread-deliveries/deliveries/delivery-visible")
+    assert detail.status_code == 200
+    assert detail.json()["events"][0]["event_type"] == "enqueued"
+    assert (
+        client.get("/api/collab/other-thread/deliveries/delivery-visible").status_code == 404
+    )
+    assert client.get(
+        "/api/collab/thread-deliveries/deliveries", params={"status": "made-up"}
+    ).status_code == 400
+
+    dismissed = client.post(
+        "/api/collab/thread-deliveries/deliveries/delivery-visible/dismiss"
+    )
+    assert dismissed.status_code == 200
+    assert dismissed.json()["delivery"]["status"] == "dismissed"
+    retried = client.post(
+        "/api/collab/thread-deliveries/deliveries/delivery-visible/retry"
+    )
+    assert retried.status_code == 200
+    assert retried.json()["delivery"]["status"] == "pending"
+
+
+def test_linked_room_annotations_are_durable_threads(tmp_path) -> None:
+    group_store = GroupStore(base_dir=tmp_path / "groups")
+    collaboration = CollaborationStore(base_dir=tmp_path / "collaboration")
+    rooms = create_team_rooms_router(state_path=tmp_path / "team_rooms.json")
+    app = FastAPI()
+    app.include_router(rooms)
+    app.include_router(
+        create_cowork_group_router(
+            store=group_store,
+            collaboration_store=collaboration,
+            team_rooms_router=rooms,
+        )
+    )
+    client = TestClient(app)
+    thread_id = "thread-annotation"
+    room_id = client.post(
+        "/api/teams",
+        json={"name": "Annotations", "members": [{"name": "general"}]},
+    ).json()["id"]
+    assert client.post(
+        f"/api/collab/{thread_id}/link-room",
+        json={"room_id": room_id},
+    ).status_code == 200
+
+    created = client.post(
+        f"/api/collab/{thread_id}/annotations",
+        json={
+            "message_id": "thread:message-1",
+            "body": "请补充验收标准",
+            "display_name": "Eve",
+            "avatar_color": "#2563eb",
+        },
+    )
+    assert created.status_code == 200, created.text
+    annotation = created.json()["annotation"]
+    annotation_id = annotation["annotation_id"]
+    assert annotation["resolved"] is False
+
+    replied = client.post(
+        f"/api/collab/{thread_id}/annotations/{annotation_id}/replies",
+        json={"body": "已补充", "display_name": "Coder"},
+    )
+    assert replied.status_code == 200, replied.text
+    resolved = client.patch(
+        f"/api/collab/{thread_id}/annotations/{annotation_id}",
+        json={"resolved": True},
+    )
+    assert resolved.status_code == 200
+    listed = client.get(f"/api/collab/{thread_id}/annotations")
+    assert listed.status_code == 200
+    saved = listed.json()["annotations"]
+    assert len(saved) == 1
+    assert saved[0]["resolved"] is True
+    assert saved[0]["replies"][0]["body"] == "已补充"
+    assert client.delete(
+        f"/api/collab/{thread_id}/annotations/{annotation_id}",
+    ).status_code == 200
+    assert client.get(f"/api/collab/{thread_id}/annotations").json()["annotations"] == []
+
+
+def test_linked_room_message_reactions_are_durable_and_toggle(tmp_path) -> None:
+    group_store = GroupStore(base_dir=tmp_path / "groups")
+    collaboration = CollaborationStore(base_dir=tmp_path / "collaboration")
+    rooms = create_team_rooms_router(state_path=tmp_path / "team_rooms.json")
+    app = FastAPI()
+    app.include_router(rooms)
+    app.include_router(
+        create_cowork_group_router(
+            store=group_store,
+            collaboration_store=collaboration,
+            team_rooms_router=rooms,
+        )
+    )
+    client = TestClient(app)
+    thread_id = "thread-reactions"
+    room_id = client.post(
+        "/api/teams",
+        json={"name": "Reactions", "members": [{"name": "general"}]},
+    ).json()["id"]
+    assert client.post(
+        f"/api/collab/{thread_id}/link-room",
+        json={"room_id": room_id},
+    ).status_code == 200
+
+    created = client.post(
+        f"/api/collab/{thread_id}/reactions",
+        json={"message_id": "thread:message-1", "emoji": "👍"},
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["reaction"] == {
+        "message_id": "thread:message-1",
+        "emoji": "👍",
+        "count": 1,
+        "participant_ids": ["user"],
+        "active": True,
+    }
+    listed = client.get(f"/api/collab/{thread_id}/reactions")
+    assert listed.status_code == 200
+    assert listed.json()["reactions"][0]["count"] == 1
+
+    removed = client.post(
+        f"/api/collab/{thread_id}/reactions",
+        json={"message_id": "thread:message-1", "emoji": "👍"},
+    )
+    assert removed.status_code == 200
+    assert removed.json()["reaction"]["active"] is False
+    assert client.get(f"/api/collab/{thread_id}/reactions").json()["reactions"] == []
+
+
+def test_linked_room_pinned_messages_are_durable_and_toggle(tmp_path) -> None:
+    group_store = GroupStore(base_dir=tmp_path / "groups")
+    collaboration = CollaborationStore(base_dir=tmp_path / "collaboration")
+    rooms = create_team_rooms_router(state_path=tmp_path / "team_rooms.json")
+    app = FastAPI()
+    app.include_router(rooms)
+    app.include_router(
+        create_cowork_group_router(
+            store=group_store,
+            collaboration_store=collaboration,
+            team_rooms_router=rooms,
+        )
+    )
+    client = TestClient(app)
+    thread_id = "thread-pins"
+    room_id = client.post(
+        "/api/teams",
+        json={"name": "Pins", "members": [{"name": "general"}]},
+    ).json()["id"]
+    assert client.post(
+        f"/api/collab/{thread_id}/link-room", json={"room_id": room_id}
+    ).status_code == 200
+
+    added = client.post(
+        f"/api/collab/{thread_id}/pinned-messages",
+        json={"message_id": "thread:decision-1"},
+    )
+    assert added.status_code == 200, added.text
+    assert added.json()["pin"]["pinned"] is True
+    pinned = client.get(f"/api/collab/{thread_id}/pinned-messages").json()[
+        "pinned_messages"
+    ]
+    assert pinned[0]["message_id"] == "thread:decision-1"
+
+    removed = client.post(
+        f"/api/collab/{thread_id}/pinned-messages",
+        json={"message_id": "thread:decision-1"},
+    )
+    assert removed.status_code == 200
+    assert removed.json()["pin"] == {
+        "message_id": "thread:decision-1",
+        "pinned": False,
+    }
 
 
 def test_invalid_mode_rejected(tmp_path) -> None:

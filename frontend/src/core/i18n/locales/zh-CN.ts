@@ -215,11 +215,20 @@ export const zhCN: Translations = {
       ]
         .filter(Boolean)
         .join(" · "),
+    agentResponseSummary: (total, responded, errors) =>
+      [
+        `${total} 位成员`,
+        responded > 0 ? `${responded} 已回应` : "",
+        errors > 0 ? `${errors} 异常` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
     processDetails: "展开线索",
     completedSteps: (n: number) => `已完成 ${n} 个步骤`,
     completedThings: (n: number) => `完成了 ${n} 件事`,
     statusViewing: "运行中",
     statusCompleted: "已完成",
+    statusResponded: "已回应",
     statusError: "异常",
     statusWaiting: "等待中",
     assistant: "Assistant",
@@ -507,6 +516,13 @@ export const zhCN: Translations = {
     kindRoomMessage: "房间消息",
     kindRoomTask: "房间任务",
     linkedRoom: "已关联房间",
+    deliveryPending: (n) => `${n} 条成员回复待送达`,
+    deliveryWaiting: "正在恢复",
+    deliveryFailed: "送达失败",
+    deliveryRetry: "重试",
+    deliveryDismiss: "忽略这条回复",
+    deliveryUnknownMember: "协作成员",
+    deliveryMonitorUnavailable: "暂时无法读取回复送达状态",
   },
 
   // Collaboration Mode
@@ -6133,6 +6149,10 @@ export const zhCN: Translations = {
     status: "状态",
     nonTextContent: "[非文本内容]",
     binaryContent: "[二进制内容]",
+    taskHistory: "远程任务",
+    noTasks: "暂无远程任务",
+    refreshTask: "刷新任务状态",
+    cancelTask: "取消任务",
   },
 
   // Live Tool Timeline

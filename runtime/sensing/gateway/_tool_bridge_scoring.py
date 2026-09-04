@@ -306,10 +306,6 @@ def _record_score_safe(
     itself doesn't make any LLM calls — zero token cost.
     """
     try:
-        from runtime.memory.learning.turn_scoring import (
-            record_turn_score,
-            score_turn_outcome,
-        )
         from runtime.platform.process.session import current_session
         from runtime.safety.recovery.tenant_scope import (
             trusted_scope_from_session,
@@ -317,6 +313,62 @@ def _record_score_safe(
         )
 
         agent_id = getattr(agent, "agent_id", "") if agent else ""
+        if not agent_id:
+            return
+        thread_id = (
+            getattr(intent, "thread_id", None) or getattr(intent, "conversation_id", None) or ""
+        )
+        # The private context marker is stamped by the transport boundary.
+        # The active Session is the trusted compatibility carrier for OpenAI,
+        # CLI and worker paths that do not expose that marker to the intent.
+        scope = trusted_scope_from_user_context(intent.user_context)
+        if scope is None:
+            scope = trusted_scope_from_session(current_session())
+        _record_engine_neutral_score_safe(
+            agent_id=agent_id,
+            has_final_reply=has_final_reply,
+            tool_error_count=tool_error_count,
+            rounds_used=rounds_used,
+            interrupted=interrupted,
+            duration_ms=duration_ms,
+            thread_id=thread_id,
+            turn_id=str(getattr(current_session(), "turn_id", None) or ""),
+            scope=scope,
+        )
+    except (ImportError, AttributeError, OSError, ValueError):  # noqa: BLE001 — scoring is observability; failure must never block reply
+        # Scoring is observability · a failure must NEVER affect
+        # the user's reply. Swallow + move on.
+        pass
+
+
+def _record_engine_neutral_score_safe(
+    *,
+    agent_id: str,
+    has_final_reply: bool,
+    tool_error_count: int = 0,
+    rounds_used: int = 0,
+    duration_ms: int = 0,
+    interrupted: bool = False,
+    thread_id: str = "",
+    turn_id: str = "",
+    scope: Any = None,
+) -> None:
+    """Persist one score for *any* execution provider.
+
+    The native ReAct loop used to own both scoring and the auto-evolution
+    tick.  That made Codex turns invisible to learning even though they pass
+    through the same realtime lifecycle.  Keeping this small, provider
+    neutral writer here lets native and Codex share the exact same heuristic,
+    idempotent turn id and tenant scope without importing either execution
+    loop into the learning package.
+    """
+
+    try:
+        from runtime.memory.learning.turn_scoring import (
+            record_turn_score,
+            score_turn_outcome,
+        )
+
         if not agent_id:
             return
         score, reason = score_turn_outcome(
@@ -327,15 +379,6 @@ def _record_score_safe(
             interrupted=interrupted,
             duration_ms=duration_ms,
         )
-        thread_id = (
-            getattr(intent, "thread_id", None) or getattr(intent, "conversation_id", None) or ""
-        )
-        # The private context marker is stamped by the transport boundary.
-        # The active Session is the trusted compatibility carrier for OpenAI,
-        # CLI and worker paths that do not expose that marker to the intent.
-        scope = trusted_scope_from_user_context(intent.user_context)
-        if scope is None:
-            scope = trusted_scope_from_session(current_session())
         record_turn_score(
             agent_id=agent_id,
             score=score,
@@ -343,19 +386,114 @@ def _record_score_safe(
             rounds=rounds_used,
             duration_ms=duration_ms,
             thread_id=thread_id,
-            turn_id=str(getattr(current_session(), "turn_id", None) or ""),
+            turn_id=turn_id,
             scope=scope,
         )
-        # Auto-evolution tick · every 5 turns run the zero-cost
-        # regression heuristic; if it says "regressed" with ≥5
-        # post-change samples, auto-revert. This is the "anti-
-        # self-harm" feedback loop closing itself: a bad lesson
-        # won't persist past 5 bad turns.
+        # Auto-evolution tick · every 5 turns run the zero-cost regression
+        # heuristic; a provider must not get a free pass simply because its
+        # execution loop lives outside the native bridge.
         _auto_evolve_tick_safe(agent_id, scope=scope)
-    except (ImportError, AttributeError, OSError, ValueError):  # noqa: BLE001 — scoring is observability; failure must never block reply
-        # Scoring is observability · a failure must NEVER affect
-        # the user's reply. Swallow + move on.
+    except (ImportError, AttributeError, OSError, ValueError):  # noqa: BLE001
+        # Learning is observability. A broken score file or optional module
+        # must never turn a successful user task into a failed one.
         pass
+
+
+def _record_codex_turn_score_safe(*, turn: Any, agent: Any = None) -> None:
+    """Feed a completed Codex turn into the shared learning score stream.
+
+    Codex owns the inner tool loop, so it cannot provide Native's round
+    counter or ``StepEvent`` list.  The public realtime items are still a
+    durable, provider-neutral receipt: final answer presence, failed tool
+    items, lifecycle status and wall time are enough for the same coarse
+    quality signal. Fine-grained trajectories are handled separately by the
+    execution trace store.
+    """
+
+    try:
+        from datetime import UTC, datetime
+
+        from runtime.platform.process.session import current_session
+        from runtime.protocol import AgentMessageItem
+        from runtime.safety.auth.scope import TenantScope
+        from runtime.safety.recovery.tenant_scope import trusted_scope_from_session
+        from runtime.sensing.gateway.realtime_turn_input import _agent_id_from_params
+
+        params = getattr(turn, "params", None)
+        agent_id = str(
+            getattr(agent, "agent_id", None)
+            or getattr(turn, "execution_agent_id", None)
+            or (_agent_id_from_params(params) if params is not None else "")
+            or ""
+        ).strip()
+        if not agent_id:
+            return
+
+        items = list(getattr(turn, "items", None) or [])
+        final_reply = any(
+            isinstance(item, AgentMessageItem)
+            and str(getattr(item, "message_kind", "answer") or "answer") == "answer"
+            and bool(str(getattr(item, "text", "") or "").strip())
+            and str(getattr(getattr(item, "status", None), "value", getattr(item, "status", "")))
+            in {"completed", "complete"}
+            for item in items
+        )
+        tool_types = {"commandExecution", "fileChange", "mcpToolCall", "subagent"}
+        tool_error_count = sum(
+            1
+            for item in items
+            if str(getattr(getattr(item, "type", None), "value", getattr(item, "type", "")))
+            in tool_types
+            and str(getattr(getattr(item, "status", None), "value", getattr(item, "status", "")))
+            in {"failed", "error"}
+        )
+        status = str(
+            getattr(getattr(turn, "status", None), "value", getattr(turn, "status", ""))
+            or ""
+        ).lower()
+        interrupted = status in {"cancelled", "canceled", "interrupted", "paused"}
+        started_at = getattr(turn, "started_at", None)
+        completed_at = getattr(turn, "completed_at", None) or datetime.now(UTC)
+        duration_ms = 0
+        if started_at is not None:
+            try:
+                duration_ms = max(0, int((completed_at - started_at).total_seconds() * 1000))
+            except (TypeError, ValueError):
+                duration_ms = 0
+
+        scope = trusted_scope_from_session(current_session())
+        if scope is None and params is not None:
+            tenant_id = str(getattr(params, "tenant_id", None) or "").strip()
+            owner_actor_id = str(getattr(params, "owner_actor_id", None) or "").strip()
+            if bool(tenant_id) != bool(owner_actor_id):
+                # A partial private identity is an integrity failure. Do not
+                # fall back to the unscoped score file.
+                return
+            if tenant_id and owner_actor_id:
+                scope = TenantScope(tenant_id=tenant_id, actor_id=owner_actor_id)
+
+        thread_id = str(getattr(turn, "thread_id", None) or "")
+        tool_rounds = sum(
+            1
+            for item in items
+            if str(
+                getattr(getattr(item, "type", None), "value", getattr(item, "type", ""))
+            )
+            in tool_types
+        )
+        _record_engine_neutral_score_safe(
+            agent_id=agent_id,
+            has_final_reply=final_reply,
+            tool_error_count=tool_error_count,
+            rounds_used=max(1, tool_rounds),
+            duration_ms=duration_ms,
+            interrupted=interrupted,
+            thread_id=thread_id,
+            turn_id=str(getattr(turn, "id", None) or ""),
+            scope=scope,
+        )
+    except (ImportError, AttributeError, OSError, TypeError, ValueError):  # noqa: BLE001
+        _logger.debug("codex turn score skipped", exc_info=True)
 
 
 def _auto_evolve_tick_safe(

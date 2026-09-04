@@ -33,10 +33,10 @@ _PRESENCE_QUERY_RE = re.compile(
 _GROUP_WORK_REQUEST_RE = re.compile(
     r"(?:"
     r"(?:大家|各位|你们|全员|团队).{0,18}"
-    r"(?:看看|看下|分析|评审|审查|讨论|给.{0,6}意见|说说|觉得|比较|对比|分工|分别)"
+    r"(?:看看|看下|研究|调研|分析|评审|审查|讨论|给.{0,6}意见|说说|觉得|比较|对比|分工|分别)"
     r"|"
     r"(?:一起|分别|多角度|多个角度).{0,12}"
-    r"(?:看看|看下|分析|评审|审查|讨论|回答|验证)"
+    r"(?:看看|看下|研究|调研|分析|评审|审查|讨论|回答|验证)"
     r")",
     re.IGNORECASE,
 )
@@ -45,6 +45,37 @@ _ADVERSARIAL_RE = re.compile(
     r"(?:审查|评审|复核|找(?:出)?(?:问题|漏洞)|风险|反驳|挑战|辩论|互驳|"
     r"权衡|比较|对比|验证|测试|边界|失败路径|安全|回归|"
     r"critique|critic|review|challenge|debate|rebut|verify|risk|edge case)",
+    re.IGNORECASE,
+)
+
+# Requests that require a durable result must not use the lightweight
+# "everyone posts a 1-3 sentence bubble" path. That path deliberately has no
+# tools and used to turn requests such as "研究一下 Eight Sleep" into five
+# promises to work later, then mark the turn complete. Route concrete work to
+# the coordinator/topology so the normal agent loop can use tools and deliver a
+# verifiable result before the turn completes.
+_DELIVERABLE_WORK_RE = re.compile(
+    r"(?:"
+    r"研究|调研|检索|搜索|查(?:一?下|找|资料|官网)|"
+    r"实现|开发|编写|写(?:代码|脚本|文档|报告)|修改|修复|优化|重构|"
+    r"测试|验收|回归|运行|执行|安装|配置|部署|发布|提交|推送|"
+    r"生成|制作|导出|下载|制定|规划|策划|"
+    r"做.{0,12}(?:报告|方案|策划|计划|清单|表格)|"
+    r"整理(?:成|一份|报告|文档)"
+    r")",
+    re.IGNORECASE,
+)
+
+# A terse reaction is meaningful only in relation to the immediately preceding
+# turn. Broadcasting it to every persona makes each member invent a different
+# missing context ("???" became interface/CSS/story/finance guesses in a real
+# room). Let the coordinator recover the thread and decide whether the original
+# work should resume or be re-planned.
+_COORDINATOR_FOLLOWUP_RE = re.compile(
+    r"^(?:[?？!！.。…\s]{1,12}|"
+    r"(?:怎么回事|什么情况|还没好|怎么还没|继续|接着|恢复|上面(?:的)?任务|"
+    r"中断(?:的)?任务|上面中断任务|不是队长|你不是(?:\s*tl)?|队长呢|"
+    r"让你(?:理解|拆解|分派|转述)).{0,80})$",
     re.IGNORECASE,
 )
 
@@ -140,6 +171,18 @@ def is_explicit_group_work_request(message: str) -> bool:
     return bool(_GROUP_WORK_REQUEST_RE.search(str(message or "").strip()))
 
 
+def requires_coordinated_execution(message: str) -> bool:
+    """Whether the request needs execution/evidence instead of chat bubbles."""
+
+    return bool(_DELIVERABLE_WORK_RE.search(str(message or "").strip()))
+
+
+def is_coordinator_followup(message: str) -> bool:
+    """Whether a short turn should be resolved by the leader with history."""
+
+    return bool(_COORDINATOR_FOLLOWUP_RE.fullmatch(str(message or "").strip()))
+
+
 def select_team_pattern(
     message: str,
     *,
@@ -163,6 +206,12 @@ def select_team_pattern(
     if is_team_presence_query(text):
         return TeamPatternDecision(TEAM_PATTERNS["presence_check"], "roster state query")
 
+    if is_coordinator_followup(text):
+        return TeamPatternDecision(
+            TEAM_PATTERNS["focused_reply"],
+            "context-dependent follow-up is recovered by the coordinator",
+        )
+
     if addressed == 1:
         return TeamPatternDecision(
             TEAM_PATTERNS["focused_reply"],
@@ -170,6 +219,16 @@ def select_team_pattern(
         )
 
     group_requested = addressed > 1 or is_explicit_group_work_request(text)
+    if (
+        active_members > 1
+        and requires_coordinated_execution(text)
+        and (normalized_mode in {"cluster", "swarm"} or group_requested)
+    ):
+        return TeamPatternDecision(
+            TEAM_PATTERNS["coordinated_execution"],
+            "request requires a completed, verifiable deliverable",
+        )
+
     if active_members > 1 and (normalized_mode == "swarm" or group_requested):
         if _ADVERSARIAL_RE.search(text):
             return TeamPatternDecision(
@@ -212,8 +271,10 @@ __all__ = [
     "TeamPatternDecision",
     "TeamPatternSpec",
     "is_explicit_group_work_request",
+    "is_coordinator_followup",
     "is_team_presence_query",
     "pattern_member_role",
     "pattern_role_label",
+    "requires_coordinated_execution",
     "select_team_pattern",
 ]

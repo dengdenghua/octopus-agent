@@ -29,6 +29,9 @@ from runtime.sensing.gateway._realtime_turn_lifecycle_helpers import (
     _inject_cowork_turn_plan,
     _persist_cowork_user_message,
     _resolve_cowork_responder_agent,
+    _start_cowork_orchestration_run,
+    _turn_has_cowork_coordination_evidence,
+    _turn_has_cowork_delivery_evidence,
     _turn_has_observable_output,
 )
 from runtime.sensing.gateway._realtime_turn_lifecycle_resume import (
@@ -193,6 +196,21 @@ def _close_turn(
         with contextlib.suppress(Exception):
             log.item_completed(thread_id, turn.id, item)
     log.turn_completed(thread_id, turn.id, turn.status, error)
+
+    # Codex owns its inner loop, so it cannot use the native tool bridge's
+    # per-round scoring hook. Record the same coarse quality signal at the
+    # shared lifecycle boundary instead. Keeping this here (rather than in
+    # the Codex adapter) also guarantees one score for a turn that receives a
+    # late steering continuation or is closed through an interrupt path.
+    if str(getattr(turn, "execution_engine", "") or "").strip().lower() == "codex":
+        try:
+            from runtime.sensing.gateway._tool_bridge_scoring import (
+                _record_codex_turn_score_safe,
+            )
+
+            _record_codex_turn_score_safe(turn=turn)
+        except Exception:  # noqa: BLE001 — learning must never block closure
+            _logger.debug("codex lifecycle score skipped", exc_info=True)
 
     # dsh ``Stop``: fired when a full agent turn completes, successfully or
     # not (notification-type hook — post-hoc audit / metrics). Every path
@@ -891,6 +909,7 @@ async def _start_turn(
             not in {
                 "fanout",
                 "presence",
+                "orchestrated",
             }
         ):
             # A durable chat room accepts ordinary human conversation without
@@ -970,6 +989,14 @@ async def _start_turn(
             runtime._snapshot_to_thread_store(thread_id, log, intent)
             return turn
 
+        _start_cowork_orchestration_run(
+            runtime,
+            thread_id=thread_id,
+            turn=turn,
+            intent=intent,
+            text=text,
+        )
+
         # ── PHASE 5 · execution dispatch (topology/fast/react) ─────
         loop = asyncio.get_running_loop()
         gateway_provider = GatewayApprovalProvider(
@@ -1008,6 +1035,12 @@ async def _start_turn(
                 if isinstance(_team_pattern, dict)
                 else ""
             )
+            # The declarative team pattern is authoritative. A focused reply
+            # must not inherit a stale cluster topology, while an orchestrated
+            # task must not be forced back into the legacy bubble fan-out by
+            # serve_mesh/cowork_is_multi compatibility flags.
+            if _team_pattern_execution == "focused":
+                topology_id = None
             # Mode-level guard: single-agent modes MUST NOT route
             # through ``_drive_team_topology`` even if a leftover
             # ``topology_id`` slipped through (e.g. settings
@@ -1085,12 +1118,14 @@ async def _start_turn(
                     intent,
                     text=text,
                 )
-            elif (
-                _team_pattern_execution == "fanout"
-                or str(_cowork_context.get("serve_mesh") or "").strip() == "1"
-                or (
-                    bool(_cowork_context.get("cowork_is_multi"))
-                    and len(_cowork_context.get("cowork_responders") or []) > 1
+            elif _team_pattern_execution == "fanout" or (
+                not _team_pattern_execution
+                and (
+                    str(_cowork_context.get("serve_mesh") or "").strip() == "1"
+                    or (
+                        bool(_cowork_context.get("cowork_is_multi"))
+                        and len(_cowork_context.get("cowork_responders") or []) > 1
+                    )
                 )
             ):
                 # 蜂群 / 冒泡: the user picked the leaderless group mode. Fan the
@@ -1258,6 +1293,92 @@ async def _start_turn(
                     provider,
                     agent,
                     model=validated.model,
+                )
+
+        # A coordinated deliverable is not complete merely because the TL
+        # wrote a confident answer. Require server-observed delegation. Give
+        # the coordinator one bounded repair round so an omitted tool call can
+        # be corrected without making the user repeat the request.
+        if (
+            _team_pattern_execution == "orchestrated"
+            and turn.status
+            not in {
+                TurnStatus.PAUSED,
+                TurnStatus.CANCELLED,
+                TurnStatus.INTERRUPTED,
+                TurnStatus.FAILED,
+            }
+            and not _turn_has_cowork_delivery_evidence(turn)
+        ):
+            has_coordination = _turn_has_cowork_coordination_evidence(turn)
+            repair_reason = (
+                "missing_coordinator_synthesis"
+                if has_coordination
+                else "missing_delegation_evidence"
+            )
+            repair_prompt = (
+                "协调执行验收未通过：成员调用已有记录，但缺少队长在成员结果之后的统一结论。"
+                "请核验已有成员结果并立即给出最终综合交付，不要再次重复分派。"
+                if has_coordination
+                else (
+                    "协调执行验收未通过：本轮只有计划或文字结论，没有服务端可核验的成员调用记录。"
+                    "请现在实际调用合适的成员代理完成拆分任务，核验成员结果后再统一交付；"
+                    "不要只声称‘已分派’或重复计划。"
+                )
+            )
+            repair_context = dict(intent.user_context or {})
+            repair_context["cowork_orchestration_repair"] = {
+                "attempt": 1,
+                "max_attempts": 1,
+                "reason": repair_reason,
+            }
+            repair_intent = intent.model_copy(
+                update={
+                    "raw": repair_prompt,
+                    "normalized_goal": repair_prompt,
+                    "user_context": repair_context,
+                }
+            )
+            turn_driver = "react"
+            turn.execution_engine = "octopus"
+            await runtime._drive_react(
+                turn,
+                log,
+                emitter,
+                repair_intent,
+                provider,
+                agent,
+                model=validated.model,
+            )
+            if turn.status not in {
+                TurnStatus.PAUSED,
+                TurnStatus.CANCELLED,
+                TurnStatus.INTERRUPTED,
+                TurnStatus.FAILED,
+            } and not _turn_has_cowork_delivery_evidence(turn):
+                err = ErrorItem(
+                    message=(
+                        "协调执行缺少成员调用或队长最终综合，已停止将不完整交付误报为任务完成。"
+                        "该任务可继续恢复。"
+                    ),
+                    error_info={
+                        "code": "coordination_delivery_incomplete",
+                        "reason": repair_reason,
+                        "repair_attempts": 1,
+                        "recoverable": True,
+                    },
+                )
+                turn.items.append(err)
+                await runtime._emit_item_started(turn, log, emitter, err)
+                await runtime._emit_item_completed(turn, log, emitter, err)
+                turn.status = TurnStatus.INTERRUPTED
+                turn.outcome_reason = "coordination_delivery_incomplete"
+                log.turn_updated(
+                    thread_id,
+                    turn.id,
+                    objective_id=turn.objective_id,
+                    task_id=turn.task_id,
+                    outcome_reason=turn.outcome_reason,
                 )
 
         # ── PHASE 6 · status finalization + snapshot ───────────────

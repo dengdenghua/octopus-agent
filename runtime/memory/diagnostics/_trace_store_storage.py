@@ -29,6 +29,7 @@ from ._trace_store_recovery import (
 from ._trace_store_replay_storage import _TraceStoreReplayMixin
 from ._trace_store_schema import _SCHEMA
 from ._trace_store_sql import _TraceStoreSqlMixin
+from .execution_trace import build_execution_trace
 
 TRACE_SCHEMA_VERSION = 2
 
@@ -516,6 +517,38 @@ class _TraceStoreStorageMixin(_TraceStoreSqlMixin, _TraceStoreReplayMixin):
             offset=offset,
         )
         return [_decode_row(row, json_fields=("payload",)) for row in rows]
+
+    def execution_trace(
+        self,
+        *,
+        turn_id: str,
+        thread_id: str | None = None,
+        task_id: str | None = None,
+        agent_id: str | None = None,
+        scope: TenantScope | None = None,
+    ) -> dict[str, Any]:
+        """Return one provider-neutral execution trace for a turn.
+
+        This is a read model over the append-only ``agui_events`` table. It
+        deliberately does not replay provider protocol objects or query UI
+        state, so Codex and Native consumers see identical lifecycle facts.
+        """
+
+        events = self.events(
+            turn_id=turn_id,
+            thread_id=thread_id,
+            task_id=task_id,
+            agent_id=agent_id,
+            limit=10000,
+            scope=scope,
+        )
+        return build_execution_trace(
+            events,
+            thread_id=thread_id,
+            turn_id=turn_id,
+            task_id=task_id,
+            agent_id=agent_id,
+        )
 
     def approvals(
         self,

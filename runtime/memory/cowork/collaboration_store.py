@@ -15,6 +15,7 @@ import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from runtime.memory.cowork._collaboration_project_actions import (
     CollaborationProjectActionStoreMixin,
@@ -39,6 +40,14 @@ from runtime.memory.cowork._collaboration_session_writes import (
     append_message as _append_message,
 )
 from runtime.memory.cowork._collaboration_session_writes import upsert_task as _upsert_task
+from runtime.memory.cowork.collaboration_deliveries import (
+    COLLABORATION_DELIVERY_SCHEMA,
+    CollaborationDeliveryStoreMixin,
+)
+from runtime.memory.cowork.collaboration_runs import (
+    COLLABORATION_RUN_SCHEMA,
+    CollaborationRunStoreMixin,
+)
 from runtime.memory.cowork.ids import (
     normalize_display_name,
     normalize_search_query,
@@ -161,7 +170,69 @@ CREATE TABLE IF NOT EXISTS collaboration_messages (
 );
 CREATE INDEX IF NOT EXISTS idx_collab_messages_session ON collaboration_messages(session_id, seq);
 CREATE INDEX IF NOT EXISTS idx_collab_messages_room ON collaboration_messages(room_id, seq);
-"""
+CREATE TABLE IF NOT EXISTS collaboration_message_receipts (
+    room_id        TEXT NOT NULL,
+    message_id     TEXT NOT NULL,
+    participant_id TEXT NOT NULL,
+    status         TEXT NOT NULL,
+    seq            INTEGER,
+    updated_at     TEXT NOT NULL,
+    PRIMARY KEY (room_id, message_id, participant_id)
+);
+CREATE INDEX IF NOT EXISTS idx_collab_message_receipts_room
+ON collaboration_message_receipts(room_id, updated_at);
+
+CREATE TABLE IF NOT EXISTS collaboration_annotations (
+    annotation_id TEXT PRIMARY KEY,
+    session_id    TEXT NOT NULL,
+    room_id       TEXT NOT NULL,
+    message_id    TEXT NOT NULL,
+    author_id     TEXT NOT NULL DEFAULT '',
+    author_json   TEXT NOT NULL DEFAULT '{}',
+    body          TEXT NOT NULL,
+    created_at    INTEGER NOT NULL,
+    resolved      INTEGER NOT NULL DEFAULT 0,
+    updated_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_collab_annotations_session
+ON collaboration_annotations(session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_collab_annotations_message
+ON collaboration_annotations(session_id, message_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS collaboration_annotation_replies (
+    reply_id      TEXT PRIMARY KEY,
+    annotation_id TEXT NOT NULL,
+    author_id     TEXT NOT NULL DEFAULT '',
+    author_json   TEXT NOT NULL DEFAULT '{}',
+    body          TEXT NOT NULL,
+    created_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_collab_annotation_replies_annotation
+ON collaboration_annotation_replies(annotation_id, created_at);
+
+CREATE TABLE IF NOT EXISTS collaboration_message_reactions (
+    session_id     TEXT NOT NULL,
+    room_id        TEXT NOT NULL,
+    message_id     TEXT NOT NULL,
+    participant_id TEXT NOT NULL,
+    emoji          TEXT NOT NULL,
+    created_at     INTEGER NOT NULL,
+    PRIMARY KEY (session_id, message_id, participant_id, emoji)
+);
+CREATE INDEX IF NOT EXISTS idx_collab_message_reactions_session
+ON collaboration_message_reactions(session_id, message_id, emoji);
+
+CREATE TABLE IF NOT EXISTS collaboration_pinned_messages (
+    session_id     TEXT NOT NULL,
+    room_id        TEXT NOT NULL,
+    message_id     TEXT NOT NULL,
+    pinned_by      TEXT NOT NULL,
+    created_at     INTEGER NOT NULL,
+    PRIMARY KEY (session_id, message_id)
+);
+CREATE INDEX IF NOT EXISTS idx_collab_pinned_messages_session
+ON collaboration_pinned_messages(session_id, created_at DESC);
+""" + COLLABORATION_RUN_SCHEMA + COLLABORATION_DELIVERY_SCHEMA
 
 
 def _default_dir() -> Path:
@@ -442,7 +513,11 @@ def _normalize_task_payload(
     return payload
 
 
-class CollaborationStore(CollaborationProjectActionStoreMixin):
+class CollaborationStore(
+    CollaborationDeliveryStoreMixin,
+    CollaborationRunStoreMixin,
+    CollaborationProjectActionStoreMixin,
+):
     """Canonical room/task storage keyed by collaboration session id."""
 
     def __init__(self, base_dir: Path | str | None = None) -> None:
@@ -889,7 +964,28 @@ class CollaborationStore(CollaborationProjectActionStoreMixin):
                 "WHERE room_id = ? AND seq > ? ORDER BY seq DESC LIMIT ?",
                 (room_id, int(after_seq), limit),
             ).fetchall()
-        return [_message_from_row(row) for row in reversed(rows)]
+            receipt_rows = conn.execute(
+                "SELECT message_id, participant_id, status, seq, updated_at "
+                "FROM collaboration_message_receipts WHERE room_id = ?",
+                (room_id,),
+            ).fetchall()
+        receipts: dict[str, list[dict[str, Any]]] = {}
+        for receipt in receipt_rows:
+            receipts.setdefault(str(receipt[0]), []).append(
+                {
+                    "message_id": str(receipt[0]),
+                    "participant_id": str(receipt[1]),
+                    "status": str(receipt[2]),
+                    "seq": int(receipt[3]) if receipt[3] is not None else None,
+                    "updated_at": str(receipt[4]),
+                }
+            )
+        messages = [_message_from_row(row) for row in reversed(rows)]
+        for message in messages:
+            message["receipts"] = receipts.get(
+                str((message.get("metadata") or {}).get("message_id") or ""), []
+            )
+        return messages
 
     def search_messages(
         self,
@@ -934,3 +1030,338 @@ class CollaborationStore(CollaborationProjectActionStoreMixin):
                 (room_id, f"%{q}%", f"%{q}%", max(1, min(200, limit))),
             ).fetchall()
         return [_message_from_row(row) for row in rows]
+
+    def record_receipt_for_room(
+        self,
+        room_id: str,
+        *,
+        message_id: str,
+        participant_id: str,
+        status: str,
+        seq: int | None = None,
+    ) -> dict[str, Any]:
+        """Persist a monotonic delivery/read receipt in the canonical store."""
+        room_id = require_cowork_id(room_id, label="room_id")
+        message_id = require_cowork_id(message_id, label="message_id")
+        participant_id = require_cowork_id(participant_id, label="participant_id")
+        status = str(status or "").strip().lower()
+        if status not in {"delivered", "read"}:
+            raise ValueError("receipt status must be delivered or read")
+        normalized_seq = int(seq) if seq is not None else None
+        if normalized_seq is not None and normalized_seq < 1:
+            raise ValueError("receipt seq must be >= 1")
+        updated_at = _now()
+        with self._lock, self._connect() as conn:
+            existing = conn.execute(
+                "SELECT status, seq, updated_at FROM collaboration_message_receipts "
+                "WHERE room_id=? AND message_id=? AND participant_id=?",
+                (room_id, message_id, participant_id),
+            ).fetchone()
+            if existing and existing[0] == "read":
+                status = "read"
+            conn.execute(
+                "INSERT INTO collaboration_message_receipts "
+                "(room_id,message_id,participant_id,status,seq,updated_at) VALUES (?,?,?,?,?,?) "
+                "ON CONFLICT(room_id,message_id,participant_id) DO UPDATE SET "
+                "status=excluded.status, seq=COALESCE(excluded.seq, collaboration_message_receipts.seq), "
+                "updated_at=excluded.updated_at",
+                (room_id, message_id, participant_id, status, normalized_seq, updated_at),
+            )
+        return {
+            "room_id": room_id,
+            "message_id": message_id,
+            "participant_id": participant_id,
+            "status": status,
+            "seq": normalized_seq,
+            "updated_at": updated_at,
+        }
+
+    def annotations_for_session(self, session_id: str) -> list[dict[str, Any]]:
+        """Return durable annotation threads for one collaboration session."""
+        session_id = require_cowork_id(session_id, label="session_id")
+        with self._lock, self._connect() as conn:
+            rows = conn.execute(
+                "SELECT annotation_id, message_id, author_json, body, created_at, resolved "
+                "FROM collaboration_annotations WHERE session_id=? "
+                "ORDER BY resolved ASC, created_at DESC",
+                (session_id,),
+            ).fetchall()
+            replies = conn.execute(
+                "SELECT annotation_id, reply_id, author_json, body, created_at "
+                "FROM collaboration_annotation_replies WHERE annotation_id IN ("
+                "SELECT annotation_id FROM collaboration_annotations WHERE session_id=?"
+                ") ORDER BY created_at ASC",
+                (session_id,),
+            ).fetchall()
+        replies_by_annotation: dict[str, list[dict[str, Any]]] = {}
+        for reply in replies:
+            replies_by_annotation.setdefault(str(reply[0]), []).append(
+                {
+                    "reply_id": str(reply[1]),
+                    "author": _load(reply[2]) or None,
+                    "body": str(reply[3]),
+                    "created_at": int(reply[4]),
+                }
+            )
+        return [
+            {
+                "annotation_id": str(row[0]),
+                "message_id": str(row[1]),
+                "author": _load(row[2]) or None,
+                "body": str(row[3]),
+                "created_at": int(row[4]),
+                "resolved": bool(row[5]),
+                "replies": replies_by_annotation.get(str(row[0]), []),
+            }
+            for row in rows
+        ]
+
+    def add_annotation(
+        self,
+        session_id: str,
+        *,
+        room_id: str,
+        message_id: str,
+        author_id: str,
+        author: dict[str, Any] | None,
+        body: str,
+    ) -> dict[str, Any]:
+        session_id = require_cowork_id(session_id, label="session_id")
+        room_id = require_cowork_id(room_id, label="room_id")
+        message_id = require_cowork_id(message_id, label="message_id")
+        author_id = optional_cowork_id(author_id, label="author_id")
+        body = require_message_text(body)
+        now = int(datetime.now(UTC).timestamp())
+        annotation_id = f"annotation-{uuid4().hex}"
+        author_payload = _normalize_json_dict(author or {}, label="annotation author")
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "INSERT INTO collaboration_annotations "
+                "(annotation_id,session_id,room_id,message_id,author_id,author_json,body,created_at,resolved,updated_at) "
+                "VALUES (?,?,?,?,?,?,?,?,0,?)",
+                (
+                    annotation_id,
+                    session_id,
+                    room_id,
+                    message_id,
+                    author_id,
+                    _dump(author_payload, label="annotation author"),
+                    body,
+                    now,
+                    now,
+                ),
+            )
+        return {
+            "annotation_id": annotation_id,
+            "message_id": message_id,
+            "author": author_payload or None,
+            "body": body,
+            "created_at": now,
+            "resolved": False,
+            "replies": [],
+        }
+
+    def set_annotation_resolved(
+        self,
+        session_id: str,
+        annotation_id: str,
+        *,
+        resolved: bool,
+    ) -> dict[str, Any] | None:
+        session_id = require_cowork_id(session_id, label="session_id")
+        annotation_id = require_cowork_id(annotation_id, label="annotation_id")
+        with self._lock, self._connect() as conn:
+            cur = conn.execute(
+                "UPDATE collaboration_annotations SET resolved=?, updated_at=? "
+                "WHERE session_id=? AND annotation_id=?",
+                (1 if resolved else 0, int(datetime.now(UTC).timestamp()), session_id, annotation_id),
+            )
+            if cur.rowcount == 0:
+                return None
+        return next(
+            (item for item in self.annotations_for_session(session_id) if item["annotation_id"] == annotation_id),
+            None,
+        )
+
+    def delete_annotation(self, session_id: str, annotation_id: str) -> bool:
+        session_id = require_cowork_id(session_id, label="session_id")
+        annotation_id = require_cowork_id(annotation_id, label="annotation_id")
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "DELETE FROM collaboration_annotation_replies WHERE annotation_id=?",
+                (annotation_id,),
+            )
+            cur = conn.execute(
+                "DELETE FROM collaboration_annotations WHERE session_id=? AND annotation_id=?",
+                (session_id, annotation_id),
+            )
+            return cur.rowcount > 0
+
+    def add_annotation_reply(
+        self,
+        session_id: str,
+        annotation_id: str,
+        *,
+        author_id: str,
+        author: dict[str, Any] | None,
+        body: str,
+    ) -> dict[str, Any] | None:
+        session_id = require_cowork_id(session_id, label="session_id")
+        annotation_id = require_cowork_id(annotation_id, label="annotation_id")
+        author_id = optional_cowork_id(author_id, label="author_id")
+        body = require_message_text(body)
+        now = int(datetime.now(UTC).timestamp())
+        author_payload = _normalize_json_dict(author or {}, label="annotation reply author")
+        reply_id = f"annotation-reply-{uuid4().hex}"
+        with self._lock, self._connect() as conn:
+            exists = conn.execute(
+                "SELECT 1 FROM collaboration_annotations WHERE session_id=? AND annotation_id=?",
+                (session_id, annotation_id),
+            ).fetchone()
+            if not exists:
+                return None
+            conn.execute(
+                "INSERT INTO collaboration_annotation_replies "
+                "(reply_id,annotation_id,author_id,author_json,body,created_at) VALUES (?,?,?,?,?,?)",
+                (reply_id, annotation_id, author_id, _dump(author_payload, label="annotation reply author"), body, now),
+            )
+        return {
+            "reply_id": reply_id,
+            "author": author_payload or None,
+            "body": body,
+            "created_at": now,
+        }
+
+    def reactions_for_session(self, session_id: str) -> list[dict[str, Any]]:
+        """Aggregate message reactions without losing the member-level truth."""
+        session_id = require_cowork_id(session_id, label="session_id")
+        with self._lock, self._connect() as conn:
+            rows = conn.execute(
+                "SELECT message_id, emoji, participant_id FROM collaboration_message_reactions "
+                "WHERE session_id=? ORDER BY message_id, emoji, created_at",
+                (session_id,),
+            ).fetchall()
+        grouped: dict[tuple[str, str], list[str]] = {}
+        for message_id, emoji, participant_id in rows:
+            grouped.setdefault((str(message_id), str(emoji)), []).append(str(participant_id))
+        return [
+            {
+                "message_id": message_id,
+                "emoji": emoji,
+                "count": len(participants),
+                "participant_ids": participants,
+            }
+            for (message_id, emoji), participants in grouped.items()
+        ]
+
+    def toggle_message_reaction(
+        self,
+        session_id: str,
+        *,
+        room_id: str,
+        message_id: str,
+        participant_id: str,
+        emoji: str,
+    ) -> dict[str, Any]:
+        session_id = require_cowork_id(session_id, label="session_id")
+        room_id = require_cowork_id(room_id, label="room_id")
+        message_id = require_cowork_id(message_id, label="message_id")
+        participant_id = require_cowork_id(participant_id, label="participant_id")
+        emoji = str(emoji or "").strip()
+        if not emoji or len(emoji) > 16 or any(char.isspace() for char in emoji):
+            raise ValueError("reaction emoji must be a short non-whitespace token")
+        with self._lock, self._connect() as conn:
+            existing = conn.execute(
+                "SELECT 1 FROM collaboration_message_reactions "
+                "WHERE session_id=? AND message_id=? AND participant_id=? AND emoji=?",
+                (session_id, message_id, participant_id, emoji),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    "DELETE FROM collaboration_message_reactions "
+                    "WHERE session_id=? AND message_id=? AND participant_id=? AND emoji=?",
+                    (session_id, message_id, participant_id, emoji),
+                )
+                active = False
+            else:
+                conn.execute(
+                    "INSERT INTO collaboration_message_reactions "
+                    "(session_id,room_id,message_id,participant_id,emoji,created_at) VALUES (?,?,?,?,?,?)",
+                    (
+                        session_id,
+                        room_id,
+                        message_id,
+                        participant_id,
+                        emoji,
+                        int(datetime.now(UTC).timestamp()),
+                    ),
+                )
+                active = True
+        current = next(
+            (
+                item
+                for item in self.reactions_for_session(session_id)
+                if item["message_id"] == message_id and item["emoji"] == emoji
+            ),
+            {
+                "message_id": message_id,
+                "emoji": emoji,
+                "count": 0,
+                "participant_ids": [],
+            },
+        )
+        return {**current, "active": active}
+
+    def pinned_messages_for_session(self, session_id: str) -> list[dict[str, Any]]:
+        session_id = require_cowork_id(session_id, label="session_id")
+        with self._lock, self._connect() as conn:
+            rows = conn.execute(
+                "SELECT message_id, pinned_by, created_at FROM collaboration_pinned_messages "
+                "WHERE session_id=? ORDER BY created_at DESC",
+                (session_id,),
+            ).fetchall()
+        return [
+            {
+                "message_id": str(message_id),
+                "pinned_by": str(pinned_by),
+                "created_at": int(created_at),
+            }
+            for message_id, pinned_by, created_at in rows
+        ]
+
+    def toggle_pinned_message(
+        self,
+        session_id: str,
+        *,
+        room_id: str,
+        message_id: str,
+        participant_id: str,
+    ) -> dict[str, Any]:
+        session_id = require_cowork_id(session_id, label="session_id")
+        room_id = require_cowork_id(room_id, label="room_id")
+        message_id = require_cowork_id(message_id, label="message_id")
+        participant_id = require_cowork_id(participant_id, label="participant_id")
+        with self._lock, self._connect() as conn:
+            existing = conn.execute(
+                "SELECT pinned_by, created_at FROM collaboration_pinned_messages "
+                "WHERE session_id=? AND message_id=?",
+                (session_id, message_id),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    "DELETE FROM collaboration_pinned_messages WHERE session_id=? AND message_id=?",
+                    (session_id, message_id),
+                )
+                return {"message_id": message_id, "pinned": False}
+            created_at = int(datetime.now(UTC).timestamp())
+            conn.execute(
+                "INSERT INTO collaboration_pinned_messages "
+                "(session_id,room_id,message_id,pinned_by,created_at) VALUES (?,?,?,?,?)",
+                (session_id, room_id, message_id, participant_id, created_at),
+            )
+        return {
+            "message_id": message_id,
+            "pinned": True,
+            "pinned_by": participant_id,
+            "created_at": created_at,
+        }

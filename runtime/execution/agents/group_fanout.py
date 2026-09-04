@@ -23,9 +23,17 @@ that persistent team rooms have onto our one-shot fan-out.
 from __future__ import annotations
 
 import concurrent.futures as _cf
+import re
 from collections.abc import Callable
 from typing import Any
 
+from runtime.execution.agents.collaboration_quality import (
+    apply_semantic_review,
+    assess_collaboration_quality,
+    build_collaboration_delivery,
+    build_semantic_review_prompt,
+    parse_semantic_review,
+)
 from runtime.execution.agents.team_patterns import (
     is_team_presence_query,
     pattern_member_role,
@@ -57,6 +65,29 @@ _ERROR_OUTPUT_PREFIXES = (
     "[subagent error]",
 )
 
+_FUTURE_WORK_RE = re.compile(
+    r"(?:稍后|一会儿|随后|晚点|查完|整理好|完成后|做好后|"
+    r"我(?:先去|去查|来查|会去|马上去)).{0,80}"
+    r"(?:发|回复|汇报|整理|研究|查|看|做|处理|分析|验证|测试|扒)",
+    re.IGNORECASE,
+)
+_ANSWER_EVIDENCE_RE = re.compile(
+    r"(?:结论|结果|发现|数据显示|根据|证据|风险(?:是|在于)|建议(?:是|采用)|"
+    r"已(?:完成|验证|测试|查到|确认)|https?://)",
+    re.IGNORECASE,
+)
+_QUESTION_ONLY_RE = re.compile(r"[?？]\s*$")
+_INPUT_REQUEST_RE = re.compile(
+    r"(?:请|麻烦|需要你|能否|可否).{0,24}(?:提供|补充|发|贴|说明|告诉)|"
+    r"(?:把|先把).{0,24}(?:发来|贴出来|告诉我)",
+    re.IGNORECASE,
+)
+_GENERIC_WILLINGNESS_RE = re.compile(
+    r"(?:^|[，,。.!！\s])(?:没问题|可以(?:的)?|收到|我来|交给我|"
+    r"我能帮|我可以帮|随时可以).{0,28}$",
+    re.IGNORECASE,
+)
+
 
 def is_group_presence_query(message: str) -> bool:
     """Return whether a message only asks if the team is available."""
@@ -85,6 +116,20 @@ def _error_output(output: str) -> str | None:
     lowered = text.lower()
     if any(lowered.startswith(prefix) for prefix in _ERROR_OUTPUT_PREFIXES):
         return text
+    # A group-bubble lane cannot continue working after it returns. Treat a
+    # promise to report later as non-delivery, otherwise the UI would mark a
+    # future intention as a completed member result.
+    if _FUTURE_WORK_RE.search(text) and not _ANSWER_EVIDENCE_RE.search(text):
+        return "成员只承诺稍后处理，未在本轮交付结果"
+    # Fan-out replies must be self-contained contributions. Questions and
+    # requests for more input may be useful blockers, but are not answers and
+    # must not enter arbitration as completed responses.
+    if len(text) <= 160 and _QUESTION_ONLY_RE.search(text) and not _ANSWER_EVIDENCE_RE.search(text):
+        return "成员只提出反问，未形成有效回应"
+    if len(text) <= 200 and _INPUT_REQUEST_RE.search(text) and not _ANSWER_EVIDENCE_RE.search(text):
+        return "成员要求补充输入，未形成有效回应"
+    if len(text) <= 80 and _GENERIC_WILLINGNESS_RE.search(text):
+        return "成员仅表达接收或意愿，未形成有效回应"
     return None
 
 
@@ -103,9 +148,14 @@ def _score_reply(reply: dict[str, Any]) -> int:
     text = str(reply.get("reply") or "").strip()
     if not text:
         return 40
-    # Keep this intentionally boring and deterministic.  The score is a
-    # readiness signal, not a quality judgment: successful non-empty replies
-    # beat empty successes, and slightly fuller replies win stable ties.
+    quality = reply.get("quality")
+    if isinstance(quality, dict):
+        try:
+            # Keep successful replies above empty successes while ranking them
+            # with the explicit quality rubric rather than response length.
+            return 100 + max(0, min(100, int(quality.get("score") or 0)))
+        except (TypeError, ValueError):
+            pass
     return 100 + min(20, max(1, len(text) // 40))
 
 
@@ -158,6 +208,8 @@ def arbitrate_group_fanout(
             "round": int(reply.get("round") or 1),
             "pattern_role": reply.get("pattern_role"),
             "error": reply.get("error"),
+            "validation": reply.get("validation"),
+            "quality": reply.get("quality"),
         }
         if status == "failed":
             row["recommended_action"] = "retry_member"
@@ -283,7 +335,8 @@ def build_fanout_prompt(
         f"1) 必须切题——直接回应『{message}』这件事,不要跑题到你自己的日常话题或"
         f"泛泛地说'我能帮你'。\n"
         f"2) 不要反问、不要只表态不干活、不要复述别人的话。\n"
-        f"3) 不要长篇大论,不要列大纲。"
+        f"3) 只能陈述本轮已经完成的判断或结果；禁止承诺'稍后再查/整理后发'。\n"
+        f"4) 不要长篇大论,不要列大纲。"
     )
 
 
@@ -346,6 +399,9 @@ def run_group_fanout(
     mentioned: list[str] | None = None,
     speaker: str = "用户",
     pattern: dict[str, Any] | None = None,
+    max_quality_retries: int = 1,
+    semantic_reviewer: Callable[..., dict[str, Any]] | None = None,
+    semantic_reviewer_agent_id: str | None = None,
 ) -> dict[str, Any]:
     """Fan ``message`` out to each member in parallel; collect persona replies.
 
@@ -407,6 +463,7 @@ def run_group_fanout(
         1,
         min(max(int(debate_rounds or 1), pattern_rounds), _MAX_DEBATE_ROUNDS),
     )
+    quality_retries = max(0, min(int(max_quality_retries or 0), 2))
 
     def _run_round(round_no: int, transcript: list[dict[str, Any]]) -> list[dict[str, Any]]:
         def _one(index: int, member: dict[str, Any]) -> dict[str, Any]:
@@ -438,20 +495,73 @@ def run_group_fanout(
                 "error": None,
                 "round": round_no,
                 "pattern_role": pattern_role,
+                "validation": {
+                    "status": "pending",
+                    "reason": None,
+                    "attempt_count": 0,
+                    "attempts": [],
+                },
             }
+            attempts: list[dict[str, Any]] = []
             try:
-                res = agent_caller(
-                    agent_id=agent_id,
-                    prompt=prompt,
-                    timeout_s=90,
-                )
-                output = str(res.get("output") or "").strip()
-                output_error = _error_output(output)
-                rec["ok"] = bool(res.get("success")) and output_error is None
-                rec["reply"] = output if output_error is None else ""
-                rec["error"] = res.get("error") or output_error
+                attempt_prompt = prompt
+                for attempt_index in range(quality_retries + 1):
+                    res = agent_caller(
+                        agent_id=agent_id,
+                        prompt=attempt_prompt,
+                        timeout_s=90,
+                    )
+                    output = str(res.get("output") or "").strip()
+                    output_error = _error_output(output)
+                    transport_ok = bool(res.get("success"))
+                    rejection = str(res.get("error") or output_error or "").strip() or None
+                    attempts.append(
+                        {
+                            "attempt": attempt_index + 1,
+                            "status": (
+                                "accepted" if transport_ok and output_error is None else "rejected"
+                            ),
+                            "reason": rejection,
+                        }
+                    )
+                    if (
+                        transport_ok
+                        and output_error is not None
+                        and attempt_index < quality_retries
+                    ):
+                        attempt_prompt = (
+                            prompt
+                            + "\n\n<quality-retry>上一版回复未通过验收："
+                            + output_error
+                            + "。请直接重写并在本轮给出与原问题相关的具体判断、依据或明确阻塞；"
+                            + "不要解释返工过程。</quality-retry>"
+                        )
+                        continue
+                    rec["ok"] = transport_ok and output_error is None
+                    rec["reply"] = output if rec["ok"] else ""
+                    rec["error"] = rejection
+                    rec["validation"] = {
+                        "status": "accepted" if rec["ok"] else "rejected",
+                        "reason": rec["error"],
+                        "attempt_count": len(attempts),
+                        "attempts": attempts,
+                    }
+                    break
             except Exception as exc:  # noqa: BLE001 — one member's failure is isolated
                 rec["error"] = f"{type(exc).__name__}: {exc}"
+                rec["validation"] = {
+                    "status": "rejected",
+                    "reason": rec["error"],
+                    "attempt_count": len(attempts) + 1,
+                    "attempts": [
+                        *attempts,
+                        {
+                            "attempt": len(attempts) + 1,
+                            "status": "rejected",
+                            "reason": rec["error"],
+                        },
+                    ],
+                }
             return rec
 
         results: list[dict[str, Any]] = []
@@ -469,10 +579,11 @@ def run_group_fanout(
     for round_no in range(1, rounds + 1):
         round_replies = _run_round(round_no, transcript)
         # Stable global response ids across rounds.
-        for reply in round_replies:
+        response_offset = len(all_replies)
+        for index, reply in enumerate(round_replies):
             reply["response_id"] = _response_id(
                 turn_id,
-                len(all_replies),
+                response_offset + index,
                 str(reply.get("agent_id") or ""),
             )
         all_replies.extend(round_replies)
@@ -490,8 +601,58 @@ def run_group_fanout(
             break  # nobody spoke this round — no point debating into a void
 
     spoke = sum(1 for r in all_replies if r["ok"] and r["reply"].strip())
+    attempt_count = sum(
+        max(1, int((reply.get("validation") or {}).get("attempt_count") or 1))
+        for reply in all_replies
+    )
+    quality_retry_count = max(0, attempt_count - len(all_replies))
+    recovered_after_retry_count = sum(
+        1
+        for reply in all_replies
+        if reply.get("ok") and int((reply.get("validation") or {}).get("attempt_count") or 1) > 1
+    )
+    quality = assess_collaboration_quality(msg, all_replies, pattern=pattern_payload)
+    # Outcome order is identical to reply order, including repeated agent ids
+    # across debate rounds, so zip preserves per-round quality identity.
+    for reply, outcome in zip(all_replies, quality.get("outcomes") or [], strict=False):
+        reply["quality"] = outcome if isinstance(outcome, dict) else None
     arbitration = arbitrate_group_fanout(all_replies, turn_id=turn_id)
     synthesis = synthesize_group_fanout(all_replies, arbitration)
+    delivery = build_collaboration_delivery(all_replies, quality)
+    if semantic_reviewer is not None and bool(quality.get("evidence_required")):
+        valid_response_ids = {
+            str(item.get("response_id") or "")
+            for item in delivery.get("contributions") or []
+            if isinstance(item, dict) and str(item.get("response_id") or "")
+        }
+        try:
+            review_result = semantic_reviewer(
+                prompt=build_semantic_review_prompt(msg, delivery),
+                timeout_s=120,
+            )
+            if not review_result.get("success"):
+                raise RuntimeError(str(review_result.get("error") or "semantic reviewer failed"))
+            semantic_review = parse_semantic_review(
+                str(review_result.get("output") or ""),
+                valid_response_ids=valid_response_ids,
+                reviewer_agent_id=semantic_reviewer_agent_id,
+            )
+        except Exception as exc:  # noqa: BLE001 — fail closed, keep contributions visible
+            semantic_review = {
+                "schema": "octopus.collaboration_semantic_review.v1",
+                "verdict": "review_failed",
+                "confidence": 0.0,
+                "accepted_response_ids": [],
+                "issues": [
+                    {
+                        "code": "reviewer_error",
+                        "message": f"{type(exc).__name__}: {exc}"[:1000],
+                    }
+                ],
+                "summary": "语义验证执行失败",
+                "reviewer_agent_id": semantic_reviewer_agent_id,
+            }
+        quality, delivery = apply_semantic_review(quality, delivery, semantic_review)
     debate = (
         {
             "rounds": max([int(r.get("round") or 1) for r in all_replies], default=1),
@@ -506,10 +667,15 @@ def run_group_fanout(
         "replies": all_replies,
         "count": len(all_replies),
         "spoke": spoke,
+        "attempt_count": attempt_count,
+        "quality_retry_count": quality_retry_count,
+        "recovered_after_retry_count": recovered_after_retry_count,
         "dropped": capacity["dropped_members"],
         "capacity": capacity,
         "arbitration": arbitration,
         "synthesis": synthesis,
+        "quality": quality,
+        "delivery": delivery,
         "debate": debate,
         "pattern": pattern_payload or None,
     }

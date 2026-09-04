@@ -21,6 +21,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/.well-known/agent-card.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agent Card
+         * @description Returns the public AgentCard describing this agent's capabilities, supported transports, and skills.
+         */
+        get: operations["_get_agent_card__well_known_agent_card_json_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/a2a/agents": {
         parameters: {
             query?: never;
@@ -100,6 +120,513 @@ export interface paths {
         put?: never;
         /** Send Task */
         post: operations["send_task_api_a2a_agents__agent_id__send_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/rpc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A2A JSON-RPC endpoint
+         * @description A2A JSON-RPC 2.0 endpoint. The `method` field selects the operation;
+         *     `params` must match that method's schema (see the `oneOf` below).
+         *
+         *     **Supported methods:**
+         *
+         *     - `SendMessage` — Send a message to the agent (returns a Task or response Message).
+         *     - `SendStreamingMessage` — Send a message and receive a Server-Sent Events stream.
+         *     - `GetTask` — Fetch a task by ID.
+         *     - `ListTasks` — List tasks with pagination and filtering.
+         *     - `CancelTask` — Cancel an in-progress task.
+         *     - `CreateTaskPushNotificationConfig` — Register a push-notification config on a task.
+         *     - `GetTaskPushNotificationConfig` — Read a single push-notification config.
+         *     - `ListTaskPushNotificationConfigs` — List all push-notification configs for a task.
+         *     - `DeleteTaskPushNotificationConfig` — Delete a push-notification config.
+         *     - `SubscribeToTask` — Subscribe to task events via Server-Sent Events.
+         *     - `GetExtendedAgentCard` — Fetch the authenticated extended agent card.
+         */
+        post: operations["handle_requests_api_a2a_rpc_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/server/extendedAgentCard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Handle Authenticated Agent Card
+         * @description Handles the 'agentCard' REST method.
+         */
+        get: operations["handle_authenticated_agent_card_api_a2a_server_extendedAgentCard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/server/message:send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * On Message Send
+         * @description Handles the 'message/send' REST method.
+         */
+        post: operations["on_message_send_api_a2a_server_message_send_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/server/message:stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * On Message Send Stream
+         * @description Handles the 'message/stream' REST method.
+         */
+        post: operations["on_message_send_stream_api_a2a_server_message_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/server/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tasks
+         * @description Handles the 'tasks/list' REST method.
+         */
+        get: operations["list_tasks_api_a2a_server_tasks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/server/tasks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * On Get Task
+         * @description Handles the 'tasks/{id}' REST method.
+         */
+        get: operations["on_get_task_api_a2a_server_tasks__id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/server/tasks/{id}/pushNotificationConfigs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Push Notifications
+         * @description Handles the 'tasks/pushNotificationConfig/list' REST method.
+         */
+        get: operations["list_push_notifications_api_a2a_server_tasks__id__pushNotificationConfigs_get"];
+        put?: never;
+        /**
+         * Set Push Notification
+         * @description Handles the 'tasks/pushNotificationConfig/set' REST method.
+         */
+        post: operations["set_push_notification_api_a2a_server_tasks__id__pushNotificationConfigs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/server/tasks/{id}/pushNotificationConfigs/{push_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Push Notification
+         * @description Handles the 'tasks/pushNotificationConfig/get' REST method.
+         */
+        get: operations["get_push_notification_api_a2a_server_tasks__id__pushNotificationConfigs__push_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Push Notification
+         * @description Handles the 'tasks/pushNotificationConfig/delete' REST method.
+         */
+        delete: operations["delete_push_notification_api_a2a_server_tasks__id__pushNotificationConfigs__push_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/server/tasks/{id}:cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * On Cancel Task
+         * @description Handles the 'tasks/cancel' REST method.
+         */
+        post: operations["on_cancel_task_api_a2a_server_tasks__id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/server/tasks/{id}:subscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * On Subscribe To Task
+         * @description Handles the 'SubscribeToTask' REST method.
+         */
+        get: operations["on_subscribe_to_task_api_a2a_server_tasks__id__subscribe_get"];
+        put?: never;
+        /**
+         * On Subscribe To Task
+         * @description Handles the 'SubscribeToTask' REST method.
+         */
+        post: operations["on_subscribe_to_task_api_a2a_server_tasks__id__subscribe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/server/v1/card": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Partial
+         * @description partial(func, *args, **keywords) - new function with partial application
+         *     of the given arguments and keywords.
+         */
+        get: operations["partial_api_a2a_server_v1_card_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/server/v1/message:send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Partial
+         * @description partial(func, *args, **keywords) - new function with partial application
+         *     of the given arguments and keywords.
+         */
+        post: operations["partial_api_a2a_server_v1_message_send_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/server/v1/message:stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Partial
+         * @description partial(func, *args, **keywords) - new function with partial application
+         *     of the given arguments and keywords.
+         */
+        post: operations["partial_api_a2a_server_v1_message_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/server/v1/tasks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Partial
+         * @description partial(func, *args, **keywords) - new function with partial application
+         *     of the given arguments and keywords.
+         */
+        get: operations["partial_api_a2a_server_v1_tasks__id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/server/v1/tasks/{id}/pushNotificationConfigs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Partial
+         * @description partial(func, *args, **keywords) - new function with partial application
+         *     of the given arguments and keywords.
+         */
+        get: operations["partial_api_a2a_server_v1_tasks__id__pushNotificationConfigs_get"];
+        put?: never;
+        /**
+         * Partial
+         * @description partial(func, *args, **keywords) - new function with partial application
+         *     of the given arguments and keywords.
+         */
+        post: operations["partial_api_a2a_server_v1_tasks__id__pushNotificationConfigs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/server/v1/tasks/{id}/pushNotificationConfigs/{push_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Partial
+         * @description partial(func, *args, **keywords) - new function with partial application
+         *     of the given arguments and keywords.
+         */
+        get: operations["partial_api_a2a_server_v1_tasks__id__pushNotificationConfigs__push_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/server/v1/tasks/{id}:cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Partial
+         * @description partial(func, *args, **keywords) - new function with partial application
+         *     of the given arguments and keywords.
+         */
+        post: operations["partial_api_a2a_server_v1_tasks__id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/server/v1/tasks/{id}:subscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Partial
+         * @description partial(func, *args, **keywords) - new function with partial application
+         *     of the given arguments and keywords.
+         */
+        get: operations["partial_api_a2a_server_v1_tasks__id__subscribe_get"];
+        put?: never;
+        /**
+         * Partial
+         * @description partial(func, *args, **keywords) - new function with partial application
+         *     of the given arguments and keywords.
+         */
+        post: operations["partial_api_a2a_server_v1_tasks__id__subscribe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Tasks */
+        get: operations["list_tasks_api_a2a_tasks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/tasks/{local_task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Task */
+        get: operations["get_task_api_a2a_tasks__local_task_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/tasks/{local_task_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Task */
+        post: operations["cancel_task_api_a2a_tasks__local_task_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/tasks/{local_task_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Task Events */
+        get: operations["get_task_events_api_a2a_tasks__local_task_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/tasks/{local_task_id}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh Task */
+        post: operations["refresh_task_api_a2a_tasks__local_task_id__refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/tasks/{local_task_id}/subscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Subscribe Task */
+        get: operations["subscribe_task_api_a2a_tasks__local_task_id__subscribe_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3597,6 +4124,130 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/collab/{thread_id}/annotations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Annotations */
+        get: operations["list_annotations_api_collab__thread_id__annotations_get"];
+        put?: never;
+        /** Create Annotation */
+        post: operations["create_annotation_api_collab__thread_id__annotations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/annotations/{annotation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Annotation */
+        delete: operations["delete_annotation_api_collab__thread_id__annotations__annotation_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Annotation */
+        patch: operations["update_annotation_api_collab__thread_id__annotations__annotation_id__patch"];
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/annotations/{annotation_id}/replies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Annotation Reply */
+        post: operations["create_annotation_reply_api_collab__thread_id__annotations__annotation_id__replies_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Collaboration Deliveries
+         * @description Reliable result-delivery state for recovery and operator visibility.
+         */
+        get: operations["list_collaboration_deliveries_api_collab__thread_id__deliveries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/deliveries/{delivery_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Collaboration Delivery */
+        get: operations["get_collaboration_delivery_api_collab__thread_id__deliveries__delivery_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/deliveries/{delivery_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dismiss Collaboration Delivery */
+        post: operations["dismiss_collaboration_delivery_api_collab__thread_id__deliveries__delivery_id__dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/deliveries/{delivery_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Collaboration Delivery */
+        post: operations["retry_collaboration_delivery_api_collab__thread_id__deliveries__delivery_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/collab/{thread_id}/link-room": {
         parameters: {
             query?: never;
@@ -3612,6 +4263,42 @@ export interface paths {
          *     stop drifting as separate sources of truth.
          */
         post: operations["link_session_room_api_collab__thread_id__link_room_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/pinned-messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Pinned Messages */
+        get: operations["list_pinned_messages_api_collab__thread_id__pinned_messages_get"];
+        put?: never;
+        /** Toggle Pinned Message */
+        post: operations["toggle_pinned_message_api_collab__thread_id__pinned_messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/reactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Message Reactions */
+        get: operations["list_message_reactions_api_collab__thread_id__reactions_get"];
+        put?: never;
+        /** Toggle Message Reaction */
+        post: operations["toggle_message_reaction_api_collab__thread_id__reactions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3688,6 +4375,46 @@ export interface paths {
          *     only then projects the task into collaboration storage.
          */
         post: operations["message_project_action_api_collab__thread_id__room_messages__message_seq__project_actions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Collaboration Runs
+         * @description Durable multi-agent executions for timeline replay and recovery UI.
+         */
+        get: operations["list_collaboration_runs_api_collab__thread_id__runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Collaboration Run
+         * @description One run plus its immutable lifecycle events.
+         */
+        get: operations["get_collaboration_run_api_collab__thread_id__runs__run_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -14600,6 +15327,14 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        A2ARequest: {
+            id?: string | number | null;
+            /** @enum {string} */
+            jsonrpc: "2.0";
+            /** @enum {string} */
+            method: "SendMessage" | "SendStreamingMessage" | "GetTask" | "ListTasks" | "CancelTask" | "CreateTaskPushNotificationConfig" | "GetTaskPushNotificationConfig" | "ListTaskPushNotificationConfigs" | "DeleteTaskPushNotificationConfig" | "SubscribeToTask" | "GetExtendedAgentCard";
+            params?: components["schemas"]["SendMessageRequest"] | components["schemas"]["GetTaskRequest"] | components["schemas"]["ListTasksRequest"] | components["schemas"]["CancelTaskRequest"] | components["schemas"]["TaskPushNotificationConfig"] | components["schemas"]["GetTaskPushNotificationConfigRequest"] | components["schemas"]["ListTaskPushNotificationConfigsRequest"] | components["schemas"]["DeleteTaskPushNotificationConfigRequest"] | components["schemas"]["SubscribeToTaskRequest"] | components["schemas"]["GetExtendedAgentCardRequest"];
+        };
         /** AcquireLeaseBody */
         AcquireLeaseBody: {
             /** File Path */
@@ -14728,6 +15463,43 @@ export interface components {
                 [key: string]: string;
             };
         };
+        /** AnnotationBody */
+        AnnotationBody: {
+            /**
+             * Avatar Color
+             * @default
+             */
+            avatar_color: string;
+            /** Body */
+            body: string;
+            /**
+             * Display Name
+             * @default
+             */
+            display_name: string;
+            /** Message Id */
+            message_id: string;
+        };
+        /** AnnotationReplyBody */
+        AnnotationReplyBody: {
+            /**
+             * Avatar Color
+             * @default
+             */
+            avatar_color: string;
+            /** Body */
+            body: string;
+            /**
+             * Display Name
+             * @default
+             */
+            display_name: string;
+        };
+        /** AnnotationResolvedBody */
+        AnnotationResolvedBody: {
+            /** Resolved */
+            resolved: boolean;
+        };
         /** AppendRecordingEventsRequest */
         AppendRecordingEventsRequest: {
             /** Events */
@@ -14803,6 +15575,12 @@ export interface components {
         AuthProvidersResponse: {
             /** Providers */
             providers: components["schemas"]["AuthProvider"][];
+        };
+        AuthenticationInfo: {
+            /** @example  */
+            credentials?: string;
+            /** @example scheme */
+            scheme?: string;
         };
         /** AutomationPolicyRuleInstallBody */
         AutomationPolicyRuleInstallBody: {
@@ -14990,6 +15768,13 @@ export interface components {
         CancelLoopRunRequest: {
             /** Reason */
             reason?: string | null;
+        };
+        CancelTaskRequest: {
+            /** @example id */
+            id?: string;
+            metadata?: Record<string, never>;
+            /** @example  */
+            tenant?: string;
         };
         /** CandidateCanaryOutcomeBody */
         CandidateCanaryOutcomeBody: {
@@ -15870,6 +16655,14 @@ export interface components {
             /** Urls */
             urls?: string[];
         };
+        DeleteTaskPushNotificationConfigRequest: {
+            /** @example id */
+            id?: string;
+            /** @example task_id */
+            task_id?: string;
+            /** @example  */
+            tenant?: string;
+        };
         /** DetachFromGroupBody */
         DetachFromGroupBody: {
             /** Expected Project Id */
@@ -16200,6 +16993,26 @@ export interface components {
              */
             style_prompt: string;
         };
+        GetExtendedAgentCardRequest: {
+            /** @example  */
+            tenant?: string;
+        };
+        GetTaskPushNotificationConfigRequest: {
+            /** @example id */
+            id?: string;
+            /** @example task_id */
+            task_id?: string;
+            /** @example  */
+            tenant?: string;
+        };
+        GetTaskRequest: {
+            /** Format: int32 */
+            history_length?: number;
+            /** @example id */
+            id?: string;
+            /** @example  */
+            tenant?: string;
+        };
         /** GrantBody */
         GrantBody: {
             /** From Msg */
@@ -16388,6 +17201,37 @@ export interface components {
         LinkRoomBody: {
             /** Room Id */
             room_id: string;
+        };
+        ListTaskPushNotificationConfigsRequest: {
+            /** Format: int32 */
+            page_size?: number;
+            /** @example  */
+            page_token?: string;
+            /** @example task_id */
+            task_id?: string;
+            /** @example  */
+            tenant?: string;
+        };
+        ListTasksRequest: {
+            /** @example  */
+            context_id?: string;
+            /** Format: int32 */
+            history_length?: number;
+            /** @example false */
+            include_artifacts?: boolean;
+            /** Format: int32 */
+            page_size?: number;
+            /** @example  */
+            page_token?: string;
+            /**
+             * @example TASK_STATE_SUBMITTED
+             * @enum {string}
+             */
+            status?: "TASK_STATE_UNSPECIFIED" | "TASK_STATE_SUBMITTED" | "TASK_STATE_WORKING" | "TASK_STATE_COMPLETED" | "TASK_STATE_FAILED" | "TASK_STATE_CANCELED" | "TASK_STATE_INPUT_REQUIRED" | "TASK_STATE_REJECTED" | "TASK_STATE_AUTH_REQUIRED";
+            /** Format: date-time */
+            status_timestamp_after?: string;
+            /** @example  */
+            tenant?: string;
         };
         /** LoopAttempt */
         LoopAttempt: {
@@ -16708,6 +17552,40 @@ export interface components {
              */
             summary: string;
         };
+        Message: {
+            /** @example  */
+            context_id?: string;
+            /**
+             * @example [
+             *       ""
+             *     ]
+             */
+            extensions?: string[];
+            /** @example message_id */
+            message_id?: string;
+            metadata?: Record<string, never>;
+            /**
+             * @example [
+             *       {
+             *         "text": ""
+             *       }
+             *     ]
+             */
+            parts?: components["schemas"]["Part"][];
+            /**
+             * @example [
+             *       ""
+             *     ]
+             */
+            reference_task_ids?: string[];
+            /**
+             * @example ROLE_USER
+             * @enum {string}
+             */
+            role?: "ROLE_UNSPECIFIED" | "ROLE_USER" | "ROLE_AGENT";
+            /** @example  */
+            task_id?: string;
+        };
         /** MessageProjectActionBody */
         MessageProjectActionBody: {
             /** Acceptance Criteria */
@@ -16821,6 +17699,29 @@ export interface components {
             /** Thread Id */
             thread_id: string;
         };
+        /**
+         * @example {
+         *       "text": ""
+         *     }
+         */
+        Part: {
+            /** @example  */
+            filename?: string;
+            /** @example  */
+            media_type?: string;
+            metadata?: Record<string, never>;
+        } & ({
+            /** @example  */
+            text: string;
+        } | {
+            /** Format: byte */
+            raw: string;
+        } | {
+            /** @example  */
+            url: string;
+        } | {
+            data: unknown;
+        });
         /** PauseTaskBody */
         PauseTaskBody: {
             /**
@@ -16833,6 +17734,11 @@ export interface components {
              * @default user_request
              */
             reason: string;
+        };
+        /** PinMessageBody */
+        PinMessageBody: {
+            /** Message Id */
+            message_id: string;
         };
         /** PlanBody */
         PlanBody: {
@@ -16927,10 +17833,19 @@ export interface components {
             /** Top K */
             top_k?: number | null;
         };
+        /** ReactionBody */
+        ReactionBody: {
+            /** Emoji */
+            emoji: string;
+            /** Message Id */
+            message_id: string;
+        };
         /** ReadBody */
         ReadBody: {
             /** Member Id */
             member_id: string;
+            /** Message Seq */
+            message_seq?: number | null;
             /** Seq */
             seq?: number | null;
         };
@@ -17109,6 +18024,10 @@ export interface components {
              * @default
              */
             participant_id: string;
+            /** Reply To */
+            reply_to?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Source Message Id
              * @default
@@ -17158,6 +18077,28 @@ export interface components {
              * @default 95
              */
             target_score: number;
+        };
+        SendMessageConfiguration: {
+            /**
+             * @example [
+             *       ""
+             *     ]
+             */
+            accepted_output_modes?: string[];
+            /** Format: int32 */
+            history_length?: number;
+            /** @example false */
+            return_immediately?: boolean;
+            /** @example null */
+            task_push_notification_config?: components["schemas"]["TaskPushNotificationConfig"] | null;
+        };
+        SendMessageRequest: {
+            /** @example null */
+            configuration?: components["schemas"]["SendMessageConfiguration"] | null;
+            message?: components["schemas"]["Message"];
+            metadata?: Record<string, never>;
+            /** @example  */
+            tenant?: string;
         };
         /** SkillWire */
         SkillWire: {
@@ -17348,6 +18289,12 @@ export interface components {
              */
             reason: string;
         };
+        SubscribeToTaskRequest: {
+            /** @example id */
+            id?: string;
+            /** @example  */
+            tenant?: string;
+        };
         /** TaskApprovalDecisionRequest */
         TaskApprovalDecisionRequest: {
             /** Approved */
@@ -17401,6 +18348,20 @@ export interface components {
              * @default false
              */
             run: boolean;
+        };
+        TaskPushNotificationConfig: {
+            /** @example null */
+            authentication?: components["schemas"]["AuthenticationInfo"] | null;
+            /** @example  */
+            id?: string;
+            /** @example  */
+            task_id?: string;
+            /** @example  */
+            tenant?: string;
+            /** @example  */
+            token?: string;
+            /** @example url */
+            url?: string;
         };
         /**
          * TaskResumeExecutionRequest
@@ -18056,6 +19017,26 @@ export interface operations {
             };
         };
     };
+    _get_agent_card__well_known_agent_card_json_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     list_agents_api_a2a_agents_get: {
         parameters: {
             query?: never;
@@ -18207,6 +19188,770 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    handle_requests_api_a2a_rpc_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description A2A JSON-RPC 2.0 request */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["A2ARequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    handle_authenticated_agent_card_api_a2a_server_extendedAgentCard_get: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    on_message_send_api_a2a_server_message_send_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description A2A SendMessageRequest */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    on_message_send_stream_api_a2a_server_message_stream_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description A2A SendMessageRequest */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    list_tasks_api_a2a_server_tasks_get: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    on_get_task_api_a2a_server_tasks__id__get: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    list_push_notifications_api_a2a_server_tasks__id__pushNotificationConfigs_get: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    set_push_notification_api_a2a_server_tasks__id__pushNotificationConfigs_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description A2A TaskPushNotificationConfig */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskPushNotificationConfig"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_push_notification_api_a2a_server_tasks__id__pushNotificationConfigs__push_id__get: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    delete_push_notification_api_a2a_server_tasks__id__pushNotificationConfigs__push_id__delete: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    on_cancel_task_api_a2a_server_tasks__id__cancel_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    on_subscribe_to_task_api_a2a_server_tasks__id__subscribe_get: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    on_subscribe_to_task_api_a2a_server_tasks__id__subscribe_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    partial_api_a2a_server_v1_card_get: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    partial_api_a2a_server_v1_message_send_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description A2A SendMessageRequest */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    partial_api_a2a_server_v1_message_stream_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description A2A SendMessageRequest */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    partial_api_a2a_server_v1_tasks__id__get: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    partial_api_a2a_server_v1_tasks__id__pushNotificationConfigs_get: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    partial_api_a2a_server_v1_tasks__id__pushNotificationConfigs_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description A2A TaskPushNotificationConfig */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskPushNotificationConfig"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    partial_api_a2a_server_v1_tasks__id__pushNotificationConfigs__push_id__get: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    partial_api_a2a_server_v1_tasks__id__cancel_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    partial_api_a2a_server_v1_tasks__id__subscribe_get: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    partial_api_a2a_server_v1_tasks__id__subscribe_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @example 1.0 */
+                "A2A-Version": "1.0";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    list_tasks_api_a2a_tasks_get: {
+        parameters: {
+            query?: {
+                agent_id?: string;
+                status?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_task_api_a2a_tasks__local_task_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                local_task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_task_api_a2a_tasks__local_task_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                local_task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_task_events_api_a2a_tasks__local_task_id__events_get: {
+        parameters: {
+            query?: {
+                after_seq?: number;
+            };
+            header?: never;
+            path: {
+                local_task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_task_api_a2a_tasks__local_task_id__refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                local_task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    subscribe_task_api_a2a_tasks__local_task_id__subscribe_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                local_task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -25120,6 +26865,324 @@ export interface operations {
             };
         };
     };
+    list_annotations_api_collab__thread_id__annotations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_annotation_api_collab__thread_id__annotations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnotationBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_annotation_api_collab__thread_id__annotations__annotation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                annotation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_annotation_api_collab__thread_id__annotations__annotation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                annotation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnotationResolvedBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_annotation_reply_api_collab__thread_id__annotations__annotation_id__replies_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                annotation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnotationReplyBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_collaboration_deliveries_api_collab__thread_id__deliveries_get: {
+        parameters: {
+            query?: {
+                status?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_collaboration_delivery_api_collab__thread_id__deliveries__delivery_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                delivery_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dismiss_collaboration_delivery_api_collab__thread_id__deliveries__delivery_id__dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                delivery_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_collaboration_delivery_api_collab__thread_id__deliveries__delivery_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                delivery_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     link_session_room_api_collab__thread_id__link_room_post: {
         parameters: {
             query?: never;
@@ -25132,6 +27195,146 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["LinkRoomBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_pinned_messages_api_collab__thread_id__pinned_messages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    toggle_pinned_message_api_collab__thread_id__pinned_messages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PinMessageBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_message_reactions_api_collab__thread_id__reactions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    toggle_message_reaction_api_collab__thread_id__reactions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReactionBody"];
             };
         };
         responses: {
@@ -25246,6 +27449,76 @@ export interface operations {
                 "application/json": components["schemas"]["MessageProjectActionBody"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_collaboration_runs_api_collab__thread_id__runs_get: {
+        parameters: {
+            query?: {
+                status?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_collaboration_run_api_collab__thread_id__runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

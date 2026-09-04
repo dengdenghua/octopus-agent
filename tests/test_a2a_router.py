@@ -42,12 +42,12 @@ class _FakeTask:
     id = "task-123"
     status = None
 
-    def __init__(self) -> None:
+    def __init__(self, state=None) -> None:
         from a2a.types import Role, Task, TaskState
 
         self._t = Task()
         self._t.id = "task-123"
-        self._t.status.state = TaskState.TASK_STATE_COMPLETED
+        self._t.status.state = state or TaskState.TASK_STATE_COMPLETED
         # Task 新版用 history(非 messages)承载对话;TaskStatus.message
         # 赋值被 protobuf 拦截(SDK 字段名与 Message 基类冲突),读取走 dict。
         msg = self._t.history.add()
@@ -67,18 +67,40 @@ class _FakeStreamResponse:
 
 
 class _FakeClient:
-    def __init__(self, card) -> None:
+    def __init__(self, card, *, send_state=None, refresh_state=None) -> None:
         self.agent_card = card
         self.card = card
         self.sent: list = []
+        self.send_state = send_state
+        self.refresh_state = refresh_state
 
     async def send_message(self, request):
         self.sent.append(request)
-        task = _FakeTask()
+        task = _FakeTask(self.send_state)
         yield _FakeStreamResponse(task._t)
 
+    async def get_task(self, request):
+        return _FakeTask(self.refresh_state)._t
 
-def _install_sdk_mock(monkeypatch, *, card=None, fail=False):
+    async def cancel_task(self, request):
+        from a2a.types import TaskState
+
+        return _FakeTask(TaskState.TASK_STATE_CANCELED)._t
+
+    async def subscribe(self, request):
+        from a2a.types import TaskState
+
+        yield _FakeStreamResponse(_FakeTask(TaskState.TASK_STATE_COMPLETED)._t)
+
+
+def _install_sdk_mock(
+    monkeypatch,
+    *,
+    card=None,
+    fail=False,
+    send_state=None,
+    refresh_state=None,
+):
     """Replace a2a.client.ClientFactory with a fake that resolves one card."""
 
     class FakeFactory:
@@ -88,7 +110,11 @@ def _install_sdk_mock(monkeypatch, *, card=None, fail=False):
         async def create_from_url(self, url):
             if fail:
                 raise RuntimeError("boom: card unreachable")
-            return _FakeClient(card or _make_card())
+            return _FakeClient(
+                card or _make_card(),
+                send_state=send_state,
+                refresh_state=refresh_state,
+            )
 
     monkeypatch.setattr(
         "a2a.client.ClientFactory",
@@ -189,3 +215,80 @@ class TestHealthAndSend:
     def test_send_task_unknown_agent(self, a2a_app):
         r = a2a_app.post("/api/a2a/agents/nope/send", json={"text": "hi"})
         assert r.status_code == 404
+
+
+class TestTaskLifecycle:
+    def test_send_persists_task_events_and_is_idempotent(self, a2a_app, monkeypatch):
+        _install_sdk_mock(monkeypatch)
+        reg = a2a_app.post("/api/a2a/agents/register", json={"url": "https://a.example/x"}).json()
+        payload = {"text": "durable work", "local_task_id": "request-42"}
+
+        first = a2a_app.post(f"/api/a2a/agents/{reg['agent_id']}/send", json=payload)
+        assert first.status_code == 200, first.text
+        assert first.json()["local_task_id"] == "request-42"
+        assert first.json()["lifecycle_status"] == "completed"
+
+        detail = a2a_app.get("/api/a2a/tasks/request-42")
+        assert detail.status_code == 200
+        assert detail.json()["remote_task_id"] == "task-123"
+        listed = a2a_app.get("/api/a2a/tasks", params={"status": "completed"}).json()
+        assert listed["count"] == 1
+        events = a2a_app.get("/api/a2a/tasks/request-42/events").json()["events"]
+        assert [event["event_type"] for event in events] == ["submitted", "remote_task"]
+
+        replay = a2a_app.post(f"/api/a2a/agents/{reg['agent_id']}/send", json=payload)
+        assert replay.status_code == 200
+        assert replay.json()["replayed"] is True
+        assert a2a_app.get("/api/a2a/tasks/request-42/events").json()["count"] == 2
+
+    def test_refresh_advances_remote_task(self, a2a_app, monkeypatch):
+        from a2a.types import TaskState
+
+        _install_sdk_mock(
+            monkeypatch,
+            send_state=TaskState.TASK_STATE_WORKING,
+            refresh_state=TaskState.TASK_STATE_COMPLETED,
+        )
+        reg = a2a_app.post("/api/a2a/agents/register", json={"url": "https://a.example/x"}).json()
+        sent = a2a_app.post(
+            f"/api/a2a/agents/{reg['agent_id']}/send",
+            json={"text": "long work", "local_task_id": "refresh-me"},
+        )
+        assert sent.json()["lifecycle_status"] == "working"
+
+        refreshed = a2a_app.post("/api/a2a/tasks/refresh-me/refresh")
+        assert refreshed.status_code == 200, refreshed.text
+        assert refreshed.json()["status"] == "completed"
+        assert refreshed.json()["result"]["status"]["state"] == "3"
+
+    def test_cancel_running_remote_task(self, a2a_app, monkeypatch):
+        from a2a.types import TaskState
+
+        _install_sdk_mock(monkeypatch, send_state=TaskState.TASK_STATE_WORKING)
+        reg = a2a_app.post("/api/a2a/agents/register", json={"url": "https://a.example/x"}).json()
+        a2a_app.post(
+            f"/api/a2a/agents/{reg['agent_id']}/send",
+            json={"text": "cancel work", "local_task_id": "cancel-me"},
+        )
+
+        canceled = a2a_app.post("/api/a2a/tasks/cancel-me/cancel")
+        assert canceled.status_code == 200, canceled.text
+        assert canceled.json()["status"] == "canceled"
+        assert canceled.json()["result"]["status"]["state"] == "5"
+
+    def test_subscribe_streams_snapshot_and_persists_updates(self, a2a_app, monkeypatch):
+        from a2a.types import TaskState
+
+        _install_sdk_mock(monkeypatch, send_state=TaskState.TASK_STATE_WORKING)
+        reg = a2a_app.post("/api/a2a/agents/register", json={"url": "https://a.example/x"}).json()
+        a2a_app.post(
+            f"/api/a2a/agents/{reg['agent_id']}/send",
+            json={"text": "watch work", "local_task_id": "watch-me"},
+        )
+
+        with a2a_app.stream("GET", "/api/a2a/tasks/watch-me/subscribe") as response:
+            assert response.status_code == 200
+            stream = "".join(response.iter_text())
+        assert "event: snapshot" in stream
+        assert "event: update" in stream
+        assert a2a_app.get("/api/a2a/tasks/watch-me").json()["status"] == "completed"

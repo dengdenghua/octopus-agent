@@ -26,11 +26,9 @@ describe("realtime compact chat header contract", () => {
     expect(header).toContain(
       'className="absolute left-3 top-1/2 -translate-y-1/2 md:hidden"',
     );
-    expect(pageSource).toContain(
-      'embeddedDesignChat\n                  ? "px-3"',
-    );
-    expect(header).toContain(
-      "members={embeddedDesignChat ? null : headerMemberSurface}",
+    expect(pageSource).toMatch(/embeddedDesignChat\s*\? "px-3"/);
+    expect(header).toMatch(
+      /members=\{\s*embeddedDesignChat \? null : headerMemberSurface\s*\}/,
     );
     expect(header).toContain(
       "workbench={embeddedDesignChat ? null : headerActions}",
@@ -56,6 +54,12 @@ describe("realtime compact chat header contract", () => {
     expect(memberSurface).toContain("<RealtimeChatHeaderMemberSurface");
     expect(memberSurface).toContain("aiMembers={headerMemberControl}");
     expect(pageSource).toContain("humanInviteAction={headerHumanInvite}");
+  });
+
+  it("keeps linked rooms live and counts their actual online participants", () => {
+    expect(pageSource).toContain("<CollaborationRealtimeBridge");
+    expect(pageSource).toContain("roomId={collabSessionQuery.data?.room_id}");
+    expect(pageSource).toContain("countOnlineRoomParticipants(");
   });
 
   it("uses the persisted header title for overflow sharing", () => {

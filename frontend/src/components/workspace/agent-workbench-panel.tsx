@@ -49,6 +49,7 @@ import type {
 import type { LiveToolEvent } from "./live-tool-timeline";
 import { cn } from "@/lib/utils";
 import { CoworkCollabBar } from "./cowork-collab-bar";
+import { CollaborationDeliveryRecovery } from "./collaboration-delivery-recovery";
 import type { ExtractedCodeBlocks } from "@/lib/extract-code-blocks";
 import type { StreamdownProps } from "streamdown";
 import type { AgentWorkbenchTabId, DiffEntry } from "./agent-workbench-utils";
@@ -124,7 +125,9 @@ function AgentWorkbenchPanelImpl({
   groupTitle,
   currentThreadTitle,
   personaId,
+  showMachineScopeRail = true,
   showMachineRosterRail = true,
+  showDeliveryRecovery = false,
 }: {
   activeTab?: AgentWorkbenchTabId;
   events: LiveToolEvent[];
@@ -139,7 +142,9 @@ function AgentWorkbenchPanelImpl({
   groundingSources?: GroundingSource[];
   focusedAgentId?: string | null;
   /** Which activity view a focusedAgentId intent lands on; defaults to the
-   * live computer screen when the caller doesn't say. */
+   * live computer screen when the caller doesn't say. Legacy "role" intents
+   * are treated as the execution screen: role details now live in the avatar
+   * profile card rather than the right workbench. */
   focusedAgentView?: "summary" | "screen" | "role" | null;
   /** Public fallback used when a historical chat card no longer belongs to
    * the latest-turn event snapshot shown by the workbench. */
@@ -197,9 +202,15 @@ function AgentWorkbenchPanelImpl({
   groupTitle?: string | null;
   /** Current conversation title when no distinct group title is available. */
   currentThreadTitle?: string | null;
+  /** Whether to render the legacy machine switcher at the bottom of the
+   * workbench. Group conversations expose the same agents beside the composer,
+   * so callers can remove the duplicate switcher entirely. */
+  showMachineScopeRail?: boolean;
   /** Team-member avatars can be hosted below the composer. Runtime-spawned
    * machine seats remain in the workbench rail either way. */
   showMachineRosterRail?: boolean;
+  /** Group-only reliable delivery monitor. Solo chats do not poll this API. */
+  showDeliveryRecovery?: boolean;
 }) {
   const { t } = useI18n();
   const { deriveAgentTiles, workbenchStatus } = useAgentWorkbenchI18n();
@@ -479,7 +490,7 @@ function AgentWorkbenchPanelImpl({
               phases: mainPhases,
               paused,
             });
-  const machineRail = (
+  const machineRail = showMachineScopeRail ? (
     <MachineScopeRail
       agents={agentTiles}
       leaderSeat={showMachineRosterRail ? leaderRosterSeat : null}
@@ -490,7 +501,7 @@ function AgentWorkbenchPanelImpl({
       onSelectAgent={openSubagentProcess}
       onSelectRoster={openRosterProcess}
     />
-  );
+  ) : null;
   const requestedActiveTab: AgentWorkbenchTabId =
     activeTab ?? (focusedAgentId ? "agent" : focusedTab) ?? "agent";
   // Keep an explicitly requested project surface mounted while its binding is
@@ -638,13 +649,8 @@ function AgentWorkbenchPanelImpl({
   // The main conversation owns the global execution narrative. A selected
   // sub-agent may still open its own computer: a complete, isolated streaming
   // conversation rather than a duplicate mixed activity trace.
-  const effectiveActivityView: "summary" | "screen" | "role" = selectedAgent
-    ? activityView === "role"
-      ? "role"
-      : activityView === "screen"
-        ? "screen"
-        : "summary"
-    : "summary";
+  const effectiveActivityView: "summary" | "screen" =
+    selectedAgent && activityView === "screen" ? "screen" : "summary";
 
   // Workbench view: summary / computer view.
   if (
@@ -820,7 +826,12 @@ function AgentWorkbenchPanelImpl({
       {threadId &&
       effectiveActiveTab !== "project" &&
       effectiveActiveTab !== "workspace" ? (
-        <CoworkCollabBar threadId={threadId} rosterSeats={rosterSeats} />
+        <>
+          <CoworkCollabBar threadId={threadId} rosterSeats={rosterSeats} />
+          {showDeliveryRecovery ? (
+            <CollaborationDeliveryRecovery threadId={threadId} />
+          ) : null}
+        </>
       ) : null}
 
       <section

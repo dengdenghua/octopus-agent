@@ -216,6 +216,32 @@ class TestContextSharing:
         assert "fix the login bug" in prompt
         assert "let me investigate auth.py" in prompt
 
+    def test_context_steward_blocks_implicit_parent_conversation(self):
+        from runtime.execution.suckers.ephemeral_agents import (
+            run_ephemeral_role,
+            set_ephemeral_role_runner,
+        )
+
+        captured = {}
+
+        def capture(call):
+            captured["prompt"] = call.composed_system_prompt
+            return "ok"
+
+        set_ephemeral_role_runner(capture)
+        sess = self._make_session_with_messages(
+            [{"type": "human", "content": "PRIVATE-PARENT-HISTORY"}]
+        )
+        run_ephemeral_role(
+            "reviewer",
+            "review the steward brief",
+            session=sess,
+            context={"context_steward_managed": True},
+        )
+
+        assert "PRIVATE-PARENT-HISTORY" not in captured["prompt"]
+        assert "Caller conversation" not in captured["prompt"]
+
     def test_share_context_false_excludes_conversation(self):
         # researcher has share_context=True by default in current
         # catalog · use a temporary role def with share_context=False

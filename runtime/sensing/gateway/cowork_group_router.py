@@ -12,6 +12,7 @@ static AgentGroupRegistry of agent-team *templates*, a different concept).
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import inspect
 from contextlib import suppress
 from typing import Any
@@ -30,6 +31,9 @@ from runtime.memory.threads.event_log import validate_thread_id
 
 from ._cowork_group_access import CoworkGroupAccess
 from ._cowork_group_models import (
+    AnnotationBody,
+    AnnotationReplyBody,
+    AnnotationResolvedBody,
     AssignBody,
     BoardBody,
     BreakoutBody,
@@ -42,6 +46,8 @@ from ._cowork_group_models import (
     MergeBody,
     MessageProjectActionBody,
     ModeBody,
+    PinMessageBody,
+    ReactionBody,
     ReadBody,
     RoomMessageBody,
     RosterBody,
@@ -340,6 +346,319 @@ def create_cowork_group_router(
             _require_room_member(room_id, request)
         return _session_payload(thread_id)
 
+    @router.get("/api/collab/{thread_id}/runs")
+    def list_collaboration_runs(
+        thread_id: str,
+        request: Request,
+        status: str = "",
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        """Durable multi-agent executions for timeline replay and recovery UI."""
+
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
+        statuses = [part.strip() for part in status.split(",") if part.strip()]
+        try:
+            runs = _collaboration_store().collaboration_runs_for_session(
+                thread_id,
+                statuses=statuses,
+                limit=max(1, min(1000, limit)),
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {
+            "thread_id": thread_id,
+            "runs": runs,
+            "count": len(runs),
+        }
+
+    @router.get("/api/collab/{thread_id}/runs/{run_id}")
+    def get_collaboration_run(
+        thread_id: str,
+        run_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        """One run plus its immutable lifecycle events."""
+
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
+        store = _collaboration_store()
+        try:
+            run = store.collaboration_run(run_id)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if run is None or str(run.get("session_id") or "") != thread_id:
+            raise HTTPException(404, "collaboration run not found")
+        return {
+            "thread_id": thread_id,
+            "run": run,
+            "events": store.collaboration_run_events(run_id),
+        }
+
+    @router.get("/api/collab/{thread_id}/deliveries")
+    def list_collaboration_deliveries(
+        thread_id: str,
+        request: Request,
+        status: str = "",
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        """Reliable result-delivery state for recovery and operator visibility."""
+
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
+        statuses = [part.strip() for part in status.split(",") if part.strip()]
+        try:
+            deliveries = _collaboration_store().collaboration_deliveries_for_session(
+                thread_id,
+                statuses=statuses,
+                limit=max(1, min(1000, limit)),
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {
+            "thread_id": thread_id,
+            "deliveries": deliveries,
+            "count": len(deliveries),
+        }
+
+    def _collaboration_delivery_for_thread(
+        thread_id: str,
+        delivery_id: str,
+    ) -> tuple[Any, dict[str, Any]]:
+        store = _collaboration_store()
+        try:
+            delivery = store.collaboration_delivery(delivery_id)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if delivery is None or str(delivery.get("session_id") or "") != thread_id:
+            raise HTTPException(404, "collaboration delivery not found")
+        return store, delivery
+
+    @router.get("/api/collab/{thread_id}/deliveries/{delivery_id}")
+    def get_collaboration_delivery(
+        thread_id: str,
+        delivery_id: str,
+    ) -> dict[str, Any]:
+        store, delivery = _collaboration_delivery_for_thread(thread_id, delivery_id)
+        return {
+            "thread_id": thread_id,
+            "delivery": delivery,
+            "events": store.collaboration_delivery_events(delivery_id),
+        }
+
+    @router.post(
+        "/api/collab/{thread_id}/deliveries/{delivery_id}/retry",
+        dependencies=[Depends(_auth_dep)],
+    )
+    def retry_collaboration_delivery(
+        thread_id: str,
+        delivery_id: str,
+    ) -> dict[str, Any]:
+        store, _delivery = _collaboration_delivery_for_thread(thread_id, delivery_id)
+        try:
+            delivery = store.retry_collaboration_delivery(delivery_id)
+            logs_root = getattr(runtime, "_logs_root", None)
+            if logs_root is not None:
+                from runtime.sensing.gateway.collaboration_delivery_outbox import (
+                    drain_collaboration_delivery_outbox,
+                )
+
+                drain_collaboration_delivery_outbox(
+                    store,
+                    logs_root=logs_root,
+                    session_id=thread_id,
+                    limit=100,
+                )
+                delivery = store.collaboration_delivery(delivery_id) or delivery
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return {"ok": True, "delivery": delivery}
+
+    @router.post(
+        "/api/collab/{thread_id}/deliveries/{delivery_id}/dismiss",
+        dependencies=[Depends(_auth_dep)],
+    )
+    def dismiss_collaboration_delivery(
+        thread_id: str,
+        delivery_id: str,
+    ) -> dict[str, Any]:
+        store, _delivery = _collaboration_delivery_for_thread(thread_id, delivery_id)
+        try:
+            delivery = store.dismiss_collaboration_delivery(delivery_id)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return {"ok": True, "delivery": delivery}
+
+    def _annotation_author(
+        request: Request,
+        *,
+        display_name: str,
+        avatar_color: str,
+    ) -> tuple[str, dict[str, str]]:
+        actor_id = str(_actor(request) or "anonymous").strip() or "anonymous"
+        name = display_name.strip() or actor_id
+        color = avatar_color.strip()
+        if not color.startswith("#") or len(color) not in {4, 7, 9}:
+            # A deterministic, safe fallback makes server-rendered history
+            # look stable even when a client has no avatar profile.
+            color = f"#{hashlib.sha256(actor_id.encode()).hexdigest()[:6]}"
+        return actor_id, {"display_name": name[:160], "avatar_color": color}
+
+    def _annotation_room_id(thread_id: str, request: Request) -> str:
+        room_id = str(getattr(group_store.state(thread_id), "room_id", None) or "").strip()
+        if not room_id:
+            raise HTTPException(409, "no room linked to this session")
+        _require_room_member(room_id, request)
+        return room_id
+
+    @router.get("/api/collab/{thread_id}/reactions")
+    def list_message_reactions(thread_id: str, request: Request) -> dict[str, Any]:
+        room_id = _annotation_room_id(thread_id, request)
+        return {
+            "thread_id": thread_id,
+            "room_id": room_id,
+            "reactions": _collaboration_store().reactions_for_session(thread_id),
+        }
+
+    @router.post("/api/collab/{thread_id}/reactions", dependencies=[Depends(_auth_dep)])
+    def toggle_message_reaction(
+        thread_id: str,
+        body: ReactionBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        room_id = _annotation_room_id(thread_id, request)
+        participant_id = str(_actor(request) or "anonymous").strip() or "anonymous"
+        reaction = _collaboration_store().toggle_message_reaction(
+            thread_id,
+            room_id=room_id,
+            message_id=body.message_id,
+            participant_id=participant_id,
+            emoji=body.emoji,
+        )
+        return {"ok": True, "reaction": reaction}
+
+    @router.get("/api/collab/{thread_id}/pinned-messages")
+    def list_pinned_messages(thread_id: str, request: Request) -> dict[str, Any]:
+        room_id = _annotation_room_id(thread_id, request)
+        return {
+            "thread_id": thread_id,
+            "room_id": room_id,
+            "pinned_messages": _collaboration_store().pinned_messages_for_session(thread_id),
+        }
+
+    @router.post(
+        "/api/collab/{thread_id}/pinned-messages", dependencies=[Depends(_auth_dep)]
+    )
+    def toggle_pinned_message(
+        thread_id: str,
+        body: PinMessageBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        room_id = _annotation_room_id(thread_id, request)
+        participant_id = str(_actor(request) or "anonymous").strip() or "anonymous"
+        pin = _collaboration_store().toggle_pinned_message(
+            thread_id,
+            room_id=room_id,
+            message_id=body.message_id,
+            participant_id=participant_id,
+        )
+        return {"ok": True, "pin": pin}
+
+    @router.get("/api/collab/{thread_id}/annotations")
+    def list_annotations(thread_id: str, request: Request) -> dict[str, Any]:
+        room_id = _annotation_room_id(thread_id, request)
+        return {
+            "thread_id": thread_id,
+            "room_id": room_id,
+            "annotations": _collaboration_store().annotations_for_session(thread_id),
+        }
+
+    @router.post("/api/collab/{thread_id}/annotations", dependencies=[Depends(_auth_dep)])
+    def create_annotation(
+        thread_id: str,
+        body: AnnotationBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        room_id = _annotation_room_id(thread_id, request)
+        author_id, author = _annotation_author(
+            request,
+            display_name=body.display_name,
+            avatar_color=body.avatar_color,
+        )
+        annotation = _collaboration_store().add_annotation(
+            thread_id,
+            room_id=room_id,
+            message_id=body.message_id,
+            author_id=author_id,
+            author=author,
+            body=body.body,
+        )
+        return {"ok": True, "annotation": annotation}
+
+    @router.patch(
+        "/api/collab/{thread_id}/annotations/{annotation_id}",
+        dependencies=[Depends(_auth_dep)],
+    )
+    def update_annotation(
+        thread_id: str,
+        annotation_id: str,
+        body: AnnotationResolvedBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        _annotation_room_id(thread_id, request)
+        annotation = _collaboration_store().set_annotation_resolved(
+            thread_id,
+            annotation_id,
+            resolved=body.resolved,
+        )
+        if annotation is None:
+            raise HTTPException(404, "annotation not found")
+        return {"ok": True, "annotation": annotation}
+
+    @router.delete(
+        "/api/collab/{thread_id}/annotations/{annotation_id}",
+        dependencies=[Depends(_auth_dep)],
+    )
+    def delete_annotation(
+        thread_id: str,
+        annotation_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        _annotation_room_id(thread_id, request)
+        if not _collaboration_store().delete_annotation(thread_id, annotation_id):
+            raise HTTPException(404, "annotation not found")
+        return {"ok": True}
+
+    @router.post(
+        "/api/collab/{thread_id}/annotations/{annotation_id}/replies",
+        dependencies=[Depends(_auth_dep)],
+    )
+    def create_annotation_reply(
+        thread_id: str,
+        annotation_id: str,
+        body: AnnotationReplyBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        _annotation_room_id(thread_id, request)
+        author_id, author = _annotation_author(
+            request,
+            display_name=body.display_name,
+            avatar_color=body.avatar_color,
+        )
+        reply = _collaboration_store().add_annotation_reply(
+            thread_id,
+            annotation_id,
+            author_id=author_id,
+            author=author,
+            body=body.body,
+        )
+        if reply is None:
+            raise HTTPException(404, "annotation not found")
+        return {"ok": True, "reply": reply}
+
     @router.post("/api/collab/{thread_id}/room", dependencies=[Depends(_owner_dep)])
     async def ensure_session_room(
         thread_id: str,
@@ -485,6 +804,8 @@ def create_cowork_group_router(
             raise HTTPException(409, "no room linked to this session — link one first")
         _require_room_member(room_id, request)
         metadata = dict(body.metadata)
+        if body.reply_to is not None:
+            metadata["reply_to"] = body.reply_to
         if body.source_message_id:
             metadata["source_message_id"] = body.source_message_id
         if body.message_type:
@@ -653,11 +974,21 @@ def create_cowork_group_router(
         group events past each member's read marker (floored at their join)."""
         from runtime.memory.cowork.presence import group_presence
 
+        message_head: int | None = None
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id and collaboration_store is not None:
+            messages_for_room = getattr(collaboration_store, "messages_for_room", None)
+            if callable(messages_for_room):
+                with suppress(Exception):
+                    latest = messages_for_room(room_id, limit=1, after_seq=0)
+                    if latest:
+                        message_head = max(int(item.get("seq", 0) or 0) for item in latest)
         members = group_presence(
             group_store,
             _presence_store(),
             thread_id,
             online_window_s=max(1, online_window_s),
+            message_head=message_head,
         )
         return {"thread_id": thread_id, "members": [m.to_dict() for m in members]}
 
@@ -665,6 +996,14 @@ def create_cowork_group_router(
     def mark_read(thread_id: str, body: ReadBody) -> dict[str, Any]:
         """Mark ``member_id`` caught up to ``seq`` (default: the current event
         head). The marker is monotonic — it never rewinds."""
+        if body.message_seq is not None:
+            _presence_store().mark_read(
+                thread_id,
+                body.member_id,
+                int(body.message_seq),
+                coordinate="message",
+            )
+            return {"ok": True, **_presence_store().get(thread_id, body.member_id)}
         seq = body.seq
         if seq is None:
             events = group_store.events(thread_id)

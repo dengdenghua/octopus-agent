@@ -1,19 +1,24 @@
-import { Fragment, useMemo, type ReactNode } from "react";
-import { Link2Icon } from "lucide-react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { Link2Icon, PinIcon, SmilePlusIcon } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { MemberProfilePopover } from "@/components/workspace/member-profile-popover";
 import type {
   CoworkRoomEntityRef,
   CoworkRoomMessage,
   CoworkRoomParticipant,
+  CoworkRoomReplyReference,
 } from "@/core/cowork";
 import { formatCompactRelativeTimestamp } from "@/core/utils/datetime";
+import { swallow } from "@/core/utils/log";
 import { cn } from "@/lib/utils";
 
 import {
   CoworkRoomMessageActions,
   type CoworkRoomMessageActionsProps,
 } from "./cowork-room-message-actions";
+import { AddAnnotationButton, AnnotationThread } from "./annotations";
+import { useOptionalCollab } from "./collab-provider";
 import {
   CoworkRoomSystemCard,
   getCoworkRoomSystemCard,
@@ -160,6 +165,38 @@ function EntityReferences({
   );
 }
 
+function ReplyReference({
+  reply,
+  participantById,
+}: {
+  reply: CoworkRoomReplyReference;
+  participantById: Map<string, CoworkRoomParticipant>;
+}) {
+  const author =
+    reply.display_name?.trim() ||
+    (reply.participant_id
+      ? participantLabel(
+          participantById.get(reply.participant_id),
+          reply.participant_id,
+        )
+      : "原消息");
+  const preview = reply.text?.replace(/\s+/g, " ").trim();
+  if (!preview && !reply.seq) return null;
+  return (
+    <div className="mb-2 flex max-w-full items-start gap-1.5 rounded-md border-l-2 border-primary/35 bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground">
+      <span className="shrink-0 font-medium text-foreground/70">
+        回复 {author}
+      </span>
+      {reply.seq ? (
+        <span className="shrink-0 text-muted-foreground/70">
+          · #{reply.seq}
+        </span>
+      ) : null}
+      {preview ? <span className="min-w-0 truncate">{preview}</span> : null}
+    </div>
+  );
+}
+
 function buildParticipantMap(participants: CoworkRoomParticipant[]) {
   const next = new Map<string, CoworkRoomParticipant>();
   for (const participant of participants) {
@@ -179,6 +216,9 @@ function CoworkRoomTimelineEntryContent({
 }: Omit<CoworkRoomTimelineEntryProps, "participants"> & {
   participantById: Map<string, CoworkRoomParticipant>;
 }) {
+  const collab = useOptionalCollab();
+  const [showAnnotations, setShowAnnotations] = useState(false);
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
   const refs = message.metadata?.entity_refs ?? [];
   if (isCoworkRoomSystemMessage(message)) {
     const card = getCoworkRoomSystemCard(message) ?? {
@@ -209,22 +249,71 @@ function CoworkRoomTimelineEntryContent({
     typeof participant?.avatar_url === "string"
       ? participant.avatar_url
       : undefined;
+  const annotationMessageId =
+    message.metadata?.source_message_id ||
+    `room:${message.room_id ?? "room"}:${message.seq}`;
+  const messageAnnotations =
+    collab?.annotations.filter(
+      (annotation) => annotation.message_id === annotationMessageId,
+    ) ?? [];
+  const annotationCount = messageAnnotations.length;
+  const messageReactions =
+    collab?.messageReactions.filter(
+      (reaction) => reaction.message_id === annotationMessageId,
+    ) ?? [];
+  const reactingParticipantId = collab?.currentUser?.id;
+  const isPinned = Boolean(
+    collab?.pinnedMessages.some(
+      (pin) => pin.message_id === annotationMessageId,
+    ),
+  );
 
   return (
     <article
       data-message-seq={message.seq}
       className={cn(
-        "group flex items-start gap-2",
+        "group/msg flex items-start gap-2",
         own && "flex-row-reverse",
         className,
       )}
     >
-      <Avatar className="mt-0.5 size-8 rounded-lg">
-        {avatarUrl ? <AvatarImage src={avatarUrl} alt={displayName} /> : null}
-        <AvatarFallback className="rounded-lg text-[10px] font-semibold">
-          {initials(displayName)}
-        </AvatarFallback>
-      </Avatar>
+      <MemberProfilePopover
+        name={displayName}
+        avatar={
+          <Avatar className="size-14 shrink-0 rounded-2xl">
+            {avatarUrl ? (
+              <AvatarImage src={avatarUrl} alt={displayName} />
+            ) : null}
+            <AvatarFallback className="rounded-2xl text-lg font-semibold">
+              {initials(displayName)}
+            </AvatarFallback>
+          </Avatar>
+        }
+        roleLabel={participant?.kind === "agent" ? "AI 成员" : "协作成员"}
+        presenceLabel={own ? "当前视角" : "参与对话"}
+        summary={
+          participant?.description?.trim() ||
+          (participant?.kind === "agent"
+            ? "正在参与当前协作。"
+            : "该成员正在参与当前对话。")
+        }
+        trigger={
+          <button
+            type="button"
+            className="mt-0.5 shrink-0 rounded-lg outline-none transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={`${displayName} · 查看成员信息`}
+          >
+            <Avatar className="size-8 rounded-lg">
+              {avatarUrl ? (
+                <AvatarImage src={avatarUrl} alt={displayName} />
+              ) : null}
+              <AvatarFallback className="rounded-lg text-[10px] font-semibold">
+                {initials(displayName)}
+              </AvatarFallback>
+            </Avatar>
+          </button>
+        }
+      />
       <div
         className={cn(
           "flex min-w-0 max-w-[min(78%,42rem)] flex-col items-start",
@@ -253,17 +342,148 @@ function CoworkRoomTimelineEntryContent({
               "rounded-tl-2xl rounded-tr-md border-primary/15 bg-primary/[0.07]",
           )}
         >
+          {message.metadata?.reply_to ? (
+            <ReplyReference
+              reply={message.metadata.reply_to}
+              participantById={participantById}
+            />
+          ) : null}
           <p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">
             {renderMessageText(message.text, participantById)}
           </p>
           <EntityReferences refs={refs} onEntityClick={onEntityClick} />
         </div>
+        {isPinned ? (
+          <div
+            className={cn(
+              "mt-1 flex items-center gap-1 text-[11px] text-muted-foreground",
+              own && "flex-row-reverse",
+            )}
+          >
+            <PinIcon className="size-3" />
+            <span>已置顶</span>
+          </div>
+        ) : null}
+        {messageReactions.length > 0 ? (
+          <div
+            className={cn("mt-1 flex flex-wrap gap-1", own && "justify-end")}
+          >
+            {messageReactions.map((reaction) => {
+              const active = Boolean(
+                reactingParticipantId &&
+                reaction.participant_ids.includes(reactingParticipantId),
+              );
+              return (
+                <button
+                  key={`${reaction.message_id}:${reaction.emoji}`}
+                  type="button"
+                  aria-label={`${reaction.emoji} ${reaction.count} 人回应`}
+                  onClick={() =>
+                    void collab
+                      ?.toggleMessageReaction(
+                        annotationMessageId,
+                        reaction.emoji,
+                      )
+                      .catch((error) =>
+                        swallow(error, "toggle-collaboration-message-reaction"),
+                      )
+                  }
+                  className={cn(
+                    "rounded-full border border-border-subtle bg-muted/50 px-1.5 py-0.5 text-xs transition-colors hover:bg-muted",
+                    active && "border-primary/30 bg-primary/10 text-primary",
+                  )}
+                >
+                  {reaction.emoji} {reaction.count}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         {messageActions !== false && messageActions ? (
           <CoworkRoomMessageActions
             {...messageActions}
             message={message}
             className={cn(own && "justify-end", messageActions.className)}
           />
+        ) : null}
+        {collab ? (
+          <div className="relative flex items-center gap-0.5">
+            <button
+              type="button"
+              aria-label="添加消息回应"
+              aria-expanded={showReactionPicker}
+              onClick={() => setShowReactionPicker((current) => !current)}
+              className="rounded p-1 text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground group-hover/msg:opacity-100 focus-visible:opacity-100"
+            >
+              <SmilePlusIcon className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              aria-label={isPinned ? "取消置顶消息" : "置顶消息"}
+              onClick={() =>
+                void collab
+                  .togglePinnedMessage(annotationMessageId)
+                  .catch((error) =>
+                    swallow(error, "toggle-collaboration-message-pin"),
+                  )
+              }
+              className={cn(
+                "rounded p-1 text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground group-hover/msg:opacity-100 focus-visible:opacity-100",
+                isPinned && "opacity-100 text-primary",
+              )}
+            >
+              <PinIcon className="size-3.5" />
+            </button>
+            {showReactionPicker ? (
+              <div className="absolute left-0 top-7 z-10 flex gap-0.5 rounded-lg border border-border-subtle bg-popover p-1 shadow-md">
+                {["👍", "✅", "👀", "🎉"].map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    aria-label={`用 ${emoji} 回应`}
+                    onClick={() => {
+                      setShowReactionPicker(false);
+                      void collab
+                        .toggleMessageReaction(annotationMessageId, emoji)
+                        .catch((error) =>
+                          swallow(
+                            error,
+                            "toggle-collaboration-message-reaction",
+                          ),
+                        );
+                    }}
+                    className="rounded p-1 text-sm hover:bg-muted"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <AddAnnotationButton
+              messageId={annotationMessageId}
+              className={annotationCount > 0 ? "opacity-100 text-primary" : ""}
+            />
+            {annotationCount > 0 ? (
+              <button
+                type="button"
+                aria-label={`查看 ${annotationCount} 条批注`}
+                onClick={() => setShowAnnotations((current) => !current)}
+                className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/15"
+              >
+                {annotationCount}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {collab && showAnnotations && annotationCount > 0 ? (
+          <div className="mt-2 w-full space-y-2">
+            {messageAnnotations.map((annotation) => (
+              <AnnotationThread
+                key={annotation.annotation_id}
+                annotation={annotation}
+              />
+            ))}
+          </div>
         ) : null}
       </div>
     </article>

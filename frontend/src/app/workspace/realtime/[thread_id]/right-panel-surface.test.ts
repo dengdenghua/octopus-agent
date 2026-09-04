@@ -20,7 +20,7 @@ describe("realtime unified right panel contract", () => {
   it("routes utility views and the workbench through one secondary surface", () => {
     const layout = sourceBetween(
       "<ChatPageLayout",
-      "\n            />\n          </ChatBox>",
+      "</ChatBox>",
     );
 
     expect(layout.match(/secondaryPanel=\{/g)).toHaveLength(1);
@@ -97,5 +97,31 @@ describe("realtime unified right panel contract", () => {
     );
     expect(pageSource).toContain("onClick={toggleAutomationPanel}");
     expect(pageSource).toContain("openTeachRepeatPanel();");
+  });
+
+  it("keeps team avatars beside the composer without reviving the legacy rail", () => {
+    expect(pageSource).toContain("<ConversationRosterStrip");
+    expect(pageSource).toContain("seats={collaborationRosterSeats}");
+    expect(pageSource).toContain("onOpenMemberProcess={openAgentPanel}");
+
+    const workbench = sourceBetween(
+      "<AgentWorkbenchPanel",
+      "onClose={closeAgentWorkbenchPanel}",
+    );
+    expect(workbench).toContain("showMachineScopeRail={false}");
+    expect(workbench).toContain("focusedAgentId={focusedWorkbenchAgentId}");
+  });
+
+  it("keeps a group role switch in the same conversation viewpoint", () => {
+    const roleSwitch = sourceBetween(
+      'useEvent(\n    "agent:changed"',
+      "const streamOptions = useMemo",
+    );
+    expect(roleSwitch).toContain("isGroupConversation");
+    expect(roleSwitch).toContain("groupPerspectiveAgentIds.has(name)");
+    expect(roleSwitch).toContain("setGroupPerspectiveAgentId(name)");
+    expect(roleSwitch).toContain("return;");
+    expect(pageSource).toContain("const mainPerspectiveAgentId");
+    expect(pageSource).toContain("agent_name: mainPerspectiveAgentId");
   });
 });

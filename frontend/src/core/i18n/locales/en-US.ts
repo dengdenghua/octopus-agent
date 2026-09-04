@@ -223,12 +223,21 @@ export const enUS: Translations = {
       ]
         .filter(Boolean)
         .join(" · "),
+    agentResponseSummary: (total, responded, errors) =>
+      [
+        `${total} members`,
+        responded > 0 ? `${responded} responded` : "",
+        errors > 0 ? `${errors} errors` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
     processDetails: "Open details",
     completedSteps: (n: number) => `Completed ${n} step${n === 1 ? "" : "s"}`,
     completedThings: (n: number) =>
       `Completed ${n} ${n === 1 ? "thing" : "things"}`,
     statusViewing: "Running",
     statusCompleted: "Completed",
+    statusResponded: "Responded",
     statusError: "Error",
     statusWaiting: "Waiting",
     assistant: "Assistant",
@@ -533,6 +542,15 @@ export const enUS: Translations = {
     kindRoomMessage: "Room message",
     kindRoomTask: "Room task",
     linkedRoom: "Linked room",
+    deliveryPending: (n) =>
+      `${n} member repl${n === 1 ? "y" : "ies"} awaiting delivery`,
+    deliveryWaiting: "Recovering",
+    deliveryFailed: "Delivery failed",
+    deliveryRetry: "Retry",
+    deliveryDismiss: "Dismiss this reply",
+    deliveryUnknownMember: "Collaborator",
+    deliveryMonitorUnavailable:
+      "Reply delivery status is temporarily unavailable",
   },
 
   // Collaboration Mode
@@ -6497,6 +6515,10 @@ Strategy:
     status: "Status",
     nonTextContent: "[non-text content]",
     binaryContent: "[binary content]",
+    taskHistory: "Remote tasks",
+    noTasks: "No remote tasks yet",
+    refreshTask: "Refresh task status",
+    cancelTask: "Cancel task",
   },
 
   // Live Tool Timeline

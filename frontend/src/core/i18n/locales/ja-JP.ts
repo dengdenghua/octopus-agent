@@ -220,11 +220,20 @@ export const jaJP: Translations = {
       ]
         .filter(Boolean)
         .join(" · "),
+    agentResponseSummary: (total, responded, errors) =>
+      [
+        `${total} 人のメンバー`,
+        responded > 0 ? `${responded} 回答済み` : "",
+        errors > 0 ? `${errors} エラー` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
     processDetails: "詳細を開く",
     completedSteps: (n: number) => `${n} 件のステップを完了`,
     completedThings: (n: number) => `${n} 件完了`,
     statusViewing: "実行中",
     statusCompleted: "完了",
+    statusResponded: "回答済み",
     statusError: "エラー",
     statusWaiting: "待機中",
     assistant: "アシスタント",
@@ -526,6 +535,13 @@ export const jaJP: Translations = {
     kindRoomMessage: "ルームメッセージ",
     kindRoomTask: "ルームタスク",
     linkedRoom: "リンク済みルーム",
+    deliveryPending: (n) => `${n} 件のメンバー返信を配信待ち`,
+    deliveryWaiting: "復旧中",
+    deliveryFailed: "配信失敗",
+    deliveryRetry: "再試行",
+    deliveryDismiss: "この返信を無視",
+    deliveryUnknownMember: "コラボレーター",
+    deliveryMonitorUnavailable: "返信の配信状態を一時的に取得できません",
   },
 
   // Collaboration Mode
@@ -6469,6 +6485,10 @@ export const jaJP: Translations = {
     status: "ステータス",
     nonTextContent: "[非テキストコンテンツ]",
     binaryContent: "[バイナリコンテンツ]",
+    taskHistory: "リモートタスク",
+    noTasks: "リモートタスクはありません",
+    refreshTask: "タスク状態を更新",
+    cancelTask: "タスクをキャンセル",
   },
 
   // Live Tool Timeline

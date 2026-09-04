@@ -68,6 +68,10 @@ import {
 } from "../agent-run-status";
 
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
+import {
+  MemberProfilePopover,
+  summarizeAgentCapabilities,
+} from "@/components/workspace/member-profile-popover";
 
 import { AgentAvatar } from "./agent-message-header";
 import { ClarificationChoiceCard } from "./clarification-choice-card";
@@ -125,6 +129,9 @@ interface MessageListAgentRosterEntry {
   icon?: string | null;
   name?: string | null;
   role?: MessageListAgentRole | null;
+  description?: string | null;
+  model?: string | null;
+  toolGroups?: string[] | null;
 }
 
 interface AgentIdentity {
@@ -133,6 +140,9 @@ interface AgentIdentity {
   id?: string;
   name?: string;
   role?: string;
+  description?: string;
+  model?: string;
+  toolGroups?: string[];
 }
 
 const EMPTY_AGENT_ROSTER: MessageListAgentRosterEntry[] = [];
@@ -956,6 +966,7 @@ const MemoizedGroup = memo(
     showAssistantAvatar,
     subagentAgents,
     subagentEvents,
+    subagentBindings,
     subagentMission,
     subagentSettled,
     subagentTurnIndex,
@@ -976,13 +987,17 @@ const MemoizedGroup = memo(
     showAssistantAvatar: boolean;
     subagentAgents?: InlineSubagentInfo[];
     subagentEvents?: LiveToolEvent[];
+    subagentBindings?: Map<
+      string,
+      { agent: InlineSubagentInfo; events: LiveToolEvent[] }
+    >;
     subagentMission?: string;
     subagentSettled?: boolean;
     subagentTurnIndex?: number;
     showSubagentCluster: boolean;
     renderGroupContent: (
       group: CoreMessageGroup,
-      beforeAssistantContent?: ReactNode,
+      assistantHeaderMeta?: (messageId?: string) => ReactNode,
       enableClarificationActions?: boolean,
       keepOpen?: boolean,
       deferOutputs?: boolean,
@@ -995,6 +1010,36 @@ const MemoizedGroup = memo(
     ) => ReactNode;
     groupTurnRenderInfo: GroupTurnRenderInfo;
   }) {
+    const hasPairedBindings = Boolean(subagentBindings?.size);
+    const pairedStatusControl = hasPairedBindings
+      ? (messageId?: string) => {
+          if (!messageId) return undefined;
+          const binding = subagentBindings?.get(messageId);
+          return binding ? (
+            <InlineSubagentCards
+              agents={[binding.agent]}
+              events={binding.events}
+              mission={subagentMission}
+              settled={subagentSettled}
+              turnIndex={subagentTurnIndex}
+              variant="paired"
+            />
+          ) : undefined;
+        }
+      : undefined;
+    const renderedGroup = renderGroupContent(
+      group,
+      pairedStatusControl,
+      enableClarificationActions,
+      keepGroupOpen,
+      deferGroupOutputs,
+      groupAuditNotice,
+      groupFailure,
+      showAssistantAvatar,
+      undefined,
+      Boolean(subagentAgents?.length || subagentEvents?.length),
+      groupTurnRenderInfo,
+    );
     return (
       <div
         data-turn-key={group.type === "human" ? groupKey : undefined}
@@ -1007,27 +1052,22 @@ const MemoizedGroup = memo(
             "-mt-2",
         )}
       >
-        {renderGroupContent(
-          group,
-          undefined,
-          enableClarificationActions,
-          keepGroupOpen,
-          deferGroupOutputs,
-          groupAuditNotice,
-          groupFailure,
-          showAssistantAvatar,
-          showSubagentCluster ? (
-            <InlineSubagentCards
-              agents={subagentAgents}
-              events={subagentEvents}
-              mission={subagentMission}
-              settled={subagentSettled}
-              turnIndex={subagentTurnIndex}
-              className="mb-2"
-            />
-          ) : undefined,
-          Boolean(subagentAgents?.length || subagentEvents?.length),
-          groupTurnRenderInfo,
+        {hasPairedBindings ? (
+          renderedGroup
+        ) : (
+          <>
+            {showSubagentCluster ? (
+              <InlineSubagentCards
+                agents={subagentAgents}
+                events={subagentEvents}
+                mission={subagentMission}
+                settled={subagentSettled}
+                turnIndex={subagentTurnIndex}
+                className="mb-1 ml-11"
+              />
+            ) : null}
+            {renderedGroup}
+          </>
         )}
       </div>
     );
@@ -1047,6 +1087,7 @@ const MemoizedGroup = memo(
     prev.showAssistantAvatar === next.showAssistantAvatar &&
     prev.subagentAgents === next.subagentAgents &&
     prev.subagentEvents === next.subagentEvents &&
+    prev.subagentBindings === next.subagentBindings &&
     prev.subagentMission === next.subagentMission &&
     prev.subagentSettled === next.subagentSettled &&
     prev.subagentTurnIndex === next.subagentTurnIndex &&
@@ -1732,9 +1773,24 @@ export function MessageList({
           threadDisplayName,
         ) ?? soleRosterEntry;
       const rosterAgentId = agentIdForRosterEntry(rosterMatch);
+      const rosterDisplayName = displayNameForRosterEntry(rosterMatch);
+      // Older group-fanout messages persisted the runtime id in the
+      // display-name field (for example "coder" or "desktop_operator").
+      // When that value resolves to a roster member, the roster's persona
+      // label is authoritative for presentation while the stored id remains
+      // untouched for replay/audit.
+      const explicitDisplayIsRuntimeId = Boolean(
+        rosterMatch &&
+        explicitDisplayName &&
+        [rosterMatch.name, rosterMatch.agent_id].some(
+          (value) => identityKey(value) === identityKey(explicitDisplayName),
+        ),
+      );
       const name =
-        explicitDisplayName ??
-        displayNameForRosterEntry(rosterMatch) ??
+        (explicitDisplayIsRuntimeId
+          ? rosterDisplayName
+          : explicitDisplayName) ??
+        rosterDisplayName ??
         currentAgent?.display_name ??
         currentAgent?.name ??
         threadDisplayName;
@@ -1750,6 +1806,14 @@ export function MessageList({
         cleanIdentityText(rosterMatch?.icon) ??
         cleanIdentityText(currentAgent?.icon);
       const role = cleanIdentityText(rosterMatch?.role);
+      const description = cleanIdentityText(rosterMatch?.description);
+      const model = cleanIdentityText(rosterMatch?.model);
+      const toolGroups = Array.isArray(rosterMatch?.toolGroups)
+        ? rosterMatch.toolGroups.filter(
+            (tool): tool is string =>
+              typeof tool === "string" && Boolean(tool.trim()),
+          )
+        : undefined;
 
       return {
         avatar,
@@ -1757,6 +1821,9 @@ export function MessageList({
         id: rosterAgentId ?? currentAgent?.name ?? explicitAgentId,
         name,
         role,
+        description,
+        model,
+        toolGroups,
       };
     },
     [agentRosterMap, currentAgent, soleRosterEntry, thread.values, threadId],
@@ -1939,7 +2006,11 @@ export function MessageList({
     agentAvatar,
     agentIcon,
     agentRole,
+    agentDescription,
+    agentModel,
+    agentToolGroups,
     replyTo,
+    headerMeta,
     children,
   }: {
     key: string;
@@ -1947,28 +2018,56 @@ export function MessageList({
     agentAvatar?: string;
     agentIcon?: string | null;
     agentRole?: string;
+    agentDescription?: string;
+    agentModel?: string;
+    agentToolGroups?: string[];
     /** ③ @因果链：本气泡回应/反驳的成员名，显示"回应 @谁"。 */
     replyTo?: string;
+    /** Compact execution state; detailed task/event streams live in workbench. */
+    headerMeta?: ReactNode;
     children: ReactNode;
   }) => {
     const displayName = agentName || t.message.assistant;
+    const capabilitySummary = summarizeAgentCapabilities(agentToolGroups);
     // In a team room, label each agent's message with its name (and 队长
     // badge) so the thread reads like a group chat — you can see who's
     // speaking, not just an anonymous avatar.
     const isTeam = showSenderName;
     return (
       <div key={key} className="flex w-full items-start gap-3">
-        <AgentAvatar
-          agentDisplayName={displayName}
-          avatarUrl={
-            agentAvatar ? withAgentAvatarVersion(agentAvatar) : agentAvatar
+        <MemberProfilePopover
+          name={displayName}
+          roleLabel={agentRole === "tl" ? "队长" : "协作成员"}
+          presenceLabel="参与对话"
+          summary={agentDescription || "正在参与当前协作。"}
+          details={[
+            ...(agentModel ? [{ label: "模型", value: agentModel }] : []),
+            ...(capabilitySummary
+              ? [{ label: "擅长", value: capabilitySummary }]
+              : []),
+          ]}
+          trigger={
+            <button
+              type="button"
+              className="mt-1 shrink-0 rounded-md outline-none transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={`${displayName} · 查看成员信息`}
+            >
+              <AgentAvatar
+                agentDisplayName={displayName}
+                avatarUrl={
+                  agentAvatar
+                    ? withAgentAvatarVersion(agentAvatar)
+                    : agentAvatar
+                }
+                icon={agentIcon}
+                className="size-8 rounded-md"
+              />
+            </button>
           }
-          icon={agentIcon}
-          className="mt-1 size-8 rounded-md"
         />
         <div className="min-w-0 flex-1">
           {isTeam && agentName && (
-            <div className="mb-0.5 flex items-center gap-1.5">
+            <div className="mb-0.5 flex w-full items-center gap-1.5">
               <span className="text-sm font-semibold text-foreground">
                 {displayName}
               </span>
@@ -1985,6 +2084,11 @@ export function MessageList({
                   ↪ 回应 @{replyTo}
                 </span>
               )}
+              {headerMeta ? (
+                <span className="ml-auto flex shrink-0 items-center">
+                  {headerMeta}
+                </span>
+              ) : null}
             </div>
           )}
           {children}
@@ -2034,6 +2138,7 @@ export function MessageList({
     beforeContent?: ReactNode,
     suppressReasoningPanel = false,
     afterContent?: ReactNode,
+    headerMeta?: ReactNode,
   ) => {
     const key = `${keyPrefix}/${msg.id}`;
     const messageIndex = messageIndexByReference.get(msg);
@@ -2064,13 +2169,18 @@ export function MessageList({
     if (msg.type !== "ai") {
       return <div key={key}>{content}</div>;
     }
-    const { name, avatar, icon, role } = resolveAgentIdentity(msg);
+    const { name, avatar, icon, role, description, model, toolGroups } =
+      resolveAgentIdentity(msg);
     return renderAssistantFrame({
       key,
       agentName: name,
       agentAvatar: avatar,
       agentIcon: icon,
       agentRole: role,
+      agentDescription: description,
+      agentModel: model,
+      agentToolGroups: toolGroups,
+      headerMeta,
       replyTo:
         typeof msg.additional_kwargs?.reply_to === "string"
           ? (msg.additional_kwargs.reply_to as string)
@@ -2096,6 +2206,9 @@ export function MessageList({
       avatar: agentAvatar,
       icon: agentIcon,
       role: agentRole,
+      description: agentDescription,
+      model: agentModel,
+      toolGroups: agentToolGroups,
     } = resolveAgentIdentity(aiMessage);
     const content = (
       <>
@@ -2126,6 +2239,9 @@ export function MessageList({
       agentAvatar,
       agentIcon,
       agentRole,
+      agentDescription,
+      agentModel,
+      agentToolGroups,
       replyTo:
         typeof aiMessage?.additional_kwargs?.reply_to === "string"
           ? (aiMessage.additional_kwargs.reply_to as string)
@@ -2136,7 +2252,7 @@ export function MessageList({
 
   const renderGroupContent = (
     group: (typeof groupedMessages)[number],
-    beforeAssistantContent?: ReactNode,
+    assistantHeaderMeta?: (messageId?: string) => ReactNode,
     enableClarificationActions = false,
     keepOpen = false,
     deferOutputs = false,
@@ -2212,25 +2328,22 @@ export function MessageList({
       const outputHostMessage = outputSummary
         ? [...group.messages].reverse().find((message) => message.type === "ai")
         : undefined;
-      let injectedBeforeContent = false;
       const renderedMessages = group.messages.map((msg) => {
-        const beforeContent =
-          beforeAssistantContent && msg.type === "ai" && !injectedBeforeContent
-            ? beforeAssistantContent
-            : undefined;
-        if (beforeContent) injectedBeforeContent = true;
+        const headerMeta =
+          msg.type === "ai" ? assistantHeaderMeta?.(msg.id) : undefined;
         return showAssistantAvatar || msg.type !== "ai"
           ? renderMessageWithHeader(
               msg,
               group.id,
-              beforeContent,
+              undefined,
               turnHasProcessingLane,
               msg === outputHostMessage ? outputSummary : undefined,
+              headerMeta,
             )
           : renderMessageContent(
               msg,
               group.id,
-              beforeContent,
+              undefined,
               turnHasProcessingLane,
               msg === outputHostMessage ? outputSummary : undefined,
             );
@@ -2481,6 +2594,12 @@ export function MessageList({
         settled: boolean;
         firstProcessingIndex: number;
         hasCluster: boolean;
+        agentsByGroupIndex: Map<number, InlineSubagentInfo[]>;
+        eventsByGroupIndex: Map<number, LiveToolEvent[]>;
+        bindingsByGroupIndex: Map<
+          number,
+          Map<string, { agent: InlineSubagentInfo; events: LiveToolEvent[] }>
+        >;
       }
     >();
     // Historical events are immutable for this render. Index them once
@@ -2497,7 +2616,25 @@ export function MessageList({
       const turn = messageTurns[turnIndex]!;
       const turnMessages =
         groupTurnRenderInfo.get(turn.groupIndexes[0]!)?.turnMessages ?? [];
-      const agents = deriveSubagentsFromMessages(turnMessages);
+      const agents = deriveSubagentsFromMessages(turnMessages).map((agent) => {
+        const rosterEntry = findRosterEntry(
+          agentRosterMap,
+          agent.id,
+          agent.name,
+          agent.role,
+        );
+        if (!rosterEntry) return agent;
+        const rosterName = displayNameForRosterEntry(rosterEntry);
+        const rosterAgentId = agentIdForRosterEntry(rosterEntry);
+        return {
+          ...agent,
+          name: rosterName ?? agent.name,
+          avatar:
+            cleanIdentityText(rosterEntry.avatar_url) ??
+            agent.avatar ??
+            fallbackAgentAvatarUrl(rosterAgentId),
+        };
+      });
       const mission = deriveSubagentMissionFromMessages(turnMessages);
       const isLatestTurn = turnIndex === messageTurns.length - 1;
       const sourceEvents = isLatestTurn
@@ -2520,6 +2657,70 @@ export function MessageList({
         turn.groupIndexes.find(
           (index) => groupedMessages[index]?.type === "assistant:processing",
         ) ?? -1;
+      const agentsByGroupIndex = new Map<number, InlineSubagentInfo[]>();
+      const eventsByGroupIndex = new Map<number, LiveToolEvent[]>();
+      const bindingsByGroupIndex = new Map<
+        number,
+        Map<string, { agent: InlineSubagentInfo; events: LiveToolEvent[] }>
+      >();
+      const claimedAgentIds = new Set<string>();
+
+      // Bind each member state to the exact answer message authored by that
+      // stable agent id. One assistant group can contain adjacent replies from
+      // several members, so group-level identity is not precise enough here.
+      for (const groupIndex of turn.groupIndexes) {
+        const group = groupedMessages[groupIndex];
+        if (group?.type !== "assistant") continue;
+        const bindings = new Map<
+          string,
+          { agent: InlineSubagentInfo; events: LiveToolEvent[] }
+        >();
+        for (const message of group.messages) {
+          if (message.type !== "ai" || !message.id) continue;
+          const speaker = resolveAgentIdentity(message);
+          const speakerKeys = new Set(
+            [speaker.id, speaker.name]
+              .map(identityKey)
+              .filter((value): value is string => Boolean(value)),
+          );
+          const agent = agents.find((candidate) => {
+            if (claimedAgentIds.has(candidate.id)) return false;
+            return [candidate.id, candidate.name].some((value) => {
+              const key = identityKey(value);
+              return Boolean(key && speakerKeys.has(key));
+            });
+          });
+          if (!agent) continue;
+          claimedAgentIds.add(agent.id);
+          const aliases = new Set(
+            [agent.id, agent.name]
+              .map(identityKey)
+              .filter((value): value is string => Boolean(value)),
+          );
+          const matchingEvents = events.filter((event) =>
+            [event.agentId, event.agentName, event.subagentCodename].some(
+              (value) => {
+                const key = identityKey(value);
+                return Boolean(key && aliases.has(key));
+              },
+            ),
+          );
+          bindings.set(message.id, { agent, events: matchingEvents });
+        }
+        if (bindings.size > 0) {
+          bindingsByGroupIndex.set(groupIndex, bindings);
+        }
+      }
+
+      // A member that never emitted any answer still needs an observable
+      // failure/running card. Keep those unmatched lanes at the process slot.
+      const unmatchedAgents = agents.filter(
+        (agent) => !claimedAgentIds.has(agent.id),
+      );
+      if (firstProcessingIndex >= 0 && unmatchedAgents.length > 0) {
+        agentsByGroupIndex.set(firstProcessingIndex, unmatchedAgents);
+        eventsByGroupIndex.set(firstProcessingIndex, events);
+      }
       info.set(turn.key, {
         agents,
         events,
@@ -2527,16 +2728,21 @@ export function MessageList({
         settled: !isLatestTurn,
         firstProcessingIndex,
         hasCluster: agents.length > 0 || events.length > 0,
+        agentsByGroupIndex,
+        eventsByGroupIndex,
+        bindingsByGroupIndex,
       });
     }
     return info;
   }, [
     allToolEvents,
+    agentRosterMap,
     groupTurnRenderInfo,
     groupedMessages,
     lastTurnToolEvents,
     liveToolEvents,
     messageTurns,
+    resolveAgentIdentity,
   ]);
 
   if (thread.isThreadLoading && messages.length === 0) {
@@ -2671,6 +2877,27 @@ export function MessageList({
               {turn.groupIndexes.map((index) => {
                 const group = groupedMessages[index]!;
                 const groupKey = `${group.type}:${group.id ?? `idx-${index}`}`;
+                const hideTeamExecutionProjection = Boolean(
+                  showSenderName &&
+                  subagentRenderInfo?.hasCluster &&
+                  group.type === "assistant:processing" &&
+                  !group.messages.some((message) => hasContent(message)),
+                );
+                if (hideTeamExecutionProjection) {
+                  // Team rooms already project every member's live state and
+                  // output into the right-hand execution workbench. Keeping
+                  // the legacy inline "Agent 集群" card in the chat duplicates
+                  // that surface and pushes the actual replies out of view.
+                  return (
+                    <Fragment key={groupKey}>
+                      {timelineEntrySlots[index]?.map((entry) => (
+                        <Fragment key={`timeline:${entry.id}`}>
+                          {entry.content}
+                        </Fragment>
+                      ))}
+                    </Fragment>
+                  );
+                }
                 const isLatestGroup = index === groupedMessages.length - 1;
                 const groupHasStreamingMessage =
                   thread.streamingMessage != null &&
@@ -2691,6 +2918,12 @@ export function MessageList({
                     ? verificationAuditNotice
                     : null;
                 const groupInfo = groupTurnRenderInfo.get(index)!;
+                const boundSubagentAgents =
+                  subagentRenderInfo?.agentsByGroupIndex.get(index);
+                const boundSubagentEvents =
+                  subagentRenderInfo?.eventsByGroupIndex.get(index);
+                const boundSubagentBindings =
+                  subagentRenderInfo?.bindingsByGroupIndex.get(index);
                 const groupTurnMessages =
                   group.type === "assistant"
                     ? groupInfo.turnMessages
@@ -2776,22 +3009,24 @@ export function MessageList({
                       // comparator on every streamed frame and reopen every
                       // otherwise-settled historical group.
                       subagentAgents={
-                        subagentRenderInfo?.agents.length
-                          ? subagentRenderInfo.agents
+                        boundSubagentAgents?.length
+                          ? boundSubagentAgents
                           : undefined
                       }
                       subagentEvents={
-                        subagentRenderInfo?.events.length
-                          ? subagentRenderInfo.events
+                        boundSubagentEvents?.length
+                          ? boundSubagentEvents
                           : undefined
                       }
+                      subagentBindings={boundSubagentBindings}
                       subagentMission={subagentRenderInfo?.mission}
                       subagentSettled={subagentRenderInfo?.settled}
                       subagentTurnIndex={turnIndex}
-                      showSubagentCluster={
-                        Boolean(subagentRenderInfo?.hasCluster) &&
-                        index === subagentRenderInfo?.firstProcessingIndex
-                      }
+                      showSubagentCluster={Boolean(
+                        boundSubagentAgents?.length ||
+                        boundSubagentEvents?.length ||
+                        boundSubagentBindings?.size,
+                      )}
                       groupTurnRenderInfo={groupInfo}
                     />
                   </Fragment>

@@ -13,12 +13,29 @@ import { toast } from "sonner";
 
 import { swallow } from "@/core/utils/log";
 import { getToken } from "@/core/auth/api";
+import { openAuthenticatedWebSocket } from "@/core/auth/websocket";
 import { getBackendWebSocketBaseURL } from "@/core/config";
 import { readOrCreateTeamParticipantId } from "@/core/teams";
 import type { SpeakerPolicy } from "@/core/teams";
 import { eventBus } from "@/core/events";
 import { teamTaskQueryKeys } from "@/core/team-tasks/hooks";
 import type { TeamTask } from "@/core/team-tasks/types";
+import type {
+  CoworkMessageReaction,
+  CoworkPinnedMessage,
+  CoworkRoomReplyReference,
+} from "@/core/cowork/types";
+import {
+  createCollabAnnotation,
+  createCollabAnnotationReply,
+  deleteCollabAnnotation,
+  getCollabAnnotations,
+  getCollabMessageReactions,
+  getCollabPinnedMessages,
+  setCollabAnnotationResolved,
+  toggleCollabMessageReaction,
+  toggleCollabPinnedMessage,
+} from "@/core/cowork/api";
 
 export interface User {
   id: string;
@@ -51,11 +68,26 @@ export interface Annotation {
 
 export interface RoomMessage {
   message_id: string;
+  client_message_id?: string;
+  seq?: number;
   thread_id?: string;
   participant_id: string;
   display_name: string;
+  on_behalf_of?: string;
   text: string;
+  reply_to?: CoworkRoomReplyReference | null;
   created_at: string;
+  delivery_status?: "sending" | "sent" | "delivered" | "read" | "failed";
+  error?: string;
+}
+
+export interface RoomMessageReceipt {
+  room_id: string;
+  message_id: string;
+  participant_id: string;
+  status: "delivered" | "read";
+  seq?: number | null;
+  updated_at?: string;
 }
 
 export interface TeamTaskProgressEvent {
@@ -94,17 +126,28 @@ interface CollabContextType {
   currentUser: User | null;
   isConnected: boolean;
   roomMessages: RoomMessage[];
+  messageReceipts: RoomMessageReceipt[];
   taskEvents: TeamTaskProgressEvent[];
   floor: FloorState;
   join: (user: User) => void;
   leave: () => void;
   updateCursor: (position: { x: number; y: number }) => void;
-  sendRoomMessage: (text: string, onBehalfOf?: string) => void;
+  sendRoomMessage: (
+    text: string,
+    onBehalfOf?: string,
+    replyTo?: CoworkRoomReplyReference | null,
+  ) => string | null;
+  retryRoomMessage: (messageId: string) => boolean;
+  markRoomMessageRead: (messageId: string, seq?: number) => boolean;
   raiseHand: () => void;
   yieldFloor: () => void;
   grantFloor: (targetId: string | null) => void;
   notifyThreadUpdate: (reason?: string) => void;
   annotations: Annotation[];
+  messageReactions: CoworkMessageReaction[];
+  pinnedMessages: CoworkPinnedMessage[];
+  toggleMessageReaction: (messageId: string, emoji: string) => Promise<void>;
+  togglePinnedMessage: (messageId: string) => Promise<void>;
   addAnnotation: (messageId: string, body: string) => Promise<void>;
   resolveAnnotation: (annotationId: string) => Promise<void>;
   unresolveAnnotation: (annotationId: string) => Promise<void>;
@@ -150,8 +193,17 @@ export function CollabProvider({
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [roomMessages, setRoomMessages] = useState<RoomMessage[]>([]);
+  const [messageReceipts, setMessageReceipts] = useState<RoomMessageReceipt[]>(
+    [],
+  );
   const [taskEvents, setTaskEvents] = useState<TeamTaskProgressEvent[]>([]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [messageReactions, setMessageReactions] = useState<
+    CoworkMessageReaction[]
+  >([]);
+  const [pinnedMessages, setPinnedMessages] = useState<CoworkPinnedMessage[]>(
+    [],
+  );
   const [floor, setFloor] = useState<FloorState>(DEFAULT_FLOOR);
 
   const localUser = useMemo<User>(
@@ -166,7 +218,68 @@ export function CollabProvider({
 
   useEffect(() => {
     setTaskEvents([]);
+    setRoomMessages([]);
+    setMessageReceipts([]);
+    setFloor(DEFAULT_FLOOR);
   }, [teamId]);
+
+  useEffect(() => {
+    if (!teamId || !normalizedThreadId) {
+      setAnnotations([]);
+      setMessageReactions([]);
+      setPinnedMessages([]);
+      return;
+    }
+    let disposed = false;
+    void getCollabAnnotations(normalizedThreadId)
+      .then((next) => {
+        if (!disposed) setAnnotations(next);
+      })
+      .catch((error) => {
+        if (!disposed) swallow(error, "load-collaboration-annotations");
+      });
+    void getCollabMessageReactions(normalizedThreadId)
+      .then((next) => {
+        if (!disposed) setMessageReactions(next);
+      })
+      .catch((error) => {
+        if (!disposed) swallow(error, "load-collaboration-message-reactions");
+      });
+    void getCollabPinnedMessages(normalizedThreadId)
+      .then((next) => {
+        if (!disposed) setPinnedMessages(next);
+      })
+      .catch((error) => {
+        if (!disposed) swallow(error, "load-collaboration-pinned-messages");
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [normalizedThreadId, teamId]);
+
+  useEffect(() => {
+    if (!teamId || typeof window === "undefined") return;
+    const queued = readRoomOutbox(teamId, resolvedParticipantId);
+    if (queued.length === 0) return;
+    setRoomMessages((prev) => {
+      let next = prev;
+      for (const item of queued) {
+        next = upsertRoomMessage(next, {
+          message_id: `local:${item.client_message_id}`,
+          client_message_id: item.client_message_id,
+          thread_id: item.thread_id,
+          participant_id: item.on_behalf_of || resolvedParticipantId,
+          display_name: item.on_behalf_of ? "Pending" : localUser.name,
+          on_behalf_of: item.on_behalf_of,
+          reply_to: item.reply_to,
+          text: item.text,
+          created_at: item.created_at,
+          delivery_status: "sending",
+        });
+      }
+      return next;
+    });
+  }, [localUser.name, resolvedParticipantId, teamId]);
 
   const notifyRemoved = useCallback(
     (_reason = "removed") => {
@@ -207,12 +320,9 @@ export function CollabProvider({
       if (normalizedThreadId) {
         params.set("thread_id", normalizedThreadId);
       }
-      const token = getToken();
-      if (token) {
-        params.set("token", token);
-      }
-      const socket = new WebSocket(
+      const socket = openAuthenticatedWebSocket(
         `${wsBase}/api/teams/${encodeURIComponent(teamId)}/ws?${params.toString()}`,
+        getToken(),
       );
       wsRef.current = socket;
 
@@ -220,6 +330,24 @@ export function CollabProvider({
         if (disposed) return;
         setIsConnected(true);
         setCurrentUser(localUser);
+        for (const queued of readRoomOutbox(teamId, resolvedParticipantId)) {
+          try {
+            socket.send(
+              JSON.stringify({
+                type: "message",
+                text: queued.text,
+                client_message_id: queued.client_message_id,
+                ...(queued.on_behalf_of
+                  ? { on_behalf_of: queued.on_behalf_of }
+                  : {}),
+                ...(queued.thread_id ? { thread_id: queued.thread_id } : {}),
+                ...(queued.reply_to ? { reply_to: queued.reply_to } : {}),
+              }),
+            );
+          } catch {
+            break;
+          }
+        }
       };
       socket.onmessage = (event) => {
         if (disposed) return;
@@ -227,6 +355,19 @@ export function CollabProvider({
         if (!msg) return;
         if (msg.type === "error") {
           const message = String(msg.message ?? "");
+          const clientMessageId = String(msg.client_message_id ?? "");
+          if (clientMessageId) {
+            setRoomMessages((prev) =>
+              markRoomMessageFailed(prev, clientMessageId, message),
+            );
+            if (msg.retryable !== true) {
+              removeRoomOutboxMessage(
+                teamId,
+                resolvedParticipantId,
+                clientMessageId,
+              );
+            }
+          }
           if (message.includes("participant removed")) {
             shouldReconnectRef.current = false;
             notifyRemoved("removed");
@@ -240,6 +381,24 @@ export function CollabProvider({
             // moderator / not authorized to speak for someone). Surface it.
             toast.error(message || "You can't speak right now");
           }
+        } else if (msg.type === "message:error") {
+          const clientMessageId = String(msg.client_message_id ?? "");
+          if (clientMessageId) {
+            setRoomMessages((prev) =>
+              markRoomMessageFailed(
+                prev,
+                clientMessageId,
+                String(msg.message ?? "Message was not saved"),
+              ),
+            );
+            if (msg.retryable !== true) {
+              removeRoomOutboxMessage(
+                teamId,
+                resolvedParticipantId,
+                clientMessageId,
+              );
+            }
+          }
         } else if (msg.type === "floor") {
           setFloor(floorFrom(msg));
         } else if (msg.type === "ready" && msg.participant) {
@@ -247,6 +406,31 @@ export function CollabProvider({
           if (isRecord(msg.team)) setFloor(floorFrom(msg.team));
         } else if (msg.type === "presence" && Array.isArray(msg.participants)) {
           setUsers(msg.participants.map((p) => participantToUser(p)));
+        } else if (msg.type === "message:receipt") {
+          const status = msg.status === "read" ? "read" : "delivered";
+          const receipt: RoomMessageReceipt = {
+            room_id: String(msg.room_id ?? teamId ?? ""),
+            message_id: String(msg.message_id ?? ""),
+            participant_id: String(msg.participant_id ?? ""),
+            status,
+            seq: Number.isFinite(Number(msg.seq)) ? Number(msg.seq) : null,
+            updated_at: String(msg.updated_at ?? new Date().toISOString()),
+          };
+          if (!receipt.message_id || !receipt.participant_id) return;
+          setMessageReceipts((prev) => upsertRoomMessageReceipt(prev, receipt));
+          if (receipt.participant_id === resolvedParticipantId) {
+            setRoomMessages((prev) =>
+              prev.map((message) =>
+                message.message_id === receipt.message_id
+                  ? {
+                      ...message,
+                      delivery_status:
+                        receipt.status === "read" ? "read" : "delivered",
+                    }
+                  : message,
+              ),
+            );
+          }
         } else if (msg.type === "message" && typeof msg.text === "string") {
           const incomingThreadId =
             typeof msg.thread_id === "string" ? msg.thread_id : "";
@@ -254,17 +438,52 @@ export function CollabProvider({
             return;
           }
           const text = msg.text;
-          setRoomMessages((prev) => [
-            ...prev.slice(-49),
-            {
+          const clientMessageId = String(msg.client_message_id ?? "");
+          if (clientMessageId) {
+            removeRoomOutboxMessage(
+              teamId,
+              resolvedParticipantId,
+              clientMessageId,
+            );
+          }
+          setRoomMessages((prev) =>
+            upsertRoomMessage(prev, {
               message_id: String(msg.message_id ?? `room-msg-${Date.now()}`),
+              client_message_id: clientMessageId || undefined,
+              seq: Number.isFinite(Number(msg.seq))
+                ? Number(msg.seq)
+                : undefined,
               thread_id: incomingThreadId || undefined,
               participant_id: String(msg.participant_id ?? ""),
               display_name: String(msg.display_name ?? "Guest"),
+              reply_to: isRecord(msg.reply_to)
+                ? (msg.reply_to as CoworkRoomReplyReference)
+                : undefined,
               text,
               created_at: String(msg.created_at ?? new Date().toISOString()),
-            },
-          ]);
+              delivery_status: "sent",
+            }),
+          );
+          if (
+            clientMessageId &&
+            String(msg.participant_id ?? "") !== resolvedParticipantId &&
+            wsRef.current?.readyState === WebSocket.OPEN
+          ) {
+            try {
+              wsRef.current.send(
+                JSON.stringify({
+                  type: "message:delivered",
+                  message_id: String(msg.message_id ?? ""),
+                  seq: Number.isFinite(Number(msg.seq))
+                    ? Number(msg.seq)
+                    : undefined,
+                }),
+              );
+            } catch {
+              // Delivery receipts are best-effort; reconnect catch-up remains
+              // authoritative for the message itself.
+            }
+          }
         } else if (msg.type === "thread:update") {
           const incomingThreadId =
             typeof msg.thread_id === "string" ? msg.thread_id : "";
@@ -273,6 +492,27 @@ export function CollabProvider({
           }
           const senderId = String(msg.participant_id ?? "");
           if (senderId === resolvedParticipantId) return;
+          if (msg.reason === "annotation" && normalizedThreadId) {
+            void getCollabAnnotations(normalizedThreadId)
+              .then(setAnnotations)
+              .catch((error) =>
+                swallow(error, "refresh-collaboration-annotations"),
+              );
+          }
+          if (msg.reason === "reaction" && normalizedThreadId) {
+            void getCollabMessageReactions(normalizedThreadId)
+              .then(setMessageReactions)
+              .catch((error) =>
+                swallow(error, "refresh-collaboration-message-reactions"),
+              );
+          }
+          if (msg.reason === "pin" && normalizedThreadId) {
+            void getCollabPinnedMessages(normalizedThreadId)
+              .then(setPinnedMessages)
+              .catch((error) =>
+                swallow(error, "refresh-collaboration-pinned-messages"),
+              );
+          }
           window.dispatchEvent(
             new CustomEvent("octopus:team-thread-update", {
               detail: {
@@ -317,6 +557,17 @@ export function CollabProvider({
       socket.onclose = (event) => {
         if (disposed) return;
         setIsConnected(false);
+        setRoomMessages((prev) =>
+          prev.map((message) =>
+            message.delivery_status === "sending"
+              ? {
+                  ...message,
+                  delivery_status: "failed",
+                  error: "Connection lost before the message was confirmed",
+                }
+              : message,
+          ),
+        );
         if (event.code === 4403) {
           shouldReconnectRef.current = false;
           notifyRemoved("removed");
@@ -372,9 +623,13 @@ export function CollabProvider({
     setCurrentUser(null);
   }, [closeSocket, currentUser?.id]);
 
-  const sendJson = useCallback((payload: Record<string, unknown>) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+  const sendJson = useCallback((payload: Record<string, unknown>): boolean => {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return false;
+    try {
       wsRef.current.send(JSON.stringify(payload));
+      return true;
+    } catch {
+      return false;
     }
   }, []);
 
@@ -390,17 +645,122 @@ export function CollabProvider({
   );
 
   const sendRoomMessage = useCallback(
-    (text: string, onBehalfOf?: string) => {
+    (
+      text: string,
+      onBehalfOf?: string,
+      replyTo?: CoworkRoomReplyReference | null,
+    ) => {
       const clean = text.trim();
-      if (!clean) return;
-      sendJson({
+      if (!clean) return null;
+      const clientMessageId = createClientMessageId();
+      const localMessage: RoomMessage = {
+        message_id: `local:${clientMessageId}`,
+        client_message_id: clientMessageId,
+        thread_id: normalizedThreadId || undefined,
+        participant_id: onBehalfOf || localUser.id,
+        display_name: onBehalfOf ? "Pending" : localUser.name,
+        on_behalf_of: onBehalfOf,
+        reply_to: replyTo ?? undefined,
+        text: clean,
+        created_at: new Date().toISOString(),
+        delivery_status: "sending",
+      };
+      enqueueRoomOutbox(teamId, resolvedParticipantId, {
+        client_message_id: clientMessageId,
+        thread_id: normalizedThreadId || undefined,
+        on_behalf_of: onBehalfOf,
+        text: clean,
+        reply_to: replyTo ?? undefined,
+      });
+      setRoomMessages((prev) => upsertRoomMessage(prev, localMessage));
+      const sent = sendJson({
         type: "message",
         text: clean,
+        client_message_id: clientMessageId,
         ...(onBehalfOf ? { on_behalf_of: onBehalfOf } : {}),
         ...(normalizedThreadId ? { thread_id: normalizedThreadId } : {}),
+        ...(replyTo ? { reply_to: replyTo } : {}),
       });
+      if (!sent) {
+        setRoomMessages((prev) =>
+          markRoomMessageFailed(prev, clientMessageId, "Not connected"),
+        );
+      }
+      return clientMessageId;
     },
-    [normalizedThreadId, sendJson],
+    [localUser, normalizedThreadId, resolvedParticipantId, sendJson, teamId],
+  );
+
+  const retryRoomMessage = useCallback(
+    (messageId: string) => {
+      const pending = roomMessages.find(
+        (message) =>
+          message.message_id === messageId ||
+          message.client_message_id === messageId,
+      );
+      if (!pending?.client_message_id || pending.delivery_status !== "failed") {
+        return false;
+      }
+      setRoomMessages((prev) =>
+        prev.map((message) =>
+          message.client_message_id === pending.client_message_id
+            ? { ...message, delivery_status: "sending", error: undefined }
+            : message,
+        ),
+      );
+      const sent = sendJson({
+        type: "message",
+        text: pending.text,
+        client_message_id: pending.client_message_id,
+        ...(pending.on_behalf_of ? { on_behalf_of: pending.on_behalf_of } : {}),
+        ...(pending.thread_id ? { thread_id: pending.thread_id } : {}),
+        ...(pending.reply_to ? { reply_to: pending.reply_to } : {}),
+      });
+      if (!sent) {
+        setRoomMessages((prev) =>
+          markRoomMessageFailed(
+            prev,
+            pending.client_message_id!,
+            "Not connected",
+          ),
+        );
+      }
+      return sent;
+    },
+    [roomMessages, sendJson],
+  );
+
+  const markRoomMessageRead = useCallback(
+    (messageId: string, seq?: number) => {
+      const cleanId = messageId.trim();
+      if (!cleanId) return false;
+      const sent = sendJson({
+        type: "message:read",
+        message_id: cleanId,
+        ...(seq != null ? { seq } : {}),
+      });
+      if (sent) {
+        setMessageReceipts((prev) =>
+          upsertRoomMessageReceipt(prev, {
+            room_id: teamId ?? "",
+            message_id: cleanId,
+            participant_id: resolvedParticipantId,
+            status: "read",
+            seq: seq ?? null,
+            updated_at: new Date().toISOString(),
+          }),
+        );
+        setRoomMessages((prev) =>
+          prev.map((message) =>
+            message.message_id === cleanId
+              ? { ...message, delivery_status: "read" }
+              : message,
+          ),
+        );
+      }
+      return sent;
+    },
+    [resolvedParticipantId, sendJson, teamId],
   );
 
   const raiseHand = useCallback(() => {
@@ -440,70 +800,143 @@ export function CollabProvider({
 
   const addAnnotation = useCallback(
     async (messageId: string, body: string) => {
-      setAnnotations((prev) => [
-        ...prev,
-        {
-          annotation_id: `ann-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          message_id: messageId,
-          author,
-          body,
-          created_at: Math.floor(Date.now() / 1000),
-          resolved: false,
-          replies: [],
-        },
-      ]);
+      if (!normalizedThreadId) throw new Error("请先创建协作会话");
+      const annotation = await createCollabAnnotation(normalizedThreadId, {
+        message_id: messageId,
+        body,
+        display_name: author?.display_name,
+        avatar_color: author?.avatar_color,
+      });
+      setAnnotations((prev) => [...prev, annotation]);
+      void queryClient.invalidateQueries({
+        queryKey: ["cowork", "session", normalizedThreadId],
+      });
+      notifyThreadUpdate("annotation");
     },
-    [author],
+    [author, normalizedThreadId, notifyThreadUpdate, queryClient],
   );
 
-  const resolveAnnotation = useCallback(async (annotationId: string) => {
-    setAnnotations((prev) =>
-      prev.map((item) =>
-        item.annotation_id === annotationId
-          ? { ...item, resolved: true }
-          : item,
-      ),
-    );
-  }, []);
+  const toggleMessageReaction = useCallback(
+    async (messageId: string, emoji: string) => {
+      if (!normalizedThreadId) throw new Error("请先创建协作会话");
+      const reaction = await toggleCollabMessageReaction(normalizedThreadId, {
+        message_id: messageId,
+        emoji,
+      });
+      setMessageReactions((previous) => {
+        const withoutCurrent = previous.filter(
+          (item) =>
+            !(
+              item.message_id === reaction.message_id &&
+              item.emoji === reaction.emoji
+            ),
+        );
+        return reaction.count > 0
+          ? [...withoutCurrent, reaction]
+          : withoutCurrent;
+      });
+      notifyThreadUpdate("reaction");
+    },
+    [normalizedThreadId, notifyThreadUpdate],
+  );
 
-  const unresolveAnnotation = useCallback(async (annotationId: string) => {
-    setAnnotations((prev) =>
-      prev.map((item) =>
-        item.annotation_id === annotationId
-          ? { ...item, resolved: false }
-          : item,
-      ),
-    );
-  }, []);
+  const togglePinnedMessage = useCallback(
+    async (messageId: string) => {
+      if (!normalizedThreadId) throw new Error("请先创建协作会话");
+      const pin = await toggleCollabPinnedMessage(
+        normalizedThreadId,
+        messageId,
+      );
+      setPinnedMessages((previous) =>
+        pin.pinned
+          ? [
+              ...previous.filter((item) => item.message_id !== pin.message_id),
+              {
+                message_id: pin.message_id,
+                pinned_by: currentUser?.id ?? "",
+                created_at: Date.now() / 1000,
+              },
+            ]
+          : previous.filter((item) => item.message_id !== pin.message_id),
+      );
+      notifyThreadUpdate("pin");
+    },
+    [currentUser?.id, normalizedThreadId, notifyThreadUpdate],
+  );
 
-  const deleteAnnotation = useCallback(async (annotationId: string) => {
-    setAnnotations((prev) =>
-      prev.filter((item) => item.annotation_id !== annotationId),
-    );
-  }, []);
+  const resolveAnnotation = useCallback(
+    async (annotationId: string) => {
+      if (!normalizedThreadId) throw new Error("请先创建协作会话");
+      const annotation = await setCollabAnnotationResolved(
+        normalizedThreadId,
+        annotationId,
+        true,
+      );
+      setAnnotations((prev) =>
+        prev.map((item) =>
+          item.annotation_id === annotationId ? annotation : item,
+        ),
+      );
+      notifyThreadUpdate("annotation");
+    },
+    [normalizedThreadId, notifyThreadUpdate],
+  );
+
+  const unresolveAnnotation = useCallback(
+    async (annotationId: string) => {
+      if (!normalizedThreadId) throw new Error("请先创建协作会话");
+      const annotation = await setCollabAnnotationResolved(
+        normalizedThreadId,
+        annotationId,
+        false,
+      );
+      setAnnotations((prev) =>
+        prev.map((item) =>
+          item.annotation_id === annotationId ? annotation : item,
+        ),
+      );
+      notifyThreadUpdate("annotation");
+    },
+    [normalizedThreadId, notifyThreadUpdate],
+  );
+
+  const deleteAnnotation = useCallback(
+    async (annotationId: string) => {
+      if (!normalizedThreadId) throw new Error("请先创建协作会话");
+      await deleteCollabAnnotation(normalizedThreadId, annotationId);
+      setAnnotations((prev) =>
+        prev.filter((item) => item.annotation_id !== annotationId),
+      );
+      notifyThreadUpdate("annotation");
+    },
+    [normalizedThreadId, notifyThreadUpdate],
+  );
 
   const replyToAnnotation = useCallback(
     async (annotationId: string, body: string) => {
+      if (!normalizedThreadId) throw new Error("请先创建协作会话");
+      const { reply } = await createCollabAnnotationReply(
+        normalizedThreadId,
+        annotationId,
+        {
+          body,
+          display_name: author?.display_name,
+          avatar_color: author?.avatar_color,
+        },
+      );
       setAnnotations((prev) =>
         prev.map((item) =>
           item.annotation_id === annotationId
             ? {
                 ...item,
-                replies: [
-                  ...item.replies,
-                  {
-                    reply_id: `reply-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-                    author,
-                    body,
-                    created_at: Math.floor(Date.now() / 1000),
-                  },
-                ],
+                replies: [...item.replies, reply],
               }
             : item,
         ),
       );
+      notifyThreadUpdate("annotation");
     },
-    [author],
+    [author, normalizedThreadId, notifyThreadUpdate],
   );
 
   return (
@@ -513,6 +946,7 @@ export function CollabProvider({
         currentUser,
         isConnected,
         roomMessages,
+        messageReceipts,
         taskEvents,
         floor,
         raiseHand,
@@ -522,8 +956,14 @@ export function CollabProvider({
         leave,
         updateCursor,
         sendRoomMessage,
+        retryRoomMessage,
+        markRoomMessageRead,
         notifyThreadUpdate,
         annotations,
+        messageReactions,
+        pinnedMessages,
+        toggleMessageReaction,
+        togglePinnedMessage,
         addAnnotation,
         resolveAnnotation,
         unresolveAnnotation,
@@ -546,6 +986,153 @@ export function useCollab() {
 
 export function useOptionalCollab() {
   return useContext(CollabContext);
+}
+
+function createClientMessageId(): string {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+  return `client-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+interface QueuedRoomMessage {
+  client_message_id: string;
+  text: string;
+  thread_id?: string;
+  on_behalf_of?: string;
+  created_at: string;
+  reply_to?: CoworkRoomReplyReference | null;
+}
+
+const ROOM_OUTBOX_PREFIX = "octopus:room-outbox:";
+
+function roomOutboxKey(teamId: string, participantId: string): string {
+  return `${ROOM_OUTBOX_PREFIX}${teamId}:${participantId}`;
+}
+
+function readRoomOutbox(
+  teamId?: string | null,
+  participantId?: string | null,
+): QueuedRoomMessage[] {
+  if (!teamId || !participantId || typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(roomOutboxKey(teamId, participantId)) ?? "[]",
+    );
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (item): item is QueuedRoomMessage =>
+        item &&
+        typeof item === "object" &&
+        typeof item.client_message_id === "string" &&
+        typeof item.text === "string" &&
+        typeof item.created_at === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function writeRoomOutbox(
+  teamId: string,
+  participantId: string,
+  messages: QueuedRoomMessage[],
+) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      roomOutboxKey(teamId, participantId),
+      JSON.stringify(messages.slice(-100)),
+    );
+  } catch {
+    // Storage may be disabled or full; in-memory delivery still works.
+  }
+}
+
+function enqueueRoomOutbox(
+  teamId: string | null | undefined,
+  participantId: string,
+  message: Omit<QueuedRoomMessage, "created_at"> & { created_at?: string },
+) {
+  if (!teamId) return;
+  const queued = readRoomOutbox(teamId, participantId).filter(
+    (item) => item.client_message_id !== message.client_message_id,
+  );
+  queued.push({
+    ...message,
+    created_at: message.created_at ?? new Date().toISOString(),
+  });
+  writeRoomOutbox(teamId, participantId, queued);
+}
+
+function removeRoomOutboxMessage(
+  teamId: string | null | undefined,
+  participantId: string,
+  clientMessageId: string,
+) {
+  if (!teamId) return;
+  const queued = readRoomOutbox(teamId, participantId).filter(
+    (item) => item.client_message_id !== clientMessageId,
+  );
+  writeRoomOutbox(teamId, participantId, queued);
+}
+
+export function upsertRoomMessage(
+  messages: RoomMessage[],
+  incoming: RoomMessage,
+): RoomMessage[] {
+  const index = messages.findIndex(
+    (message) =>
+      message.message_id === incoming.message_id ||
+      Boolean(
+        incoming.client_message_id &&
+        message.client_message_id === incoming.client_message_id,
+      ),
+  );
+  if (index < 0) return [...messages, incoming].slice(-50);
+  const next = [...messages];
+  next[index] = incoming;
+  return next.slice(-50);
+}
+
+export function upsertRoomMessageReceipt(
+  receipts: RoomMessageReceipt[],
+  incoming: RoomMessageReceipt,
+): RoomMessageReceipt[] {
+  const index = receipts.findIndex(
+    (receipt) =>
+      receipt.message_id === incoming.message_id &&
+      receipt.participant_id === incoming.participant_id,
+  );
+  if (index < 0) return [...receipts, incoming].slice(-500);
+  const current = receipts[index]!;
+  const status =
+    current.status === "read" || incoming.status === "read"
+      ? "read"
+      : "delivered";
+  const next = [...receipts];
+  next[index] = {
+    ...current,
+    ...incoming,
+    status,
+    seq: incoming.seq ?? current.seq ?? null,
+  };
+  return next.slice(-500);
+}
+
+function markRoomMessageFailed(
+  messages: RoomMessage[],
+  clientMessageId: string,
+  error: string,
+): RoomMessage[] {
+  return messages.map((message) =>
+    message.client_message_id === clientMessageId
+      ? { ...message, delivery_status: "failed", error }
+      : message,
+  );
 }
 
 function parseMessage(data: unknown): Record<string, unknown> | null {

@@ -146,6 +146,12 @@ def _assemble_memory_sections(state: _AssemblyState) -> None:
     if _team_block:
         state.system_parts.append(_team_block)
 
+    cowork_manifest = state.user_context.get("cowork_context_manifest")
+    if isinstance(cowork_manifest, str) and cowork_manifest.strip():
+        # Volatile and per-recipient: unlike the stable roster contract this
+        # changes with the current task and selected blackboard records.
+        state.volatile_parts.append(cowork_manifest.strip())
+
     try:
         from runtime.memory.runtime_state.hub import (
             MemoryHub,

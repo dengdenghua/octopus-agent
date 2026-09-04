@@ -17,6 +17,7 @@ import contextlib
 import logging
 import re
 import time
+import uuid
 from collections.abc import Callable, Generator
 from typing import Any
 
@@ -200,6 +201,17 @@ def _ambient_subagent_session_id() -> str:
         from runtime.execution.subagents._ambient import current_subagent_session_id
 
         return current_subagent_session_id()
+    except Exception:  # noqa: BLE001 - optional attribution, never breaks streaming
+        return ""
+
+
+def _ambient_subagent_root_id() -> str:
+    """Return the delegated root turn used by the durable spend breaker."""
+
+    try:
+        from runtime.execution.subagents._ambient import current_subagent_root_id
+
+        return current_subagent_root_id()
     except Exception:  # noqa: BLE001 - optional attribution, never breaks streaming
         return ""
 
@@ -971,15 +983,56 @@ def _phase_6b_model_stream(
                     )
             # Feed the process-level cost ledger so OCTOPUS_MAX_COST_USD can
             # gate further subagent spawns in bridge.py.
+            _governance_cost = _cost
             if _in_tok or _out_tok:
                 with contextlib.suppress(Exception):
                     from runtime.platform.budget import UsagePricing
 
-                    UsagePricing.get().record(
+                    _usage_record = UsagePricing.get().record(
                         str(getattr(resp, "model", "") or "unknown"),
                         _in_tok,
                         _out_tok,
                     )
+                    if _governance_cost <= 0:
+                        _governance_cost = float(_usage_record.cost_usd)
+            _governance_root = _ambient_subagent_root_id()
+            if _governance_root and (_in_tok or _out_tok or _governance_cost):
+                with contextlib.suppress(Exception):
+                    from runtime.execution.subagents.governance import governance_store
+
+                    _governance_snapshot = governance_store().record_usage(
+                        _governance_root,
+                        usage_id=(
+                            f"{_ambient_subagent_session_id()}:{react_task_id}:"
+                            f"{i + 1}:{uuid.uuid4().hex}"
+                        ),
+                        session_id=_ambient_subagent_session_id(),
+                        task_id=str(react_task_id or ""),
+                        iteration=i + 1,
+                        model=str(getattr(resp, "model", "") or ""),
+                        input_tokens=_in_tok,
+                        output_tokens=_out_tok,
+                        cost_usd=_governance_cost,
+                    )
+                    if (
+                        _governance_snapshot.get("breaker") == "tripped"
+                        and react_task_id is not None
+                        and not _pause.is_pause_requested(str(react_task_id))
+                    ):
+                        _pause.request_pause(
+                            task_id=str(react_task_id),
+                            reason="subagent_subtree_budget",
+                            requested_by="system",
+                            note=(
+                                "自动暂停 · 协作子树预算已触发 · 累计 tokens "
+                                f"{int(_governance_snapshot.get('tokens_used') or 0):,}/"
+                                f"{int(_governance_snapshot.get('token_limit') or 0):,} · "
+                                f"${float(_governance_snapshot.get('cost_usd') or 0):.3f}/"
+                                f"${float(_governance_snapshot.get('cost_limit_usd') or 0):.3f}"
+                            ),
+                            thread_id=thread_id or "",
+                            agent_id=_agent_id_for_pause,
+                        )
             _updated = _pause.update_active_usage(
                 str(react_task_id),
                 tokens_delta=_tok,

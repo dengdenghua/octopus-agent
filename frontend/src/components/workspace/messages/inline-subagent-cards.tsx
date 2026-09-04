@@ -1,5 +1,6 @@
 import {
   BotIcon,
+  CheckIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   MonitorIcon,
@@ -730,11 +731,17 @@ export function deriveSubagentsFromMessages(
       continue;
     }
     const terminal = new Set<InlineSubagentStatus>(["done", "error"]);
-    const status = terminal.has(candidate.status)
-      ? candidate.status
-      : terminal.has(existing.status)
-        ? existing.status
-        : candidate.status;
+    // Failure is sticky. Legacy fan-out history can contain a failed member
+    // marker followed by a parent batch envelope that says the overall call
+    // completed. The parent completion must never repaint that member green.
+    const status =
+      candidate.status === "error" || existing.status === "error"
+        ? "error"
+        : terminal.has(candidate.status)
+          ? candidate.status
+          : terminal.has(existing.status)
+            ? existing.status
+            : candidate.status;
     deduplicated.set(candidate.id, {
       ...existing,
       name: candidate.name || existing.name,
@@ -968,10 +975,12 @@ function KimiStyleSubagentCard({
   agent,
   previewEnabled,
   turnIndex,
+  paired = false,
 }: {
   agent: InlineSubagentInfo;
   previewEnabled: boolean;
   turnIndex?: number;
+  paired?: boolean;
 }) {
   const { t } = useI18n();
   const detailId = `${useId()}-agent-preview`;
@@ -982,7 +991,9 @@ function KimiStyleSubagentCard({
   const isDone = agent.status === "done";
   const statusLabel =
     agent.status === "done"
-      ? t.message.statusCompleted
+      ? agent.role === "cowork"
+        ? t.message.statusResponded
+        : t.message.statusCompleted
       : agent.status === "error"
         ? t.message.statusError
         : agent.status === "waiting"
@@ -1012,6 +1023,34 @@ function KimiStyleSubagentCard({
       view: "screen",
     });
   };
+
+  if (paired) {
+    return (
+      <button
+        type="button"
+        onClick={handleClick}
+        aria-label={`${agent.name} · ${statusLabel} · 查看执行画面`}
+        title="查看执行画面"
+        className={cn(
+          "inline-flex shrink-0 items-center gap-1 px-0.5 py-0 text-xs font-medium transition-colors",
+          "hover:underline hover:underline-offset-4 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50",
+          agent.status === "done" && "text-success",
+          agent.status === "error" && "text-destructive",
+          (agent.status === "running" || agent.status === "waiting") &&
+            "text-warning",
+        )}
+      >
+        {agent.status === "done" ? (
+          <CheckIcon aria-hidden className="size-3" />
+        ) : agent.status === "error" ? (
+          <XCircleIcon aria-hidden className="size-3" />
+        ) : (
+          <Loader2Icon aria-hidden className="size-3 animate-spin" />
+        )}
+        {statusLabel}
+      </button>
+    );
+  }
 
   return (
     <div
@@ -1240,6 +1279,7 @@ export function InlineSubagentCards({
   settled = false,
   turnIndex,
   className,
+  variant = "cluster",
 }: {
   events?: LiveToolEvent[];
   agents?: InlineSubagentInfo[];
@@ -1247,6 +1287,7 @@ export function InlineSubagentCards({
   settled?: boolean;
   turnIndex?: number;
   className?: string;
+  variant?: "cluster" | "paired";
 }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
@@ -1304,11 +1345,18 @@ export function InlineSubagentCards({
       // Live terminal state wins. A non-terminal live marker must not regress
       // a terminal result already present in the persisted message stream.
       const terminal = new Set<InlineSubagentStatus>(["done", "error"]);
-      const status: InlineSubagentStatus = terminal.has(src.status)
-        ? src.status
-        : terminal.has(dst.status)
-          ? dst.status
-          : src.status || dst.status;
+      // Failure is sticky across persisted and live aliases. Historical
+      // streams can contain a stale "finished/done" transport marker after
+      // the member's real planner failure; that bookkeeping event must not
+      // repaint a failed lane as successfully completed.
+      const status: InlineSubagentStatus =
+        src.status === "error" || dst.status === "error"
+          ? "error"
+          : terminal.has(src.status)
+            ? src.status
+            : terminal.has(dst.status)
+              ? dst.status
+              : src.status || dst.status;
       let progress: number | undefined;
       if (status === "done") progress = 1.0;
       else if (status === "error")
@@ -1465,6 +1513,29 @@ export function InlineSubagentCards({
   const visibleAgents = expanded
     ? agents
     : agents.slice(0, MAX_COLLAPSED_AGENTS);
+
+  if (variant === "paired") {
+    return (
+      <div
+        data-testid={
+          visibleAgents[0]
+            ? `agent-task-strip-${visibleAgents[0].id}`
+            : undefined
+        }
+        className={cn("inline-flex", className)}
+      >
+        {visibleAgents.map((agent) => (
+          <KimiStyleSubagentCard
+            key={agent.id}
+            agent={agent}
+            previewEnabled={false}
+            turnIndex={turnIndex}
+            paired
+          />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className={cn("my-1.5", className)}>

@@ -75,7 +75,7 @@ export function useWorkbenchSelection({
   );
   const [manualBlockSelection, setManualBlockSelection] = useState(false);
   const [activityView, setActivityView] = useState<
-    "summary" | "trace" | "screen" | "role"
+    "summary" | "trace" | "screen"
   >("summary");
 
   const phaseBlocks = useMemo(
@@ -223,9 +223,7 @@ export function useWorkbenchSelection({
       setSelectedEffectKey(null);
       setSelectedAgentId(agentId);
       setSelectedRosterSeatId(null);
-      // Workbench roster clicks introduce the role. Conversation clicks carry
-      // an explicit screen intent and land on the independent conversation.
-      setActivityView("role");
+      setActivityView("screen");
       setManualBlockSelection(false);
       onSelectTab?.("agent");
     },
@@ -254,7 +252,9 @@ export function useWorkbenchSelection({
     consumedFocusedAgentIdRef.current = intentKey;
     setSelectedAgentId(target.id);
     setSelectedRosterSeatId(null);
-    setActivityView(focusedAgentView ?? "screen");
+    setActivityView(
+      focusedAgentView === "role" ? "screen" : (focusedAgentView ?? "screen"),
+    );
   }, [
     focusedAgentId,
     focusedAgentView,
@@ -401,7 +401,7 @@ export function useWorkbenchSelection({
       setSelectedEffectKey(null);
       setSelectedAgentId(target.id);
       setSelectedRosterSeatId(null);
-      setActivityView(view ?? "screen");
+      setActivityView(view === "role" ? "screen" : (view ?? "screen"));
       setManualBlockSelection(false);
 
       // Switch to the specified tab if provided

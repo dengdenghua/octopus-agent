@@ -150,6 +150,7 @@ export function CoworkRoomMessageActions({
   }, [defaultMilestoneId, milestones]);
   const projectActionDisabled =
     disabled || pending || (!threadId && !onActionRequest);
+  const showProjectActions = Boolean(threadId || onActionRequest);
 
   const requestAction = async (
     action: CoworkMessageProjectAction,
@@ -254,49 +255,51 @@ export function CoworkRoomMessageActions({
           <AtSignIcon className="size-3.5" />
         </Button>
       ) : null}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="size-7"
-            aria-label="消息项目操作"
-            disabled={projectActionDisabled}
-          >
-            {pending ? (
-              <Loader2Icon className="size-3.5 animate-spin" />
-            ) : (
-              <EllipsisIcon className="size-3.5" />
-            )}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="min-w-48">
-          {milestoneAction("link_milestone", "关联里程碑", Link2Icon)}
-          {milestoneAction("create_item", "创建项目事项", ListPlusIcon)}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            disabled={projectActionDisabled}
-            onSelect={() => void requestAction("record_decision")}
-          >
-            <CheckCircle2Icon />
-            记录为项目决策
-            {applied.has("record_decision") ? (
-              <CheckIcon className="ml-auto" />
-            ) : null}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={projectActionDisabled}
-            onSelect={() => void requestAction("publish_artifact")}
-          >
-            <FileUpIcon />
-            发布为项目资料
-            {applied.has("publish_artifact") ? (
-              <CheckIcon className="ml-auto" />
-            ) : null}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {showProjectActions ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="size-7"
+              aria-label="消息项目操作"
+              disabled={projectActionDisabled}
+            >
+              {pending ? (
+                <Loader2Icon className="size-3.5 animate-spin" />
+              ) : (
+                <EllipsisIcon className="size-3.5" />
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-48">
+            {milestoneAction("link_milestone", "关联里程碑", Link2Icon)}
+            {milestoneAction("create_item", "创建项目事项", ListPlusIcon)}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              disabled={projectActionDisabled}
+              onSelect={() => void requestAction("record_decision")}
+            >
+              <CheckCircle2Icon />
+              记录为项目决策
+              {applied.has("record_decision") ? (
+                <CheckIcon className="ml-auto" />
+              ) : null}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={projectActionDisabled}
+              onSelect={() => void requestAction("publish_artifact")}
+            >
+              <FileUpIcon />
+              发布为项目资料
+              {applied.has("publish_artifact") ? (
+                <CheckIcon className="ml-auto" />
+              ) : null}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
       {error ? (
         <span
           role="alert"

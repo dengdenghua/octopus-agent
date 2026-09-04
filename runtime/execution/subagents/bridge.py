@@ -12,6 +12,7 @@ import logging
 import os
 import threading
 import time
+import uuid
 from collections.abc import Callable, Iterable
 from typing import Any
 
@@ -113,25 +114,54 @@ def _default_max_active_subagents() -> int:
 
 MAX_ACTIVE_SUBAGENTS: int = _default_max_active_subagents()
 _ACTIVE_SUBAGENTS: int = 0
+_ACTIVE_SUBAGENTS_BY_ROOT: dict[str, int] = {}
 _ACTIVE_SUBAGENTS_LOCK = threading.Lock()
 
 
-def _acquire_subagent_slot() -> bool:
+def _positive_env(name: str, default: int, *, ceiling: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if raw:
+        try:
+            return max(1, min(int(raw), ceiling))
+        except ValueError:
+            pass
+    return default
+
+
+MAX_SUBAGENT_DEPTH = _positive_env("OCTOPUS_MAX_SUBAGENT_DEPTH", 3, ceiling=16)
+MAX_ACTIVE_SUBAGENTS_PER_ROOT = _positive_env(
+    "OCTOPUS_MAX_ACTIVE_SUBAGENTS_PER_ROOT", 16, ceiling=256
+)
+
+
+def _acquire_subagent_slot(root_id: str = "unscoped") -> bool:
     """Reserve a concurrency slot. Returns False when the global cap is
     already reached (caller must refuse to spawn)."""
     global _ACTIVE_SUBAGENTS
     with _ACTIVE_SUBAGENTS_LOCK:
-        if _ACTIVE_SUBAGENTS >= MAX_ACTIVE_SUBAGENTS:
+        root_active = _ACTIVE_SUBAGENTS_BY_ROOT.get(root_id, 0)
+        if (
+            _ACTIVE_SUBAGENTS >= MAX_ACTIVE_SUBAGENTS
+            or root_active >= MAX_ACTIVE_SUBAGENTS_PER_ROOT
+        ):
             return False
         _ACTIVE_SUBAGENTS += 1
+        _ACTIVE_SUBAGENTS_BY_ROOT[root_id] = root_active + 1
         return True
 
 
-def _release_subagent_slot() -> None:
+def _release_subagent_slot(root_id: str = "unscoped") -> None:
     global _ACTIVE_SUBAGENTS
     with _ACTIVE_SUBAGENTS_LOCK:
         if _ACTIVE_SUBAGENTS > 0:
             _ACTIVE_SUBAGENTS -= 1
+        root_active = _ACTIVE_SUBAGENTS_BY_ROOT.get(root_id, 0)
+        if root_active <= 1:
+            _ACTIVE_SUBAGENTS_BY_ROOT.pop(root_id, None)
+        else:
+            _ACTIVE_SUBAGENTS_BY_ROOT[root_id] = root_active - 1
+        if _ACTIVE_SUBAGENTS == 0:
+            _ACTIVE_SUBAGENTS_BY_ROOT.clear()
 
 
 def active_subagent_count() -> int:
@@ -369,6 +399,34 @@ def call_subagent(
             ).strip()
 
     context = _inherit_parent_work_context(context, session)
+    _governance_meta = getattr(session, "metadata", None) if session is not None else None
+    if not isinstance(_governance_meta, dict):
+        _governance_meta = {}
+    try:
+        _parent_depth = max(0, int(_governance_meta.get("_subagent_depth") or 0))
+    except (TypeError, ValueError):
+        _parent_depth = 0
+    _child_depth = _parent_depth + 1
+    _subagent_root_id = str(
+        _governance_meta.get("_subagent_root_id")
+        or getattr(session, "turn_id", None)
+        or getattr(session, "thread_id", None)
+        or "unscoped"
+    ).strip() or "unscoped"
+    if _child_depth > MAX_SUBAGENT_DEPTH:
+        return {
+            "status": "rejected",
+            "error": (
+                f"subagent nesting depth cap reached ({MAX_SUBAGENT_DEPTH}); "
+                f"refused to spawn '{agent_id}' at depth {_child_depth}"
+            ),
+            "governance_error": "depth_exhausted",
+            "agent_id": agent_id,
+            "output": "",
+            "success": False,
+            "subagent_depth": _child_depth,
+            "subagent_root_id": _subagent_root_id,
+        }
 
     # Capture the parent turn's react stack (ambient ContextVar set around
     # the main conversation's ``stream_react_loop``) so the runner can drive
@@ -497,13 +555,15 @@ def call_subagent(
     # known session is injected so the child continues instead of
     # re-researching from scratch.
     _active_session: dict[str, Any] = {"session": None, "session_id": None}
+    _session_store = None
     try:
         from runtime.execution.subagents.sessions import (
             get_subagent_session_store,
         )
+
+        _session_store = get_subagent_session_store()
     except ImportError:  # pragma: no cover - sessions module absent
-        get_subagent_session_store = None  # type: ignore[assignment]
-    _session_store = get_subagent_session_store() if get_subagent_session_store else None
+        pass
     _session_owner_actor_id = ""
     _session_tenant_id = ""
     if isinstance(context, dict):
@@ -742,6 +802,8 @@ def call_subagent(
             _extra_meta["_active_parent_tool_use_id"] = _parent_tool_use_id
         _extra_meta["subagent_role"] = _role_label
         _extra_meta["subagent_avatar"] = _avatar
+        _extra_meta["_subagent_depth"] = _child_depth
+        _extra_meta["_subagent_root_id"] = _subagent_root_id
         from runtime.platform.process.session import Session
 
         if session is not None and isinstance(session, Session):
@@ -766,7 +828,7 @@ def call_subagent(
             # No ambient Session but a locked write root was requested:
             # carry it on a bare Session so the ephemeral chokepoint still
             # confines writes (original behaviour).
-            run_session = Session(metadata={"_locked_write_root": _locked_root})
+            run_session = Session(metadata=dict(_extra_meta))
         scope_token = None
         if run_session is not None:
             # Bind on THIS worker thread so blackboard skills see the parent's
@@ -801,10 +863,13 @@ def call_subagent(
                         "subagent_session_id": _active_session["session_id"],
                     }
                 from runtime.execution.subagents._ambient import (
+                    subagent_root_scope,
                     subagent_session_scope,
                 )
 
-                with subagent_session_scope(_active_session["session_id"]):
+                with subagent_root_scope(_subagent_root_id), subagent_session_scope(
+                    _active_session["session_id"]
+                ):
                     return _dispatch(
                         agent_id=agent_id,
                         prompt=prompt,
@@ -996,6 +1061,16 @@ def call_subagent(
         result.setdefault("avatar", _avatar)
         result.setdefault("role", _role_label)
         result.setdefault("requested_agent_id", _requested_agent_id)
+        result.setdefault("subagent_depth", _child_depth)
+        result.setdefault("subagent_root_id", _subagent_root_id)
+        try:
+            from runtime.execution.subagents.governance import governance_store
+
+            result.setdefault(
+                "governance", governance_store().snapshot(_subagent_root_id)
+            )
+        except Exception:  # noqa: BLE001 — result delivery survives telemetry failure
+            pass
         # Lifecycle: finish. Mirrors the spawn event so the frontend
         # can mark the tile complete + show duration / iteration /
         # files-touched stats. ``ok`` is the canonical success flag;
@@ -1086,9 +1161,11 @@ def call_subagent(
                             }
                             for index, report in _pending
                         ]
-                        result["reports_prompt"] = _session_store.reports_prompt(
-                            _session_store.get(_active_session["session_id"])
-                        )
+                        _report_session = _session_store.get(_active_session["session_id"])
+                        if _report_session is not None:
+                            result["reports_prompt"] = _session_store.reports_prompt(
+                                _report_session
+                            )
                         _session_store.mark_reports_delivered(_active_session["session_id"])
         try:
             from runtime.memory.learning.subagent_review import (
@@ -1186,14 +1263,16 @@ def call_subagent(
     except Exception:  # noqa: BLE001
         pass  # budget check failure is non-fatal
 
-    # Concurrency guard: hold a slot for the whole child run (see the helpers
-    # at module top). Over the global cap → refuse to spawn, fail-closed.
-    if not _acquire_subagent_slot():
+    # Concurrency guard: hold both an in-process slot and a durable SQLite
+    # lease. The durable gate applies the same root/global limits across app
+    # workers and survives a restart; stale process leases expire safely.
+    if not _acquire_subagent_slot(_subagent_root_id):
         _reject = {
             "status": "rejected",
             "error": (
                 f"subagent concurrency cap reached "
-                f"({MAX_ACTIVE_SUBAGENTS} active) — refused to spawn '{agent_id}'"
+                f"(global {MAX_ACTIVE_SUBAGENTS}, subtree "
+                f"{MAX_ACTIVE_SUBAGENTS_PER_ROOT}) — refused to spawn '{agent_id}'"
             ),
             "agent_id": agent_id,
             "role": _role_label,
@@ -1204,6 +1283,9 @@ def call_subagent(
             "rounds_completed": 0,
             "iteration_count": 0,
             "files_touched": [],
+            "governance_error": "concurrency_exhausted",
+            "subagent_depth": _child_depth,
+            "subagent_root_id": _subagent_root_id,
         }
         _log.warning(
             "subagent spawn refused (cap %d reached) · agent_id=%s role=%s",
@@ -1212,6 +1294,105 @@ def call_subagent(
             _role_label,
         )
         return _augment(_reject)
+
+    _governance_lease: dict[str, Any] | None = None
+    try:
+        from runtime.execution.subagents.governance import governance_store
+
+        _governance_lease = governance_store().acquire(
+            _subagent_root_id,
+            depth=_child_depth,
+            global_limit=MAX_ACTIVE_SUBAGENTS,
+            root_limit=MAX_ACTIVE_SUBAGENTS_PER_ROOT,
+            owner_id=f"{os.getpid()}:{uuid.uuid4().hex}",
+        )
+    except Exception as exc:  # noqa: BLE001 — governance failure must not widen access
+        _release_subagent_slot(_subagent_root_id)
+        return _augment(
+            {
+                "status": "rejected",
+                "error": f"durable subagent governance unavailable: {type(exc).__name__}",
+                "agent_id": agent_id,
+                "role": _role_label,
+                "codename": _codename,
+                "avatar": _avatar,
+                "output": "",
+                "success": False,
+                "rounds_completed": 0,
+                "iteration_count": 0,
+                "files_touched": [],
+                "governance_error": "governance_unavailable",
+            }
+        )
+    if _governance_lease is None:
+        _release_subagent_slot(_subagent_root_id)
+        try:
+            _governance_snapshot = governance_store().snapshot(_subagent_root_id)
+        except Exception:  # noqa: BLE001
+            _governance_snapshot = {}
+        _governance_reason = str(
+            _governance_snapshot.get("trip_reason") or "concurrency_exhausted"
+        )
+        return _augment(
+            {
+                "status": "rejected",
+                "error": f"durable subagent governance refused spawn: {_governance_reason}",
+                "agent_id": agent_id,
+                "role": _role_label,
+                "codename": _codename,
+                "avatar": _avatar,
+                "output": "",
+                "success": False,
+                "rounds_completed": 0,
+                "iteration_count": 0,
+                "files_touched": [],
+                "governance_error": _governance_reason,
+                "governance": _governance_snapshot,
+            }
+        )
+
+    _lease_id = str(_governance_lease["lease_id"])
+    _lease_stop = threading.Event()
+    _capacity_release_lock = threading.Lock()
+    _capacity_released = False
+
+    def _release_subagent_capacity() -> None:
+        nonlocal _capacity_released
+        with _capacity_release_lock:
+            if _capacity_released:
+                return
+            _capacity_released = True
+        _lease_stop.set()
+        _release_subagent_slot(_subagent_root_id)
+        try:
+            from runtime.execution.subagents.governance import governance_store
+
+            governance_store().release(_lease_id)
+        except Exception as exc:  # noqa: BLE001
+            _log.error("subagent governance lease release failed: %s", exc)
+
+    def _renew_governance_lease() -> None:
+        try:
+            from runtime.execution.subagents.governance import (
+                governance_store,
+                lease_seconds,
+            )
+
+            interval = max(0.25, min(30.0, float(lease_seconds()) / 3.0))
+            while not _lease_stop.wait(interval):
+                if not governance_store().renew(_lease_id):
+                    _log.error("subagent governance lease expired · lease_id=%s", _lease_id)
+                    _child_source.cancel(reason="subagent governance lease expired")
+                    return
+        except Exception as exc:  # noqa: BLE001
+            _log.error("subagent governance lease renewal failed: %s", exc)
+            _child_source.cancel(reason="subagent governance unavailable")
+
+    threading.Thread(
+        target=_renew_governance_lease,
+        name=f"subagent-governance-{_lease_id[:8]}",
+        daemon=True,
+    ).start()
     try:
         slot_release_deferred = False
         # Preserve the direct-call path for non-request callers that have no
@@ -1242,7 +1423,7 @@ def call_subagent(
             if slot_release_deferred or future.done():
                 return
             slot_release_deferred = True
-            future.add_done_callback(lambda _future: _release_subagent_slot())
+            future.add_done_callback(lambda _future: _release_subagent_capacity())
 
         deadline = time.monotonic() + timeout_seconds if timeout_seconds is not None else None
         try:
@@ -1367,7 +1548,7 @@ def call_subagent(
         # owns the slot until its thread actually exits.  This prevents a
         # retry from running concurrently with the old generation.
         if not slot_release_deferred:
-            _release_subagent_slot()
+            _release_subagent_capacity()
 
 
 def _dispatch(

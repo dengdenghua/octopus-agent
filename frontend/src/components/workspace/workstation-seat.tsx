@@ -1,9 +1,12 @@
-import { useState, type ReactNode } from "react";
+import { useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import { BotIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-export interface WorkstationSeatProps {
+export interface WorkstationSeatProps extends Omit<
+  ComponentPropsWithoutRef<"button">,
+  "aria-label" | "children" | "className" | "onClick" | "title"
+> {
   /** Display name (codename / member name). Truncated when long. */
   name: string;
   /** Emoji or single-glyph avatar. Ignored when ``avatarUrl`` is set. */
@@ -30,6 +33,9 @@ export interface WorkstationSeatProps {
   selected?: boolean;
   /** Click handler — renders the seat as a button when provided. */
   onClick?: () => void;
+  /** Render a semantic button even when click behavior is supplied by a parent
+   * primitive (for example a profile popover trigger). */
+  interactive?: boolean;
   /** Constrain the name width (used in the horizontal dock). */
   compactName?: boolean;
   /** Avatar-only presentation for dense horizontal docks. */
@@ -62,11 +68,13 @@ export function WorkstationSeat({
   title,
   selected,
   onClick,
+  interactive,
   compactName,
   iconOnly,
   iconCaption,
   className,
   ariaLabel,
+  ...buttonProps
 }: WorkstationSeatProps) {
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
   const showAvatarImage = Boolean(avatarUrl && avatarUrl !== failedAvatarUrl);
@@ -161,9 +169,10 @@ export function WorkstationSeat({
     </>
   );
 
-  if (onClick) {
+  if (onClick || interactive) {
     return (
       <button
+        {...buttonProps}
         type="button"
         onClick={onClick}
         title={title}

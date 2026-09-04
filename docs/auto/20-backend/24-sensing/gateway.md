@@ -128,6 +128,7 @@ tier: "standard"
 | `_tool_bridge_scoring.py` | Per-turn quality scoring + auto-evolution tick helpers. |
 | `_tool_bridge_session.py` | Session metadata + browser operation guidance helpers. |
 | `a2a_router.py` | A2A (Agent-to-Agent) remote agent registry + relay router. |
+| `a2a_server.py` | Official A2A v1 inbound server mounted on the Octopus runtime. |
 | `account_usage_router.py` | — |
 | `adaptive_delta_buffer.py` | 自适应流式刷新策略（纯决策，不存内容） |
 | `agent_market_sources/financial-services/agent-plugins/model-builder/skills/dcf-model/scripts/validate_dcf.py` | DCF Model Validation Script Validates Excel DCF models for formula errors and common DCF mistakes |
@@ -149,6 +150,7 @@ tier: "standard"
 | `asset_registry_router.py` | 统一资产仓库路由 —— 插件 / 技能 / 角色(WorkBuddy + Codex + 本地 + 内置)归一视图。 |
 | `capability_router.py` | 统一「插件」市场路由 —— 所有外部能力(WorkBuddy MCP 服务 + Codex 插件)统一叫插件。 |
 | `channels_router.py` | — |
+| `collaboration_delivery_outbox.py` | Replay collaboration delivery outbox rows into durable thread logs. |
 | `comfyui_manager.py` | User-triggered managed ComfyUI installation and update jobs. |
 | `comfyui_supervisor.py` | User-triggered lifecycle control for an existing local ComfyUI installation. |
 | `completion_router.py` | Inline code completion endpoint — Tab-complete skeleton. |
@@ -351,6 +353,11 @@ tier: "standard"
 | class | `class HeartbeatBody(BaseModel)` |  |
 | class | `class LinkRoomBody(BaseModel)` |  |
 | class | `class RoomMessageBody(BaseModel)` |  |
+| class | `class AnnotationBody(BaseModel)` |  |
+| class | `class AnnotationReplyBody(BaseModel)` |  |
+| class | `class AnnotationResolvedBody(BaseModel)` |  |
+| class | `class ReactionBody(BaseModel)` |  |
+| class | `class PinMessageBody(BaseModel)` |  |
 | class | `class MessageProjectActionBody(BaseModel)` |  |
 | class | `class EnsureRoomBody(BaseModel)` |  |
 | class | `class CollabTaskBody(BaseModel)` |  |
@@ -582,6 +589,12 @@ tier: "standard"
 | --- | --- | --- |
 | func | `def create_a2a_router(identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
 
+### `a2a_server.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def mount_a2a_server(app, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, data_dir)` | Mount official Agent Card, JSON-RPC and REST A2A endpoints. |
+
 ### `account_usage_router.py`
 
 | Kind | Symbol | Doc |
@@ -749,6 +762,13 @@ tier: "standard"
 | --- | --- | --- |
 | class | `class LocalChannelManager` | Small channel manager for dashboard-only sessions. |
 | func | `def create_channels_router(manager, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, state_path)` |  |
+
+### `collaboration_delivery_outbox.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def persist_collaboration_delivery(store, delivery, log, worker_id)` | Write one claimed row to the event log and acknowledge it atomically enough. |
+| func | `def drain_collaboration_delivery_outbox(store, logs_root, session_id, limit, worker_id)` | Deliver all currently due rows; retain failures for scheduled retry. |
 
 ### `comfyui_manager.py`
 
@@ -1302,7 +1322,7 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def create_team_rooms_router(state_path, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, reset_callback, room_message_store, room_projection, room_delete_projection, room_message_projection, room_message_provider, invitation_store, project_store, group_store, twin_responder)` | Create `/api/teams/*` routes. |
+| func | `def create_team_rooms_router(state_path, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, reset_callback, room_message_store, room_projection, room_delete_projection, room_message_projection, room_receipt_projection, room_message_provider, invitation_store, project_store, group_store, twin_responder)` | Create `/api/teams/*` routes. |
 
 ### `team_rooms_ws.py`
 
@@ -1453,21 +1473,23 @@ tier: "standard"
 
 ## Who imports this
 
-**17** file(s) reference this package:
+**19** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
 - **`runtime/cli_serve.py/`** · 1 file(s)
   - `runtime/cli_serve.py`
+- **`runtime/evals/`** · 1 file(s)
+  - `runtime/evals/multi_agent_benchmark.py`
 - **`runtime/kernel/`** · 1 file(s)
   - `runtime/kernel/kernel.py`
-- **`runtime/platform/`** · 13 file(s)
+- **`runtime/platform/`** · 14 file(s)
   - `runtime/platform/plugins/bundled/comfyui_bridge/__init__.py`
   - `runtime/platform/plugins/cloud_expert_store.py`
   - `runtime/platform/ui/_app_agents.py`
   - `runtime/platform/ui/_app_collab.py`
   - `runtime/platform/ui/_app_health.py`
-  - _… and 8 more_
+  - _… and 9 more_
 - **`runtime/projectos/`** · 1 file(s)
   - `runtime/projectos/group_service.py`
 

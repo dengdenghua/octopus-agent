@@ -121,6 +121,10 @@ agents/**/*.jsonc.lock
 .octopus/artifacts/
 agents/*/workspace/
 benchmarks/results/
+# workbuddy-experts shared/remote bundles are install-time delivery artifacts
+# (multi-hundred-MB corpora/databases/binaries). Keep them out of version control;
+# already-pushed history is intentionally left untouched.
+/extensions/workbuddy-experts/remote/bundles/
 skills_backup_*/
 
 # Historical analysis / replay dumps

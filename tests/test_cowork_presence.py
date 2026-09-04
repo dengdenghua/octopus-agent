@@ -113,3 +113,13 @@ def test_state_is_thread_scoped(tmp_path) -> None:
     ps.mark_read("t1", "alice", 4)
     assert ps.get("t2", "alice")["last_read"] == 0
     assert ps.all("t1") == {"alice": {"last_read": 4, "last_seen_at": None}}
+
+
+def test_linked_room_presence_uses_message_cursor_when_available(tmp_path) -> None:
+    gs, ps = _seed(tmp_path)
+    gs.append("t1", MemberEvent(action="invite", actor="u", target_id="alice", target_kind="agent"))
+    ps.mark_read("t1", "alice", 2, coordinate="message")
+
+    pres = {p.member_id: p for p in group_presence(gs, ps, "t1", message_head=5)}
+    assert pres["alice"].unread == 3
+    assert pres["alice"].last_read_message_seq == 2

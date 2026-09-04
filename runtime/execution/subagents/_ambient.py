@@ -37,6 +37,26 @@ def current_subagent_session_id() -> str:
     return _current_subagent_session_id.get()
 
 
+_current_subagent_root_id: ContextVar[str] = ContextVar(
+    "_current_subagent_root_id", default=""
+)
+
+
+@contextmanager
+def subagent_root_scope(root_id: str) -> Iterator[None]:
+    """Attribute provider usage to one recursively delegated root turn."""
+
+    token = _current_subagent_root_id.set(root_id or "")
+    try:
+        yield
+    finally:
+        _current_subagent_root_id.reset(token)
+
+
+def current_subagent_root_id() -> str:
+    return _current_subagent_root_id.get()
+
+
 _current_react_stack: ContextVar[Any] = ContextVar("_current_react_stack", default=None)
 
 
@@ -60,7 +80,9 @@ def current_react_stack() -> Any:
 
 __all__ = [
     "current_react_stack",
+    "current_subagent_root_id",
     "current_subagent_session_id",
     "react_stack_scope",
+    "subagent_root_scope",
     "subagent_session_scope",
 ]

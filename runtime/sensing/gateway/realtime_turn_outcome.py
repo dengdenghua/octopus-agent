@@ -409,6 +409,16 @@ def _turn_execution_engine(turn: Turn) -> str:
     return value if value in {"codex", "octopus"} else "octopus"
 
 
+def _turn_agent_id(turn: Turn) -> str | None:
+    """Return the server-resolved agent identity for this execution strand."""
+
+    execution_agent_id = str(getattr(turn, "execution_agent_id", None) or "").strip()
+    if execution_agent_id:
+        return execution_agent_id
+    params = getattr(turn, "params", None)
+    return _agent_id_from_params(cast(TurnParams, params)) if params is not None else None
+
+
 def _goal_fingerprint(goal: str) -> str:
     normalized = " ".join(goal.strip().lower().split())
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
@@ -861,13 +871,16 @@ def _record_task_run_finished(
             task_id=turn.id,
             thread_id=turn.thread_id,
             turn_id=turn.id,
-            agent_id=_agent_id_from_params(cast(TurnParams, turn.params)),
+            agent_id=_turn_agent_id(turn),
             status=status,
             reason=status_value,
             scope=_turn_scope(turn),
             metadata={
                 "item_count": len(getattr(turn, "items", []) or []),
                 "error": getattr(turn, "error", None),
+                "engine": _turn_execution_engine(turn),
+                "outcome_reason": getattr(turn, "outcome_reason", None),
+                "completion_decision": getattr(turn, "completion_decision", None),
             },
         )
     except Exception as exc:  # noqa: BLE001
@@ -896,7 +909,7 @@ def _record_react_trace_event(runtime: CerebrumRuntime, turn: Turn, evt: dict[st
                     metadata={
                         "objective_id": supervisor_task_id,
                         "turn_id": turn.id,
-                        "agent_id": _agent_id_from_params(params),
+                        "agent_id": _turn_agent_id(turn),
                     },
                 )
             except Exception as exc:  # noqa: BLE001
@@ -921,6 +934,15 @@ def _record_react_trace_event(runtime: CerebrumRuntime, turn: Turn, evt: dict[st
     if event_type is None:
         return
     payload = dict(evt)
+    # The trace store is the engine-neutral source for evaluation and replay.
+    # Persist the execution strand on every event so consumers never infer it
+    # from a surrounding task or from the frontend's current mode label.
+    payload.setdefault("engine", _turn_execution_engine(turn))
+    params = getattr(turn, "params", None)
+    if params is not None:
+        model = getattr(params, "model", None)
+        if isinstance(model, str) and model.strip():
+            payload.setdefault("model", model.strip())
     if kind in {"tool_start", "tool_end", "tool_background"}:
         lifecycle_kind: Literal["tool_start", "tool_end"] = (
             "tool_start" if kind == "tool_start" else "tool_end"
@@ -941,7 +963,7 @@ def _record_react_trace_event(runtime: CerebrumRuntime, turn: Turn, evt: dict[st
             thread_id=turn.thread_id,
             turn_id=turn.id,
             task_id=turn.id,
-            agent_id=_agent_id_from_params(cast(TurnParams, turn.params)),
+            agent_id=_turn_agent_id(turn),
             item_id=str(evt.get("tool_call_id") or evt.get("item_id") or "") or None,
             scope=_turn_scope(turn),
         )

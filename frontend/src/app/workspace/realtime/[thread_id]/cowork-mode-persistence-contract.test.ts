@@ -31,4 +31,12 @@ describe("realtime cowork response-mode persistence contract", () => {
       "coworkGroupQuery.data?.state ?? sessionState ?? null",
     );
   });
+
+  test("only an explicit interaction in this tab may persist mode or roster", () => {
+    expect(pageSource).toContain(
+      "collaboratorSelectionTouchedRef.current ||\n      responseModeIntentTouchedRef.current ||\n      pendingRosterModeRef.current !== null",
+    );
+    expect(pageSource).toContain("if (!hasLocalWriteIntent) return;");
+    expect(pageSource).not.toContain("matchesSavedRoster");
+  });
 });

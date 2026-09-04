@@ -2561,6 +2561,11 @@ def test_cowork_group_request_drives_pattern_fanout(
         assert member_context["workflow_preset"] == "audit.deep"
         assert member_context["verification_policy"] == "strict"
         assert member_context["direct_conversation_reply"] is True
+        assert member_context["context_steward_managed"] is True
+        assert member_context["share_history"] is False
+        assert "conversation_messages" not in member_context
+        assert "cowork_member_context_messages" not in member_context
+        assert "cowork_durable_context" not in member_context
         assert "tool_allowlist_read_only" not in member_context
         assert "audit.deep" in member_context["system_addendum"]
         assert "当前任务类型: research" in member_context["system_addendum"]
@@ -2576,10 +2581,31 @@ def test_cowork_group_request_drives_pattern_fanout(
     assert team_items[0]["arguments"]["schema"] == "octopus.group_fanout_run.v1"
     assert team_items[0]["arguments"]["capacity"]["schema"] == ("octopus.group_fanout_capacity.v1")
     assert team_items[0]["arguments"]["pattern"]["id"] == "parallel_roundtable"
+    assert team_items[0]["arguments"]["context_plan"]["schema"] == (
+        "octopus.cowork_context_plan.v1"
+    )
+    assert team_items[0]["arguments"]["routing"] == {
+        "schema": "octopus.cowork_member_routing.v1",
+        "reason": "group_request_or_mode",
+        "available_member_count": 2,
+        "selected_member_count": 2,
+        "selected_agent_ids": ["db-agent", "ui-agent"],
+        "excluded_agent_ids": [],
+    }
+    assert "full_context_estimated_tokens" in team_items[0]["arguments"]["context_plan"]
+    assert "selected_estimated_tokens" in team_items[0]["arguments"]["context_plan"]
+    assert "estimated_reduction_ratio" in team_items[0]["arguments"]["context_plan"]
     assert team_items[0]["result"]["schema"] == "octopus.group_fanout_result.v1"
     assert team_items[0]["result"]["pattern"]["id"] == "parallel_roundtable"
     assert team_items[0]["result"]["capacity"]["requested_members"] == 2
     assert team_items[0]["result"]["capacity"]["dispatched_members"] == 2
+    assert team_items[0]["result"]["context_plan"]["strategy"] == (
+        "common-authorized-brief-plus-role-delta"
+    )
+    assert team_items[0]["result"]["routing"]["selected_agent_ids"] == [
+        "db-agent",
+        "ui-agent",
+    ]
     subagent_items = [
         item
         for item in turn["items"]
@@ -2592,6 +2618,7 @@ def test_cowork_group_request_drives_pattern_fanout(
     assert "ui-agent replied" in agent_texts
     summary_text = next(text for text in agent_texts if text.startswith("协作汇总:"))
     assert "采用并行圆桌" in summary_text
+    assert "主要观点来自" not in summary_text
     assert "采纳主视角，同时补看失败成员" in summary_text
     assert "use_primary_and_retry_failed_members" not in summary_text
     assert "react should not run" not in agent_texts
@@ -2667,6 +2694,514 @@ def test_cowork_presence_question_uses_roster_without_starting_agents(
     agent_texts = [item["text"] for item in turn["items"] if item["type"] == "agentMessage"]
     assert agent_texts == ["2 位 AI 成员均已就绪：Eve、Kane。"]
     assert not any(item["type"] == "subagent" for item in turn["items"])
+
+
+def test_cowork_deliverable_request_uses_agent_loop_not_bubble_fanout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.memory.cowork.collaboration_store import CollaborationStore
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member, set_mode
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    store = GroupStore(base_dir=tmp_path / "cowork")
+    collaboration = CollaborationStore(base_dir=tmp_path / "collaboration")
+    invite_member(store, "th-research", actor="u", target_id="general", kind="agent")
+    invite_member(store, "th-research", actor="u", target_id="coder", kind="agent")
+    set_mode(store, "th-research", actor="u", mode="swarm")
+
+    def should_not_fanout(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("deliverable work must not use no-tool chat bubbles")
+
+    monkeypatch.setattr(
+        "runtime.execution.agents.group_fanout.run_group_fanout",
+        should_not_fanout,
+    )
+    _set_script(
+        [
+            {
+                "type": "tool_start",
+                "tool_name": "call_agent_parallel",
+                "tool_call_id": "research-team",
+                "iteration": 1,
+            },
+            {
+                "type": "tool_end",
+                "tool_name": "call_agent_parallel",
+                "tool_call_id": "research-team",
+                "iteration": 1,
+                "status": "success",
+                "output_preview": "2 members returned evidence",
+            },
+            {
+                "type": "text_delta",
+                "delta": "研究已完成：这是带来源的最终结论。",
+            },
+            {"type": "react_completed"},
+        ]
+    )
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "threads"),
+        cowork_group_store=store,
+        collaboration_store=collaboration,
+    )
+    captured_context: dict[str, Any] = {}
+    original_drive_react = runtime._drive_react
+
+    async def capture_coordinator_contract(*args: Any, **kwargs: Any) -> Any:
+        turn_intent = args[3]
+        captured_context.update(turn_intent.user_context)
+        return await original_drive_react(*args, **kwargs)
+
+    monkeypatch.setattr(runtime, "_drive_react", capture_coordinator_contract)
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-research",
+                "input": [{"type": "text", "text": "研究一下 Eight Sleep，给出报告"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "completed"
+    assert not any(
+        item["type"] == "mcpToolCall" and item.get("tool") == "team_swarm" for item in turn["items"]
+    )
+    assert "研究已完成：这是带来源的最终结论。" in [
+        item["text"] for item in turn["items"] if item["type"] == "agentMessage"
+    ]
+    assert any(
+        item["type"] == "commandExecution"
+        and item.get("command") == "call_agent_parallel"
+        and item.get("status") == "completed"
+        for item in turn["items"]
+    )
+    assert "你是本轮队长/TL" in captured_context["mode_contract"]
+    assert "不要把用户原话广播给所有人" in captured_context["mode_contract"]
+    runs = collaboration.collaboration_runs_for_session("th-research")
+    assert len(runs) == 1
+    assert runs[0]["kind"] == "coordinated_execution"
+    assert runs[0]["status"] == "completed"
+    assert runs[0]["input"]["schema"] == "octopus.coordinated_execution_contract.v1"
+    assert runs[0]["input"]["required_task_fields"] == [
+        "objective",
+        "owner",
+        "inputs",
+        "deliverable",
+        "dependencies",
+        "acceptance_criteria",
+        "status",
+    ]
+    assert "successful member delegation" in runs[0]["input"]["execution_evidence_rule"]
+    assert runs[0]["result"]["schema"] == "octopus.coordinated_execution_result.v1"
+    assert runs[0]["result"]["coordination_evidence"] is True
+    assert runs[0]["result"]["delivery_ready"] is True
+    assert runs[0]["result"]["delegations"][0]["command"] == "call_agent_parallel"
+
+
+def test_cowork_orchestration_retries_once_then_rejects_a_text_only_claim(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.memory.cowork.collaboration_store import CollaborationStore
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member, set_mode
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    group_store = GroupStore(base_dir=tmp_path / "cowork")
+    collaboration = CollaborationStore(base_dir=tmp_path / "collaboration")
+    invite_member(group_store, "th-fake-delegation", actor="u", target_id="general", kind="agent")
+    invite_member(group_store, "th-fake-delegation", actor="u", target_id="coder", kind="agent")
+    set_mode(group_store, "th-fake-delegation", actor="u", mode="swarm")
+    _set_script(
+        [
+            {"type": "text_delta", "delta": "已经分派给成员并完成。"},
+            {"type": "react_completed"},
+        ]
+    )
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "threads"),
+        cowork_group_store=group_store,
+        collaboration_store=collaboration,
+    )
+    contexts: list[dict[str, Any]] = []
+    original_drive_react = runtime._drive_react
+
+    async def capture_repair(*args: Any, **kwargs: Any) -> Any:
+        contexts.append(dict(args[3].user_context))
+        return await original_drive_react(*args, **kwargs)
+
+    monkeypatch.setattr(runtime, "_drive_react", capture_repair)
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        turn = _drive(
+            ws,
+            {
+                "threadId": "th-fake-delegation",
+                "input": [{"type": "text", "text": "研究竞品并输出报告"}],
+                "approvalPolicy": "never",
+            },
+        )["response"].result["turn"]
+
+    assert turn["status"] == "interrupted"
+    assert len(contexts) == 2
+    assert contexts[1]["cowork_orchestration_repair"] == {
+        "attempt": 1,
+        "max_attempts": 1,
+        "reason": "missing_delegation_evidence",
+    }
+    error = next(item for item in turn["items"] if item["type"] == "error")
+    assert error["errorInfo"]["code"] == "coordination_delivery_incomplete"
+    runs = collaboration.collaboration_runs_for_session("th-fake-delegation")
+    assert runs[0]["status"] == "interrupted"
+    assert runs[0]["result"]["outcome_reason"] == "coordination_delivery_incomplete"
+
+
+def test_cowork_orchestration_accepts_real_delegation_on_repair(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member, set_mode
+    from runtime.protocol import AgentMessageItem, CommandExecutionItem, ItemStatus
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    group_store = GroupStore(base_dir=tmp_path / "cowork")
+    invite_member(
+        group_store, "th-repaired-delegation", actor="u", target_id="general", kind="agent"
+    )
+    invite_member(group_store, "th-repaired-delegation", actor="u", target_id="coder", kind="agent")
+    set_mode(group_store, "th-repaired-delegation", actor="u", mode="swarm")
+    _set_script(
+        [
+            {"type": "text_delta", "delta": "先给出结论。"},
+            {"type": "react_completed"},
+        ]
+    )
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "threads"),
+        cowork_group_store=group_store,
+    )
+    calls = 0
+    original_drive_react = runtime._drive_react
+
+    async def delegate_on_repair(*args: Any, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        result = await original_drive_react(*args, **kwargs)
+        if calls == 2:
+            args[0].items.append(
+                CommandExecutionItem(
+                    command="call_agent_parallel",
+                    status=ItemStatus.COMPLETED,
+                    aggregated_output="two member results",
+                )
+            )
+            args[0].items.append(
+                AgentMessageItem(text="综合成员结果后的最终方案。", status=ItemStatus.COMPLETED)
+            )
+        return result
+
+    monkeypatch.setattr(runtime, "_drive_react", delegate_on_repair)
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        turn = _drive(
+            ws,
+            {
+                "threadId": "th-repaired-delegation",
+                "input": [{"type": "text", "text": "调研市场并给出方案"}],
+                "approvalPolicy": "never",
+            },
+        )["response"].result["turn"]
+
+    assert calls == 2
+    assert turn["status"] == "completed"
+    assert not any(item["type"] == "error" for item in turn["items"])
+
+
+def test_cowork_tl_correction_and_question_marks_preserve_the_original_task(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression for the real conversation that exposed context-free fanout."""
+
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member, set_mode
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    store = GroupStore(base_dir=tmp_path / "cowork")
+    invite_member(store, "th-tl-recovery", actor="u", target_id="general", kind="agent")
+    invite_member(store, "th-tl-recovery", actor="u", target_id="coder", kind="agent")
+    set_mode(store, "th-tl-recovery", actor="u", mode="swarm")
+
+    def should_not_fanout(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("TL work and context recovery must never use bubble fanout")
+
+    monkeypatch.setattr(
+        "runtime.execution.agents.group_fanout.run_group_fanout",
+        should_not_fanout,
+    )
+    _set_script(
+        [
+            {
+                "type": "tool_start",
+                "tool_name": "call_agent_parallel",
+                "tool_call_id": "initial-research",
+                "iteration": 1,
+            },
+            {
+                "type": "tool_end",
+                "tool_name": "call_agent_parallel",
+                "tool_call_id": "initial-research",
+                "iteration": 1,
+                "status": "success",
+            },
+            {"type": "text_delta", "delta": "已拆解调研任务并开始协调执行。"},
+            {"type": "react_completed"},
+            {"type": "text_delta", "delta": "收到纠正：后续由 TL 转述并分派。"},
+            {"type": "react_completed"},
+            {"type": "text_delta", "delta": "正在沿原调研任务继续推进。"},
+            {"type": "react_completed"},
+        ]
+    )
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "threads"),
+        cowork_group_store=store,
+    )
+    captured_contexts: list[dict[str, Any]] = []
+    original_drive_react = runtime._drive_react
+
+    async def capture_turn_context(*args: Any, **kwargs: Any) -> Any:
+        captured_contexts.append(dict(args[3].user_context))
+        return await original_drive_react(*args, **kwargs)
+
+    monkeypatch.setattr(runtime, "_drive_react", capture_turn_context)
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    prompts = [
+        "做一个深度调研，我们要做类似产品，给出市场、定价和商业策划",
+        "让你理解、拆解、转述再指派，不是把原话发给别人",
+        "？？？",
+    ]
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        turns = [
+            _drive(
+                ws,
+                {
+                    "threadId": "th-tl-recovery",
+                    "input": [{"type": "text", "text": prompt}],
+                    "approvalPolicy": "never",
+                },
+            )["response"].result["turn"]
+            for prompt in prompts
+        ]
+
+    assert all(turn["status"] == "completed" for turn in turns)
+    assert [context["team_pattern"]["execution"] for context in captured_contexts] == [
+        "orchestrated",
+        "focused",
+        "focused",
+    ]
+    final_history = captured_contexts[-1]["conversation_messages"]
+    assert any(
+        "理解、拆解、转述再指派" in str(message.get("content") or "")
+        for message in final_history
+        if isinstance(message, dict)
+    )
+    assert not any(
+        item["type"] == "mcpToolCall" and item.get("tool") == "team_swarm"
+        for turn in turns
+        for item in turn["items"]
+    )
+
+
+def test_failed_coordinated_execution_is_recoverable_in_the_run_ledger(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.memory.cowork.collaboration_store import CollaborationStore
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member, set_mode
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    group_store = GroupStore(base_dir=tmp_path / "cowork")
+    collaboration = CollaborationStore(base_dir=tmp_path / "collaboration")
+    invite_member(group_store, "th-failed-run", actor="u", target_id="general", kind="agent")
+    invite_member(group_store, "th-failed-run", actor="u", target_id="coder", kind="agent")
+    set_mode(group_store, "th-failed-run", actor="u", mode="swarm")
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "threads"),
+        cowork_group_store=group_store,
+        collaboration_store=collaboration,
+    )
+
+    async def crash_driver(*_args: Any, **_kwargs: Any) -> None:
+        raise RuntimeError("coordinator crashed")
+
+    monkeypatch.setattr(runtime, "_drive_react", crash_driver)
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        turn = _drive(
+            ws,
+            {
+                "threadId": "th-failed-run",
+                "input": [{"type": "text", "text": "研究竞品并输出报告"}],
+                "approvalPolicy": "never",
+            },
+        )["response"].result["turn"]
+
+    assert turn["status"] == "failed"
+    runs = collaboration.collaboration_runs_for_session("th-failed-run")
+    assert len(runs) == 1
+    assert runs[0]["status"] == "failed"
+    assert "coordinator crashed" in str(runs[0]["error"])
+    assert runs[0]["result"]["turn_status"] == "failed"
+    assert [
+        event["status"] for event in collaboration.collaboration_run_events(runs[0]["run_id"])
+    ] == [
+        "queued",
+        "running",
+        "failed",
+    ]
+
+
+def test_continue_reclaims_the_same_interrupted_coordinated_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.memory.cowork.collaboration_store import CollaborationStore
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member, set_mode
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    group_store = GroupStore(base_dir=tmp_path / "cowork")
+    collaboration = CollaborationStore(base_dir=tmp_path / "collaboration")
+    invite_member(group_store, "th-resume-run", actor="u", target_id="general", kind="agent")
+    invite_member(group_store, "th-resume-run", actor="u", target_id="coder", kind="agent")
+    set_mode(group_store, "th-resume-run", actor="u", mode="swarm")
+    run_id = "cowork-orchestrated:old-turn"
+    contract = {
+        "schema": "octopus.coordinated_execution_contract.v1",
+        "objective": "研究 Eight Sleep 并输出商业报告",
+        "required_task_fields": ["objective", "owner", "acceptance_criteria", "status"],
+    }
+    collaboration.create_collaboration_run(
+        run_id=run_id,
+        session_id="th-resume-run",
+        turn_id="old-turn",
+        kind="coordinated_execution",
+        input=contract,
+    )
+    collaboration.claim_collaboration_run(run_id, worker_id="old-worker")
+    collaboration.transition_collaboration_run(
+        run_id,
+        status="interrupted",
+        worker_id="old-worker",
+        result={"task_graph": [{"id": "market", "status": "completed"}]},
+    )
+
+    _set_script(
+        [
+            {
+                "type": "tool_start",
+                "tool_name": "call_agent_parallel",
+                "tool_call_id": "resume-incomplete-nodes",
+                "iteration": 1,
+            },
+            {
+                "type": "tool_end",
+                "tool_name": "call_agent_parallel",
+                "tool_call_id": "resume-incomplete-nodes",
+                "iteration": 1,
+                "status": "success",
+            },
+            {"type": "text_delta", "delta": "已跳过完成节点，并从未完成节点继续。"},
+            {"type": "react_completed"},
+        ]
+    )
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "threads"),
+        cowork_group_store=group_store,
+        collaboration_store=collaboration,
+    )
+    contexts: list[dict[str, Any]] = []
+    original_drive_react = runtime._drive_react
+
+    async def capture_resume(*args: Any, **kwargs: Any) -> Any:
+        contexts.append(dict(args[3].user_context))
+        return await original_drive_react(*args, **kwargs)
+
+    monkeypatch.setattr(runtime, "_drive_react", capture_resume)
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        turn = _drive(
+            ws,
+            {
+                "threadId": "th-resume-run",
+                "input": [{"type": "text", "text": "继续"}],
+                "approvalPolicy": "never",
+            },
+        )["response"].result["turn"]
+
+    assert turn["status"] == "completed"
+    assert contexts[0]["team_pattern"]["execution"] == "orchestrated"
+    assert contexts[0]["cowork_resume_run_id"] == run_id
+    assert "研究 Eight Sleep 并输出商业报告" in contexts[0]["mode_contract"]
+    assert '"id":"market","status":"completed"' in contexts[0]["mode_contract"]
+    assert "只重跑未完成、失败或需要复核的节点" in contexts[0]["mode_contract"]
+    runs = collaboration.collaboration_runs_for_session("th-resume-run")
+    assert len(runs) == 1
+    assert runs[0]["run_id"] == run_id
+    assert runs[0]["status"] == "completed"
+    assert runs[0]["attempt"] == 2
+    assert runs[0]["input"] == contract
+    assert runs[0]["result"]["turn_id"] == turn["id"]
+    assert [event["event_type"] for event in collaboration.collaboration_run_events(run_id)] == [
+        "created",
+        "claimed",
+        "interrupted",
+        "reclaimed",
+        "completed",
+    ]
 
 
 def test_cowork_swarm_failure_reports_group_fanout_driver(

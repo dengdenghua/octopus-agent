@@ -424,6 +424,39 @@ async def test_tool_call_delta_buffers_before_start_and_merges_into_preview() ->
 
 
 @pytest.mark.asyncio
+async def test_pre_tool_answer_prose_is_completed_as_commentary() -> None:
+    state, turn, emitter, log = _new_state()
+
+    await state.append_agent_message(
+        turn,
+        log,
+        emitter,
+        "阶段报告：证据基本齐全，但还要更新清单。",
+    )
+    await state.start_tool(
+        turn,
+        log,
+        emitter,
+        {"tool_call_id": "todo-1", "tool_name": "todo_write"},
+    )
+    await state.complete_tool(
+        turn,
+        log,
+        emitter,
+        {"tool_call_id": "todo-1", "status": "success", "output_preview": "ok"},
+    )
+    await state.append_agent_message(turn, log, emitter, "最终报告：证据已经核实。")
+    await state.flush(turn, log, emitter)
+
+    prose = [item for item in turn.items if item.type == "agentMessage"]
+    assert [item.message_kind for item in prose] == ["commentary", "answer"]
+    assert [item.text for item in prose] == [
+        "阶段报告：证据基本齐全，但还要更新清单。",
+        "最终报告：证据已经核实。",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_tool_call_delta_reemits_throttled_on_open_item() -> None:
     state, turn, emitter, log = _new_state()
     await state.start_tool(

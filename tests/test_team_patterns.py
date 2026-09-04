@@ -3,10 +3,19 @@
 from __future__ import annotations
 
 from runtime.execution.agents.team_patterns import (
+    is_coordinator_followup,
     is_explicit_group_work_request,
     pattern_member_role,
+    requires_coordinated_execution,
     select_team_pattern,
 )
+
+
+def test_terse_or_tl_correction_goes_to_coordinator_not_full_fanout() -> None:
+    for message in ("？", "？？？", "上面中断任务啊", "不是队长拆解么"):
+        assert is_coordinator_followup(message) is True
+        decision = select_team_pattern(message, mode="swarm", member_count=6)
+        assert decision.spec.execution == "focused"
 
 
 def test_presence_uses_roster_state_in_every_mode() -> None:
@@ -59,6 +68,28 @@ def test_swarm_is_parallel_unless_review_depth_is_needed() -> None:
 
     assert parallel.spec.id == "parallel_roundtable"
     assert review.spec.id == "adversarial_review"
+
+
+def test_deliverable_work_never_uses_chat_bubbles() -> None:
+    assert requires_coordinated_execution("研究一下 Eight Sleep") is True
+    assert requires_coordinated_execution("做一个类似产品的商业策划") is True
+    assert requires_coordinated_execution("制定市场进入方案和定价计划") is True
+
+    for mode in ("cluster", "swarm"):
+        decision = select_team_pattern(
+            "研究一下 Eight Sleep，给出带来源的报告",
+            mode=mode,
+            member_count=5,
+        )
+        assert decision.spec.id == "coordinated_execution"
+        assert decision.spec.execution == "orchestrated"
+
+    group_chat = select_team_pattern(
+        "大家一起研究一下 Eight Sleep，给出带来源的报告",
+        mode="chat",
+        member_count=5,
+    )
+    assert group_chat.spec.execution == "orchestrated"
 
 
 def test_single_mention_stays_focused_even_in_swarm() -> None:

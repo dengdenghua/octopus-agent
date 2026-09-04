@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from typing import Any
+from types import SimpleNamespace
 
 from runtime.memory.threads.session_title import SessionTitleService
 from runtime.memory.threads.store import ThreadStateStore
-from runtime.protocol import Turn, TurnStatus
+from runtime.protocol import AgentMessageItem, ItemStatus, Turn, TurnStatus
 from runtime.sensing.gateway._realtime_cerebrum_thread import _snapshot_to_thread_store
 
 
@@ -25,6 +26,18 @@ class _Log:
 class _Runtime:
     def __init__(self, store: Any) -> None:
         self._thread_store = store
+
+
+class _CollaborationStore:
+    def __init__(self) -> None:
+        self.messages: list[dict[str, Any]] = []
+
+    def append_message(self, session_id: str, **payload: Any) -> int:
+        source_id = payload["metadata"]["source_message_id"]
+        if any(m["metadata"]["source_message_id"] == source_id for m in self.messages):
+            raise ValueError("source_message_id already belongs to a different room message")
+        self.messages.append({"session_id": session_id, **payload})
+        return len(self.messages)
 
 
 def test_snapshot_triggers_auto_title_once() -> None:
@@ -95,6 +108,44 @@ def test_snapshot_without_service_keeps_legacy_behavior() -> None:
     state = store.get_state(thread_id)
     assert state["values"]["title"] == ""
     assert "title_source" not in state["metadata"]
+
+
+def test_snapshot_projects_completed_agent_messages_to_linked_room() -> None:
+    store = ThreadStateStore()
+    collaboration = _CollaborationStore()
+    runtime = _Runtime(store)
+    runtime._collaboration_store = collaboration
+    thread_id = "th-agent-room"
+    turn = Turn(
+        threadId=thread_id,
+        status=TurnStatus.COMPLETED,
+        items=[
+            AgentMessageItem(
+                text="已完成核对。",
+                agentDisplayName="Coder",
+                status=ItemStatus.COMPLETED,
+            )
+        ],
+    )
+    log = SimpleNamespace(replay=lambda: [turn])
+    intent = SimpleNamespace(
+        user_context={
+            "cowork_persistent_group": True,
+            "cowork_room_id": "room-agent",
+            "agent": "coder",
+        }
+    )
+
+    _snapshot_to_thread_store(runtime, thread_id, log, intent)
+    _snapshot_to_thread_store(runtime, thread_id, log, intent)
+
+    assert len(collaboration.messages) == 1
+    message = collaboration.messages[0]
+    assert message["text"] == "已完成核对。"
+    assert message["participant_id"] == "agent:coder"
+    assert message["display_name"] == "Coder"
+    assert message["metadata"]["source_message_id"].startswith("thread:agent:")
+    assert message["metadata"]["sender_type"] == "agent"
 
 
 def test_runtime_wrapper_passes_service_through() -> None:

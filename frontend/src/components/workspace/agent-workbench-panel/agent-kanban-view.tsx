@@ -14,8 +14,7 @@ import type {
 } from "../agent-workbench-utils";
 import type { AgentPhase } from "../agent-phases";
 import type { AgentWorkbenchProcessEventSnapshot } from "../agent-workbench-events";
-import { AgentCreationCard, AgentSummaryPage } from "../agent-workbench-pages";
-import { useAgentWorkbenchI18n } from "../use-agent-workbench-i18n";
+import { AgentSummaryPage } from "../agent-workbench-pages";
 import type { LiveToolEvent } from "../live-tool-timeline";
 import type { WorkbenchRosterSeat } from "./helpers";
 import { SubagentProcessView } from "./subagent-process-view";
@@ -81,7 +80,7 @@ function AgentKanbanViewImpl({
   setSelectedBlockId,
   setManualBlockSelection,
 }: {
-  effectiveActivityView: "summary" | "screen" | "role";
+  effectiveActivityView: "summary" | "screen";
   selectedRosterSeat: WorkbenchRosterSeat | null;
   selectedAgent: AgentTile | null;
   screenBlocks: WorkBlock[];
@@ -104,7 +103,7 @@ function AgentKanbanViewImpl({
   isCompressingContext?: boolean;
   onCompressContext?: () => void | Promise<void>;
   visibilityEvents: LiveToolEvent[];
-  setActivityView: (view: "summary" | "trace" | "screen" | "role") => void;
+  setActivityView: (view: "summary" | "trace" | "screen") => void;
   onSelectTab: ((tab: AgentWorkbenchTabId) => void) | undefined;
   onOpenArtifact: ((path: string) => void) | undefined;
   openMainProcess: () => void;
@@ -112,8 +111,6 @@ function AgentKanbanViewImpl({
   setManualBlockSelection: (selected: boolean) => void;
 }) {
   const { t } = useI18n();
-  const { agentStatusLabel, agentStatusClass } = useAgentWorkbenchI18n();
-
   // Visibility (capability routing / delegation / skill-catalog) decisions.
   // Deliberately de-emphasised: collapsed by default, small text,
   // transparent background. Latest visibility item wins.
@@ -139,8 +136,9 @@ function AgentKanbanViewImpl({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Summary remains the default for the main process. Once an Agent is
-          selected, its computer and role card stay explicitly reachable. */}
+      {/* Summary remains the default for the main process. A selected agent's
+          execution screen is available here; identity belongs to the avatar
+          profile card in the conversation, not this workbench. */}
       <div className="flex items-center gap-4 border-b border-border-subtle px-5 py-2">
         {[
           { id: "summary" as const, label: t.agentWorkbenchPanel.summaryLabel },
@@ -149,10 +147,6 @@ function AgentKanbanViewImpl({
                 {
                   id: "screen" as const,
                   label: t.agentWorkbench.executionView,
-                },
-                {
-                  id: "role" as const,
-                  label: t.agentWorkbenchPages.roleCard,
                 },
               ]
             : []),
@@ -212,16 +206,6 @@ function AgentKanbanViewImpl({
             setManualBlockSelection(true);
           }}
         />
-      ) : selectedAgent ? (
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/70 p-3">
-          <div className="mx-auto w-full max-w-xl">
-            <AgentCreationCard
-              agent={selectedAgent}
-              agentStatusClass={agentStatusClass}
-              agentStatusLabel={agentStatusLabel}
-            />
-          </div>
-        </div>
       ) : (
         <AgentSummaryPage
           phases={phases}

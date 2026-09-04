@@ -32,16 +32,16 @@ tier: "standard"
 
 ## `session_start` · 2 处
 
-- `runtime/sensing/gateway/realtime_turn_lifecycle.py:665`
-- `runtime/sensing/gateway/realtime_turn_lifecycle.py:673`
+- `runtime/sensing/gateway/realtime_turn_lifecycle.py:683`
+- `runtime/sensing/gateway/realtime_turn_lifecycle.py:691`
 
 ## `stop` · 2 处
 
-- `runtime/sensing/gateway/realtime_turn_lifecycle.py:206`
-- `runtime/sensing/gateway/realtime_turn_lifecycle.py:213`
+- `runtime/sensing/gateway/realtime_turn_lifecycle.py:224`
+- `runtime/sensing/gateway/realtime_turn_lifecycle.py:231`
 
 ## `user_prompt` · 2 处
 
-- `runtime/sensing/gateway/realtime_turn_lifecycle.py:666`
-- `runtime/sensing/gateway/realtime_turn_lifecycle.py:675`
+- `runtime/sensing/gateway/realtime_turn_lifecycle.py:684`
+- `runtime/sensing/gateway/realtime_turn_lifecycle.py:693`
 

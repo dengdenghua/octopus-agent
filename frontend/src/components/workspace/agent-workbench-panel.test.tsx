@@ -653,6 +653,31 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByRole("button", { name: /Eve · 群主/ })).toBeNull();
   });
 
+  test("keeps the legacy machine rail hidden when runtime subagents appear", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        events={[
+          event({
+            id: "parent-call-hidden-rail",
+            name: "call_agent_parallel",
+            status: "running",
+            input: {
+              specs: [
+                { agent_id: "researcher", prompt: "pricing lane" },
+                { agent_id: "reviewer", prompt: "risk lane" },
+              ],
+            },
+          }),
+        ]}
+        showMachineScopeRail={false}
+      />,
+    );
+
+    expect(screen.queryByTestId("workstation-bottom-rail")).toBeNull();
+    expect(screen.queryByTitle("researcher: pricing lane")).toBeNull();
+    expect(screen.queryByTitle("reviewer: risk lane")).toBeNull();
+  });
+
   test("uses the leader avatar for the main workstation in solo mode", () => {
     const { container } = renderWorkbench(
       <AgentWorkbenchPanel
@@ -707,18 +732,14 @@ describe("<AgentWorkbenchPanel />", () => {
 
     fireEvent.click(writerSeat);
 
-    // Clicking a sub-role lands on its nameplate (工牌): the role's identity,
-    // not the turn's delegated brief.
-    expect(screen.getAllByText("writer").length).toBeGreaterThan(0);
-    expect(
-      screen.getByText("Drafts clear, well-structured prose and deliverables."),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("summary lane")).not.toBeInTheDocument();
+    // Clicking a sub-role opens its execution process; identity details live
+    // on the avatar profile card, not in this sidebar.
+    expect(screen.getByText("summary lane")).toBeInTheDocument();
 
     expect(
       screen.getByRole("button", { name: "执行画面" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText("summary lane")).not.toBeInTheDocument();
+    expect(screen.getByText("summary lane")).toBeInTheDocument();
   });
 
   test("merges dispatch specs with same-role runtime lifecycle by requested id", () => {
@@ -1008,9 +1029,6 @@ describe("<AgentWorkbenchPanel />", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "查看 Review-03 独立进程" }),
     );
-
-    // Clicking a sub-role lands on its nameplate (工牌) first.
-    expect(screen.getByText("Agent 集群 - 创建助手")).toBeInTheDocument();
 
     expect(
       screen.getByRole("button", { name: "执行画面" }),
@@ -1703,6 +1721,11 @@ describe("<AgentWorkbenchPanel />", () => {
 
     expandSummarySection(/上下文/);
 
+    expect(screen.getByTestId("agent-summary-scroll-viewport")).toHaveClass(
+      "min-w-0",
+      "overflow-x-hidden",
+      "overflow-y-auto",
+    );
     expect(
       screen.getByLabelText("当前对话中 AI 获取的上下文"),
     ).toBeInTheDocument();
@@ -1714,6 +1737,10 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(
       screen.getByTestId("workbench-context-usage-bar").firstElementChild,
     ).toHaveStyle({ width: "59%" });
+    const referenceList = screen.getByTestId("workbench-reference-list");
+    expect(referenceList).toHaveClass("space-y-1", "overflow-x-hidden");
+    expect(referenceList).not.toHaveClass("grid", "flex-1");
+    expect(referenceList).not.toHaveClass("max-h-64", "overflow-y-auto");
 
     fireEvent.click(screen.getByRole("button", { name: "压缩" }));
     expect(onCompressContext).toHaveBeenCalledTimes(1);
@@ -1758,7 +1785,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.getAllByText("Spark-02").length).toBeGreaterThan(0);
   });
 
-  test("shows the role card only when the user focuses a sub-agent", async () => {
+  test("maps a legacy role focus to the sub-agent execution screen", async () => {
     const spawn = event({
       id: "spawn-1",
       name: "subagent",
@@ -1774,7 +1801,7 @@ describe("<AgentWorkbenchPanel />", () => {
       <AgentWorkbenchPanel events={[spawn]} />,
     );
 
-    // The spawn event alone must not replace the summary with the role card.
+    // The spawn event alone must not replace the main summary.
     expect(screen.queryByText("Agent 集群 - 创建助手")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "角色卡" }),
@@ -1809,7 +1836,7 @@ describe("<AgentWorkbenchPanel />", () => {
       screen.queryByRole("tab", { name: /浏览器/ }),
     ).not.toBeInTheDocument();
 
-    // An explicit role focus intent lands on the role card (工牌).
+    // Old role focus intents remain safe, but land on the execution screen.
     rerender(
       <AgentWorkbenchPanel
         focusedAgentId="designer-a"
@@ -1830,9 +1857,13 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
     await waitFor(() => {
-      expect(screen.getByText("Agent 集群 - 创建助手")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "执行画面" }),
+      ).toBeInTheDocument();
     });
-    expect(screen.getAllByText("Spark-Design").length).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole("button", { name: "角色卡" }),
+    ).not.toBeInTheDocument();
   });
 
   test("resolves a main-chat codename focus to the runtime agent tile", async () => {
@@ -1914,47 +1945,9 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(
       screen.getByRole("button", { name: "执行画面" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "角色卡" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "角色卡" }));
-    await waitFor(() => {
-      expect(screen.getByText("Agent 集群 - 创建助手")).toBeInTheDocument();
-    });
-    expect(screen.getAllByText("Prism-history").length).toBeGreaterThan(0);
-  });
-
-  test("shows the backend built-in role identity on the nameplate", async () => {
-    const spawn = event({
-      id: "spawn-1",
-      name: "subagent",
-      lifecycle: "spawned",
-      status: "running",
-      parentToolUseId: "parent-call-1",
-      agentId: "reviewer-a",
-      subAgentRole: "reviewer",
-      subagentCodename: "Spark-Review",
-      subagentRoleDisplayName: "Code Reviewer",
-      subagentRoleDescription:
-        "Scans a code change for bugs, security holes, performance issues, and maintainability smells.",
-    });
-    renderWorkbench(
-      <AgentWorkbenchPanel
-        focusedAgentId="reviewer-a"
-        focusedAgentView="role"
-        focusedAgentNonce={1}
-        events={[spawn]}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText("Agent 集群 - 创建助手")).toBeInTheDocument();
-    });
-    // The backend catalog's display name wins over the frontend fallback map
-    // (which would render "Reviewer" for role="reviewer").
-    expect(screen.getByText("Code Reviewer")).toBeInTheDocument();
     expect(
-      screen.getByText(/Scans a code change for bugs, security holes/),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "角色卡" }),
+    ).not.toBeInTheDocument();
   });
 
   test("shows only the focused sub-agent complete stream in the right workbench", async () => {

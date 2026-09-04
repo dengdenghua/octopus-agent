@@ -1,6 +1,84 @@
 {
   "components": {
     "schemas": {
+      "A2ARequest": {
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "jsonrpc": {
+            "enum": [
+              "2.0"
+            ],
+            "type": "string"
+          },
+          "method": {
+            "enum": [
+              "SendMessage",
+              "SendStreamingMessage",
+              "GetTask",
+              "ListTasks",
+              "CancelTask",
+              "CreateTaskPushNotificationConfig",
+              "GetTaskPushNotificationConfig",
+              "ListTaskPushNotificationConfigs",
+              "DeleteTaskPushNotificationConfig",
+              "SubscribeToTask",
+              "GetExtendedAgentCard"
+            ],
+            "type": "string"
+          },
+          "params": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SendMessageRequest"
+              },
+              {
+                "$ref": "#/components/schemas/GetTaskRequest"
+              },
+              {
+                "$ref": "#/components/schemas/ListTasksRequest"
+              },
+              {
+                "$ref": "#/components/schemas/CancelTaskRequest"
+              },
+              {
+                "$ref": "#/components/schemas/TaskPushNotificationConfig"
+              },
+              {
+                "$ref": "#/components/schemas/GetTaskPushNotificationConfigRequest"
+              },
+              {
+                "$ref": "#/components/schemas/ListTaskPushNotificationConfigsRequest"
+              },
+              {
+                "$ref": "#/components/schemas/DeleteTaskPushNotificationConfigRequest"
+              },
+              {
+                "$ref": "#/components/schemas/SubscribeToTaskRequest"
+              },
+              {
+                "$ref": "#/components/schemas/GetExtendedAgentCardRequest"
+              }
+            ]
+          }
+        },
+        "required": [
+          "jsonrpc",
+          "method"
+        ],
+        "type": "object"
+      },
       "AcquireLeaseBody": {
         "properties": {
           "file_path": {
@@ -353,6 +431,80 @@
         "title": "AgentWire",
         "type": "object"
       },
+      "AnnotationBody": {
+        "properties": {
+          "avatar_color": {
+            "default": "",
+            "maxLength": 32,
+            "title": "Avatar Color",
+            "type": "string"
+          },
+          "body": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "display_name": {
+            "default": "",
+            "maxLength": 160,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "message_id": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Message Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id",
+          "body"
+        ],
+        "title": "AnnotationBody",
+        "type": "object"
+      },
+      "AnnotationReplyBody": {
+        "properties": {
+          "avatar_color": {
+            "default": "",
+            "maxLength": 32,
+            "title": "Avatar Color",
+            "type": "string"
+          },
+          "body": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "display_name": {
+            "default": "",
+            "maxLength": 160,
+            "title": "Display Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "title": "AnnotationReplyBody",
+        "type": "object"
+      },
+      "AnnotationResolvedBody": {
+        "properties": {
+          "resolved": {
+            "title": "Resolved",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "resolved"
+        ],
+        "title": "AnnotationResolvedBody",
+        "type": "object"
+      },
       "AppendRecordingEventsRequest": {
         "properties": {
           "events": {
@@ -506,6 +658,19 @@
           "providers"
         ],
         "title": "AuthProvidersResponse",
+        "type": "object"
+      },
+      "AuthenticationInfo": {
+        "properties": {
+          "credentials": {
+            "example": "",
+            "type": "string"
+          },
+          "scheme": {
+            "example": "scheme",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "AutomationPolicyRuleInstallBody": {
@@ -900,6 +1065,22 @@
           }
         },
         "title": "CancelLoopRunRequest",
+        "type": "object"
+      },
+      "CancelTaskRequest": {
+        "properties": {
+          "id": {
+            "example": "id",
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "tenant": {
+            "example": "",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "CandidateCanaryOutcomeBody": {
@@ -3255,6 +3436,23 @@
         "title": "DeepResearchRequest",
         "type": "object"
       },
+      "DeleteTaskPushNotificationConfigRequest": {
+        "properties": {
+          "id": {
+            "example": "id",
+            "type": "string"
+          },
+          "task_id": {
+            "example": "task_id",
+            "type": "string"
+          },
+          "tenant": {
+            "example": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "DetachFromGroupBody": {
         "properties": {
           "expected_project_id": {
@@ -4199,6 +4397,49 @@
         "title": "GenerateAgentVisualsRequest",
         "type": "object"
       },
+      "GetExtendedAgentCardRequest": {
+        "properties": {
+          "tenant": {
+            "example": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GetTaskPushNotificationConfigRequest": {
+        "properties": {
+          "id": {
+            "example": "id",
+            "type": "string"
+          },
+          "task_id": {
+            "example": "task_id",
+            "type": "string"
+          },
+          "tenant": {
+            "example": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GetTaskRequest": {
+        "properties": {
+          "history_length": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "id": {
+            "example": "id",
+            "type": "string"
+          },
+          "tenant": {
+            "example": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "GrantBody": {
         "properties": {
           "from_msg": {
@@ -4526,6 +4767,75 @@
           "room_id"
         ],
         "title": "LinkRoomBody",
+        "type": "object"
+      },
+      "ListTaskPushNotificationConfigsRequest": {
+        "properties": {
+          "page_size": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "page_token": {
+            "example": "",
+            "type": "string"
+          },
+          "task_id": {
+            "example": "task_id",
+            "type": "string"
+          },
+          "tenant": {
+            "example": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ListTasksRequest": {
+        "properties": {
+          "context_id": {
+            "example": "",
+            "type": "string"
+          },
+          "history_length": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "include_artifacts": {
+            "example": false,
+            "type": "boolean"
+          },
+          "page_size": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "page_token": {
+            "example": "",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "TASK_STATE_UNSPECIFIED",
+              "TASK_STATE_SUBMITTED",
+              "TASK_STATE_WORKING",
+              "TASK_STATE_COMPLETED",
+              "TASK_STATE_FAILED",
+              "TASK_STATE_CANCELED",
+              "TASK_STATE_INPUT_REQUIRED",
+              "TASK_STATE_REJECTED",
+              "TASK_STATE_AUTH_REQUIRED"
+            ],
+            "example": "TASK_STATE_SUBMITTED",
+            "type": "string"
+          },
+          "status_timestamp_after": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "tenant": {
+            "example": "",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "LoopAttempt": {
@@ -5237,6 +5547,66 @@
         "title": "MergeBody",
         "type": "object"
       },
+      "Message": {
+        "properties": {
+          "context_id": {
+            "example": "",
+            "type": "string"
+          },
+          "extensions": {
+            "example": [
+              ""
+            ],
+            "items": {
+              "example": "",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "message_id": {
+            "example": "message_id",
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "parts": {
+            "example": [
+              {
+                "text": ""
+              }
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Part"
+            },
+            "type": "array"
+          },
+          "reference_task_ids": {
+            "example": [
+              ""
+            ],
+            "items": {
+              "example": "",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "role": {
+            "enum": [
+              "ROLE_UNSPECIFIED",
+              "ROLE_USER",
+              "ROLE_AGENT"
+            ],
+            "example": "ROLE_USER",
+            "type": "string"
+          },
+          "task_id": {
+            "example": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "MessageProjectActionBody": {
         "properties": {
           "acceptance_criteria": {
@@ -5431,6 +5801,78 @@
         "title": "MoveThreadBody",
         "type": "object"
       },
+      "Part": {
+        "allOf": [
+          {
+            "properties": {
+              "filename": {
+                "example": "",
+                "type": "string"
+              },
+              "media_type": {
+                "example": "",
+                "type": "string"
+              },
+              "metadata": {
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "oneOf": [
+              {
+                "properties": {
+                  "text": {
+                    "example": "",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "raw": {
+                    "format": "byte",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "raw"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "url": {
+                    "example": "",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "url"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "data": {}
+                },
+                "required": [
+                  "data"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        ],
+        "example": {
+          "text": ""
+        }
+      },
       "PauseTaskBody": {
         "properties": {
           "note": {
@@ -5445,6 +5887,21 @@
           }
         },
         "title": "PauseTaskBody",
+        "type": "object"
+      },
+      "PinMessageBody": {
+        "properties": {
+          "message_id": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Message Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id"
+        ],
+        "title": "PinMessageBody",
         "type": "object"
       },
       "PlanBody": {
@@ -5738,12 +6195,45 @@
         "title": "RankRequest",
         "type": "object"
       },
+      "ReactionBody": {
+        "properties": {
+          "emoji": {
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Emoji",
+            "type": "string"
+          },
+          "message_id": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Message Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id",
+          "emoji"
+        ],
+        "title": "ReactionBody",
+        "type": "object"
+      },
       "ReadBody": {
         "properties": {
           "member_id": {
             "minLength": 1,
             "title": "Member Id",
             "type": "string"
+          },
+          "message_seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Seq"
           },
           "seq": {
             "anyOf": [
@@ -6076,6 +6566,18 @@
             "title": "Participant Id",
             "type": "string"
           },
+          "reply_to": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply To"
+          },
           "source_message_id": {
             "default": "",
             "title": "Source Message Id",
@@ -6167,6 +6669,66 @@
           }
         },
         "title": "ScorecardGapQueueBody",
+        "type": "object"
+      },
+      "SendMessageConfiguration": {
+        "properties": {
+          "accepted_output_modes": {
+            "example": [
+              ""
+            ],
+            "items": {
+              "example": "",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "history_length": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "return_immediately": {
+            "example": false,
+            "type": "boolean"
+          },
+          "task_push_notification_config": {
+            "example": null,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TaskPushNotificationConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "SendMessageRequest": {
+        "properties": {
+          "configuration": {
+            "example": null,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SendMessageConfiguration"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "$ref": "#/components/schemas/Message"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "tenant": {
+            "example": "",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "SkillWire": {
@@ -6667,6 +7229,19 @@
         "title": "SubagentPolicyDecisionBody",
         "type": "object"
       },
+      "SubscribeToTaskRequest": {
+        "properties": {
+          "id": {
+            "example": "id",
+            "type": "string"
+          },
+          "tenant": {
+            "example": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "TaskApprovalDecisionRequest": {
         "properties": {
           "approved": {
@@ -6774,6 +7349,42 @@
           "action"
         ],
         "title": "TaskInterventionBody",
+        "type": "object"
+      },
+      "TaskPushNotificationConfig": {
+        "properties": {
+          "authentication": {
+            "example": null,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AuthenticationInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "example": "",
+            "type": "string"
+          },
+          "task_id": {
+            "example": "",
+            "type": "string"
+          },
+          "tenant": {
+            "example": "",
+            "type": "string"
+          },
+          "token": {
+            "example": "",
+            "type": "string"
+          },
+          "url": {
+            "example": "url",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "TaskResumeExecutionRequest": {
@@ -8224,6 +8835,26 @@
         "summary": "Index"
       }
     },
+    "/.well-known/agent-card.json": {
+      "get": {
+        "description": "Returns the public AgentCard describing this agent's capabilities, supported transports, and skills.",
+        "operationId": "_get_agent_card__well_known_agent_card_json_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": " Get Agent Card",
+        "tags": [
+          "A2A: Agent Card"
+        ]
+      }
+    },
     "/api/a2a/agents": {
       "get": {
         "operationId": "list_agents_api_a2a_agents_get",
@@ -8431,6 +9062,1146 @@
           }
         },
         "summary": "Send Task",
+        "tags": [
+          "a2a"
+        ]
+      }
+    },
+    "/api/a2a/rpc": {
+      "post": {
+        "description": "A2A JSON-RPC 2.0 endpoint. The `method` field selects the operation;\n`params` must match that method's schema (see the `oneOf` below).\n\n**Supported methods:**\n\n- `SendMessage` — Send a message to the agent (returns a Task or response Message).\n- `SendStreamingMessage` — Send a message and receive a Server-Sent Events stream.\n- `GetTask` — Fetch a task by ID.\n- `ListTasks` — List tasks with pagination and filtering.\n- `CancelTask` — Cancel an in-progress task.\n- `CreateTaskPushNotificationConfig` — Register a push-notification config on a task.\n- `GetTaskPushNotificationConfig` — Read a single push-notification config.\n- `ListTaskPushNotificationConfigs` — List all push-notification configs for a task.\n- `DeleteTaskPushNotificationConfig` — Delete a push-notification config.\n- `SubscribeToTask` — Subscribe to task events via Server-Sent Events.\n- `GetExtendedAgentCard` — Fetch the authenticated extended agent card.\n",
+        "operationId": "handle_requests_api_a2a_rpc_post",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/A2ARequest"
+              }
+            }
+          },
+          "description": "A2A JSON-RPC 2.0 request",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "A2A JSON-RPC endpoint",
+        "tags": [
+          "A2A: JSON-RPC"
+        ]
+      }
+    },
+    "/api/a2a/server/extendedAgentCard": {
+      "get": {
+        "description": "Handles the 'agentCard' REST method.",
+        "operationId": "handle_authenticated_agent_card_api_a2a_server_extendedAgentCard_get",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Handle Authenticated Agent Card",
+        "tags": [
+          "A2A: REST"
+        ]
+      }
+    },
+    "/api/a2a/server/message:send": {
+      "post": {
+        "description": "Handles the 'message/send' REST method.",
+        "operationId": "on_message_send_api_a2a_server_message_send_post",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageRequest"
+              }
+            }
+          },
+          "description": "A2A SendMessageRequest",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "On Message Send",
+        "tags": [
+          "A2A: REST"
+        ]
+      }
+    },
+    "/api/a2a/server/message:stream": {
+      "post": {
+        "description": "Handles the 'message/stream' REST method.",
+        "operationId": "on_message_send_stream_api_a2a_server_message_stream_post",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageRequest"
+              }
+            }
+          },
+          "description": "A2A SendMessageRequest",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "On Message Send Stream",
+        "tags": [
+          "A2A: REST"
+        ]
+      }
+    },
+    "/api/a2a/server/tasks": {
+      "get": {
+        "description": "Handles the 'tasks/list' REST method.",
+        "operationId": "list_tasks_api_a2a_server_tasks_get",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Tasks",
+        "tags": [
+          "A2A: REST"
+        ]
+      }
+    },
+    "/api/a2a/server/tasks/{id}": {
+      "get": {
+        "description": "Handles the 'tasks/{id}' REST method.",
+        "operationId": "on_get_task_api_a2a_server_tasks__id__get",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "On Get Task",
+        "tags": [
+          "A2A: REST"
+        ]
+      }
+    },
+    "/api/a2a/server/tasks/{id}/pushNotificationConfigs": {
+      "get": {
+        "description": "Handles the 'tasks/pushNotificationConfig/list' REST method.",
+        "operationId": "list_push_notifications_api_a2a_server_tasks__id__pushNotificationConfigs_get",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Push Notifications",
+        "tags": [
+          "A2A: REST"
+        ]
+      },
+      "post": {
+        "description": "Handles the 'tasks/pushNotificationConfig/set' REST method.",
+        "operationId": "set_push_notification_api_a2a_server_tasks__id__pushNotificationConfigs_post",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskPushNotificationConfig"
+              }
+            }
+          },
+          "description": "A2A TaskPushNotificationConfig",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Set Push Notification",
+        "tags": [
+          "A2A: REST"
+        ]
+      }
+    },
+    "/api/a2a/server/tasks/{id}/pushNotificationConfigs/{push_id}": {
+      "delete": {
+        "description": "Handles the 'tasks/pushNotificationConfig/delete' REST method.",
+        "operationId": "delete_push_notification_api_a2a_server_tasks__id__pushNotificationConfigs__push_id__delete",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Delete Push Notification",
+        "tags": [
+          "A2A: REST"
+        ]
+      },
+      "get": {
+        "description": "Handles the 'tasks/pushNotificationConfig/get' REST method.",
+        "operationId": "get_push_notification_api_a2a_server_tasks__id__pushNotificationConfigs__push_id__get",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Push Notification",
+        "tags": [
+          "A2A: REST"
+        ]
+      }
+    },
+    "/api/a2a/server/tasks/{id}:cancel": {
+      "post": {
+        "description": "Handles the 'tasks/cancel' REST method.",
+        "operationId": "on_cancel_task_api_a2a_server_tasks__id__cancel_post",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "On Cancel Task",
+        "tags": [
+          "A2A: REST"
+        ]
+      }
+    },
+    "/api/a2a/server/tasks/{id}:subscribe": {
+      "get": {
+        "description": "Handles the 'SubscribeToTask' REST method.",
+        "operationId": "on_subscribe_to_task_api_a2a_server_tasks__id__subscribe_get",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "On Subscribe To Task",
+        "tags": [
+          "A2A: REST"
+        ]
+      },
+      "post": {
+        "description": "Handles the 'SubscribeToTask' REST method.",
+        "operationId": "on_subscribe_to_task_api_a2a_server_tasks__id__subscribe_post",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "On Subscribe To Task",
+        "tags": [
+          "A2A: REST"
+        ]
+      }
+    },
+    "/api/a2a/server/v1/card": {
+      "get": {
+        "description": "partial(func, *args, **keywords) - new function with partial application\nof the given arguments and keywords.",
+        "operationId": "partial_api_a2a_server_v1_card_get",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Partial",
+        "tags": [
+          "A2A: REST"
+        ]
+      }
+    },
+    "/api/a2a/server/v1/message:send": {
+      "post": {
+        "description": "partial(func, *args, **keywords) - new function with partial application\nof the given arguments and keywords.",
+        "operationId": "partial_api_a2a_server_v1_message_send_post",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageRequest"
+              }
+            }
+          },
+          "description": "A2A SendMessageRequest",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Partial",
+        "tags": [
+          "A2A: REST"
+        ]
+      }
+    },
+    "/api/a2a/server/v1/message:stream": {
+      "post": {
+        "description": "partial(func, *args, **keywords) - new function with partial application\nof the given arguments and keywords.",
+        "operationId": "partial_api_a2a_server_v1_message_stream_post",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageRequest"
+              }
+            }
+          },
+          "description": "A2A SendMessageRequest",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Partial",
+        "tags": [
+          "A2A: REST"
+        ]
+      }
+    },
+    "/api/a2a/server/v1/tasks/{id}": {
+      "get": {
+        "description": "partial(func, *args, **keywords) - new function with partial application\nof the given arguments and keywords.",
+        "operationId": "partial_api_a2a_server_v1_tasks__id__get",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Partial",
+        "tags": [
+          "A2A: REST"
+        ]
+      }
+    },
+    "/api/a2a/server/v1/tasks/{id}/pushNotificationConfigs": {
+      "get": {
+        "description": "partial(func, *args, **keywords) - new function with partial application\nof the given arguments and keywords.",
+        "operationId": "partial_api_a2a_server_v1_tasks__id__pushNotificationConfigs_get",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Partial",
+        "tags": [
+          "A2A: REST"
+        ]
+      },
+      "post": {
+        "description": "partial(func, *args, **keywords) - new function with partial application\nof the given arguments and keywords.",
+        "operationId": "partial_api_a2a_server_v1_tasks__id__pushNotificationConfigs_post",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskPushNotificationConfig"
+              }
+            }
+          },
+          "description": "A2A TaskPushNotificationConfig",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Partial",
+        "tags": [
+          "A2A: REST"
+        ]
+      }
+    },
+    "/api/a2a/server/v1/tasks/{id}/pushNotificationConfigs/{push_id}": {
+      "get": {
+        "description": "partial(func, *args, **keywords) - new function with partial application\nof the given arguments and keywords.",
+        "operationId": "partial_api_a2a_server_v1_tasks__id__pushNotificationConfigs__push_id__get",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Partial",
+        "tags": [
+          "A2A: REST"
+        ]
+      }
+    },
+    "/api/a2a/server/v1/tasks/{id}:cancel": {
+      "post": {
+        "description": "partial(func, *args, **keywords) - new function with partial application\nof the given arguments and keywords.",
+        "operationId": "partial_api_a2a_server_v1_tasks__id__cancel_post",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Partial",
+        "tags": [
+          "A2A: REST"
+        ]
+      }
+    },
+    "/api/a2a/server/v1/tasks/{id}:subscribe": {
+      "get": {
+        "description": "partial(func, *args, **keywords) - new function with partial application\nof the given arguments and keywords.",
+        "operationId": "partial_api_a2a_server_v1_tasks__id__subscribe_get",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Partial",
+        "tags": [
+          "A2A: REST"
+        ]
+      },
+      "post": {
+        "description": "partial(func, *args, **keywords) - new function with partial application\nof the given arguments and keywords.",
+        "operationId": "partial_api_a2a_server_v1_tasks__id__subscribe_post",
+        "parameters": [
+          {
+            "example": "1.0",
+            "in": "header",
+            "name": "A2A-Version",
+            "required": true,
+            "schema": {
+              "enum": [
+                "1.0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Partial",
+        "tags": [
+          "A2A: REST"
+        ]
+      }
+    },
+    "/api/a2a/tasks": {
+      "get": {
+        "operationId": "list_tasks_api_a2a_tasks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Tasks Api A2A Tasks Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Tasks",
+        "tags": [
+          "a2a"
+        ]
+      }
+    },
+    "/api/a2a/tasks/{local_task_id}": {
+      "get": {
+        "operationId": "get_task_api_a2a_tasks__local_task_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "local_task_id",
+            "required": true,
+            "schema": {
+              "title": "Local Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Task Api A2A Tasks  Local Task Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Task",
+        "tags": [
+          "a2a"
+        ]
+      }
+    },
+    "/api/a2a/tasks/{local_task_id}/cancel": {
+      "post": {
+        "operationId": "cancel_task_api_a2a_tasks__local_task_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "local_task_id",
+            "required": true,
+            "schema": {
+              "title": "Local Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cancel Task Api A2A Tasks  Local Task Id  Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Task",
+        "tags": [
+          "a2a"
+        ]
+      }
+    },
+    "/api/a2a/tasks/{local_task_id}/events": {
+      "get": {
+        "operationId": "get_task_events_api_a2a_tasks__local_task_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "local_task_id",
+            "required": true,
+            "schema": {
+              "title": "Local Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_seq",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "After Seq",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Task Events Api A2A Tasks  Local Task Id  Events Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Task Events",
+        "tags": [
+          "a2a"
+        ]
+      }
+    },
+    "/api/a2a/tasks/{local_task_id}/refresh": {
+      "post": {
+        "operationId": "refresh_task_api_a2a_tasks__local_task_id__refresh_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "local_task_id",
+            "required": true,
+            "schema": {
+              "title": "Local Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Refresh Task Api A2A Tasks  Local Task Id  Refresh Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Refresh Task",
+        "tags": [
+          "a2a"
+        ]
+      }
+    },
+    "/api/a2a/tasks/{local_task_id}/subscribe": {
+      "get": {
+        "operationId": "subscribe_task_api_a2a_tasks__local_task_id__subscribe_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "local_task_id",
+            "required": true,
+            "schema": {
+              "title": "Local Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Subscribe Task",
         "tags": [
           "a2a"
         ]
@@ -19072,6 +20843,503 @@
         ]
       }
     },
+    "/api/collab/{thread_id}/annotations": {
+      "get": {
+        "operationId": "list_annotations_api_collab__thread_id__annotations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Annotations Api Collab  Thread Id  Annotations Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Annotations",
+        "tags": [
+          "cowork"
+        ]
+      },
+      "post": {
+        "operationId": "create_annotation_api_collab__thread_id__annotations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnotationBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Annotation Api Collab  Thread Id  Annotations Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Annotation",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/annotations/{annotation_id}": {
+      "delete": {
+        "operationId": "delete_annotation_api_collab__thread_id__annotations__annotation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "annotation_id",
+            "required": true,
+            "schema": {
+              "title": "Annotation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Annotation Api Collab  Thread Id  Annotations  Annotation Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Annotation",
+        "tags": [
+          "cowork"
+        ]
+      },
+      "patch": {
+        "operationId": "update_annotation_api_collab__thread_id__annotations__annotation_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "annotation_id",
+            "required": true,
+            "schema": {
+              "title": "Annotation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnotationResolvedBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Annotation Api Collab  Thread Id  Annotations  Annotation Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Annotation",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/annotations/{annotation_id}/replies": {
+      "post": {
+        "operationId": "create_annotation_reply_api_collab__thread_id__annotations__annotation_id__replies_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "annotation_id",
+            "required": true,
+            "schema": {
+              "title": "Annotation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnotationReplyBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Annotation Reply Api Collab  Thread Id  Annotations  Annotation Id  Replies Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Annotation Reply",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/deliveries": {
+      "get": {
+        "description": "Reliable result-delivery state for recovery and operator visibility.",
+        "operationId": "list_collaboration_deliveries_api_collab__thread_id__deliveries_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Collaboration Deliveries Api Collab  Thread Id  Deliveries Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Collaboration Deliveries",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/deliveries/{delivery_id}": {
+      "get": {
+        "operationId": "get_collaboration_delivery_api_collab__thread_id__deliveries__delivery_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "delivery_id",
+            "required": true,
+            "schema": {
+              "title": "Delivery Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Collaboration Delivery Api Collab  Thread Id  Deliveries  Delivery Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Collaboration Delivery",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/deliveries/{delivery_id}/dismiss": {
+      "post": {
+        "operationId": "dismiss_collaboration_delivery_api_collab__thread_id__deliveries__delivery_id__dismiss_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "delivery_id",
+            "required": true,
+            "schema": {
+              "title": "Delivery Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Dismiss Collaboration Delivery Api Collab  Thread Id  Deliveries  Delivery Id  Dismiss Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dismiss Collaboration Delivery",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/deliveries/{delivery_id}/retry": {
+      "post": {
+        "operationId": "retry_collaboration_delivery_api_collab__thread_id__deliveries__delivery_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "delivery_id",
+            "required": true,
+            "schema": {
+              "title": "Delivery Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Retry Collaboration Delivery Api Collab  Thread Id  Deliveries  Delivery Id  Retry Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Collaboration Delivery",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
     "/api/collab/{thread_id}/link-room": {
       "post": {
         "description": "Link a Team Room to this session (event-sourced) so the two surfaces\nstop drifting as separate sources of truth.",
@@ -19122,6 +21390,198 @@
           }
         },
         "summary": "Link Session Room",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/pinned-messages": {
+      "get": {
+        "operationId": "list_pinned_messages_api_collab__thread_id__pinned_messages_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Pinned Messages Api Collab  Thread Id  Pinned Messages Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Pinned Messages",
+        "tags": [
+          "cowork"
+        ]
+      },
+      "post": {
+        "operationId": "toggle_pinned_message_api_collab__thread_id__pinned_messages_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PinMessageBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Toggle Pinned Message Api Collab  Thread Id  Pinned Messages Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Toggle Pinned Message",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/reactions": {
+      "get": {
+        "operationId": "list_message_reactions_api_collab__thread_id__reactions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Message Reactions Api Collab  Thread Id  Reactions Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Message Reactions",
+        "tags": [
+          "cowork"
+        ]
+      },
+      "post": {
+        "operationId": "toggle_message_reaction_api_collab__thread_id__reactions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReactionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Toggle Message Reaction Api Collab  Thread Id  Reactions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Toggle Message Reaction",
         "tags": [
           "cowork"
         ]
@@ -19296,6 +21756,125 @@
           }
         },
         "summary": "Message Project Action",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/runs": {
+      "get": {
+        "description": "Durable multi-agent executions for timeline replay and recovery UI.",
+        "operationId": "list_collaboration_runs_api_collab__thread_id__runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Collaboration Runs Api Collab  Thread Id  Runs Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Collaboration Runs",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/runs/{run_id}": {
+      "get": {
+        "description": "One run plus its immutable lifecycle events.",
+        "operationId": "get_collaboration_run_api_collab__thread_id__runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Collaboration Run Api Collab  Thread Id  Runs  Run Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Collaboration Run",
         "tags": [
           "cowork"
         ]

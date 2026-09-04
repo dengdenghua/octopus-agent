@@ -60,6 +60,8 @@ interface RemoteAgent {
 
 interface TaskResult {
   id: string;
+  local_task_id?: string;
+  lifecycle_status?: string;
   status: {
     state: string;
     message?: string;
@@ -72,6 +74,18 @@ interface TaskResult {
     name?: string;
     parts: Array<{ type: string; text?: string }>;
   }>;
+}
+
+interface RemoteTaskRecord {
+  local_task_id: string;
+  remote_task_id: string;
+  agent_id: string;
+  status: string;
+  request: { text?: string; context_id?: string };
+  result: TaskResult | null;
+  error: string | null;
+  updated_at: string;
+  terminal_at: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +117,7 @@ const api = {
   async unregisterAgent(agentId: string): Promise<void> {
     const res = await fetch(
       `${getBackendBaseURL()}/api/a2a/agents/${agentId}`,
-      { method: "DELETE" },
+      { method: "DELETE", headers: authHeaders() },
     );
     if (!res.ok) throw new Error(`Unregister failed: ${res.statusText}`);
   },
@@ -113,7 +127,7 @@ const api = {
   ): Promise<{ healthy: boolean; status: string; error?: string }> {
     const res = await fetch(
       `${getBackendBaseURL()}/api/a2a/agents/${agentId}/health`,
-      { method: "POST" },
+      { method: "POST", headers: jsonAuthHeaders() },
     );
     if (!res.ok) throw new Error(`Health check failed: ${res.statusText}`);
     return res.json();
@@ -124,13 +138,52 @@ const api = {
       `${getBackendBaseURL()}/api/a2a/agents/${agentId}/send`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, stream: false }),
+        headers: jsonAuthHeaders(),
+        body: JSON.stringify({
+          text,
+          stream: false,
+          local_task_id: `web_${crypto.randomUUID()}`,
+        }),
       },
     );
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || `Send failed: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async listTasks(agentId: string): Promise<RemoteTaskRecord[]> {
+    const query = new URLSearchParams({ agent_id: agentId, limit: "20" });
+    const res = await fetch(
+      `${getBackendBaseURL()}/api/a2a/tasks?${query.toString()}`,
+      { headers: authHeaders() },
+    );
+    if (!res.ok) throw new Error(`Failed to list tasks: ${res.statusText}`);
+    const payload = await res.json();
+    return payload.tasks ?? [];
+  },
+
+  async refreshTask(localTaskId: string): Promise<RemoteTaskRecord> {
+    const res = await fetch(
+      `${getBackendBaseURL()}/api/a2a/tasks/${encodeURIComponent(localTaskId)}/refresh`,
+      { method: "POST", headers: jsonAuthHeaders() },
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Refresh failed: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async cancelTask(localTaskId: string): Promise<RemoteTaskRecord> {
+    const res = await fetch(
+      `${getBackendBaseURL()}/api/a2a/tasks/${encodeURIComponent(localTaskId)}/cancel`,
+      { method: "POST", headers: jsonAuthHeaders() },
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Cancel failed: ${res.statusText}`);
     }
     return res.json();
   },
@@ -451,6 +504,25 @@ function AgentDetailView({
   const [sending, setSending] = useState(false);
   const [taskResult, setTaskResult] = useState<TaskResult | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
+  const [tasks, setTasks] = useState<RemoteTaskRecord[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [taskAction, setTaskAction] = useState<string | null>(null);
+
+  const fetchTasks = useCallback(async () => {
+    setTasksLoading(true);
+    try {
+      setTasks(await api.listTasks(agent.agent_id));
+    } catch (err) {
+      swallow(err);
+      setTaskError(err instanceof Error ? err.message : "Failed to load tasks");
+    } finally {
+      setTasksLoading(false);
+    }
+  }, [agent.agent_id]);
+
+  useEffect(() => {
+    fetchTasks();
+  }, [fetchTasks]);
 
   const handleHealthCheck = async () => {
     setChecking(true);
@@ -492,11 +564,30 @@ function AgentDetailView({
       const result = await api.sendTask(agent.agent_id, taskText.trim());
       setTaskResult(result);
       setTaskText("");
+      await fetchTasks();
     } catch (err) {
       swallow(err);
       setTaskError(err instanceof Error ? err.message : "Send failed");
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleTaskAction = async (
+    localTaskId: string,
+    action: "refresh" | "cancel",
+  ) => {
+    setTaskAction(`${action}:${localTaskId}`);
+    setTaskError(null);
+    try {
+      if (action === "refresh") await api.refreshTask(localTaskId);
+      else await api.cancelTask(localTaskId);
+      await fetchTasks();
+    } catch (err) {
+      swallow(err);
+      setTaskError(err instanceof Error ? err.message : `${action} failed`);
+    } finally {
+      setTaskAction(null);
     }
   };
 
@@ -702,14 +793,17 @@ function AgentDetailView({
               <span
                 className={cn(
                   "inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-medium",
-                  taskResult.status.state === "completed"
+                  (taskResult.lifecycle_status ?? taskResult.status.state) ===
+                    "completed" || taskResult.status.state === "3"
                     ? "bg-success/10 text-success"
-                    : taskResult.status.state === "failed"
+                    : (taskResult.lifecycle_status ??
+                          taskResult.status.state) === "failed" ||
+                        taskResult.status.state === "4"
                       ? "bg-destructive/10 text-destructive"
                       : "bg-info/10 text-info",
                 )}
               >
-                {taskResult.status.state}
+                {taskResult.lifecycle_status ?? taskResult.status.state}
               </span>
               <span className="text-muted-foreground text-xs">
                 Task {taskResult.id.slice(0, 8)}
@@ -718,7 +812,7 @@ function AgentDetailView({
 
             {/* Show agent response */}
             {taskResult.messages
-              .filter((m) => m.role === "agent")
+              .filter((m) => m.role.toLowerCase().includes("agent"))
               .map((msg, i) => (
                 <div key={i} className="mt-2 rounded-lg bg-muted/30 px-3 py-2">
                   {msg.parts.map((part, j) => (
@@ -755,6 +849,101 @@ function AgentDetailView({
                 ))}
               </div>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* Durable task lifecycle */}
+      <div className="border-t px-4 py-3">
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+            {t.a2a.taskHistory}
+          </span>
+          <button
+            type="button"
+            onClick={fetchTasks}
+            disabled={tasksLoading}
+            className="text-muted-foreground hover:text-foreground rounded p-1"
+            aria-label={t.a2a.refresh}
+          >
+            <RefreshCwIcon
+              className={cn("size-3", tasksLoading && "animate-spin")}
+            />
+          </button>
+        </div>
+        {tasks.length === 0 && !tasksLoading ? (
+          <p className="text-muted-foreground mt-2 text-xs">{t.a2a.noTasks}</p>
+        ) : (
+          <div className="mt-2 divide-y">
+            {tasks.map((task) => {
+              const terminal = Boolean(task.terminal_at);
+              const busy = taskAction?.endsWith(`:${task.local_task_id}`);
+              return (
+                <div key={task.local_task_id} className="py-2.5 first:pt-0">
+                  <div className="flex items-start gap-2">
+                    <span
+                      className={cn(
+                        "mt-1 size-1.5 shrink-0 rounded-full",
+                        task.status === "completed"
+                          ? "bg-success"
+                          : task.status === "failed" ||
+                              task.status === "rejected"
+                            ? "bg-destructive"
+                            : task.status === "canceled"
+                              ? "bg-muted-foreground"
+                              : "bg-info",
+                      )}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-medium">
+                        {task.request.text || task.local_task_id}
+                      </p>
+                      <p className="text-muted-foreground mt-0.5 text-xs">
+                        {task.status} ·{" "}
+                        {task.remote_task_id.slice(0, 12) || "—"}
+                      </p>
+                      {task.error && (
+                        <p className="mt-1 line-clamp-2 text-xs text-destructive">
+                          {task.error}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleTaskAction(task.local_task_id, "refresh")
+                        }
+                        disabled={busy || !task.remote_task_id}
+                        className="text-muted-foreground hover:text-foreground rounded p-1 disabled:opacity-40"
+                        aria-label={t.a2a.refreshTask}
+                      >
+                        <RefreshCwIcon
+                          className={cn(
+                            "size-3",
+                            taskAction === `refresh:${task.local_task_id}` &&
+                              "animate-spin",
+                          )}
+                        />
+                      </button>
+                      {!terminal && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleTaskAction(task.local_task_id, "cancel")
+                          }
+                          disabled={busy || !task.remote_task_id}
+                          className="rounded p-1 text-destructive disabled:opacity-40"
+                          aria-label={t.a2a.cancelTask}
+                        >
+                          <XIcon className="size-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

@@ -142,6 +142,8 @@ from ._tool_bridge_protocol import (
 )
 from ._tool_bridge_scoring import (
     _auto_evolve_tick_safe,
+    _record_codex_turn_score_safe,
+    _record_engine_neutral_score_safe,
     _record_score_safe,
 )
 from ._tool_bridge_session import (
@@ -223,6 +225,8 @@ __all__ = [
     "_safe_public_source_title",
     # scoring / auto-evolution
     "_auto_evolve_tick_safe",
+    "_record_codex_turn_score_safe",
+    "_record_engine_neutral_score_safe",
     "_record_score_safe",
     # session metadata + browser guidance
     "_browser_action_evidence",

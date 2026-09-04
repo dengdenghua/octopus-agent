@@ -717,17 +717,6 @@ def mount_routers_b(
             _design_exc,
         )
 
-    from runtime.sensing.gateway.stub_router import create_stub_router
-
-    app.include_router(
-        create_stub_router(
-            require_auth=ctx.require_auth,
-            jwt_secret=ctx.jwt_secret,
-            jwt_issuer=ctx.jwt_issuer,
-            jwt_audience=ctx.jwt_audience,
-        )
-    )
-
     # ─── A2A remote agent registry (a2a-agents-panel) ─────────────
     # Frontend panel shipped earlier without backend routes; mount the
     # protocol relay so registered remote agents can be listed, probed,
@@ -743,6 +732,17 @@ def mount_routers_b(
                 jwt_issuer=ctx.jwt_issuer,
                 jwt_audience=ctx.jwt_audience,
             )
+        )
+        from runtime.sensing.gateway.a2a_server import mount_a2a_server
+
+        mount_a2a_server(
+            app,
+            identity_store=ctx.identity_store,
+            require_auth=ctx.require_auth,
+            jwt_secret=ctx.jwt_secret,
+            jwt_issuer=ctx.jwt_issuer,
+            jwt_audience=ctx.jwt_audience,
+            data_dir=app_paths().data_dir,
         )
     except Exception as _a2a_exc:  # noqa: BLE001 — optional surface
         logging.getLogger(__name__).warning(
@@ -823,4 +823,19 @@ def mount_routers_b(
             stack=stack,
             agent_registry=ctx.agent_registry,
         ),
+    )
+
+    # Broad compatibility stubs must always be registered last. FastAPI uses
+    # first-match route ordering; placing these catch-alls earlier shadowed
+    # real A2A / Teach & Repeat / extension routes and bypassed their auth
+    # dependencies with a misleading 404.
+    from runtime.sensing.gateway.stub_router import create_stub_router
+
+    app.include_router(
+        create_stub_router(
+            require_auth=ctx.require_auth,
+            jwt_secret=ctx.jwt_secret,
+            jwt_issuer=ctx.jwt_issuer,
+            jwt_audience=ctx.jwt_audience,
+        )
     )

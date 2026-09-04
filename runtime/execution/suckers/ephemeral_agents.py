@@ -917,8 +917,13 @@ def _compose_system_prompt(
     # read the reasoning it was spawned to check, and picking a role whose
     # definition happens to share context must not silently re-open that.
     starved = bool((context or {}).get("subagent_policy_starve_context"))
+    steward_managed = bool((context or {}).get("context_steward_managed"))
     thread_id = (context or {}).get("thread_id") or getattr(session, "thread_id", None)
-    share_history = (context or {}).get("share_history", True) and not starved
+    share_history = (
+        (context or {}).get("share_history", True)
+        and not starved
+        and not steward_managed
+    )
     if thread_id and share_history:
         from runtime.execution.subagents.memory import recent_turns_prompt
 
@@ -926,7 +931,7 @@ def _compose_system_prompt(
         if history_prefix:
             parts.append(history_prefix.strip())
 
-    if role.share_context and not starved:
+    if role.share_context and not starved and not steward_managed:
         msgs = _collect_caller_context(session)
         if msgs:
             rendered_lines: list[str] = ["## Caller conversation"]
@@ -953,7 +958,7 @@ def _compose_system_prompt(
                     )
                 )
 
-    if role.share_memory and not starved:
+    if role.share_memory and not starved and not steward_managed:
         mem = _collect_caller_memory(session)
         if mem:
             parts.append(mem)

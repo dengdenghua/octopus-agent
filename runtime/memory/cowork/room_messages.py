@@ -6,8 +6,9 @@ small sqlite append-only log (ordered ``seq`` computed atomically inside the
 INSERT, like ``group_store``) so room messages survive and can be replayed /
 caught up on / searched.
 
-Keyed by ``room_id`` (the team room). Independent of the cowork ``thread_id``
-log; unifying the two is the larger collaboration-session refactor.
+Keyed by ``room_id`` (the team room). CollaborationStore is the canonical log
+for linked rooms; this store remains the durable fallback and compatibility
+shadow for standalone Team Room deployments.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from runtime.memory.cowork.ids import (
+    normalize_actor_id,
     normalize_display_name,
     normalize_search_query,
     optional_cowork_id,
@@ -31,6 +33,8 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS room_messages (
     room_id        TEXT NOT NULL,
     seq            INTEGER NOT NULL,
+    message_id     TEXT NOT NULL DEFAULT '',
+    client_message_id TEXT NOT NULL DEFAULT '',
     participant_id TEXT,
     display_name   TEXT,
     text           TEXT NOT NULL,
@@ -38,6 +42,21 @@ CREATE TABLE IF NOT EXISTS room_messages (
     PRIMARY KEY (room_id, seq)
 );
 CREATE INDEX IF NOT EXISTS idx_room_messages_room ON room_messages(room_id);
+DROP INDEX IF EXISTS idx_room_messages_client_id;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_room_messages_client_sender_id
+ON room_messages(room_id, participant_id, client_message_id)
+WHERE client_message_id != '';
+CREATE TABLE IF NOT EXISTS room_message_receipts (
+    room_id        TEXT NOT NULL,
+    message_id     TEXT NOT NULL,
+    participant_id TEXT NOT NULL,
+    status         TEXT NOT NULL,
+    seq            INTEGER,
+    updated_at     TEXT NOT NULL,
+    PRIMARY KEY (room_id, message_id, participant_id)
+);
+CREATE INDEX IF NOT EXISTS idx_room_message_receipts_room
+ON room_message_receipts(room_id, updated_at);
 """
 
 
@@ -56,6 +75,27 @@ class RoomMessageStore:
         self._db = self._dir / "room_messages.db"
         self._lock = threading.Lock()
         with self._lock, self._connect() as conn:
+            # Existing desktop databases predate message acknowledgements.
+            # Add the nullable-compatible columns before creating the new
+            # idempotency index; fresh databases get them from ``_SCHEMA``.
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS room_messages ("
+                "room_id TEXT NOT NULL, seq INTEGER NOT NULL, "
+                "participant_id TEXT, display_name TEXT, text TEXT NOT NULL, "
+                "ts TEXT NOT NULL, PRIMARY KEY (room_id, seq))"
+            )
+            columns = {
+                str(row[1]) for row in conn.execute("PRAGMA table_info(room_messages)").fetchall()
+            }
+            if "message_id" not in columns:
+                conn.execute(
+                    "ALTER TABLE room_messages ADD COLUMN message_id TEXT NOT NULL DEFAULT ''"
+                )
+            if "client_message_id" not in columns:
+                conn.execute(
+                    "ALTER TABLE room_messages "
+                    "ADD COLUMN client_message_id TEXT NOT NULL DEFAULT ''"
+                )
             conn.executescript(_SCHEMA)
 
     @property
@@ -74,21 +114,57 @@ class RoomMessageStore:
         text: str,
         participant_id: str = "",
         display_name: str = "",
+        message_id: str = "",
+        client_message_id: str = "",
     ) -> int:
         """Append a line, stamping a per-room monotonic ``seq`` + ``ts``. The
         next ``seq`` is computed inside the INSERT so concurrent appends never
         collide. Returns the assigned seq."""
         room_id = require_cowork_id(room_id, label="room_id")
         participant_id = optional_cowork_id(participant_id, label="participant_id")
+        message_id = optional_cowork_id(message_id, label="message_id")
+        client_message_id = normalize_actor_id(
+            client_message_id,
+            label="client_message_id",
+        )
         display_name = normalize_display_name(display_name)
         text = require_message_text(text)
         ts = datetime.now(UTC).isoformat()
         with self._lock, self._connect() as conn:
+            if client_message_id:
+                existing = conn.execute(
+                    "SELECT seq, participant_id, display_name, text, message_id "
+                    "FROM room_messages WHERE room_id = ? AND participant_id = ? "
+                    "AND client_message_id = ?",
+                    (room_id, participant_id, client_message_id),
+                ).fetchone()
+                if existing:
+                    if (
+                        str(existing[1] or "") != participant_id
+                        or str(existing[2] or "") != display_name
+                        or str(existing[3] or "") != text
+                        or (message_id and str(existing[4] or "") != message_id)
+                    ):
+                        raise ValueError(
+                            "client_message_id already belongs to a different room message"
+                        )
+                    return int(existing[0])
             cur = conn.execute(
-                "INSERT INTO room_messages(room_id, seq, participant_id, display_name, text, ts) "
+                "INSERT INTO room_messages("
+                "room_id, seq, message_id, client_message_id, "
+                "participant_id, display_name, text, ts) "
                 "VALUES (?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM room_messages "
-                "WHERE room_id = ?), ?, ?, ?, ?) RETURNING seq",
-                (room_id, room_id, participant_id, display_name, text, ts),
+                "WHERE room_id = ?), ?, ?, ?, ?, ?, ?) RETURNING seq",
+                (
+                    room_id,
+                    room_id,
+                    message_id,
+                    client_message_id,
+                    participant_id,
+                    display_name,
+                    text,
+                    ts,
+                ),
             )
             row = cur.fetchone()
             return int(row[0]) if row else 0
@@ -102,10 +178,26 @@ class RoomMessageStore:
         limit = max(1, min(2000, limit))
         with self._lock, self._connect() as conn:
             rows = conn.execute(
-                "SELECT seq, participant_id, display_name, text, ts FROM room_messages "
+                "SELECT seq, participant_id, display_name, text, ts, "
+                "message_id, client_message_id FROM room_messages "
                 "WHERE room_id = ? AND seq > ? ORDER BY seq DESC LIMIT ?",
                 (room_id, int(after_seq), limit),
             ).fetchall()
+            receipt_rows = conn.execute(
+                "SELECT message_id, participant_id, status, seq, updated_at "
+                "FROM room_message_receipts WHERE room_id=?",
+                (room_id,),
+            ).fetchall()
+        receipts_by_message: dict[str, list[dict[str, Any]]] = {}
+        for receipt in receipt_rows:
+            receipts_by_message.setdefault(str(receipt[0]), []).append(
+                {
+                    "participant_id": str(receipt[1]),
+                    "status": str(receipt[2]),
+                    "seq": int(receipt[3]) if receipt[3] is not None else None,
+                    "updated_at": str(receipt[4]),
+                }
+            )
         return [
             {
                 "seq": int(r[0]),
@@ -113,6 +205,9 @@ class RoomMessageStore:
                 "display_name": r[2] or "",
                 "text": r[3],
                 "ts": r[4],
+                "message_id": r[5] or "",
+                "client_message_id": r[6] or "",
+                "receipts": receipts_by_message.get(str(r[5]), []),
             }
             for r in reversed(rows)
         ]
@@ -126,7 +221,8 @@ class RoomMessageStore:
             return []
         with self._lock, self._connect() as conn:
             rows = conn.execute(
-                "SELECT seq, participant_id, display_name, text, ts FROM room_messages "
+                "SELECT seq, participant_id, display_name, text, ts, "
+                "message_id, client_message_id FROM room_messages "
                 "WHERE room_id = ? AND lower(text) LIKE ? ORDER BY seq DESC LIMIT ?",
                 (room_id, f"%{q}%", max(1, min(200, limit))),
             ).fetchall()
@@ -137,6 +233,90 @@ class RoomMessageStore:
                 "display_name": r[2] or "",
                 "text": r[3],
                 "ts": r[4],
+                "message_id": r[5] or "",
+                "client_message_id": r[6] or "",
             }
             for r in rows
+        ]
+
+    def record_receipt(
+        self,
+        room_id: str,
+        *,
+        message_id: str,
+        participant_id: str,
+        status: str,
+        seq: int | None = None,
+    ) -> dict[str, Any]:
+        """Persist a monotonic delivered/read receipt for one participant."""
+        room_id = require_cowork_id(room_id, label="room_id")
+        message_id = require_cowork_id(message_id, label="message_id")
+        participant_id = require_cowork_id(participant_id, label="participant_id")
+        status = str(status or "").strip().lower()
+        if status not in {"delivered", "read"}:
+            raise ValueError("receipt status must be delivered or read")
+        normalized_seq = int(seq) if seq is not None else None
+        if normalized_seq is not None and normalized_seq < 1:
+            raise ValueError("receipt seq must be >= 1")
+        now = datetime.now(UTC).isoformat()
+        rank = {"delivered": 1, "read": 2}
+        with self._lock, self._connect() as conn:
+            existing = conn.execute(
+                "SELECT status, seq FROM room_message_receipts "
+                "WHERE room_id=? AND message_id=? AND participant_id=?",
+                (room_id, message_id, participant_id),
+            ).fetchone()
+            if existing and rank.get(str(existing[0]), 0) >= rank[status]:
+                return {
+                    "room_id": room_id,
+                    "message_id": message_id,
+                    "participant_id": participant_id,
+                    "status": str(existing[0]),
+                    "seq": existing[1],
+                }
+            conn.execute(
+                "INSERT INTO room_message_receipts "
+                "(room_id, message_id, participant_id, status, seq, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(room_id, message_id, participant_id) DO UPDATE SET "
+                "status=excluded.status, seq=COALESCE(excluded.seq, room_message_receipts.seq), "
+                "updated_at=excluded.updated_at",
+                (room_id, message_id, participant_id, status, normalized_seq, now),
+            )
+        return {
+            "room_id": room_id,
+            "message_id": message_id,
+            "participant_id": participant_id,
+            "status": status,
+            "seq": normalized_seq,
+        }
+
+    def receipts(self, room_id: str, *, message_id: str | None = None) -> list[dict[str, Any]]:
+        """Return durable receipts, optionally scoped to one message."""
+        room_id = require_cowork_id(room_id, label="room_id")
+        with self._lock, self._connect() as conn:
+            if message_id:
+                message_id = require_cowork_id(message_id, label="message_id")
+                rows = conn.execute(
+                    "SELECT message_id, participant_id, status, seq, updated_at "
+                    "FROM room_message_receipts WHERE room_id=? AND message_id=? "
+                    "ORDER BY updated_at ASC",
+                    (room_id, message_id),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT message_id, participant_id, status, seq, updated_at "
+                    "FROM room_message_receipts WHERE room_id=? ORDER BY updated_at ASC",
+                    (room_id,),
+                ).fetchall()
+        return [
+            {
+                "room_id": room_id,
+                "message_id": str(row[0]),
+                "participant_id": str(row[1]),
+                "status": str(row[2]),
+                "seq": int(row[3]) if row[3] is not None else None,
+                "updated_at": str(row[4]),
+            }
+            for row in rows
         ]

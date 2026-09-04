@@ -19,7 +19,11 @@ import type {
 import type { Todo } from "@/core/todos";
 import { isPrivateAgentGroundingSource } from "@/core/realtime/items";
 import { itemStreamText } from "@/core/realtime/reducer";
-import { sanitizeLegacyGuardDiagnostic } from "@/core/messages/utils";
+import {
+  isLegacyInternalAgentError,
+  sanitizeLegacyGuardDiagnostic,
+  sanitizeLegacyInternalAgentError,
+} from "@/core/messages/utils";
 
 import type {
   AgentMessageItem,
@@ -63,6 +67,7 @@ const TEAM_ROLE_PREFIX_RE =
 const NULLISH_PLACEHOLDER_RE = /^\s*(?:null|undefined|none|n\/a)\s*$/i;
 const REPEATED_NULL_PLACEHOLDER_RE = /^\s*(?:null\s*)+$/i;
 const STATUS_ONLY_MESSAGE_MAX_LENGTH = 320;
+const LEGACY_GROUP_SUMMARY_RE = /^\s*协作汇总[:：]/;
 
 /**
  * Convert a realtime ``Conversation`` into the ``AgentThreadState``
@@ -220,6 +225,58 @@ function safeTurnItems(turn: Turn): Item[] {
   return Array.isArray(turn.items) ? turn.items : [];
 }
 
+/**
+ * Recover old turns produced before pre-tool prose had an explicit commentary
+ * lane. A same-author answer with real execution between it and a later
+ * same-author answer is a draft checkpoint, not another settled chat reply.
+ * Track an execution generation in one reverse pass so replay stays O(items).
+ */
+function supersededPreToolAnswerIds(items: Item[]): Set<string> {
+  const superseded = new Set<string>();
+  const laterAnswerGenerationByAuthor = new Map<string, number>();
+  let executionGeneration = 0;
+
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index]!;
+    if (
+      item.type === "commandExecution" ||
+      item.type === "mcpToolCall" ||
+      item.type === "fileChange"
+    ) {
+      executionGeneration += 1;
+      continue;
+    }
+    if (item.type !== "agentMessage") continue;
+
+    const message = item as AgentMessageItem;
+    if (message.messageKind === "commentary") continue;
+    const text = itemStreamText(message).trim();
+    // A short "Todo/任务已完成" item is a terminal receipt, not a newer
+    // answer that should demote the report it follows. The existing adapter
+    // performs the richer suppression after reasoning metadata is attached.
+    if (
+      text.length <= STATUS_ONLY_MESSAGE_MAX_LENGTH &&
+      mentionsCompletion(text)
+    ) {
+      continue;
+    }
+    const author = String(message.agentDisplayName ?? "")
+      .trim()
+      .toLowerCase();
+    const authorKey = author || "__turn_agent__";
+    const laterGeneration = laterAnswerGenerationByAuthor.get(authorKey);
+    if (
+      laterGeneration !== undefined &&
+      executionGeneration > laterGeneration
+    ) {
+      superseded.add(message.id);
+    }
+    laterAnswerGenerationByAuthor.set(authorKey, executionGeneration);
+  }
+
+  return superseded;
+}
+
 // Conversation-level view cache, keyed on the ``conv.turns`` array reference.
 // Reuses the fully-materialized top-level mapping (messages/artifacts/todos)
 // when the turns array is unchanged, so unchanged turns are never re-walked.
@@ -319,6 +376,20 @@ function turnToMessages(turn: Turn): Message[] {
   // items field as an empty turn instead of crashing the whole conversation
   // during history recovery.
   const turnItems = safeTurnItems(turn);
+  const supersededPreToolAnswers = supersededPreToolAnswerIds(turnItems);
+  const hasLegacyMemberFailure = turnItems.some((item) => {
+    if (item.type === "agentMessage") {
+      return isLegacyInternalAgentError(itemStreamText(item));
+    }
+    if (item.type === "subagent") {
+      const subagent = item as SubagentItem;
+      return (
+        isLegacyInternalAgentError(subagent.summary) ||
+        isLegacyInternalAgentError(subagent.error)
+      );
+    }
+    return false;
+  });
 
   // A cancelled turn may contain a final agentMessage snapshot whose bytes
   // were flushed just before the interruption. It is a recoverable draft,
@@ -538,6 +609,9 @@ function turnToMessages(turn: Turn): Message[] {
       }
       case "subagent": {
         const subagent = item as SubagentItem;
+        const legacyInternalError =
+          isLegacyInternalAgentError(subagent.summary) ||
+          isLegacyInternalAgentError(subagent.error);
         pushToolCallMessage({
           id: subagent.id,
           name: "subagent",
@@ -546,9 +620,11 @@ function turnToMessages(turn: Turn): Message[] {
             role: subagent.role,
             name: subagent.name,
             codename: subagent.codename,
-            status: subagent.status,
-            summary: subagent.summary,
-            error: subagent.error,
+            status: legacyInternalError ? "failed" : subagent.status,
+            summary: legacyInternalError ? null : subagent.summary,
+            error: legacyInternalError
+              ? "该成员当时未能生成有效回复。"
+              : subagent.error,
             files_touched: subagent.filesTouched,
           },
           type: "tool_call",
@@ -561,9 +637,12 @@ function turnToMessages(turn: Turn): Message[] {
         const isInterruptedMessage = am.id === interruptedMessageId;
         const isFailedMessage = am.status === "failed";
         const split = splitReactTrace(itemStreamText(am));
-        const messageKind =
-          am.messageKind ??
-          (split.publicUpdate && !split.finalAnswer ? "commentary" : "answer");
+        const messageKind = supersededPreToolAnswers.has(am.id)
+          ? "commentary"
+          : (am.messageKind ??
+            (split.publicUpdate && !split.finalAnswer
+              ? "commentary"
+              : "answer"));
         // The earliest item feeding a FINAL answer is its reasoning (or the
         // answer prose itself). Commentary/progress messages are separate
         // bubbles with their own start time — they must not inherit the
@@ -691,13 +770,17 @@ function turnToMessages(turn: Turn): Message[] {
         if (messageKind === "commentary" && am.createdAt) {
           kwargs.created_at = am.createdAt;
         }
+        const visibleContent = split.finalAnswer || split.publicUpdate || "";
         const ai: AIMessage = {
           type: "ai",
           id: am.id,
           content:
             isInterruptedMessage || isFailedMessage
               ? ""
-              : split.finalAnswer || split.publicUpdate || "",
+              : hasLegacyMemberFailure &&
+                  LEGACY_GROUP_SUMMARY_RE.test(visibleContent)
+                ? "协作汇总：本轮部分成员未能生成有效回复，已按失败状态展示。"
+                : sanitizeLegacyInternalAgentError(visibleContent),
           additional_kwargs: kwargs,
         };
         pushAiMessage(ai);
@@ -1067,17 +1150,19 @@ function isPostFinalStatusOnlyMessage(
 }
 
 function normalizeStatusOnlyText(value: string): string {
-  return value
-    // URLs are machine identifiers, not narrative status words. In
-    // particular, generated-media URLs commonly contain `/task_<id>`;
-    // letting that token participate in the completion heuristic made a
-    // perfectly valid image answer look like post-final todo bookkeeping
-    // whenever the accompanying reasoning mentioned "final answer".
-    .replace(/https?:\/\/[^\s)>\]]+/gi, " ")
-    .replace(/[`*_~>#-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
+  return (
+    value
+      // URLs are machine identifiers, not narrative status words. In
+      // particular, generated-media URLs commonly contain `/task_<id>`;
+      // letting that token participate in the completion heuristic made a
+      // perfectly valid image answer look like post-final todo bookkeeping
+      // whenever the accompanying reasoning mentioned "final answer".
+      .replace(/https?:\/\/[^\s)>\]]+/gi, " ")
+      .replace(/[`*_~>#-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase()
+  );
 }
 
 function normalizeMessageTextForDedupe(value: unknown): string {

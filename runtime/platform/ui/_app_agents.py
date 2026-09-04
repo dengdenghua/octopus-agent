@@ -144,12 +144,15 @@ def mount_agents(
         if callable(delete_room):
             delete_room(room_id)
 
-    def _project_room_message_to_collaboration(room_id: str, message: dict[str, Any]) -> None:
+    def _project_room_message_to_collaboration(
+        room_id: str,
+        message: dict[str, Any],
+    ) -> int | None:
         collab_store = getattr(app.state, "collaboration_store", None)
         append_message = getattr(collab_store, "append_message_for_room", None)
         if not callable(append_message):
-            return
-        append_message(
+            return None
+        return append_message(
             room_id,
             text=str(message.get("text") or ""),
             participant_id=str(message.get("participant_id") or ""),
@@ -176,6 +179,17 @@ def mount_agents(
         history = getattr(collab_store, "messages_for_room", None)
         return history(room_id, limit=limit, after_seq=after_seq) if callable(history) else []
 
+    def _project_room_receipt_to_collaboration(
+        room_id: str,
+        receipt: dict[str, Any],
+    ) -> None:
+        collab_store = getattr(app.state, "collaboration_store", None)
+        record = getattr(collab_store, "record_receipt_for_room", None)
+        if callable(record):
+            payload = dict(receipt)
+            payload.pop("room_id", None)
+            record(room_id, **payload)
+
     team_rooms_router = create_team_rooms_router(
         identity_store=ctx.identity_store,
         require_auth=ctx.require_auth,
@@ -189,6 +203,7 @@ def mount_agents(
         room_projection=_project_room_to_collaboration,
         room_delete_projection=_delete_room_from_collaboration,
         room_message_projection=_project_room_message_to_collaboration,
+        room_receipt_projection=_project_room_receipt_to_collaboration,
         room_message_provider=_collaboration_room_messages,
         group_store=(
             getattr(ctx.cowork_runtime, "group_store", None)

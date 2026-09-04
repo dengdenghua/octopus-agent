@@ -57,7 +57,9 @@ import {
   type ProjectFullState,
 } from "@/components/workspace/agent-workbench-panel/project-os-tab";
 import {
+  CollaborationRealtimeBridge,
   CoworkRoomTimelineEntry,
+  countOnlineRoomParticipants,
   dedupeCoworkRoomMessages,
   GroupHumanInviteButton,
 } from "@/components/workspace/collab";
@@ -320,6 +322,7 @@ const CHAT_WORKDIR_KEY = "chat:workdir:lastUsed";
 const CODE_WORKDIR_KEY = "code:workdir:lastUsed";
 const RECENT_WORKDIRS_KEY = "octopus:recentWorkdirs";
 const AGENT_WORKBENCH_OPEN_KEY = "octopus:agent-workbench-open";
+const GROUP_PERSPECTIVE_KEY_PREFIX = "octopus:group-perspective:";
 const MAX_RECENT_WORKDIRS = 6;
 
 type ThreadRouteState = {
@@ -336,6 +339,35 @@ type ThreadRouteState = {
 
 function normalizeWorkDirKey(path: string): string {
   return path.trim().replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+function readGroupPerspective(threadId: string): string | null {
+  if (typeof window === "undefined" || !threadId || threadId === "new") {
+    return null;
+  }
+  try {
+    return (
+      window.localStorage
+        .getItem(`${GROUP_PERSPECTIVE_KEY_PREFIX}${threadId}`)
+        ?.trim() || null
+    );
+  } catch (error) {
+    swallow(error, "read-group-perspective");
+    return null;
+  }
+}
+
+function rememberGroupPerspective(threadId: string, agentId: string | null) {
+  if (typeof window === "undefined" || !threadId || threadId === "new") {
+    return;
+  }
+  try {
+    const key = `${GROUP_PERSPECTIVE_KEY_PREFIX}${threadId}`;
+    if (agentId) window.localStorage.setItem(key, agentId);
+    else window.localStorage.removeItem(key);
+  } catch (error) {
+    swallow(error, "remember-group-perspective");
+  }
 }
 
 /** Keep role folders readable while preventing display names from escaping the root. */
@@ -633,6 +665,12 @@ function RealtimePageContent({
   const [focusedWorkbenchAgentId, setFocusedWorkbenchAgentId] = useState<
     string | null
   >(null);
+  // A group has one canonical timeline but several valid first-person
+  // viewpoints. Keep the selected viewpoint scoped to this group instead of
+  // using the global role picker as a request to leave for a new task.
+  const [groupPerspectiveAgentId, setGroupPerspectiveAgentId] = useState<
+    string | null
+  >(() => readGroupPerspective(threadId));
   // Which sub-view the focus event asked for; lives and dies with
   // focusedWorkbenchAgentId (set together, cleared together).
   const [focusedWorkbenchAgentView, setFocusedWorkbenchAgentView] =
@@ -1154,10 +1192,6 @@ function RealtimePageContent({
     : resolvedThreadOwnerAgentId && resolvedThreadOwnerAgentId !== activeAgentId
       ? threadOwnerAgent
       : activeAgent;
-  const selectedExecutionEngine =
-    displayAgent?.capabilities?.execution_backend === "codex_app_server"
-      ? ("codex" as const)
-      : ("octopus" as const);
   const currentTaskAgentName = displayAgent?.name ?? effectiveAgentId;
   const composerDisplayAgent = useMemo(
     () =>
@@ -1303,7 +1337,6 @@ function RealtimePageContent({
     threadId,
     threadIdentityQuery.isPending,
   ]);
-  const selectedCollaboratorKey = selectedCollaboratorIds.join("\u0000");
   useEffect(() => {
     if (isNewThread || !threadId || threadId === "new") return;
     // Project membership decides whether the lead agent must remain in the
@@ -1311,11 +1344,16 @@ function RealtimePageContent({
     // state during a hard refresh.
     if (boundProjectQuery.isPending) return;
 
-    const startedLocally = localStartedThreadIdRef.current === threadId;
-    const userTouched = collaboratorSelectionTouchedRef.current;
-    const matchesSavedRoster =
-      selectedCollaboratorKey === persistedCollaboratorKey;
-    if (!startedLocally && !userTouched && !matchesSavedRoster) return;
+    // This effect is a writer, not another hydration source. A passive tab can
+    // have an old local mode while its roster still matches the server; using
+    // that match as write authority makes two open tabs continuously overwrite
+    // each other (chat -> cluster -> swarm -> ...). Only an explicit roster or
+    // response-mode action in this mounted page is allowed to persist state.
+    const hasLocalWriteIntent =
+      collaboratorSelectionTouchedRef.current ||
+      responseModeIntentTouchedRef.current ||
+      pendingRosterModeRef.current !== null;
+    if (!hasLocalWriteIntent) return;
     const sessionState = collabSessionQuery.data
       ? {
           roster: collabSessionQuery.data.roster,
@@ -1403,7 +1441,6 @@ function RealtimePageContent({
     replaceCoworkRosterMutation,
     savedCollaborationMode,
     selectedCollaboratorIds,
-    selectedCollaboratorKey,
     teamModeIntent,
     threadId,
   ]);
@@ -1492,6 +1529,27 @@ function RealtimePageContent({
     coworkCollaborationProfiles,
     savedCollaborationRoster,
   ]);
+  // Keep the compact member records used by the message timeline enriched
+  // with the same role profile data already available to the HUD. Historical
+  // thread rosters may only carry a name and avatar, so this is deliberately
+  // an in-memory projection rather than a migration of old conversation data.
+  const messageAgentRoster = useMemo(
+    () =>
+      visibleCollaborationRoster.map((entry) => {
+        const profile = coworkCollaborationProfiles.find(
+          (agent) => agent.name === entry.agent_id,
+        );
+        const profileDetails =
+          profile && "description" in profile ? profile : null;
+        return {
+          ...entry,
+          description: profileDetails?.description ?? null,
+          model: profileDetails?.model ?? null,
+          toolGroups: profileDetails?.tool_groups ?? null,
+        };
+      }),
+    [coworkCollaborationProfiles, visibleCollaborationRoster],
+  );
   const visibleCollaborationEnabled =
     !embeddedDesignChat && visibleCollaborationRoster.length > 1;
   const isGroupConversation =
@@ -1500,9 +1558,67 @@ function RealtimePageContent({
     (visibleCollaborationEnabled ||
       Boolean(collabSessionQuery.data?.room_id) ||
       Boolean(boundProjectQuery.data));
+  const groupPerspectiveAgentIds = useMemo(
+    () => new Set(visibleCollaborationRoster.map((member) => member.agent_id)),
+    [visibleCollaborationRoster],
+  );
+  const mainPerspectiveAgentId =
+    isGroupConversation &&
+    groupPerspectiveAgentId &&
+    groupPerspectiveAgentIds.has(groupPerspectiveAgentId)
+      ? groupPerspectiveAgentId
+      : effectiveAgentId;
+  const { agent: perspectiveAgent } = useAgent(
+    mainPerspectiveAgentId !== effectiveAgentId ? mainPerspectiveAgentId : null,
+  );
+  const perspectiveDisplayAgent = perspectiveAgent ?? displayAgent;
+  const perspectiveComposerAgent = useMemo(
+    () =>
+      perspectiveDisplayAgent ?? {
+        name: mainPerspectiveAgentId,
+        display_name: mainPerspectiveAgentId,
+        avatar_url: null,
+        icon: null,
+      },
+    [mainPerspectiveAgentId, perspectiveDisplayAgent],
+  );
+  const perspectiveExecutionEngine =
+    perspectiveDisplayAgent?.capabilities?.execution_backend ===
+    "codex_app_server"
+      ? ("codex" as const)
+      : ("octopus" as const);
+  useEffect(() => {
+    if (!isGroupConversation) {
+      setGroupPerspectiveAgentId(null);
+      return;
+    }
+    setGroupPerspectiveAgentId((current) => {
+      if (current && groupPerspectiveAgentIds.has(current)) return current;
+      const remembered = readGroupPerspective(threadId);
+      if (remembered && groupPerspectiveAgentIds.has(remembered)) {
+        return remembered;
+      }
+      return effectiveAgentId;
+    });
+  }, [
+    effectiveAgentId,
+    groupPerspectiveAgentIds,
+    isGroupConversation,
+    threadId,
+  ]);
+  useEffect(() => {
+    if (!isGroupConversation) return;
+    rememberGroupPerspective(threadId, mainPerspectiveAgentId);
+  }, [isGroupConversation, mainPerspectiveAgentId, threadId]);
   const collaborationRosterSeats = useMemo<WorkbenchRosterSeat[]>(() => {
     const seats = new Map<string, WorkbenchRosterSeat>();
+    const profileByAgentId = new Map(
+      coworkCollaborationProfiles.map((agent) => [agent.name, agent]),
+    );
     for (const agent of visibleCollaborationRoster) {
+      const profile = profileByAgentId.get(agent.agent_id);
+      const profileDetails =
+        profile && "description" in profile ? profile : null;
       seats.set(`agent:${agent.agent_id}`, {
         id: agent.agent_id,
         name: agent.display_name,
@@ -1510,6 +1626,9 @@ function RealtimePageContent({
         icon: agent.icon ?? null,
         role: agent.role,
         kind: "agent",
+        description: profileDetails?.description ?? null,
+        model: profileDetails?.model ?? null,
+        toolGroups: profileDetails?.tool_groups ?? null,
       });
     }
     for (const participant of collabSessionQuery.data?.room_participants ??
@@ -1542,7 +1661,11 @@ function RealtimePageContent({
       });
     }
     return Array.from(seats.values());
-  }, [collabSessionQuery.data?.room_participants, visibleCollaborationRoster]);
+  }, [
+    collabSessionQuery.data?.room_participants,
+    coworkCollaborationProfiles,
+    visibleCollaborationRoster,
+  ]);
   const collaborationTeamName =
     boundProjectQuery.data?.project.name ||
     firstString(threadIdentityQuery.data?.values?.title, initialPrompt) ||
@@ -1582,6 +1705,29 @@ function RealtimePageContent({
       ownerActorId === currentInviteActor
     );
   }, [currentInviteActor, currentRoomParticipant, threadIdentityQuery.data]);
+  const realtimeRoomParticipant =
+    currentRoomParticipant ??
+    (canManageHumanInvites
+      ? (collabSessionQuery.data?.room_participants ?? []).find(
+          (participant) =>
+            String(participant.role ?? "")
+              .trim()
+              .toLowerCase() === "owner",
+        )
+      : undefined);
+  const realtimeParticipantId = firstString(
+    realtimeRoomParticipant?.id,
+    realtimeRoomParticipant?.participant_id,
+    currentInviteActor,
+  );
+  const realtimeParticipantName =
+    firstString(
+      realtimeRoomParticipant?.display_name,
+      realtimeRoomParticipant?.name,
+    ) || "我";
+  const [replyTarget, setReplyTarget] = useState<CoworkRoomMessage | null>(
+    null,
+  );
   const projectCapabilityAction = resolveGroupProjectCapabilityAction({
     isNewThread,
     isGroupConversation,
@@ -1610,6 +1756,17 @@ function RealtimePageContent({
       task_agent_names: selectedCollaborators.map(
         (agent) => agent.display_name ?? agent.name,
       ),
+      ...(replyTarget
+        ? {
+            cowork_reply_to: {
+              message_id: replyTarget.metadata?.source_message_id,
+              seq: replyTarget.seq,
+              participant_id: replyTarget.participant_id,
+              display_name: replyTarget.display_name,
+              text: replyTarget.text.slice(0, 240),
+            },
+          }
+        : {}),
     };
   }, [
     collaborationEnabled,
@@ -1620,6 +1777,7 @@ function RealtimePageContent({
     t,
     teamModeIntent,
     threadId,
+    replyTarget,
   ]);
   const collaborationRoomMemberPayload = useMemo(
     () =>
@@ -1791,11 +1949,17 @@ function RealtimePageContent({
     ? embeddedDesignChat && embeddedCreationSpace
       ? joinPath(
           joinPath(personalWorkspaceRoot, "创作空间"),
-          personalRoleFolderName(displayAgent, embeddedCreationSpace),
+          personalRoleFolderName(
+            perspectiveDisplayAgent,
+            embeddedCreationSpace,
+          ),
         )
       : joinPath(
           personalWorkspaceRoot,
-          personalRoleFolderName(displayAgent, effectiveAgentId),
+          personalRoleFolderName(
+            perspectiveDisplayAgent,
+            mainPerspectiveAgentId,
+          ),
         )
     : "";
   const isProjectCodeMode = !!projectWorkspacePath;
@@ -2205,30 +2369,28 @@ function RealtimePageContent({
     ],
   );
   const roomTimelineMessageActions = useMemo(
-    () =>
-      boundProjectState
+    () => ({
+      onReply: (message: CoworkRoomMessage) => {
+        setReplyTarget(message);
+        const quoted = message.text.replace(/\s+/g, " ").trim().slice(0, 160);
+        setComposerSeed(`> ${quoted}\n\n`);
+      },
+      onMentionAuthor: (message: CoworkRoomMessage) => {
+        const member = collabSessionQuery.data?.roster.find(
+          (candidate) => candidate.id === message.participant_id,
+        );
+        const mention =
+          member?.kind === "agent" && message.participant_id
+            ? `@agent:${message.participant_id}`
+            : `@${message.display_name || message.participant_id || "成员"}`;
+        setComposerSeed(`${mention} `);
+      },
+      ...(boundProjectState
         ? {
             threadId,
             projectId: boundProjectState.project.id,
             milestones: projectMilestoneOptions,
             defaultMilestoneId: defaultProjectMilestoneId,
-            onReply: (message: CoworkRoomMessage) => {
-              const quoted = message.text
-                .replace(/\s+/g, " ")
-                .trim()
-                .slice(0, 160);
-              setComposerSeed(`> ${quoted}\n\n`);
-            },
-            onMentionAuthor: (message: CoworkRoomMessage) => {
-              const member = collabSessionQuery.data?.roster.find(
-                (candidate) => candidate.id === message.participant_id,
-              );
-              const mention =
-                member?.kind === "agent" && message.participant_id
-                  ? `@agent:${message.participant_id}`
-                  : `@${message.display_name || message.participant_id || "成员"}`;
-              setComposerSeed(`${mention} `);
-            },
             onActionApplied: (
               response: { target?: CoworkRoomEntityRef } | undefined,
               input: CoworkMessageProjectActionInput,
@@ -2252,7 +2414,8 @@ function RealtimePageContent({
               toast.error(error.message || "项目操作失败");
             },
           }
-        : false,
+        : {}),
+    }),
     [
       boundProjectQuery,
       boundProjectState,
@@ -2398,11 +2561,24 @@ function RealtimePageContent({
       // thread: 由当前 thread owner 驱动的同步，不导航
       // system: 由 URL/路由驱动的同步（页面首次加载、query 变化），不导航
       if (source === "thread" || source === "system") return;
+      // In a group, role switching is a first-person viewpoint change inside
+      // the same canonical conversation. Do not turn it into a new task or
+      // throw the user out of the room; only the main-role context changes.
+      if (isGroupConversation && groupPerspectiveAgentIds.has(name)) {
+        setGroupPerspectiveAgentId(name);
+        return;
+      }
       if (!name || name === activeAgentId) return;
       qc.invalidateQueries({ queryKey: ["threads", "search"] });
       navigate(taskWorkspaceRoute({ agentId: name }), { replace: false });
     },
-    [activeAgentId, navigate, qc],
+    [
+      activeAgentId,
+      groupPerspectiveAgentIds,
+      isGroupConversation,
+      navigate,
+      qc,
+    ],
   );
 
   const streamOptions = useMemo<ThreadStreamOptions>(
@@ -2413,7 +2589,7 @@ function RealtimePageContent({
       // threads) clobbers the current page's pick — which is how turn 2+
       // started sending the wrong id before this fix.
       context: applyCoderModelProfileBoundary(
-        effectiveAgentId,
+        mainPerspectiveAgentId,
         {
           ...settings.context,
           reasoning_effort: effectiveReasoningEffort,
@@ -2489,12 +2665,6 @@ function RealtimePageContent({
             ? projectModePreset.promptContract
             : undefined,
           project_signals: projectSignals,
-          agent_name: effectiveAgentId,
-          // The outer Realtime layer owns transport and lifecycle only for a
-          // Codex role. It must not smart-route a second, purely decorative
-          // system model over the model that the Codex account profile will
-          // actually execute.
-          execution_engine: selectedExecutionEngine,
           // A stable, user-visible browser tab / desktop window reference. The
           // runtime receives structured identity instead of guessing from prose.
           automation_target:
@@ -2512,8 +2682,13 @@ function RealtimePageContent({
           // so hidden personal/project selectors cannot leak stale constraints
           // into a project group (including Project OS groups without workDir).
           ...(isGroupConversation ? activeGroupTaskContext : {}),
+          // Collaboration context describes the roster and its leader; the
+          // current first-person viewpoint is deliberately last so it remains
+          // the actual executor for this turn without mutating that roster.
+          agent_name: mainPerspectiveAgentId,
+          execution_engine: perspectiveExecutionEngine,
         },
-        selectedExecutionEngine,
+        perspectiveExecutionEngine,
       ),
       onStart: (startedThreadId) => {
         if (startedThreadId !== threadId) {
@@ -2557,7 +2732,7 @@ function RealtimePageContent({
       commitThreadRoute,
       embeddedDesignChat,
       embeddedDesignContext,
-      effectiveAgentId,
+      mainPerspectiveAgentId,
       effectiveMode,
       effectiveReasoningEffort,
       isCodingWorkspaceMode,
@@ -2570,7 +2745,7 @@ function RealtimePageContent({
       projectSignals,
       projectWorkspacePath,
       qc,
-      selectedExecutionEngine,
+      perspectiveExecutionEngine,
       setIsNewThread,
       settings.context,
       settings.personal_space.custom_instructions,
@@ -3644,6 +3819,7 @@ function RealtimePageContent({
       markSidebarThreadRunning(threadId);
       if (browserFiles.length === 0) {
         void sendMessage(threadId, { text: message.text, files: [] });
+        setReplyTarget(null);
         if (isGroupConversation) {
           // Task strategy is a one-turn intent. Returning to auto avoids a
           // later conversational follow-up silently running a heavy workflow.
@@ -3671,6 +3847,7 @@ function RealtimePageContent({
         uploaded: uploadedByName.get(file.name),
       }));
       void sendMessage(threadId, { text: message.text, files });
+      setReplyTarget(null);
       if (isGroupConversation) {
         setGroupTaskStrategy(groupTaskStrategyAfterSubmit());
       }
@@ -3692,6 +3869,7 @@ function RealtimePageContent({
       navigate,
       settings,
       threadIdentityQuery,
+      setReplyTarget,
     ],
   );
   // Auto-send a one-shot hand-off when a fresh thread is opened by the
@@ -3970,19 +4148,42 @@ function RealtimePageContent({
                 : "agent"
               : null;
 
-  const openAgentPanel = useCallback(() => {
-    closeSpecialUtilityPanels();
-    setFocusedWorkbenchEffectKey(null);
-    setArtifactsOpen(false);
-    setShowAgentPlan(false);
-    setAgentWorkbenchDismissed(false);
-    setAgentWorkbenchManuallyOpened(true);
-    setShowResearchHistory(false);
-    setShowResearch(false);
-    setShowPreview(false);
-    setAgentWorkbenchTab("agent");
-    setAgentWorkbenchTabTouched(true);
-  }, [closeSpecialUtilityPanels, setArtifactsOpen, setShowResearch]);
+  const openAgentPanel = useCallback(
+    (seat?: WorkbenchRosterSeat) => {
+      closeSpecialUtilityPanels();
+      setFocusedWorkbenchEffectKey(null);
+      // In a group the main column is the selected role's conversation view.
+      // Clicking any *other* AI seat must therefore open that member's own
+      // workstation on the right, rather than silently throwing away the
+      // identity that the roster strip already supplied.
+      if (seat?.kind === "agent" && seat.id.trim()) {
+        setFocusedWorkbenchAgentId(seat.id.trim());
+        setFocusedWorkbenchAgentView("screen");
+        setFocusedWorkbenchAgentSnapshot(null);
+        setFocusedWorkbenchTurnIndex(null);
+        setFocusedWorkbenchAgentNonce((value) => value + 1);
+        setFocusedWorkbenchEventId(null);
+        setFocusedWorkbenchEventKind(null);
+        setFocusedWorkbenchEventView(null);
+        setFocusedWorkbenchProcessEvent(null);
+      } else {
+        setFocusedWorkbenchAgentId(null);
+        setFocusedWorkbenchAgentView(null);
+        setFocusedWorkbenchAgentSnapshot(null);
+        setFocusedWorkbenchTurnIndex(null);
+      }
+      setArtifactsOpen(false);
+      setShowAgentPlan(false);
+      setAgentWorkbenchDismissed(false);
+      setAgentWorkbenchManuallyOpened(true);
+      setShowResearchHistory(false);
+      setShowResearch(false);
+      setShowPreview(false);
+      setAgentWorkbenchTab("agent");
+      setAgentWorkbenchTabTouched(true);
+    },
+    [closeSpecialUtilityPanels, setArtifactsOpen, setShowResearch],
+  );
 
   const openArtifactsPanel = useCallback(() => {
     closeSpecialUtilityPanels();
@@ -4165,15 +4366,20 @@ function RealtimePageContent({
 
   const currentAgent = useMemo(
     () => ({
-      name: effectiveAgentId,
-      display_name: displayAgent?.display_name || effectiveAgentId,
+      name: mainPerspectiveAgentId,
+      display_name:
+        perspectiveDisplayAgent?.display_name || mainPerspectiveAgentId,
       avatar_url:
-        displayAgent?.avatar_url ||
-        `/api/agents/${encodeURIComponent(effectiveAgentId)}/avatar`,
-      icon: displayAgent?.icon || null,
-      execution_engine: selectedExecutionEngine,
+        perspectiveDisplayAgent?.avatar_url ||
+        `/api/agents/${encodeURIComponent(mainPerspectiveAgentId)}/avatar`,
+      icon: perspectiveDisplayAgent?.icon || null,
+      execution_engine: perspectiveExecutionEngine,
     }),
-    [displayAgent, effectiveAgentId, selectedExecutionEngine],
+    [
+      mainPerspectiveAgentId,
+      perspectiveDisplayAgent,
+      perspectiveExecutionEngine,
+    ],
   );
 
   const handleModelChange = useCallback(
@@ -4247,11 +4453,8 @@ function RealtimePageContent({
 
   const headerAgentIdentity = (
     <ChatHeaderAgentBadge
-      agent={displayAgent}
-      agentId={effectiveAgentId}
-      collaborators={
-        visibleCollaborationEnabled ? visibleCollaborationRoster : undefined
-      }
+      agent={perspectiveDisplayAgent}
+      agentId={mainPerspectiveAgentId}
     />
   );
   const headerTitle = !isOctopusAssistant ? (
@@ -4289,11 +4492,14 @@ function RealtimePageContent({
         disabled={isNewThread || ensureCollabRoomMutation.isPending}
       />
     ) : null;
-  const onlineCollaboratorCount =
-    collabSessionQuery.data?.presence.reduce(
-      (count, member) => count + (member.online ? 1 : 0),
-      0,
-    ) ?? 0;
+  const onlineCollaboratorCount = collabSessionQuery.data?.room_id
+    ? countOnlineRoomParticipants(
+        collabSessionQuery.data.room_participants ?? [],
+      )
+    : (collabSessionQuery.data?.presence.reduce(
+        (count, member) => count + (member.online ? 1 : 0),
+        0,
+      ) ?? 0);
   const headerMemberControl =
     !isOctopusAssistant && canManageHumanInvites ? (
       <TaskCollaboratorControl
@@ -4397,540 +4603,585 @@ function RealtimePageContent({
           }
           active={thread.isLoading}
         >
-          <ChatBox artifactPanelMode="external" threadId={threadId}>
-            <ChatPageLayout
-              isNewThread={isNewThread}
-              pageTitle={
-                headerThreadTitle ||
-                thread?.values?.title ||
-                boundProjectState?.project.name ||
-                initialPrompt ||
-                (isNewThread ? t.sidebar.actionNewTask : "EchoAI")
-              }
-              header={
-                <>
-                  {!embeddedDesignChat && !isOctopusAssistant && (
-                    <ChatHeaderMenuButton
-                      onClick={() => setChatsDrawerOpen(true)}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 md:hidden"
-                    />
-                  )}
-                  {!isOctopusAssistant ? (
-                    <RealtimeGroupHeaderLayout
-                      title={headerTitle}
-                      projectStatus={
-                        !embeddedDesignChat && boundProjectState ? (
-                          <ProjectGroupHeaderBadge
-                            name={boundProjectState.project.name}
-                            status={boundProjectState.project.status}
-                            onOpenWorkbench={() =>
-                              openProjectWorkbenchForEntity()
-                            }
-                            canDetach={canManageHumanInvites}
-                            onDetach={() =>
-                              void handleDetachProjectCapability()
-                            }
-                            isDetaching={
-                              detachProjectFromGroupMutation.isPending
-                            }
-                          />
-                        ) : null
-                      }
-                      runStatus={headerRunStatus}
-                      members={embeddedDesignChat ? null : headerMemberSurface}
-                      workbench={embeddedDesignChat ? null : headerActions}
-                    />
-                  ) : (
-                    <>
-                      {headerAgentIdentity}
-                      <div className="flex min-w-0 flex-1 items-center gap-2">
-                        {connectedChannels.length > 0 && (
-                          <div className="flex shrink-0 items-center gap-1">
-                            <span className="size-1.5 rounded-full bg-emerald-500" />
-                            <span className="text-mini text-muted-foreground/70">
-                              已连接:{" "}
-                              {connectedChannels
-                                .map((c) => channelDisplayNames[c] || c)
-                                .join("、")}
-                            </span>
-                          </div>
-                        )}
-                        {headerRunStatus}
-                      </div>
-                      <div className="ml-auto flex shrink-0 items-center gap-1">
-                        {/* 助理是单聊：不提供加人/协作，也不录制，头部保持极简 */}
-                        {headerOctopusShare}
-                        <Button
-                          type="button"
-                          aria-label="自动化与订阅"
-                          title="自动化与订阅"
-                          onClick={toggleAutomationPanel}
-                          className={cn(
-                            "flex size-[42px] items-center justify-center rounded-lg border shadow-none transition-all duration-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 sm:size-8",
-                            showAutomationPanel
-                              ? "border-transparent bg-transparent text-foreground/82 hover:border-border-default hover:bg-muted/55 hover:text-foreground"
-                              : "border-transparent bg-transparent text-muted-foreground hover:border-border-default hover:bg-muted/55 hover:text-foreground",
-                          )}
-                        >
-                          <Settings2Icon className="size-4" />
-                        </Button>
-                        <AssistantSettingsMenu />
-                        {headerWorkbench}
-                      </div>
-                    </>
-                  )}
-                  {canPromoteGroupToProject ? (
-                    <PromoteGroupToProjectDialog
-                      open={promoteGroupDialogOpen}
-                      onOpenChange={setPromoteGroupDialogOpen}
-                      threadId={threadId}
-                      defaultName={headerThreadTitle || collaborationTeamName}
-                      onPromoted={async () => {
-                        await boundProjectQuery.refetch();
-                        openProjectWorkbenchForEntity();
-                      }}
-                    />
-                  ) : null}
-                  {projectDetachDialog}
-                </>
-              }
-              headerClassName={
-                embeddedDesignChat
-                  ? "px-3"
-                  : !isOctopusAssistant
-                    ? "md:pl-3"
-                    : undefined
-              }
-              messageList={
-                <MessageList
-                  key={threadId}
-                  className="size-full"
-                  threadId={threadId}
-                  thread={thread}
-                  onStop={handleStop}
-                  isStopping={isStopping}
-                  onOpenArtifact={openWorkbenchArtifact}
-                  project={projectWorkspacePath || null}
-                  onSendFollowUp={handleSendFollowUp}
-                  onRetryTask={handleRetryTask}
-                  onAuthorizeNetwork={handleAuthorizeNetwork}
-                  authorizingNetworkTier={
-                    pendingNetworkRegen?.threadId === threadId
-                      ? pendingNetworkRegen.tier
-                      : null
-                  }
-                  header={
-                    realtimeApprovals.hasMoreTurns ? (
-                      <LoadOlderTurnsBanner
-                        onLoad={realtimeApprovals.loadOlderTurns}
+          <CollaborationRealtimeBridge
+            roomId={collabSessionQuery.data?.room_id}
+            threadId={isNewThread ? null : threadId}
+            participantId={realtimeParticipantId}
+            displayName={realtimeParticipantName}
+            avatar={
+              typeof realtimeRoomParticipant?.avatar_url === "string"
+                ? realtimeRoomParticipant.avatar_url
+                : null
+            }
+          >
+            <ChatBox artifactPanelMode="external" threadId={threadId}>
+              <ChatPageLayout
+                isNewThread={isNewThread}
+                pageTitle={
+                  headerThreadTitle ||
+                  thread?.values?.title ||
+                  boundProjectState?.project.name ||
+                  initialPrompt ||
+                  (isNewThread ? t.sidebar.actionNewTask : "EchoAI")
+                }
+                header={
+                  <>
+                    {!embeddedDesignChat && !isOctopusAssistant && (
+                      <ChatHeaderMenuButton
+                        onClick={() => setChatsDrawerOpen(true)}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 md:hidden"
                       />
-                    ) : null
-                  }
-                  emptyState={
-                    !realtimeApprovals.hasMoreTurns &&
-                    !isNewThread &&
-                    !thread.isThreadLoading &&
-                    !thread.isLoading ? (
-                      <ConversationEmptyState
-                        isGroupConversation={isGroupConversation}
-                        hasError={Boolean(thread.error)}
-                        onRetry={() => {
-                          void thread.refresh();
+                    )}
+                    {!isOctopusAssistant ? (
+                      <RealtimeGroupHeaderLayout
+                        title={headerTitle}
+                        projectStatus={
+                          !embeddedDesignChat && boundProjectState ? (
+                            <ProjectGroupHeaderBadge
+                              name={boundProjectState.project.name}
+                              status={boundProjectState.project.status}
+                              onOpenWorkbench={() =>
+                                openProjectWorkbenchForEntity()
+                              }
+                              canDetach={canManageHumanInvites}
+                              onDetach={() =>
+                                void handleDetachProjectCapability()
+                              }
+                              isDetaching={
+                                detachProjectFromGroupMutation.isPending
+                              }
+                            />
+                          ) : null
+                        }
+                        runStatus={headerRunStatus}
+                        members={
+                          embeddedDesignChat ? null : headerMemberSurface
+                        }
+                        workbench={embeddedDesignChat ? null : headerActions}
+                      />
+                    ) : (
+                      <>
+                        {headerAgentIdentity}
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          {connectedChannels.length > 0 && (
+                            <div className="flex shrink-0 items-center gap-1">
+                              <span className="size-1.5 rounded-full bg-emerald-500" />
+                              <span className="text-mini text-muted-foreground/70">
+                                已连接:{" "}
+                                {connectedChannels
+                                  .map((c) => channelDisplayNames[c] || c)
+                                  .join("、")}
+                              </span>
+                            </div>
+                          )}
+                          {headerRunStatus}
+                        </div>
+                        <div className="ml-auto flex shrink-0 items-center gap-1">
+                          {/* 助理是单聊：不提供加人/协作，也不录制，头部保持极简 */}
+                          {headerOctopusShare}
+                          <Button
+                            type="button"
+                            aria-label="自动化与订阅"
+                            title="自动化与订阅"
+                            onClick={toggleAutomationPanel}
+                            className={cn(
+                              "flex size-[42px] items-center justify-center rounded-lg border shadow-none transition-all duration-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 sm:size-8",
+                              showAutomationPanel
+                                ? "border-transparent bg-transparent text-foreground/82 hover:border-border-default hover:bg-muted/55 hover:text-foreground"
+                                : "border-transparent bg-transparent text-muted-foreground hover:border-border-default hover:bg-muted/55 hover:text-foreground",
+                            )}
+                          >
+                            <Settings2Icon className="size-4" />
+                          </Button>
+                          <AssistantSettingsMenu />
+                          {headerWorkbench}
+                        </div>
+                      </>
+                    )}
+                    {canPromoteGroupToProject ? (
+                      <PromoteGroupToProjectDialog
+                        open={promoteGroupDialogOpen}
+                        onOpenChange={setPromoteGroupDialogOpen}
+                        threadId={threadId}
+                        defaultName={headerThreadTitle || collaborationTeamName}
+                        onPromoted={async () => {
+                          await boundProjectQuery.refetch();
+                          openProjectWorkbenchForEntity();
                         }}
                       />
-                    ) : null
-                  }
-                  paddingBottom={MESSAGE_LIST_DEFAULT_PADDING_BOTTOM}
-                  mode={effectiveMode}
-                  liveToolEvents={embeddedDesignChat ? [] : lastTurnToolEvents}
-                  lastTurnToolEvents={
-                    embeddedDesignChat ? [] : lastTurnToolEvents
-                  }
-                  allToolEvents={embeddedDesignChat ? [] : allToolEvents}
-                  completedAgentOutput={hasCompletedAgentOutput}
-                  currentAgent={currentAgent}
-                  agentRoster={
-                    visibleCollaborationEnabled
-                      ? visibleCollaborationRoster
+                    ) : null}
+                    {projectDetachDialog}
+                  </>
+                }
+                headerClassName={
+                  embeddedDesignChat
+                    ? "px-3"
+                    : !isOctopusAssistant
+                      ? "md:pl-3"
                       : undefined
-                  }
-                  showSenderName={
-                    !embeddedDesignChat &&
-                    (visibleCollaborationEnabled ||
-                      Boolean(collabSessionQuery.data?.room_id) ||
-                      isProjectHomeThread)
-                  }
-                  projectMessageActions={projectMessageActions}
-                  allowThreadFork={allowThreadFork}
-                  timelineEntries={conversationTimelineEntries}
-                  footer={
-                    <>
-                      {hasCompletedAgentOutput &&
-                      hasFinalArtifact &&
-                      !hasReportArtifact ? (
-                        <FinalArtifactCompletionNotice
-                          entries={finalArtifactEntries}
-                          onOpen={openFinalArtifactPanel}
+                }
+                messageList={
+                  <MessageList
+                    key={threadId}
+                    className="size-full"
+                    threadId={threadId}
+                    thread={thread}
+                    onStop={handleStop}
+                    isStopping={isStopping}
+                    onOpenArtifact={openWorkbenchArtifact}
+                    project={projectWorkspacePath || null}
+                    onSendFollowUp={handleSendFollowUp}
+                    onRetryTask={handleRetryTask}
+                    onAuthorizeNetwork={handleAuthorizeNetwork}
+                    authorizingNetworkTier={
+                      pendingNetworkRegen?.threadId === threadId
+                        ? pendingNetworkRegen.tier
+                        : null
+                    }
+                    header={
+                      realtimeApprovals.hasMoreTurns ? (
+                        <LoadOlderTurnsBanner
+                          onLoad={realtimeApprovals.loadOlderTurns}
                         />
-                      ) : null}
-                    </>
-                  }
-                />
-              }
-              inputArea={
-                <div
-                  className={cn(
-                    "relative w-full transition-[max-width,transform] duration-slow",
-                    isNewThread &&
-                      "-translate-y-[clamp(3rem,12dvh,7rem)] md:-translate-y-[calc(50vh-168px)]",
-                    isNewThread ? "max-w-3xl" : "max-w-(--container-width-md)",
-                  )}
-                >
-                  {mounted ? (
-                    <div className="flex flex-col gap-2">
-                      {isNewThread ? (
-                        <Welcome
-                          agent={displayAgent}
-                          agentName={effectiveAgentId}
+                      ) : null
+                    }
+                    emptyState={
+                      !realtimeApprovals.hasMoreTurns &&
+                      !isNewThread &&
+                      !thread.isThreadLoading &&
+                      !thread.isLoading ? (
+                        <ConversationEmptyState
+                          isGroupConversation={isGroupConversation}
+                          hasError={Boolean(thread.error)}
+                          onRetry={() => {
+                            void thread.refresh();
+                          }}
                         />
-                      ) : null}
-                      {!isNewThread ? (
-                        <ComposerStepProgress
-                          events={agentDisplayEvents}
-                          hasAnswer={hasCompletedAgentOutput}
-                          isLoading={thread.isLoading}
-                          runSettled={agentRunSettled}
-                          runFailed={agentRunFailed}
-                          paused={hasPausedOrPendingBackgroundTask}
-                          className="mt-2"
-                        />
-                      ) : null}
-                      <RealtimeApprovalPrompt
-                        approvals={realtimeApprovals.pendingApprovals}
-                        resolveApproval={realtimeApprovals.resolveApproval}
-                        className="-mb-1"
-                      />
-                      <div className="pt-3">
-                        {automationTarget ? (
-                          <AutomationControlDock
-                            threadId={threadId}
-                            target={automationTarget}
+                      ) : null
+                    }
+                    paddingBottom={MESSAGE_LIST_DEFAULT_PADDING_BOTTOM}
+                    mode={effectiveMode}
+                    liveToolEvents={
+                      embeddedDesignChat ? [] : lastTurnToolEvents
+                    }
+                    lastTurnToolEvents={
+                      embeddedDesignChat ? [] : lastTurnToolEvents
+                    }
+                    allToolEvents={embeddedDesignChat ? [] : allToolEvents}
+                    completedAgentOutput={hasCompletedAgentOutput}
+                    currentAgent={currentAgent}
+                    agentRoster={
+                      visibleCollaborationEnabled
+                        ? messageAgentRoster
+                        : undefined
+                    }
+                    showSenderName={
+                      !embeddedDesignChat &&
+                      (visibleCollaborationEnabled ||
+                        Boolean(collabSessionQuery.data?.room_id) ||
+                        isProjectHomeThread)
+                    }
+                    projectMessageActions={projectMessageActions}
+                    allowThreadFork={allowThreadFork}
+                    timelineEntries={conversationTimelineEntries}
+                    footer={
+                      <>
+                        {hasCompletedAgentOutput &&
+                        hasFinalArtifact &&
+                        !hasReportArtifact ? (
+                          <FinalArtifactCompletionNotice
+                            entries={finalArtifactEntries}
+                            onOpen={openFinalArtifactPanel}
                           />
                         ) : null}
-                        <ChatInputBox
-                          key={composerSeed || "empty-composer"}
-                          status={
-                            thread.error && !hasCompletedAgentOutput
-                              ? "error"
-                              : thread.isLoading
-                                ? "streaming"
-                                : "ready"
-                          }
-                          readyForMutations={thread.readyForMutations}
-                          connectionPhase={thread.connectionPhase}
-                          onRetryConnection={thread.refresh}
-                          modelName={settings.context.model_name}
-                          // Keep one selector, but project model ownership by
-                          // engine: Codex roles use the server-owned profile;
-                          // native roles serialize the thread's model source.
-                          modelProfileControl={!embeddedDesignChat}
-                          executionEngine={selectedExecutionEngine}
-                          mode={effectiveMode}
-                          reasoningEffort={effectiveReasoningEffort}
-                          threadId={threadId}
-                          mentionMembers={collaborationMentionMembers}
-                          isGroupConversation={isGroupConversation}
-                          groupTaskStrategy={groupTaskStrategy}
-                          onGroupTaskStrategyChange={setGroupTaskStrategy}
-                          projectCapabilityEnabled={Boolean(boundProjectState)}
-                          onProjectCapabilityAction={
-                            projectCapabilityAction === "open"
-                              ? () => openProjectWorkbenchForEntity()
-                              : projectCapabilityAction === "create"
-                                ? () => setPromoteGroupDialogOpen(true)
-                                : undefined
-                          }
-                          onSwitchPanel={
-                            recorderPluginEnabled
-                              ? (panel) => {
-                                  if (panel === "teach-repeat") {
-                                    openTeachRepeatPanel();
-                                  }
-                                }
-                              : undefined
-                          }
-                          responseModeControl={
-                            !embeddedDesignChat && isGroupConversation ? (
-                              <TeamModePicker
-                                value={teamModeIntent}
-                                onChange={handleTeamModeIntentChange}
-                                ariaLabel={t.chatInputBox.responseMode}
-                                compact
-                                disabled={
-                                  thread.isLoading ||
-                                  replaceCoworkRosterMutation.isPending
-                                }
-                                disabledModes={
-                                  visibleCollaborationRoster.length <= 1
-                                    ? ["cluster", "swarm"]
-                                    : []
-                                }
-                                disabledReason={
-                                  t.chatInputBox.responseModeTeamRequired
-                                }
-                              />
-                            ) : undefined
-                          }
-                          statusTrailing={
-                            embeddedDesignChat ? (
-                              <span
-                                data-testid="design-canvas-context-status"
-                                className="whitespace-nowrap text-[11px] text-violet-600"
-                              >
-                                {embeddedDesignContext
-                                  ? embeddedDesignContext.selected_node_ids
-                                      .length > 0
-                                    ? `已连接画布 · 已选 ${embeddedDesignContext.selected_node_ids.length}`
-                                    : "已连接画布"
-                                  : "正在连接画布…"}
+                      </>
+                    }
+                  />
+                }
+                inputArea={
+                  <div
+                    className={cn(
+                      "relative w-full transition-[max-width,transform] duration-slow",
+                      isNewThread &&
+                        "-translate-y-[clamp(3rem,12dvh,7rem)] md:-translate-y-[calc(50vh-168px)]",
+                      isNewThread
+                        ? "max-w-3xl"
+                        : "max-w-(--container-width-md)",
+                    )}
+                  >
+                    {mounted ? (
+                      <div className="flex flex-col gap-2">
+                        {isNewThread ? (
+                          <Welcome
+                            agent={perspectiveDisplayAgent}
+                            agentName={mainPerspectiveAgentId}
+                          />
+                        ) : null}
+                        {!isNewThread ? (
+                          <ComposerStepProgress
+                            events={agentDisplayEvents}
+                            hasAnswer={hasCompletedAgentOutput}
+                            isLoading={thread.isLoading}
+                            runSettled={agentRunSettled}
+                            runFailed={agentRunFailed}
+                            paused={hasPausedOrPendingBackgroundTask}
+                            className="mt-2"
+                          />
+                        ) : null}
+                        <RealtimeApprovalPrompt
+                          approvals={realtimeApprovals.pendingApprovals}
+                          resolveApproval={realtimeApprovals.resolveApproval}
+                          className="-mb-1"
+                        />
+                        <div className="pt-3">
+                          {automationTarget ? (
+                            <AutomationControlDock
+                              threadId={threadId}
+                              target={automationTarget}
+                            />
+                          ) : null}
+                          {replyTarget ? (
+                            <div className="mb-2 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/[0.04] px-3 py-2 text-xs">
+                              <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                                回复 {replyTarget.display_name || "协作成员"}：
+                                {replyTarget.text}
                               </span>
-                            ) : isGroupConversation ? (
-                              <ConversationRosterStrip
-                                seats={collaborationRosterSeats}
-                                onMemberClick={openAgentPanel}
-                              />
-                            ) : undefined
+                              <button
+                                type="button"
+                                className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                aria-label="取消回复"
+                                onClick={() => setReplyTarget(null)}
+                              >
+                                <XIcon className="size-3.5" />
+                              </button>
+                            </div>
+                          ) : null}
+                          <ChatInputBox
+                            key={composerSeed || "empty-composer"}
+                            status={
+                              thread.error && !hasCompletedAgentOutput
+                                ? "error"
+                                : thread.isLoading
+                                  ? "streaming"
+                                  : "ready"
+                            }
+                            readyForMutations={thread.readyForMutations}
+                            connectionPhase={thread.connectionPhase}
+                            onRetryConnection={thread.refresh}
+                            modelName={settings.context.model_name}
+                            // Keep one selector, but project model ownership by
+                            // engine: Codex roles use the server-owned profile;
+                            // native roles serialize the thread's model source.
+                            modelProfileControl={!embeddedDesignChat}
+                            executionEngine={perspectiveExecutionEngine}
+                            mode={effectiveMode}
+                            reasoningEffort={effectiveReasoningEffort}
+                            threadId={threadId}
+                            mentionMembers={collaborationMentionMembers}
+                            isGroupConversation={isGroupConversation}
+                            groupTaskStrategy={groupTaskStrategy}
+                            onGroupTaskStrategyChange={setGroupTaskStrategy}
+                            projectCapabilityEnabled={Boolean(
+                              boundProjectState,
+                            )}
+                            onProjectCapabilityAction={
+                              projectCapabilityAction === "open"
+                                ? () => openProjectWorkbenchForEntity()
+                                : projectCapabilityAction === "create"
+                                  ? () => setPromoteGroupDialogOpen(true)
+                                  : undefined
+                            }
+                            onSwitchPanel={
+                              recorderPluginEnabled
+                                ? (panel) => {
+                                    if (panel === "teach-repeat") {
+                                      openTeachRepeatPanel();
+                                    }
+                                  }
+                                : undefined
+                            }
+                            responseModeControl={
+                              !embeddedDesignChat && isGroupConversation ? (
+                                <TeamModePicker
+                                  value={teamModeIntent}
+                                  onChange={handleTeamModeIntentChange}
+                                  ariaLabel={t.chatInputBox.responseMode}
+                                  compact
+                                  disabled={
+                                    thread.isLoading ||
+                                    replaceCoworkRosterMutation.isPending
+                                  }
+                                  disabledModes={
+                                    visibleCollaborationRoster.length <= 1
+                                      ? ["cluster", "swarm"]
+                                      : []
+                                  }
+                                  disabledReason={
+                                    t.chatInputBox.responseModeTeamRequired
+                                  }
+                                />
+                              ) : undefined
+                            }
+                            statusTrailing={
+                              embeddedDesignChat ? (
+                                <span
+                                  data-testid="design-canvas-context-status"
+                                  className="whitespace-nowrap text-[11px] text-violet-600"
+                                >
+                                  {embeddedDesignContext
+                                    ? embeddedDesignContext.selected_node_ids
+                                        .length > 0
+                                      ? `已连接画布 · 已选 ${embeddedDesignContext.selected_node_ids.length}`
+                                      : "已连接画布"
+                                    : "正在连接画布…"}
+                                </span>
+                              ) : isGroupConversation ? (
+                                <ConversationRosterStrip
+                                  seats={collaborationRosterSeats}
+                                  onOpenMemberProcess={openAgentPanel}
+                                />
+                              ) : undefined
+                            }
+                            automationTarget={
+                              embeddedDesignChat ? null : automationTarget
+                            }
+                            onAutomationTargetChange={
+                              embeddedDesignChat
+                                ? undefined
+                                : handleAutomationTargetChange
+                            }
+                            disabled={researchLoading}
+                            workDir={effectiveWorkDir}
+                            displayAgent={perspectiveComposerAgent}
+                            showWorkDirSelector={!embeddedDesignChat}
+                            showModeSelector
+                            onWorkDirChange={handleWorkDirChange}
+                            lockWorkDirToThread={!isNewThread}
+                            onOpenWorkDirInNewTask={openWorkDirInNewTask}
+                            codeModeUnlocked={codeModeUnlocked}
+                            projectAgentMode={projectAgentMode}
+                            projectDetection={projectDetection}
+                            onProjectAgentModeChange={
+                              handleProjectAgentModeStateChange
+                            }
+                            onProjectAgentModeUserChange={
+                              handleProjectAgentModeUserChange
+                            }
+                            onProjectDetectionChange={setProjectDetection}
+                            onManualOverrideChange={setModeManualOverride}
+                            modeIntentSuggestion={modeIntentSuggestion}
+                            onAcceptModeIntent={handleAcceptModeIntent}
+                            onDismissModeIntent={handleDismissModeIntent}
+                            contextTokens={contextTokens}
+                            maxContextTokens={maxContextTokens}
+                            isCompressingContext={isCompressingContext}
+                            onCompressContext={handleCompressContext}
+                            onModelChange={handleModelChange}
+                            onModelSwitchNotice={handleModelSwitchNotice}
+                            onReasoningEffortChange={
+                              handleReasoningEffortChange
+                            }
+                            onModeChange={handleModeChange}
+                            permissionMode={normalizePermissionMode(
+                              settings.context.permission_mode,
+                            )}
+                            onPermissionModeChange={handlePermissionModeChange}
+                            onSubmit={handleSubmit}
+                            onDeepResearch={handleDeepResearch}
+                            showInspirationToggle={!embeddedDesignChat}
+                            allowAgentModes={!embeddedDesignChat}
+                            onStop={handleStop}
+                            isStopping={isStopping}
+                            isUploading={isUploading}
+                            autoFocus={isNewThread}
+                            defaultValue={composerSeed}
+                            placeholder={
+                              isOctopusAssistant
+                                ? t.realtime.composer.placeholderOctopus
+                                : isProjectCodeMode
+                                  ? t.realtime.composer.placeholderCode
+                                  : isNewThread
+                                    ? t.realtime.composer.placeholderNew
+                                    : undefined
+                            }
+                            className={
+                              isNewThread
+                                ? "border-border-subtle bg-card/90 shadow-none"
+                                : undefined
+                            }
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        aria-hidden="true"
+                        className="workspace-panel h-32 w-full rounded-lg"
+                      />
+                    )}
+                  </div>
+                }
+                secondaryPanel={
+                  recorderPluginEnabled && showTeachRepeatPanel ? (
+                    <div className="flex size-full min-h-0 flex-col overflow-hidden">
+                      <div className="flex h-11 shrink-0 items-center justify-between border-b border-border-default px-3">
+                        <span className="text-sm font-semibold">
+                          {t.teachRepeat.title}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowTeachRepeatPanel(false)}
+                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                          aria-label={t.common.close}
+                        >
+                          <XIcon className="size-3.5" />
+                        </button>
+                      </div>
+                      <TeachRepeatPanel
+                        threadId={threadId}
+                        className="min-h-0 flex-1 overflow-auto"
+                      />
+                    </div>
+                  ) : isOctopusAssistant && showAutomationPanel ? (
+                    <AutomationSubscriptionPanel
+                      className="size-full"
+                      onClose={() => setShowAutomationPanel(false)}
+                    />
+                  ) : showResearchHistory ? (
+                    <DeepResearchHistoryPanel
+                      activeJobId={researchJob?.job_id}
+                      onSelect={(job) => {
+                        setResearchJob(job);
+                        setResearchError(null);
+                        setShowResearch(true);
+                        setShowResearchHistory(false);
+                        setShowPreview(false);
+                      }}
+                      onClose={() => setShowResearchHistory(false)}
+                    />
+                  ) : showResearch && researchJob ? (
+                    <DeepResearchPanel
+                      job={researchJob}
+                      loading={researchLoading}
+                      error={researchError}
+                      onClose={() => setShowResearch(false)}
+                    />
+                  ) : showResearch && researchError ? (
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                      <div className="flex items-center justify-between border-b border-border-default px-3 py-2">
+                        <span className="text-sm font-medium">Agent</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowResearch(false)}
+                          className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                          aria-label={t.common.close}
+                        >
+                          <XIcon className="size-3.5" />
+                        </button>
+                      </div>
+                      <div className="p-3 text-xs text-destructive">
+                        {researchError}
+                      </div>
+                    </div>
+                  ) : showAgentPlan ? (
+                    <PlanPanel
+                      className="size-full rounded-none border-0 shadow-none"
+                      messages={thread.messages}
+                      open
+                      onClose={() => setShowAgentPlan(false)}
+                    />
+                  ) : showAgentWorkbench ? (
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                      <div className="flex min-h-0 flex-1">
+                        <AgentWorkbenchPanel
+                          activeTab={agentWorkbenchTab}
+                          personaId={effectiveAgentId}
+                          events={workbenchDisplayEvents}
+                          progressOutline={progressOutline}
+                          userInput={
+                            focusedWorkbenchTurnIndex === null
+                              ? lastTurnUserInput
+                              : {
+                                  text:
+                                    focusedWorkbenchAgentSnapshot?.task ?? "",
+                                  uploadedFiles: [],
+                                  attachments: [],
+                                }
                           }
-                          automationTarget={
-                            embeddedDesignChat ? null : automationTarget
+                          groundingSources={
+                            thread.values.latest_grounding ?? []
                           }
-                          onAutomationTargetChange={
-                            embeddedDesignChat
-                              ? undefined
-                              : handleAutomationTargetChange
+                          focusedAgentId={focusedWorkbenchAgentId}
+                          focusedAgentView={focusedWorkbenchAgentView}
+                          focusedAgentSnapshot={focusedWorkbenchAgentSnapshot}
+                          focusedAgentNonce={focusedWorkbenchAgentNonce}
+                          focusedEventId={focusedWorkbenchEventId}
+                          focusedEventKind={focusedWorkbenchEventKind}
+                          focusedEventView={focusedWorkbenchEventView}
+                          focusedEventNonce={focusedWorkbenchEventNonce}
+                          focusedProcessEvent={focusedWorkbenchProcessEvent}
+                          focusedEffectKey={focusedWorkbenchEffectKey}
+                          hasAnswer={
+                            focusedWorkbenchTurnIndex === null
+                              ? hasCompletedAgentOutput
+                              : true
                           }
-                          disabled={researchLoading}
-                          workDir={effectiveWorkDir}
-                          displayAgent={composerDisplayAgent}
-                          showWorkDirSelector={!embeddedDesignChat}
-                          showModeSelector
-                          onWorkDirChange={handleWorkDirChange}
-                          lockWorkDirToThread={!isNewThread}
-                          onOpenWorkDirInNewTask={openWorkDirInNewTask}
-                          codeModeUnlocked={codeModeUnlocked}
-                          projectAgentMode={projectAgentMode}
-                          projectDetection={projectDetection}
-                          onProjectAgentModeChange={
-                            handleProjectAgentModeStateChange
+                          isLoading={
+                            focusedWorkbenchTurnIndex === null
+                              ? thread.isLoading
+                              : false
                           }
-                          onProjectAgentModeUserChange={
-                            handleProjectAgentModeUserChange
+                          runSettled={
+                            focusedWorkbenchTurnIndex === null
+                              ? agentRunSettled
+                              : true
                           }
-                          onProjectDetectionChange={setProjectDetection}
-                          onManualOverrideChange={setModeManualOverride}
-                          modeIntentSuggestion={modeIntentSuggestion}
-                          onAcceptModeIntent={handleAcceptModeIntent}
-                          onDismissModeIntent={handleDismissModeIntent}
+                          runFailed={
+                            focusedWorkbenchTurnIndex === null
+                              ? agentRunFailed
+                              : focusedWorkbenchAgentSnapshot?.status ===
+                                "error"
+                          }
+                          runInterrupted={agentRunInterrupted}
+                          runBlocked={agentRunBlocked}
+                          paused={hasPausedOrPendingBackgroundTask}
+                          threadId={threadId}
+                          workDir={workDir}
+                          browserPreviewBlocks={previewBlocks}
+                          resultPreviewUrl={resultPreviewUrl}
+                          mainAgentName={
+                            perspectiveDisplayAgent?.display_name ||
+                            mainPerspectiveAgentId
+                          }
                           contextTokens={contextTokens}
                           maxContextTokens={maxContextTokens}
                           isCompressingContext={isCompressingContext}
                           onCompressContext={handleCompressContext}
-                          onModelChange={handleModelChange}
-                          onModelSwitchNotice={handleModelSwitchNotice}
-                          onReasoningEffortChange={handleReasoningEffortChange}
-                          onModeChange={handleModeChange}
-                          permissionMode={normalizePermissionMode(
-                            settings.context.permission_mode,
-                          )}
-                          onPermissionModeChange={handlePermissionModeChange}
-                          onSubmit={handleSubmit}
-                          onDeepResearch={handleDeepResearch}
-                          showInspirationToggle={!embeddedDesignChat}
-                          allowAgentModes={!embeddedDesignChat}
-                          onStop={handleStop}
-                          isStopping={isStopping}
-                          isUploading={isUploading}
-                          autoFocus={isNewThread}
-                          defaultValue={composerSeed}
-                          placeholder={
-                            isOctopusAssistant
-                              ? t.realtime.composer.placeholderOctopus
-                              : isProjectCodeMode
-                                ? t.realtime.composer.placeholderCode
-                                : isNewThread
-                                  ? t.realtime.composer.placeholderNew
-                                  : undefined
+                          rosterSeats={collaborationRosterSeats}
+                          showMachineScopeRail={false}
+                          showMachineRosterRail={false}
+                          showDeliveryRecovery={isGroupConversation}
+                          groupTitle={
+                            isGroupConversation ? collaborationTeamName : null
                           }
-                          className={
-                            isNewThread
-                              ? "border-border-subtle bg-card/90 shadow-none"
+                          currentThreadTitle={headerThreadTitle || null}
+                          onInvitePeople={
+                            canManageHumanInvites
+                              ? handleOpenHumanInvite
                               : undefined
                           }
+                          onClose={closeAgentWorkbenchPanel}
+                          onSelectTab={selectAgentWorkbenchTab}
+                          onOpenArtifact={openWorkbenchArtifact}
                         />
                       </div>
                     </div>
-                  ) : (
-                    <div
-                      aria-hidden="true"
-                      className="workspace-panel h-32 w-full rounded-lg"
-                    />
-                  )}
-                </div>
-              }
-              secondaryPanel={
-                recorderPluginEnabled && showTeachRepeatPanel ? (
-                  <div className="flex size-full min-h-0 flex-col overflow-hidden">
-                    <div className="flex h-11 shrink-0 items-center justify-between border-b border-border-default px-3">
-                      <span className="text-sm font-semibold">
-                        {t.teachRepeat.title}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setShowTeachRepeatPanel(false)}
-                        className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                        aria-label={t.common.close}
-                      >
-                        <XIcon className="size-3.5" />
-                      </button>
-                    </div>
-                    <TeachRepeatPanel
-                      threadId={threadId}
-                      className="min-h-0 flex-1 overflow-auto"
-                    />
-                  </div>
-                ) : isOctopusAssistant && showAutomationPanel ? (
-                  <AutomationSubscriptionPanel
-                    className="size-full"
-                    onClose={() => setShowAutomationPanel(false)}
-                  />
-                ) : showResearchHistory ? (
-                  <DeepResearchHistoryPanel
-                    activeJobId={researchJob?.job_id}
-                    onSelect={(job) => {
-                      setResearchJob(job);
-                      setResearchError(null);
-                      setShowResearch(true);
-                      setShowResearchHistory(false);
-                      setShowPreview(false);
-                    }}
-                    onClose={() => setShowResearchHistory(false)}
-                  />
-                ) : showResearch && researchJob ? (
-                  <DeepResearchPanel
-                    job={researchJob}
-                    loading={researchLoading}
-                    error={researchError}
-                    onClose={() => setShowResearch(false)}
-                  />
-                ) : showResearch && researchError ? (
-                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                    <div className="flex items-center justify-between border-b border-border-default px-3 py-2">
-                      <span className="text-sm font-medium">Agent</span>
-                      <button
-                        type="button"
-                        onClick={() => setShowResearch(false)}
-                        className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-                        aria-label={t.common.close}
-                      >
-                        <XIcon className="size-3.5" />
-                      </button>
-                    </div>
-                    <div className="p-3 text-xs text-destructive">
-                      {researchError}
-                    </div>
-                  </div>
-                ) : showAgentPlan ? (
-                  <PlanPanel
-                    className="size-full rounded-none border-0 shadow-none"
-                    messages={thread.messages}
-                    open
-                    onClose={() => setShowAgentPlan(false)}
-                  />
-                ) : showAgentWorkbench ? (
-                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                    <div className="flex min-h-0 flex-1">
-                      <AgentWorkbenchPanel
-                        activeTab={agentWorkbenchTab}
-                        personaId={effectiveAgentId}
-                        events={workbenchDisplayEvents}
-                        progressOutline={progressOutline}
-                        userInput={
-                          focusedWorkbenchTurnIndex === null
-                            ? lastTurnUserInput
-                            : {
-                                text: focusedWorkbenchAgentSnapshot?.task ?? "",
-                                uploadedFiles: [],
-                                attachments: [],
-                              }
-                        }
-                        groundingSources={thread.values.latest_grounding ?? []}
-                        focusedAgentId={focusedWorkbenchAgentId}
-                        focusedAgentView={focusedWorkbenchAgentView}
-                        focusedAgentSnapshot={focusedWorkbenchAgentSnapshot}
-                        focusedAgentNonce={focusedWorkbenchAgentNonce}
-                        focusedEventId={focusedWorkbenchEventId}
-                        focusedEventKind={focusedWorkbenchEventKind}
-                        focusedEventView={focusedWorkbenchEventView}
-                        focusedEventNonce={focusedWorkbenchEventNonce}
-                        focusedProcessEvent={focusedWorkbenchProcessEvent}
-                        focusedEffectKey={focusedWorkbenchEffectKey}
-                        hasAnswer={
-                          focusedWorkbenchTurnIndex === null
-                            ? hasCompletedAgentOutput
-                            : true
-                        }
-                        isLoading={
-                          focusedWorkbenchTurnIndex === null
-                            ? thread.isLoading
-                            : false
-                        }
-                        runSettled={
-                          focusedWorkbenchTurnIndex === null
-                            ? agentRunSettled
-                            : true
-                        }
-                        runFailed={
-                          focusedWorkbenchTurnIndex === null
-                            ? agentRunFailed
-                            : focusedWorkbenchAgentSnapshot?.status === "error"
-                        }
-                        runInterrupted={agentRunInterrupted}
-                        runBlocked={agentRunBlocked}
-                        paused={hasPausedOrPendingBackgroundTask}
-                        threadId={threadId}
-                        workDir={workDir}
-                        browserPreviewBlocks={previewBlocks}
-                        resultPreviewUrl={resultPreviewUrl}
-                        mainAgentName={
-                          displayAgent?.display_name || effectiveAgentId
-                        }
-                        contextTokens={contextTokens}
-                        maxContextTokens={maxContextTokens}
-                        isCompressingContext={isCompressingContext}
-                        onCompressContext={handleCompressContext}
-                        rosterSeats={collaborationRosterSeats}
-                        showMachineRosterRail={false}
-                        groupTitle={
-                          isGroupConversation ? collaborationTeamName : null
-                        }
-                        currentThreadTitle={headerThreadTitle || null}
-                        onInvitePeople={
-                          canManageHumanInvites
-                            ? handleOpenHumanInvite
-                            : undefined
-                        }
-                        onClose={closeAgentWorkbenchPanel}
-                        onSelectTab={selectAgentWorkbenchTab}
-                        onOpenArtifact={openWorkbenchArtifact}
-                      />
-                    </div>
-                  </div>
-                ) : undefined
-              }
-              onSecondaryClose={closeUnifiedRightPanel}
-              secondaryPanelWidth="min(500px, 38vw)"
-            />
-          </ChatBox>
+                  ) : undefined
+                }
+                onSecondaryClose={closeUnifiedRightPanel}
+                secondaryPanelWidth="min(500px, 38vw)"
+              />
+            </ChatBox>
+          </CollaborationRealtimeBridge>
           <ChatsDrawer
             open={chatsDrawerOpen}
             onOpenChange={setChatsDrawerOpen}

@@ -609,14 +609,22 @@ class EventLog:
             )
         )
 
-    def item_completed(self, thread_id: str, turn_id: str, item: Item) -> LoggedEvent:
+    def item_completed(
+        self,
+        thread_id: str,
+        turn_id: str,
+        item: Item,
+        *,
+        durable: bool = False,
+    ) -> LoggedEvent:
         return self.append(
             LoggedEvent(
                 event="item_completed",
                 threadId=thread_id,
                 turnId=turn_id,
                 payload={"item": item.model_dump(by_alias=True, mode="json")},
-            )
+            ),
+            durable=durable,
         )
 
     # ── Reader side ──────────────────────────────────────────

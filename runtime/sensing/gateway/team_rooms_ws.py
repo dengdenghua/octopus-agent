@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -212,7 +213,32 @@ class TeamRoomWsContext:
     # is also appended here so room transcripts survive reconnect/restart and
     # can be caught up on / searched. None disables persistence (back-compat).
     message_store: Any = None
-    message_projection: Callable[[str, dict[str, Any]], None] | None = None
+    message_projection: Callable[[str, dict[str, Any]], int | None] | None = None
+    receipt_projection: Callable[[str, dict[str, Any]], Any] | None = None
+
+
+def _client_message_identity(
+    team_id: str,
+    participant_id: str,
+    raw_client_message_id: Any,
+) -> tuple[str, str]:
+    """Return a bounded client id plus a stable server message id.
+
+    The raw id is never used as a database key. A digest gives retries the
+    same canonical id even when a client sends punctuation outside the storage
+    slug alphabet.
+    """
+
+    client_message_id = str(raw_client_message_id or "").strip()
+    if not client_message_id or any(
+        ord(char) < 32 or ord(char) == 127 for char in client_message_id
+    ):
+        client_message_id = uuid4().hex
+    client_message_id = client_message_id[:128]
+    digest = hashlib.sha256(
+        f"{team_id}\0{participant_id}\0{client_message_id}".encode(),
+    ).hexdigest()[:32]
+    return client_message_id, f"room-msg-{digest}"
 
 
 def _remember_line(
@@ -221,45 +247,95 @@ def _remember_line(
     participant_id: str,
     display_name: str,
     text: str,
-) -> None:
-    """Append a spoken line to the room's bounded ring buffer. Locked (cheap,
-    no await) — the buffer is shared across the room's sockets."""
-    with ctx.lock:
-        buf = ctx.recent_messages.setdefault(team_id, [])
-        buf.append(
-            {
-                "participant_id": participant_id,
-                "display_name": display_name,
-                "text": text,
-            }
-        )
-        if len(buf) > _RING_SIZE:
-            del buf[: len(buf) - _RING_SIZE]
-    # Durable persistence (best-effort): so the transcript survives beyond the
-    # in-memory ring. Offloaded to a single background worker — the store does
-    # synchronous sqlite I/O, which must never run on the WS event loop (it
-    # would block the broadcast). One worker serializes writes (no contention).
+    *,
+    message_id: str = "",
+    client_message_id: str = "",
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Durably append a line before making it visible to the room.
+
+    CollaborationStore is the canonical path when the room is linked. The
+    legacy store remains the durable fallback and asynchronous shadow. A
+    message is appended to the in-memory responder transcript only after at
+    least one configured durable path has accepted it.
+    """
+
+    message_id = message_id or f"room-msg-{uuid4().hex}"
+    message_metadata = dict(metadata or {})
+    message_metadata["message_id"] = message_id
+    if client_message_id:
+        message_metadata["client_message_id"] = client_message_id
+        message_metadata.setdefault("source_message_id", f"ws:{message_id}")
+
+    sequence = 0
+    projection_succeeded = False
+    canonical_persisted = False
+    projection = ctx.message_projection
+    if projection is not None:
+        try:
+            projected_seq = projection(
+                team_id,
+                {
+                    "participant_id": participant_id,
+                    "display_name": display_name,
+                    "text": text,
+                    "metadata": message_metadata,
+                },
+            )
+            projection_succeeded = True
+            if projected_seq is not None:
+                sequence = int(projected_seq)
+                canonical_persisted = sequence > 0
+        except Exception:  # noqa: BLE001 — the legacy store is the fallback
+            canonical_persisted = False
+
     store = ctx.message_store
     if store is not None:
-        with contextlib.suppress(Exception):
+        if canonical_persisted:
+            # Keep the legacy log as a compatibility shadow without delaying
+            # the canonical acknowledgement.
             _persist_pool().submit(
                 store.append,
                 team_id,
                 text=text,
                 participant_id=participant_id,
                 display_name=display_name,
+                message_id=message_id,
+                client_message_id=client_message_id,
             )
-    projection = ctx.message_projection
-    if projection is not None:
-        with contextlib.suppress(Exception):
-            projection(
-                team_id,
+        else:
+            sequence = int(
+                store.append(
+                    team_id,
+                    text=text,
+                    participant_id=participant_id,
+                    display_name=display_name,
+                    message_id=message_id,
+                    client_message_id=client_message_id,
+                )
+            )
+    elif projection is not None and not projection_succeeded:
+        raise RuntimeError("room message persistence did not produce a durable sequence")
+
+    with ctx.lock:
+        buf = ctx.recent_messages.setdefault(team_id, [])
+        if not any(item.get("message_id") == message_id for item in buf):
+            buf.append(
                 {
+                    "message_id": message_id,
                     "participant_id": participant_id,
                     "display_name": display_name,
                     "text": text,
                 },
             )
+        if len(buf) > _RING_SIZE:
+            del buf[: len(buf) - _RING_SIZE]
+
+    return {
+        "message_id": message_id,
+        "client_message_id": client_message_id,
+        "seq": sequence,
+    }
 
 
 async def _twin_speak(
@@ -295,14 +371,35 @@ async def _twin_speak(
     text = (str(line).strip() if line else "")[:4000]
     if not text:
         return False
-    _remember_line(ctx, team_id, participant.id, participant.display_name, text)
+    client_message_id, message_id = _client_message_identity(
+        team_id,
+        twin_agent_id,
+        uuid4().hex,
+    )
+    try:
+        persisted = await asyncio.to_thread(
+            _remember_line,
+            ctx,
+            team_id,
+            participant.id,
+            participant.display_name,
+            text,
+            message_id=message_id,
+            client_message_id=client_message_id,
+            metadata={"spoken_by": twin_agent_id, "via": "twin"},
+        )
+    except Exception:  # noqa: BLE001 — never announce a line that was not persisted
+        return False
     await ctx.broadcast(
         team_id,
         {
             "type": "message",
             "team_id": team_id,
             "thread_id": None,
-            "message_id": f"room-msg-{uuid4().hex}",
+            "message_id": persisted["message_id"],
+            "client_message_id": persisted["client_message_id"],
+            "seq": persisted["seq"],
+            "delivery_status": "sent",
             "participant_id": participant.id,
             "display_name": participant.display_name,
             "spoken_by": twin_agent_id,
@@ -443,9 +540,13 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                 # In shared mode ``existing`` is guaranteed here: membership is
                 # established only by room creation or the HTTP invite flow.
                 participants = [p for p in team.participants if p.id != participant_id]
+                resolved_display_name = existing.display_name if existing else display_name
                 participant = TeamParticipantWire(
                     id=participant_id,
-                    display_name=display_name,
+                    # Reconnect is presence, not profile mutation. Preserve
+                    # the server-owned name for established members; the
+                    # participant endpoint remains the explicit rename path.
+                    display_name=resolved_display_name,
                     role=_normalize_participant_role(existing.role if existing else "viewer"),
                     actor_id=existing.actor_id if existing and existing.actor_id else actor,
                     joined_at=existing.joined_at if existing else now,
@@ -471,6 +572,7 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                 teams[team_id] = team
                 live_sockets.setdefault(team_id, {})[participant_id] = ws
                 socket_loops.setdefault(team_id, {})[participant_id] = owner_loop
+                display_name = participant.display_name
                 _save()
                 ready_payload = {
                     "type": "ready",
@@ -545,6 +647,42 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                     include=participant_id,
                 )
                 await _broadcast_presence(team_id)
+            elif msg_type in {"message:delivered", "message:read"}:
+                message_id = str(msg.get("message_id") or "").strip()
+                if not message_id:
+                    continue
+                receipt_store = ctx.message_store
+                record_receipt = getattr(receipt_store, "record_receipt", None)
+                if not callable(record_receipt):
+                    continue
+                status = "read" if msg_type == "message:read" else "delivered"
+                raw_seq = msg.get("seq")
+                try:
+                    seq = int(raw_seq) if raw_seq is not None else None
+                except (TypeError, ValueError):
+                    seq = None
+                try:
+                    receipt = await asyncio.to_thread(
+                        record_receipt,
+                        team_id,
+                        message_id=message_id,
+                        participant_id=participant_id,
+                        status=status,
+                        seq=seq,
+                    )
+                except (TypeError, ValueError):
+                    continue
+                if ctx.receipt_projection is not None:
+                    with contextlib.suppress(Exception):
+                        ctx.receipt_projection(team_id, receipt)
+                await _broadcast(
+                    team_id,
+                    {
+                        "type": "message:receipt",
+                        "team_id": team_id,
+                        **receipt,
+                    },
+                )
             elif msg_type == "cursor":
                 msg_thread_id = str(msg.get("thread_id") or thread_id or "").strip() or None
                 await _broadcast(
@@ -563,6 +701,11 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                 text = str(msg.get("text") or "").strip()
                 if not text:
                     continue
+                client_message_id, message_id = _client_message_identity(
+                    team_id,
+                    participant_id,
+                    msg.get("client_message_id"),
+                )
                 # Resolve the effective speaker. A message may be sent on
                 # another participant's behalf (twin/hosted delegation),
                 # honored only if that participant opted in and authorized
@@ -587,6 +730,7 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                             {
                                 "type": "error",
                                 "code": "delegation_denied",
+                                "client_message_id": client_message_id,
                                 "message": f"not authorized to speak for {on_behalf_of}",
                             },
                             include=participant_id,
@@ -606,28 +750,71 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                 if not allowed:
                     await _broadcast(
                         team_id,
-                        {"type": "error", "code": "speech_denied", "message": reason},
+                        {
+                            "type": "error",
+                            "code": "speech_denied",
+                            "client_message_id": client_message_id,
+                            "message": reason,
+                        },
                         include=participant_id,
                     )
                     continue
                 msg_thread_id = str(msg.get("thread_id") or thread_id or "").strip() or None
+                clean_text = text[:4000]
+                via = _normalize_speak_mode(speaker.speak_mode) if spoken_by else None
+                reply_to = msg.get("reply_to")
+                message_metadata = {"spoken_by": spoken_by, "via": via}
+                if isinstance(reply_to, dict) and reply_to:
+                    message_metadata["reply_to"] = {
+                        key: reply_to[key]
+                        for key in ("message_id", "seq", "participant_id", "display_name", "text")
+                        if key in reply_to
+                    }
+                try:
+                    persisted = await asyncio.to_thread(
+                        _remember_line,
+                        ctx,
+                        team_id,
+                        speaker.id,
+                        speaker.display_name,
+                        clean_text,
+                        message_id=message_id,
+                        client_message_id=client_message_id,
+                        metadata=message_metadata,
+                    )
+                except Exception:  # noqa: BLE001 — return a retryable receipt, not a false echo
+                    await _broadcast(
+                        team_id,
+                        {
+                            "type": "message:error",
+                            "team_id": team_id,
+                            "client_message_id": client_message_id,
+                            "code": "message_persistence_failed",
+                            "message": "Message was not saved. Try again.",
+                            "retryable": True,
+                        },
+                        include=participant_id,
+                    )
+                    continue
                 payload = {
                     "type": "message",
                     "team_id": team_id,
                     "thread_id": msg_thread_id,
-                    "message_id": f"room-msg-{uuid4().hex}",
+                    "message_id": persisted["message_id"],
+                    "client_message_id": persisted["client_message_id"],
+                    "seq": persisted["seq"],
+                    "delivery_status": "sent",
                     "participant_id": speaker.id,
                     "display_name": speaker.display_name,
                     "spoken_by": spoken_by,
-                    "via": _normalize_speak_mode(speaker.speak_mode) if spoken_by else None,
-                    "text": text[:4000],
+                    "via": via,
+                    **({"reply_to": message_metadata["reply_to"]} if "reply_to" in message_metadata else {}),
+                    "text": clean_text,
                     "created_at": _now(),
                 }
-                # Persist every accepted line before fan-out. The transcript is
-                # canonical room state even when no twin responder is wired;
-                # the in-memory ring is merely the responder's bounded view.
-                _remember_line(ctx, team_id, speaker.id, speaker.display_name, text[:4000])
-                await _emit_to_peers_or_self(payload)
+                # The server echo is the sender's delivery acknowledgement;
+                # peers receive the exact same canonical message envelope.
+                await _broadcast(team_id, payload)
                 # round_robin hands the floor to the next eligible speaker
                 # once a message lands. The other turn modes hold the floor
                 # until the speaker yields or the moderator moves it.

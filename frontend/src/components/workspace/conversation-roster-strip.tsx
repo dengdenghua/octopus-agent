@@ -13,10 +13,11 @@ function isLeader(seat: WorkbenchRosterSeat) {
 
 export function ConversationRosterStrip({
   seats,
-  onMemberClick,
+  onOpenMemberProcess,
 }: {
   seats: WorkbenchRosterSeat[];
-  onMemberClick?: (seat: WorkbenchRosterSeat) => void;
+  /** Opens this member's independent execution screen from its workstation. */
+  onOpenMemberProcess?: (seat: WorkbenchRosterSeat) => void;
 }) {
   const { t } = useI18n();
   const orderedSeats = useMemo(() => {
@@ -40,29 +41,47 @@ export function ConversationRosterStrip({
       data-testid="conversation-roster-strip"
       aria-label={t.chatInputBox.responseMode}
     >
-      {orderedSeats.map((seat) => {
-        const leader = isLeader(seat);
-        const roleLabel = rosterSeatRoleLabel(seat, t);
-        const label = `${seat.name} · ${roleLabel} · ${t.agentWorkbenchPanel.dockStatusPresent}`;
-        return (
-          <WorkstationSeat
-            key={seat.id}
-            name={seat.name}
-            avatar={seat.icon ?? null}
-            avatarUrl={seat.avatarUrl ?? null}
-            showBotBadge={seat.kind === "agent" && !leader}
-            fallbackInitial={seat.name.charAt(0)}
-            dotClassName="bg-success"
-            dotLabel={t.agentWorkbenchPanel.dockStatusPresent}
-            title={label}
-            ariaLabel={label}
-            onClick={onMemberClick ? () => onMemberClick(seat) : undefined}
-            iconOnly
-            iconCaption={leader ? "★" : undefined}
-            className="shrink-0"
-          />
-        );
-      })}
+      {orderedSeats.map((seat) => (
+        <ConversationMemberWorkstation
+          key={seat.id}
+          seat={seat}
+          onOpenMemberProcess={onOpenMemberProcess}
+        />
+      ))}
     </div>
+  );
+}
+
+function ConversationMemberWorkstation({
+  seat,
+  onOpenMemberProcess,
+}: {
+  seat: WorkbenchRosterSeat;
+  onOpenMemberProcess?: (seat: WorkbenchRosterSeat) => void;
+}) {
+  const { t } = useI18n();
+  const leader = isLeader(seat);
+  const roleLabel = rosterSeatRoleLabel(seat, t);
+  const presenceLabel = t.agentWorkbenchPanel.dockStatusPresent;
+  const label = `${seat.name} · ${roleLabel} · ${presenceLabel}`;
+
+  return (
+    <WorkstationSeat
+      name={seat.name}
+      avatar={seat.icon ?? null}
+      avatarUrl={seat.avatarUrl ?? null}
+      showBotBadge={seat.kind === "agent" && !leader}
+      fallbackInitial={seat.name.charAt(0)}
+      dotClassName="bg-success"
+      dotLabel={presenceLabel}
+      title={label}
+      ariaLabel={`${label} · 查看执行过程`}
+      onClick={
+        onOpenMemberProcess ? () => onOpenMemberProcess(seat) : undefined
+      }
+      iconOnly
+      iconCaption={leader ? "★" : undefined}
+      className="shrink-0"
+    />
   );
 }

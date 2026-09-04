@@ -112,7 +112,15 @@ def create_teach_repeat_router(
         ):
             raise HTTPException(404, "REC recorder plugin is not installed or enabled")
 
-    router = APIRouter(dependencies=[Depends(_operator_dep), Depends(_recorder_plugin_dep)])
+    def _route_dep(request: Request) -> None:
+        # Authenticate before capability concealment. Separate router
+        # dependencies can be scheduled independently by the framework, which
+        # let an invalid JWT observe the plugin's 404 instead of the required
+        # authentication 401.
+        _operator_dep(request)
+        _recorder_plugin_dep()
+
+    router = APIRouter(dependencies=[Depends(_route_dep)])
 
     def _auth(request: Request) -> str | None:
         if require_auth and identity_store is None:

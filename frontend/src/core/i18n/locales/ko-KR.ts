@@ -220,11 +220,20 @@ export const koKR: Translations = {
       ]
         .filter(Boolean)
         .join(" · "),
+    agentResponseSummary: (total, responded, errors) =>
+      [
+        `멤버 ${total}명`,
+        responded > 0 ? `${responded}명 응답` : "",
+        errors > 0 ? `${errors}개 오류` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
     processDetails: "자세히 열기",
     completedSteps: (n: number) => `${n}개 단계 완료`,
     completedThings: (n: number) => `${n}건 완료`,
     statusViewing: "실행 중",
     statusCompleted: "완료됨",
+    statusResponded: "응답함",
     statusError: "오류",
     statusWaiting: "대기 중",
     assistant: "어시스턴트",
@@ -522,6 +531,14 @@ export const koKR: Translations = {
     kindRoomMessage: "룸 메시지",
     kindRoomTask: "룸 작업",
     linkedRoom: "연결된 룸",
+    deliveryPending: (n) => `${n}개의 멤버 답변이 전송 대기 중`,
+    deliveryWaiting: "복구 중",
+    deliveryFailed: "전송 실패",
+    deliveryRetry: "재시도",
+    deliveryDismiss: "이 답변 무시",
+    deliveryUnknownMember: "협업 멤버",
+    deliveryMonitorUnavailable:
+      "답변 전송 상태를 일시적으로 불러올 수 없습니다",
   },
 
   // Collaboration Mode
@@ -6377,6 +6394,10 @@ export const koKR: Translations = {
     status: "상태",
     nonTextContent: "[텍스트 외 콘텐츠]",
     binaryContent: "[바이너리 콘텐츠]",
+    taskHistory: "원격 작업",
+    noTasks: "원격 작업이 없습니다",
+    refreshTask: "작업 상태 새로고침",
+    cancelTask: "작업 취소",
   },
 
   // Live Tool Timeline

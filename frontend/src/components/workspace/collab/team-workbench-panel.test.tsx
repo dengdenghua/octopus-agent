@@ -44,7 +44,7 @@ function teamFixture(): Team {
 }
 
 describe("<TeamWorkbenchPanel />", () => {
-  test("renders team members in the header machine rail and mentions AI members", () => {
+  test("opens a member card in the header machine rail before mentioning an AI member", () => {
     const onMention = vi.fn();
     const onSelectTab = vi.fn();
 
@@ -64,15 +64,19 @@ describe("<TeamWorkbenchPanel />", () => {
 
     const header = screen.getByRole("banner");
     const codexSeat = within(header).getByRole("button", {
-      name: "@Codex CLI",
+      name: "@Codex CLI · 查看成员信息",
     });
     expect(codexSeat).toHaveAttribute("title", "Local coding agent");
     expect(
-      within(header).getByRole("button", { name: "You · 在线" }),
+      within(header).getByRole("button", { name: "You · 在线 · 查看成员信息" }),
     ).toBeInTheDocument();
 
-    fireEvent.click(codexSeat);
+    fireEvent.pointerDown(codexSeat, { button: 0, ctrlKey: false });
+    expect(screen.getByLabelText("Codex CLI 的成员信息")).toBeInTheDocument();
+    expect(screen.getByText("Local coding agent")).toBeInTheDocument();
+    expect(onMention).not.toHaveBeenCalled();
 
+    fireEvent.click(screen.getByRole("button", { name: "提及成员" }));
     expect(onSelectTab).toHaveBeenCalledWith("members");
     expect(onMention).toHaveBeenCalledWith("codex-cli");
   });

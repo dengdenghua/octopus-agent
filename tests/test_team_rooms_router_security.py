@@ -12,6 +12,7 @@ share the same underlying authz model.
 
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 from typing import Any
@@ -649,6 +650,21 @@ def test_room_websocket_rejects_authenticated_non_member(tmp_path: Path) -> None
         assert error == {"type": "error", "message": "team invite required"}
 
 
+def test_room_websocket_accepts_browser_safe_bearer_subprotocol(tmp_path: Path) -> None:
+    client, keys = _build_app(tmp_path)
+    team = _create_team(client, keys, "alice-team", owner="alice")
+    participant_id = team["participants"][0]["id"]
+    encoded = base64.urlsafe_b64encode(keys["alice"].encode()).decode().rstrip("=")
+
+    with client.websocket_connect(
+        f"/api/teams/alice-team/ws?participant_id={participant_id}",
+        subprotocols=["bearer.b64", encoded],
+    ) as websocket:
+        ready = websocket.receive_json()
+        assert ready["type"] == "ready"
+        assert ready["participant"]["actor_id"] == "alice"
+
+
 def test_room_websocket_allows_invited_actor_and_resolves_stale_client_id(
     tmp_path: Path,
 ) -> None:
@@ -657,13 +673,14 @@ def test_room_websocket_allows_invited_actor_and_resolves_stale_client_id(
     bob_pid = _invite_and_join(client, keys, "alice-team", "alice", "bob")
 
     with client.websocket_connect(
-        "/api/teams/alice-team/ws?participant_id=stale-browser-id",
+        "/api/teams/alice-team/ws?participant_id=stale-browser-id&display_name=Stale%20Name",
         headers=_bearer(keys["bob"]),
     ) as websocket:
         ready = websocket.receive_json()
         assert ready["type"] == "ready"
         assert ready["participant"]["id"] == bob_pid
         assert ready["participant"]["actor_id"] == "bob"
+        assert ready["participant"]["display_name"] == "bob"
 
 
 @pytest.mark.parametrize("push_kind", ["team:update", "presence", "message"])

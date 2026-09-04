@@ -19,7 +19,11 @@ _MEMBERS = [
 
 
 def _caller_ok(*, agent_id, prompt, **_kw):
-    return {"success": True, "output": f"{agent_id} 冒泡:这事我来", "error": None}
+    return {
+        "success": True,
+        "output": f"{agent_id} 判断：新项目应先锁定验收指标再启动。",
+        "error": None,
+    }
 
 
 def test_every_member_replies_in_parallel() -> None:
@@ -39,6 +43,7 @@ def test_every_member_replies_in_parallel() -> None:
     assert out["arbitration"]["primary_agent_id"] == "aoi"
     assert out["arbitration"]["recommended_next_action"] == "use_primary_response"
     assert out["arbitration"]["ranking"][0]["response_id"].startswith("turn-1:resp:0:")
+    assert len({reply["response_id"] for reply in out["replies"]}) == len(_MEMBERS)
     assert out["synthesis"]["schema"] == "octopus.group_fanout_synthesis.v1"
     assert out["synthesis"]["ready"] is True
     assert out["synthesis"]["primary_agent_id"] == "aoi"
@@ -172,7 +177,11 @@ def test_each_member_sees_the_actual_human_speaker_not_itself() -> None:
 
     def caller(*, agent_id, prompt, **_kw):
         prompts.append(prompt)
-        return {"success": True, "output": f"{agent_id} 收到", "error": None}
+        return {
+            "success": True,
+            "output": f"{agent_id} 判断：当前应先确认启动条件。",
+            "error": None,
+        }
 
     run_group_fanout(
         "开始吧",
@@ -203,6 +212,113 @@ def test_planner_error_text_is_a_failure_not_a_completed_reply() -> None:
     assert "planner error" in coder["error"]
     assert "coder" in out["arbitration"]["failed_agent_ids"]
     assert "coder" not in out["arbitration"]["answered_agent_ids"]
+
+
+def test_future_work_promise_is_not_counted_as_a_completed_reply() -> None:
+    def caller(*, agent_id, prompt, **_kw):
+        if agent_id == "coder":
+            return {
+                "success": True,
+                "output": "我先去查官网和用户评测，整理好稍后发群里。",
+                "error": None,
+            }
+        return {"success": True, "output": "结论：当前方案风险在于缺少回归测试。", "error": None}
+
+    out = run_group_fanout("研究一下", _MEMBERS, agent_caller=caller)
+    coder = next(reply for reply in out["replies"] if reply["agent_id"] == "coder")
+
+    assert coder["ok"] is False
+    assert coder["reply"] == ""
+    assert "未在本轮交付结果" in coder["error"]
+    assert "coder" in out["arbitration"]["failed_agent_ids"]
+
+
+def test_question_and_generic_willingness_fail_the_response_quality_gate() -> None:
+    outputs = {
+        "aoi": "你具体想分析哪一方面？",
+        "coder": "请先把现场截图贴出来。",
+        "market_researcher": "没问题，交给我。",
+    }
+
+    def caller(*, agent_id, prompt, **_kw):
+        return {"success": True, "output": outputs[agent_id], "error": None}
+
+    out = run_group_fanout("大家讨论产品前景", _MEMBERS, agent_caller=caller)
+
+    assert out["ok"] is False
+    assert out["spoke"] == 0
+    assert out["arbitration"]["answered_agent_ids"] == []
+    assert set(out["arbitration"]["failed_agent_ids"]) == set(outputs)
+    assert all(reply["validation"]["status"] == "rejected" for reply in out["replies"])
+    assert any("反问" in reply["error"] for reply in out["replies"])
+    assert any("补充输入" in reply["error"] for reply in out["replies"])
+    assert any("接收或意愿" in reply["error"] for reply in out["replies"])
+
+
+def test_explicit_blocker_with_a_conclusion_is_kept_as_a_valid_response() -> None:
+    def caller(*, agent_id, prompt, **_kw):
+        return {
+            "success": True,
+            "output": "结论：缺少成本数据，目前无法验证毛利率；风险是定价结论不可靠。",
+            "error": None,
+        }
+
+    out = run_group_fanout("大家评估定价", _MEMBERS, agent_caller=caller)
+
+    assert out["ok"] is True
+    assert out["spoke"] == len(_MEMBERS)
+    assert all(reply["validation"]["status"] == "accepted" for reply in out["replies"])
+
+
+def test_rejected_response_is_retried_once_with_the_validation_reason() -> None:
+    calls: dict[str, list[str]] = {member["name"]: [] for member in _MEMBERS}
+
+    def caller(*, agent_id, prompt, **_kw):
+        calls[agent_id].append(prompt)
+        if len(calls[agent_id]) == 1:
+            return {"success": True, "output": "没问题，交给我。", "error": None}
+        return {
+            "success": True,
+            "output": "结论：应先验证付费转化率，再决定是否扩大投放。",
+            "error": None,
+        }
+
+    out = run_group_fanout("大家评估增长方案", _MEMBERS, agent_caller=caller)
+
+    assert out["ok"] is True
+    assert out["spoke"] == len(_MEMBERS)
+    assert all(len(prompts) == 2 for prompts in calls.values())
+    assert all("仅表达接收或意愿" in prompts[1] for prompts in calls.values())
+    assert all(reply["validation"]["status"] == "accepted" for reply in out["replies"])
+    assert all(reply["validation"]["attempt_count"] == 2 for reply in out["replies"])
+    assert out["attempt_count"] == len(_MEMBERS) * 2
+    assert out["quality_retry_count"] == len(_MEMBERS)
+    assert out["recovered_after_retry_count"] == len(_MEMBERS)
+    assert all(
+        [attempt["status"] for attempt in reply["validation"]["attempts"]]
+        == ["rejected", "accepted"]
+        for reply in out["replies"]
+    )
+
+
+def test_quality_retry_can_be_disabled_for_cost_sensitive_callers() -> None:
+    calls = 0
+
+    def caller(*, agent_id, prompt, **_kw):
+        nonlocal calls
+        calls += 1
+        return {"success": True, "output": "请补充更多信息。", "error": None}
+
+    out = run_group_fanout(
+        "大家评估方案",
+        _MEMBERS,
+        agent_caller=caller,
+        max_quality_retries=0,
+    )
+
+    assert out["ok"] is False
+    assert calls == len(_MEMBERS)
+    assert all(reply["validation"]["attempt_count"] == 1 for reply in out["replies"])
 
 
 def test_presence_query_is_answered_from_roster_state() -> None:
@@ -293,6 +409,159 @@ def test_synthesis_is_structured_without_extra_model_call() -> None:
     }
 
 
+def test_quality_rubric_prefers_specific_evidenced_answer_over_longer_generic_text() -> None:
+    def caller(*, agent_id, prompt, **_kw):
+        if agent_id == "coder":
+            return {
+                "success": True,
+                "output": (
+                    "结论：已通过 tests/test_checkout.py 的 42 个测试；失败率从 8% 降到 0%，"
+                    "证据见 https://example.test/run/42。"
+                ),
+                "error": None,
+            }
+        return {
+            "success": True,
+            "output": "这个测试验收方案总体上比较不错，我们应当继续充分考虑各种可能情况。" * 3,
+            "error": None,
+        }
+
+    out = run_group_fanout("大家测试验收结账功能", _MEMBERS, agent_caller=caller)
+
+    assert out["arbitration"]["primary_agent_id"] == "coder"
+    assert out["quality"]["schema"] == "octopus.collaboration_quality.v1"
+    coder = next(item for item in out["quality"]["outcomes"] if item["agent_id"] == "coder")
+    assert coder["evidence"] >= 60
+    assert out["delivery"]["schema"] == "octopus.collaboration_delivery.v1"
+    coder_delivery = next(
+        item for item in out["delivery"]["contributions"] if item["agent_id"] == "coder"
+    )
+    assert coder_delivery["evidence_refs"] == [
+        "https://example.test/run/42",
+        "tests/test_checkout.py",
+    ]
+
+
+def test_unverified_research_is_delivered_but_requires_semantic_review() -> None:
+    def caller(*, agent_id, prompt, **_kw):
+        return {
+            "success": True,
+            "output": f"{agent_id} 的结论是这个市场会快速增长，建议立即进入。",
+            "error": None,
+        }
+
+    out = run_group_fanout("大家研究并核实这个市场", _MEMBERS, agent_caller=caller)
+
+    assert out["ok"] is True
+    assert out["quality"]["evidence_required"] is True
+    assert out["quality"]["semantic_review_required"] is True
+    assert out["delivery"]["ready"] is False
+    assert out["delivery"]["semantic_review_required"] is True
+
+
+def test_delivery_preserves_quality_identity_across_debate_rounds() -> None:
+    call_count = 0
+
+    def caller(*, agent_id, prompt, **_kw):
+        nonlocal call_count
+        call_count += 1
+        return {
+            "success": True,
+            "output": f"结论：{agent_id} 第 {call_count} 次给出独立判断。",
+            "error": None,
+        }
+
+    out = run_group_fanout(
+        "大家讨论方案",
+        _MEMBERS,
+        agent_caller=caller,
+        debate_rounds=2,
+        turn_id="turn-quality-rounds",
+    )
+
+    contributions = out["delivery"]["contributions"]
+    assert len(contributions) == 6
+    assert all(
+        item["quality"]["response_id"] == item["response_id"] for item in contributions
+    )
+    assert [item["round"] for item in contributions] == [1, 1, 1, 2, 2, 2]
+
+
+def test_semantic_reviewer_must_accept_every_contribution_before_delivery_is_ready() -> None:
+    seen_prompts: list[str] = []
+
+    def reviewer(*, prompt, **_kw):
+        seen_prompts.append(prompt)
+        return {
+            "success": True,
+            "output": (
+                '{"verdict":"pass","confidence":0.94,'
+                '"accepted_response_ids":['
+                '"turn-reviewed:resp:0:aoi","turn-reviewed:resp:1:coder",'
+                '"turn-reviewed:resp:2:market_researcher"],'
+                '"issues":[],"summary":"证据与结论一致"}'
+            ),
+        }
+
+    out = run_group_fanout(
+        "大家评审并验证发布方案",
+        _MEMBERS,
+        agent_caller=_caller_ok,
+        turn_id="turn-reviewed",
+        pattern={"id": "adversarial_review", "debate_rounds": 1},
+        semantic_reviewer=reviewer,
+        semantic_reviewer_agent_id="market_researcher",
+    )
+
+    assert len(seen_prompts) == 1
+    assert "semantic-review-input" in seen_prompts[0]
+    assert out["quality"]["semantic_review"]["verdict"] == "pass"
+    assert out["quality"]["semantic_review_required"] is False
+    assert out["delivery"]["ready"] is True
+    assert all(
+        item["semantic_status"] == "accepted"
+        for item in out["delivery"]["contributions"]
+    )
+
+
+def test_semantic_reviewer_fails_closed_on_invalid_or_partial_output() -> None:
+    def invalid_reviewer(**_kw):
+        return {"success": True, "output": "看起来都没问题"}
+
+    invalid = run_group_fanout(
+        "大家评审风险",
+        _MEMBERS,
+        agent_caller=_caller_ok,
+        turn_id="turn-invalid-review",
+        pattern={"id": "adversarial_review", "debate_rounds": 1},
+        semantic_reviewer=invalid_reviewer,
+        semantic_reviewer_agent_id="market_researcher",
+    )
+    assert invalid["delivery"]["ready"] is False
+    assert invalid["quality"]["semantic_review"]["verdict"] == "review_failed"
+
+    def partial_reviewer(**_kw):
+        return {
+            "success": True,
+            "output": (
+                '{"verdict":"pass","confidence":0.8,'
+                '"accepted_response_ids":["turn-partial:resp:0:aoi"],'
+                '"issues":[],"summary":"只检查了一个"}'
+            ),
+        }
+
+    partial = run_group_fanout(
+        "大家评审风险",
+        _MEMBERS,
+        agent_caller=_caller_ok,
+        turn_id="turn-partial",
+        pattern={"id": "adversarial_review", "debate_rounds": 1},
+        semantic_reviewer=partial_reviewer,
+    )
+    assert partial["quality"]["semantic_review"]["verdict"] == "needs_revision"
+    assert partial["delivery"]["ready"] is False
+
+
 def test_debate_runs_second_round_with_transcript() -> None:
     calls: list[tuple[str, str]] = []
 
@@ -314,6 +583,7 @@ def test_debate_runs_second_round_with_transcript() -> None:
     assert out["debate"] is not None
     assert out["debate"]["rounds"] == 2
     assert [r["round"] for r in out["replies"]] == [1, 1, 1, 2, 2, 2]
+    assert len({reply["response_id"] for reply in out["replies"]}) == 6
     # Round-2 prompts contain the round-1 transcript (成员互见) and invite @反驳.
     r2_prompts = [p for (aid, p) in calls if aid == "aoi"]
     assert len(r2_prompts) == 2
