@@ -788,7 +788,11 @@ def run_serve(
         except Exception as exc:
             logging.getLogger(__name__).debug("admin agent registration failed: %s", exc)
 
-        group_registry = AgentGroupRegistry()
+        from runtime.platform.process.paths import app_paths
+
+        group_registry = AgentGroupRegistry(
+            state_path=app_paths().data_dir / "agent_groups.json",
+        )
     except Exception as exc:
         logging.getLogger(__name__).debug("agent/group registry init failed: %s", exc)
         agent_registry = None

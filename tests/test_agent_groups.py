@@ -102,6 +102,34 @@ class TestRegistryCRUD:
         ids = [g.group_id for g in r.list_all()]
         assert ids == ["a", "m", "z"]
 
+    def test_persistent_registry_survives_restart(self, tmp_path):
+        state_path = tmp_path / "agent_groups.json"
+        registry = AgentGroupRegistry(state_path=state_path)
+        registry.create(
+            AgentGroup(
+                group_id="release",
+                display_name="发布小队",
+                description="验证并发布",
+                members=["coder", "reviewer"],
+            )
+        )
+        registry.add_member("release", "operator")
+
+        restored = AgentGroupRegistry(state_path=state_path)
+
+        group = restored.get("release")
+        assert group.display_name == "发布小队"
+        assert group.description == "验证并发布"
+        assert group.members == ["coder", "reviewer", "operator"]
+
+    def test_corrupt_persistent_registry_starts_empty(self, tmp_path):
+        state_path = tmp_path / "agent_groups.json"
+        state_path.write_text("{not-json", encoding="utf-8")
+
+        registry = AgentGroupRegistry(state_path=state_path)
+
+        assert registry.list_all() == []
+
 
 # ═══════════════════════════════════════════════════════════
 # Implementation note.
