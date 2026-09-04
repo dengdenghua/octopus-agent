@@ -2303,9 +2303,9 @@ export const jaJP: Translations = {
     pairedGroups: "ペアリング済みグループ",
     pendingRequests: "保留中のリクエスト",
     noGroupPairing: "グループペアリングなし",
-    configureAgent: "エージェントを設定",
+    configureAgent: "応答先を設定",
     configureAgentHint:
-      "このチャンネルからのメッセージを処理するエージェントを選択",
+      "メッセージを処理するエージェントまたは AI チームを選択",
     agentConfigured: "エージェント設定済み",
     selectAgent: "エージェントを選択",
     selectAgentTitle: (channel: string) => `${channel} の Agent を選択`,
@@ -2400,6 +2400,7 @@ export const jaJP: Translations = {
       "単一のエージェント、または並列で協力してまとめて返信する AI チームを選べます。",
     noAgentsAvailable:
       "利用可能なエージェントまたは AI チームがありません。先に作成してください。",
+    searchRespondersPlaceholder: "エージェント、チーム、メンバーを検索…",
     aiTeams: "AI チーム",
     singleAgents: "単一エージェント",
     teamMembers: (n: number) => `${n} 人が並列で協力`,
@@ -2414,6 +2415,15 @@ export const jaJP: Translations = {
     handlingMessagesAsTeam: "メンバーが並列で協力し、まとめて返信",
     rebindOrUnbind: "再バインド / バインド解除",
     helpDocsComingSoon: "ヘルプドキュメントが近日公開",
+    healthHealthy: "正常稼働",
+    healthDegraded: "異常あり",
+    healthUnknown: "未確認",
+    healthUnsupported: "アクティブ確認は未対応",
+    healthChecking: "確認中",
+    runHealthCheck: "確認",
+    healthCheckPassed: "チャンネルは正常です",
+    healthCheckFailed: "チャンネルのヘルスチェックに失敗しました",
+    activeThreads: (n: number) => `${n} 件のアクティブスレッド`,
   },
 
   // Pairing Authorization

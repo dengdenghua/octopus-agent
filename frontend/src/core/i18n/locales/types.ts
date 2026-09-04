@@ -2118,6 +2118,7 @@ export interface Translations {
     assignDialogTitle: (name: string) => string;
     assignDialogDesc: string;
     noAgentsAvailable: string;
+    searchRespondersPlaceholder: string;
     aiTeams: string;
     singleAgents: string;
     teamMembers: (n: number) => string;
@@ -2131,6 +2132,15 @@ export interface Translations {
     handlingMessagesAsTeam: string;
     rebindOrUnbind: string;
     helpDocsComingSoon: string;
+    healthHealthy: string;
+    healthDegraded: string;
+    healthUnknown: string;
+    healthUnsupported: string;
+    healthChecking: string;
+    runHealthCheck: string;
+    healthCheckPassed: string;
+    healthCheckFailed: string;
+    activeThreads: (n: number) => string;
   };
 
   // Pairing Authorization

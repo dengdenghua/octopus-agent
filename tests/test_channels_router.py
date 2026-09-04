@@ -177,6 +177,28 @@ class TestListChannels:
                 "pending_count",
             }
             assert "assigned_agent_id" in d
+            assert d["operations"]["health_status"] == "unknown"
+
+    def test_probe_exposes_real_runtime_health(self, tmp_path: Path):
+        app, _, _ = _build_app(tmp_path)
+        client = TestClient(app)
+
+        response = client.post("/api/channels/slack/diagnostics/probe")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["health_status"] == "healthy"
+        assert data["check_latency_ms"] >= 0
+        assert set(data["capabilities"]) == {
+            "edit",
+            "typing",
+            "reactions",
+            "health_probe",
+        }
+
+        readback = client.get("/api/channels/slack/diagnostics")
+        assert readback.status_code == 200
+        assert readback.json()["health_status"] == "healthy"
 
 
 class TestChannelAssignment:
@@ -211,10 +233,13 @@ class TestChannelAssignment:
     def test_assign_group_is_mutually_exclusive_with_agent(self, tmp_path: Path):
         app, _, _ = _build_app(tmp_path)
         client = TestClient(app)
-        assert client.post(
-            "/api/channels/slack/assistant",
-            json={"agent_id": "coder"},
-        ).status_code == 200
+        assert (
+            client.post(
+                "/api/channels/slack/assistant",
+                json={"agent_id": "coder"},
+            ).status_code
+            == 200
+        )
 
         assigned = client.post(
             "/api/channels/slack/assistant",
@@ -231,9 +256,7 @@ class TestChannelAssignment:
             "group_id": "research-team",
         }
         slack = next(
-            row
-            for row in client.get("/api/channels").json()
-            if row["platform"] == "slack"
+            row for row in client.get("/api/channels").json() if row["platform"] == "slack"
         )
         assert slack["assigned_agent_id"] is None
         assert slack["assigned_group_id"] == "research-team"
@@ -241,10 +264,13 @@ class TestChannelAssignment:
     def test_assignment_requires_exactly_one_target(self, tmp_path: Path):
         app, _, _ = _build_app(tmp_path)
         client = TestClient(app)
-        assert client.post(
-            "/api/channels/slack/assistant",
-            json={"agent_id": "coder", "group_id": "team"},
-        ).status_code == 400
+        assert (
+            client.post(
+                "/api/channels/slack/assistant",
+                json={"agent_id": "coder", "group_id": "team"},
+            ).status_code
+            == 400
+        )
 
     def test_assign_rejects_empty(self, tmp_path: Path):
         app, _, _ = _build_app(tmp_path)

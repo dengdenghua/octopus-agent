@@ -5,6 +5,7 @@ import contextlib
 import contextvars
 import logging
 import sys
+import time
 from typing import Any, cast
 
 from runtime.adapters.instrumentation import trace_stage
@@ -23,6 +24,7 @@ from runtime.platform.step_format import (
 )
 
 from .base import Channel, ChannelMetadata, InboundMessage, OutboundMessage
+from .operations import ChannelOperationsStore
 from .store import ThreadConversationStore
 
 logger = logging.getLogger(__name__)
@@ -55,6 +57,7 @@ class ChannelManager:
         agent_registry: Any,
         group_registry: Any | None = None,
         store: ThreadConversationStore | None = None,
+        operations_store: ChannelOperationsStore | None = None,
         default_agent_id: str | None = None,
         budget_tokens: int = 50_000,
         budget_usd: float = 0.50,
@@ -78,6 +81,7 @@ class ChannelManager:
         self._agent_registry = agent_registry
         self._group_registry = group_registry
         self._store = store or ThreadConversationStore()
+        self._operations = operations_store or ChannelOperationsStore()
         self._default_agent_id = default_agent_id
         self._budget_tokens = budget_tokens
         self._budget_usd = budget_usd
@@ -138,10 +142,9 @@ class ChannelManager:
         self.shutdown()
 
     def send_async(self, channel_id: str, msg: OutboundMessage) -> concurrent.futures.Future:
-        ch = self._channels.get(channel_id)
-        if ch is None:
+        if channel_id not in self._channels:
             raise ChannelRoutingError(f"unknown channel: {channel_id!r}")
-        return self._executor.submit(ch.send, msg)
+        return self._executor.submit(self.send_to_channel, channel_id, msg)
 
     def shutdown(self, wait: bool = True) -> None:
         self._executor.shutdown(wait=wait)
@@ -154,10 +157,13 @@ class ChannelManager:
         if not msg.content or not msg.content.strip():
             raise ChannelRoutingError("empty content")
 
-        with trace_stage(
-            "channels.process_inbound",
-            channel_id=msg.channel_id,
-            thread_id=msg.thread_id,
+        with (
+            self._track_turn(msg.channel_id),
+            trace_stage(
+                "channels.process_inbound",
+                channel_id=msg.channel_id,
+                thread_id=msg.thread_id,
+            ),
         ):
             conv_id = self._store.get_or_create(
                 msg.channel_id,
@@ -210,7 +216,12 @@ class ChannelManager:
         ch = self._channels.get(channel_id)
         if ch is None:
             raise ChannelRoutingError(f"unknown channel: {channel_id!r}")
-        ch.send(msg)
+        try:
+            ch.send(msg)
+        except Exception as exc:
+            self._operations.record_error(channel_id, exc)
+            raise
+        self._operations.record_outbound(channel_id)
         return None
 
     def edit_on_channel(
@@ -222,10 +233,15 @@ class ChannelManager:
         ch = self._channels.get(channel_id)
         if ch is None:
             raise ChannelRoutingError(f"unknown channel: {channel_id!r}")
-        if ch.supports_edit:
-            ch.edit(msg, original_message_id)
-        else:
-            ch.send(msg)
+        try:
+            if ch.supports_edit:
+                ch.edit(msg, original_message_id)
+            else:
+                ch.send(msg)
+        except Exception as exc:
+            self._operations.record_error(channel_id, exc)
+            raise
+        self._operations.record_outbound(channel_id)
 
     def channel_supports_edit(self, channel_id: str) -> bool:
         ch = self._channels.get(channel_id)
@@ -246,7 +262,72 @@ class ChannelManager:
             content=result_text,
             metadata={"source": "cron"},
         )
-        ch.send(msg)
+        try:
+            ch.send(msg)
+        except Exception as exc:
+            self._operations.record_error(channel_id, exc)
+            raise
+        self._operations.record_outbound(channel_id)
+
+    @contextlib.contextmanager
+    def _track_turn(self, channel_id: str) -> Any:
+        self._operations.record_inbound(channel_id)
+        try:
+            yield
+        except Exception as exc:
+            self._operations.record_error(channel_id, exc)
+            raise
+        else:
+            self._operations.record_outbound(channel_id)
+
+    def channel_diagnostics(self, channel_id: str) -> dict[str, Any]:
+        """Return one credential-free operational snapshot for the UI/API."""
+        ch = self._channels.get(channel_id)
+        if ch is None:
+            raise ChannelRoutingError(f"unknown channel: {channel_id!r}")
+        state = self._operations.snapshot(channel_id)
+        state.update(
+            {
+                "thread_count": self._store.count_for_channel(channel_id),
+                "capabilities": {
+                    "edit": bool(ch.supports_edit),
+                    "typing": bool(ch.supports_typing),
+                    "reactions": bool(ch.supports_reactions),
+                    "health_probe": type(ch).health_check is not Channel.health_check,
+                },
+            }
+        )
+        return state
+
+    def probe_channel(self, channel_id: str) -> dict[str, Any]:
+        """Run the adapter's real health check and persist its outcome."""
+        ch = self._channels.get(channel_id)
+        if ch is None:
+            raise ChannelRoutingError(f"unknown channel: {channel_id!r}")
+        started = time.perf_counter()
+        error: BaseException | str | None = None
+        if type(ch).health_check is Channel.health_check:
+            self._operations.record_probe(
+                channel_id,
+                healthy=None,
+                latency_ms=0,
+            )
+            return self.channel_diagnostics(channel_id)
+        try:
+            healthy = bool(ch.health_check())
+            if not healthy:
+                error = "health check returned false"
+        except Exception as exc:
+            healthy = False
+            error = exc
+        latency_ms = round((time.perf_counter() - started) * 1000)
+        self._operations.record_probe(
+            channel_id,
+            healthy=healthy,
+            latency_ms=latency_ms,
+            error=error,
+        )
+        return self.channel_diagnostics(channel_id)
 
     def _pick_agent(self, msg: InboundMessage) -> Any:
         """Explicit metadata > saved channel assignment > default > intent."""
@@ -371,7 +452,9 @@ class ChannelManager:
         ]
         if successful:
             title = str(getattr(group, "display_name", "") or group.group_id)
-            blocks = [f"{reply['display_name']}\n{str(reply['reply']).strip()}" for reply in successful]
+            blocks = [
+                f"{reply['display_name']}\n{str(reply['reply']).strip()}" for reply in successful
+            ]
             reply_text = f"{title} · 团队回复\n\n" + "\n\n".join(blocks)
         else:
             reply_text = f"（团队 {group.group_id} 本轮没有成员生成有效回复）"

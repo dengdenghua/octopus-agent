@@ -203,6 +203,31 @@ def create_channels_router(
         pairings = _pairings(manager)
         out: list[dict[str, Any]] = []
 
+        def _operations(channel_id: str) -> dict[str, Any]:
+            diagnostic = getattr(manager, "channel_diagnostics", None)
+            if callable(diagnostic):
+                with contextlib.suppress(Exception):
+                    return dict(diagnostic(channel_id))
+            return {
+                "health_status": "unknown",
+                "last_checked_at": None,
+                "check_latency_ms": None,
+                "last_inbound_at": None,
+                "last_outbound_at": None,
+                "last_error_at": None,
+                "last_error": None,
+                "inbound_count": 0,
+                "outbound_count": 0,
+                "failure_count": 0,
+                "thread_count": 0,
+                "capabilities": {
+                    "edit": False,
+                    "typing": False,
+                    "reactions": False,
+                    "health_probe": False,
+                },
+            }
+
         for cid in manager.channel_ids():
             platform = _guess_platform(
                 cid,
@@ -219,6 +244,7 @@ def create_channels_router(
                     "description": meta["description"],
                     "help_url": meta["help_url"],
                     "metrics": pairings.metrics(cid),
+                    "operations": _operations(cid),
                     "assigned_agent_id": assignments.get(cid),
                     "assigned_group_id": group_assignments.get(cid),
                 }
@@ -238,6 +264,7 @@ def create_channels_router(
                     "description": meta["description"],
                     "help_url": meta["help_url"],
                     "metrics": _zero_metrics(),
+                    "operations": _operations(platform),
                     "assigned_agent_id": assignments.get(platform),
                     "assigned_group_id": group_assignments.get(platform),
                 }
@@ -246,6 +273,32 @@ def create_channels_router(
 
         _ = registered_ids  # Implementation note.
         return out
+
+    @router.get("/api/channels/{channel_id}/diagnostics")
+    def get_channel_diagnostics(channel_id: str, request: Request) -> dict[str, Any]:
+        _auth(request)  # AUTH-OK: credential-free operational state
+        safe_channel_id = _normalize_channel_id(channel_id)
+        if safe_channel_id is None:
+            raise HTTPException(400, "invalid channel_id")
+        if not manager.has(safe_channel_id):
+            raise HTTPException(404, f"unknown channel: {channel_id}")
+        diagnostic = getattr(manager, "channel_diagnostics", None)
+        if not callable(diagnostic):
+            raise HTTPException(503, "channel diagnostics are unavailable")
+        return dict(diagnostic(safe_channel_id))
+
+    @router.post("/api/channels/{channel_id}/diagnostics/probe")
+    def probe_channel_health(channel_id: str, request: Request) -> dict[str, Any]:
+        _require_admin(request)  # Explicit probe can contact the configured provider.
+        safe_channel_id = _normalize_channel_id(channel_id)
+        if safe_channel_id is None:
+            raise HTTPException(400, "invalid channel_id")
+        if not manager.has(safe_channel_id):
+            raise HTTPException(404, f"unknown channel: {channel_id}")
+        probe = getattr(manager, "probe_channel", None)
+        if not callable(probe):
+            raise HTTPException(503, "channel health probes are unavailable")
+        return dict(probe(safe_channel_id))
 
     def _assignments() -> dict[str, str]:
         a = getattr(manager, "_channel_assignments", None)

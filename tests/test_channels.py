@@ -12,6 +12,7 @@ import pytest
 from runtime.adapters.channels import (
     Channel,
     ChannelManager,
+    ChannelOperationsStore,
     ChannelRoutingError,
     InboundMessage,
     OutboundMessage,
@@ -95,6 +96,44 @@ class TestStore:
         # Implementation note.
         assert s2.get_or_create("slack", "T") != cid
 
+    def test_counts_bindings_per_channel(self):
+        store = ThreadConversationStore()
+        store.get_or_create("slack", "one")
+        store.get_or_create("slack", "two")
+        store.get_or_create("telegram", "one")
+        assert store.count_for_channel("slack") == 2
+        assert store.count_for_channel("telegram") == 1
+
+
+class TestChannelOperationsStore:
+    def test_persists_credential_free_operational_state(self, tmp_path: Path):
+        path = tmp_path / "operations.json"
+        store = ChannelOperationsStore(path)
+        store.record_inbound("slack")
+        store.record_outbound("slack")
+        store.record_probe("slack", healthy=True, latency_ms=17)
+
+        restored = ChannelOperationsStore(path).snapshot("slack")
+        assert restored["health_status"] == "healthy"
+        assert restored["check_latency_ms"] == 17
+        assert restored["inbound_count"] == 1
+        assert restored["outbound_count"] == 1
+
+    def test_records_bounded_failures_and_degraded_probe(self):
+        store = ChannelOperationsStore()
+        store.record_error("slack", "x" * 700)
+        store.record_probe(
+            "slack",
+            healthy=False,
+            latency_ms=3,
+            error="provider unavailable",
+        )
+
+        state = store.snapshot("slack")
+        assert state["health_status"] == "degraded"
+        assert state["failure_count"] == 2
+        assert state["last_error"] == "provider unavailable"
+
 
 # ═══════════════════════════════════════════════════════════
 # Channel ABC
@@ -127,6 +166,13 @@ class _FakeChannel(Channel):
 
     def send(self, msg: OutboundMessage) -> None:
         self.sent.append(msg)
+
+    def health_check(self) -> bool:
+        return True
+
+
+class _NoProbeChannel(_FakeChannel):
+    health_check = Channel.health_check
 
 
 def _build_stack(tmp_path: Path):
@@ -258,6 +304,39 @@ class TestManagerProcessInbound:
         assert out.metadata["conversation_id"]
         assert len(ch.sent) == 1
         assert ch.sent[0].content
+        diagnostics = m.channel_diagnostics("slack")
+        assert diagnostics["inbound_count"] == 1
+        assert diagnostics["outbound_count"] == 1
+        assert diagnostics["thread_count"] == 1
+
+    def test_probe_channel_records_real_health_and_capabilities(self, stack, agent_reg):
+        manager = ChannelManager(
+            stack=stack,
+            agent_registry=agent_reg,
+            default_agent_id="general",
+        )
+        channel = _FakeChannel("slack")
+        channel.supports_edit = True
+        manager.register(channel)
+
+        diagnostics = manager.probe_channel("slack")
+
+        assert diagnostics["health_status"] == "healthy"
+        assert diagnostics["check_latency_ms"] >= 0
+        assert diagnostics["capabilities"]["edit"] is True
+
+    def test_probe_does_not_report_false_green_when_adapter_has_no_probe(self, stack, agent_reg):
+        manager = ChannelManager(
+            stack=stack,
+            agent_registry=agent_reg,
+            default_agent_id="general",
+        )
+        manager.register(_NoProbeChannel("legacy"))
+
+        diagnostics = manager.probe_channel("legacy")
+
+        assert diagnostics["health_status"] == "unsupported"
+        assert diagnostics["capabilities"]["health_probe"] is False
 
     def test_conversation_id_stable_across_messages(
         self,

@@ -19,6 +19,7 @@ from .matrix import MatrixChannel, MatrixError, MatrixSignatureError
 from .mattermost import MattermostChannel, MattermostError, MattermostSignatureError
 from .ntfy import NtfyChannel, NtfyError
 from .open_webui import OpenWebUIChannel, OpenWebUIError
+from .operations import ChannelOperationsStore
 from .qqbot import QQBotChannel, QQBotError, QQBotSignatureError
 from .signal import SignalChannel, SignalError, SignalSignatureError
 from .simplex import SimpleXChannel, SimpleXError
@@ -44,6 +45,7 @@ __all__ = [
     "Channel",
     "ChannelManager",
     "ChannelMetadata",
+    "ChannelOperationsStore",
     "ChannelRoutingError",
     "DingTalkChannel",
     "DingTalkError",

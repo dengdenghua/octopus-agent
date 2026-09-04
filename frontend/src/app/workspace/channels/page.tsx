@@ -6,6 +6,7 @@ import {
   ChevronRightIcon,
   MessageCircleIcon,
   PlusIcon,
+  RefreshCwIcon,
   SearchIcon,
   SettingsIcon,
   UsersIcon,
@@ -54,6 +55,25 @@ type ChannelRow = {
     pairings_count: number;
     group_count: number;
     pending_count: number;
+  };
+  operations: {
+    health_status: "unknown" | "healthy" | "degraded" | "unsupported";
+    last_checked_at?: string | null;
+    check_latency_ms?: number | null;
+    last_inbound_at?: string | null;
+    last_outbound_at?: string | null;
+    last_error_at?: string | null;
+    last_error?: string | null;
+    inbound_count: number;
+    outbound_count: number;
+    failure_count: number;
+    thread_count: number;
+    capabilities: {
+      edit: boolean;
+      typing: boolean;
+      reactions: boolean;
+      health_probe: boolean;
+    };
   };
   assigned_agent_id?: string | null;
   assigned_group_id?: string | null;
@@ -180,12 +200,14 @@ export default function ChannelsPage() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ChannelFilter>("all");
+  const [assignQuery, setAssignQuery] = useState("");
   /* Implementation note. */
   const [assigningId, setAssigningId] = useState<string | null>(null);
   /* Implementation note. */
   const [credPlatform, setCredPlatform] = useState<string | null>(null);
   /* Implementation note. */
   const [pairingsForId, setPairingsForId] = useState<string | null>(null);
+  const [probingId, setProbingId] = useState<string | null>(null);
 
   // Implementation note.
   const loadAll = async () => {
@@ -232,6 +254,30 @@ export default function ChannelsPage() {
   }, []);
 
   const assignRow = rows.find((r) => r.channel_id === assigningId);
+  const normalizedAssignQuery = assignQuery.trim().toLowerCase();
+  const assignableAgents = normalizedAssignQuery
+    ? agents.filter((agent) =>
+        [agent.id, agent.display_name]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedAssignQuery),
+      )
+    : agents;
+  const assignableGroups = normalizedAssignQuery
+    ? groups.filter((group) =>
+        [
+          group.group_id,
+          group.display_name,
+          group.description,
+          ...group.members,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedAssignQuery),
+      )
+    : groups;
 
   async function assignAgent(channelId: string, agentId: string) {
     try {
@@ -300,6 +346,37 @@ export default function ChannelsPage() {
       toast.error(
         e instanceof Error ? e.message : t.channels.toastUnbindFailed,
       );
+    }
+  }
+
+  async function probeChannel(channelId: string) {
+    setProbingId(channelId);
+    try {
+      const response = await fetch(
+        `${getBackendBaseURL()}/api/channels/${channelId}/diagnostics/probe`,
+        { method: "POST" },
+      );
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(detail || response.statusText);
+      }
+      const operations = (await response.json()) as ChannelRow["operations"];
+      setRows((current) =>
+        current.map((row) =>
+          row.channel_id === channelId ? { ...row, operations } : row,
+        ),
+      );
+      if (operations.health_status === "healthy") {
+        toast.success(t.channels.healthCheckPassed);
+      } else {
+        toast.error(operations.last_error || t.channels.healthCheckFailed);
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t.channels.healthCheckFailed,
+      );
+    } finally {
+      setProbingId(null);
     }
   }
 
@@ -528,6 +605,10 @@ export default function ChannelsPage() {
                           onRequestPairings={() =>
                             setPairingsForId(row.channel_id)
                           }
+                          onRequestHealthCheck={() =>
+                            void probeChannel(row.channel_id)
+                          }
+                          probing={probingId === row.channel_id}
                         />
                       ))}
                     </div>
@@ -576,7 +657,12 @@ export default function ChannelsPage() {
       {/* Implementation note. */}
       <Dialog
         open={!!assigningId}
-        onOpenChange={(open) => !open && setAssigningId(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAssigningId(null);
+            setAssignQuery("");
+          }
+        }}
       >
         <DialogContent className="max-w-md max-h-[70vh] overflow-hidden flex flex-col">
           <DialogHeader>
@@ -589,6 +675,16 @@ export default function ChannelsPage() {
             </DialogDescription>
           </DialogHeader>
 
+          <div className="relative mt-1">
+            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={assignQuery}
+              onChange={(event) => setAssignQuery(event.target.value)}
+              placeholder={t.channels.searchRespondersPlaceholder}
+              className="h-9 pl-9"
+            />
+          </div>
+
           <div className="overflow-y-auto flex-1 mt-2">
             {agents.length === 0 && groups.length === 0 ? (
               <Empty className="min-h-[180px] rounded-lg px-4 py-8">
@@ -596,16 +692,26 @@ export default function ChannelsPage() {
                   <EmptyTitle>{t.channels.noAgentsAvailable}</EmptyTitle>
                 </EmptyHeader>
               </Empty>
+            ) : assignableAgents.length === 0 &&
+              assignableGroups.length === 0 ? (
+              <Empty className="min-h-[160px] rounded-lg px-4 py-8">
+                <EmptyHeader>
+                  <EmptyTitle>{t.channels.noSearchResults}</EmptyTitle>
+                  <EmptyDescription>
+                    {t.channels.noSearchResultsDescription}
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             ) : (
               <div className="space-y-4">
-                {groups.length > 0 && (
+                {assignableGroups.length > 0 && (
                   <section>
                     <div className="mb-2 flex items-center gap-2 px-1 text-xs font-medium text-muted-foreground">
                       <UsersIcon className="size-3.5" />
                       {t.channels.aiTeams}
                     </div>
                     <ul className="space-y-1">
-                      {groups.map((group) => {
+                      {assignableGroups.map((group) => {
                         const isCurrent =
                           assignRow?.assigned_group_id === group.group_id;
                         return (
@@ -644,13 +750,13 @@ export default function ChannelsPage() {
                     </ul>
                   </section>
                 )}
-                {agents.length > 0 && (
+                {assignableAgents.length > 0 && (
                   <section>
                     <div className="mb-2 px-1 text-xs font-medium text-muted-foreground">
                       {t.channels.singleAgents}
                     </div>
                     <ul className="space-y-1">
-                      {agents.map((a, index) => {
+                      {assignableAgents.map((a, index) => {
                         const isCurrent = assignRow?.assigned_agent_id === a.id;
                         const agentKey =
                           a.id?.trim() ||
@@ -735,6 +841,8 @@ function ChannelCard({
   onRequestAssign,
   onRequestCredential,
   onRequestPairings,
+  onRequestHealthCheck,
+  probing,
 }: {
   row: ChannelRow;
   agents: AgentLite[];
@@ -742,6 +850,8 @@ function ChannelCard({
   onRequestAssign: () => void;
   onRequestCredential: () => void;
   onRequestPairings: () => void;
+  onRequestHealthCheck: () => void;
+  probing: boolean;
 }) {
   const { t } = useI18n();
   const colorCls = row.connected
@@ -829,6 +939,59 @@ function ChannelCard({
           onClick={row.connected ? onRequestPairings : undefined}
         />
       </div>
+
+      {row.connected && (
+        <div className="mt-3 rounded-lg border border-border-subtle bg-muted/15 px-3 py-2">
+          <div className="flex items-center gap-2 text-xs">
+            <span
+              className={cn(
+                "size-2 shrink-0 rounded-full",
+                row.operations.health_status === "healthy" && "bg-success",
+                row.operations.health_status === "degraded" && "bg-destructive",
+                row.operations.health_status === "unsupported" &&
+                  "bg-muted-foreground/35",
+                row.operations.health_status === "unknown" &&
+                  "bg-muted-foreground/35",
+              )}
+            />
+            <span className="font-medium">
+              {row.operations.health_status === "healthy"
+                ? t.channels.healthHealthy
+                : row.operations.health_status === "degraded"
+                  ? t.channels.healthDegraded
+                  : row.operations.health_status === "unsupported"
+                    ? t.channels.healthUnsupported
+                    : t.channels.healthUnknown}
+            </span>
+            <span className="text-muted-foreground">
+              {t.channels.activeThreads(row.operations.thread_count)}
+              {row.operations.check_latency_ms != null &&
+                ` · ${row.operations.check_latency_ms} ms`}
+            </span>
+            <button
+              type="button"
+              onClick={onRequestHealthCheck}
+              disabled={probing}
+              className="ml-auto inline-flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+              title={t.channels.runHealthCheck}
+            >
+              <RefreshCwIcon
+                className={cn("size-3.5", probing && "animate-spin")}
+              />
+              {probing ? t.channels.healthChecking : t.channels.runHealthCheck}
+            </button>
+          </div>
+          {row.operations.last_error &&
+            row.operations.health_status === "degraded" && (
+              <div
+                className="mt-1 truncate pl-4 text-xs text-destructive/85"
+                title={row.operations.last_error}
+              >
+                {row.operations.last_error}
+              </div>
+            )}
+        </div>
+      )}
 
       {/* Implementation note. */}
       <div className="mt-3">
