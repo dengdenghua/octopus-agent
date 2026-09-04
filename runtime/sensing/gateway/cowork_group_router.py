@@ -400,12 +400,56 @@ def create_cowork_group_router(
         }
 
     @router.get("/api/collab/{thread_id}/runs/{run_id}/collector")
-    def get_collaboration_collector(
+    async def get_collaboration_collector(
+        thread_id: str,
+        run_id: str,
+        request: Request,
+        after_revision: int = 0,
+        wait_ms: int = 0,
+    ) -> dict[str, Any]:
+        """Revision-aware long poll for durable child results."""
+
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
+        store = _collaboration_store()
+        after_revision = max(0, int(after_revision))
+        wait_ms = max(0, min(30_000, int(wait_ms)))
+        deadline = asyncio.get_running_loop().time() + wait_ms / 1000
+        collector = None
+        run = None
+        while True:
+            try:
+                run = await asyncio.to_thread(store.collaboration_run, run_id)
+                collector = await asyncio.to_thread(store.collaboration_collector, run_id)
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
+            if run is None or str(run.get("session_id") or "") != thread_id:
+                raise HTTPException(404, "collaboration run not found")
+            if collector is None:
+                raise HTTPException(404, "collaboration collector not found")
+            revision = int(collector.get("revision") or 0)
+            if (
+                revision > after_revision
+                or collector.get("status") != "collecting"
+                or wait_ms == 0
+                or asyncio.get_running_loop().time() >= deadline
+            ):
+                break
+            await asyncio.sleep(0.1)
+        return {
+            "thread_id": thread_id,
+            "changed": int(collector.get("revision") or 0) > after_revision,
+            "collector": collector,
+        }
+
+    @router.get("/api/collab/{thread_id}/runs/{run_id}/collector/attempts")
+    def get_collaboration_collector_attempts(
         thread_id: str,
         run_id: str,
         request: Request,
     ) -> dict[str, Any]:
-        """Polling-safe durable child results for one multi-agent run."""
+        """Append-only attempt history retained across member retries."""
 
         room_id = getattr(group_store.state(thread_id), "room_id", None)
         if room_id:
@@ -413,14 +457,14 @@ def create_cowork_group_router(
         store = _collaboration_store()
         try:
             run = store.collaboration_run(run_id)
-            collector = store.collaboration_collector(run_id)
+            attempts = store.collaboration_collector_attempts(run_id)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         if run is None or str(run.get("session_id") or "") != thread_id:
             raise HTTPException(404, "collaboration run not found")
-        if collector is None:
+        if store.collaboration_collector(run_id) is None:
             raise HTTPException(404, "collaboration collector not found")
-        return {"thread_id": thread_id, "collector": collector}
+        return {"thread_id": thread_id, "attempts": attempts, "count": len(attempts)}
 
     @router.get("/api/collab/{thread_id}/deliveries")
     def list_collaboration_deliveries(

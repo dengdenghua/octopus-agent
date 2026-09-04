@@ -111,6 +111,26 @@ def test_collaboration_run_timeline_is_exposed_without_cross_thread_leakage(tmp_
     collector = client.get("/api/collab/thread-runs/runs/run-visible/collector")
     assert collector.status_code == 200, collector.text
     assert collector.json()["collector"]["remaining_child_ids"] == ["zero"]
+    revision = collector.json()["collector"]["revision"]
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        waiting = pool.submit(
+            client.get,
+            "/api/collab/thread-runs/runs/run-visible/collector",
+            params={"after_revision": revision, "wait_ms": 2_000},
+        )
+        collaboration.record_collaboration_collector_result(
+            "run-visible",
+            child_id="zero",
+            status="success",
+            result={"reply": "第二条"},
+        )
+        changed = waiting.result(timeout=3)
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["changed"] is True
+    assert changed.json()["collector"]["status"] == "completed"
+    attempts = client.get("/api/collab/thread-runs/runs/run-visible/collector/attempts")
+    assert attempts.status_code == 200, attempts.text
+    assert attempts.json()["count"] == 2
     assert client.get("/api/collab/other-thread/runs/run-visible").status_code == 404
     assert (
         client.get("/api/collab/other-thread/runs/run-visible/collector").status_code
