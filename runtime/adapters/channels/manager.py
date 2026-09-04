@@ -3,6 +3,7 @@ from __future__ import annotations
 import concurrent.futures
 import contextlib
 import contextvars
+import logging
 import sys
 from typing import Any
 
@@ -23,6 +24,8 @@ from runtime.platform.step_format import (
 
 from .base import Channel, InboundMessage, OutboundMessage
 from .store import ThreadConversationStore
+
+logger = logging.getLogger(__name__)
 
 
 class ChannelRoutingError(RuntimeError):
@@ -50,6 +53,7 @@ class ChannelManager:
         *,
         stack: Any,
         agent_registry: Any,
+        group_registry: Any | None = None,
         store: ThreadConversationStore | None = None,
         default_agent_id: str | None = None,
         budget_tokens: int = 50_000,
@@ -72,12 +76,19 @@ class ChannelManager:
         """
         self._stack = stack
         self._agent_registry = agent_registry
+        self._group_registry = group_registry
         self._store = store or ThreadConversationStore()
         self._default_agent_id = default_agent_id
         self._budget_tokens = budget_tokens
         self._budget_usd = budget_usd
         self._strict_gate = strict_gate
         self._channels: dict[str, Channel] = {}
+        # Populated by the channels settings router and persisted across
+        # restarts.  Keeping these on the runtime manager makes the saved UI
+        # choice part of the actual dispatch path rather than display-only
+        # configuration.
+        self._channel_assignments: dict[str, str] = {}
+        self._channel_group_assignments: dict[str, str] = {}
         self._executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=8, thread_name_prefix="ch-send"
         )
@@ -152,26 +163,35 @@ class ChannelManager:
                 msg.channel_id,
                 msg.thread_id,
             )
-            agent = self._pick_agent(msg)
-
             intent = ParsedIntent(
                 raw=msg.content,
                 intent_type="task",
                 normalized_goal=msg.content,
             )
 
-            with journal_context(
-                agent_id=agent.agent_id,
-                conversation_id=conv_id,
-            ):
-                tok = _current_channel_target.set((msg.channel_id, msg.thread_id))
-                try:
-                    reply_text = self._plan_and_run(agent, intent)
-                finally:
-                    _current_channel_target.reset(tok)
-
             outbound_meta = dict(msg.metadata)
-            outbound_meta["agent_id"] = agent.agent_id
+            group = self._pick_group(msg)
+            if group is not None:
+                reply_text, collaboration_meta = self._run_group(
+                    group=group,
+                    msg=msg,
+                    conversation_id=conv_id,
+                )
+                outbound_meta.pop("agent_id", None)
+                outbound_meta.update(collaboration_meta)
+            else:
+                agent = self._pick_agent(msg)
+                with journal_context(
+                    agent_id=agent.agent_id,
+                    conversation_id=conv_id,
+                ):
+                    tok = _current_channel_target.set((msg.channel_id, msg.thread_id))
+                    try:
+                        reply_text = self._plan_and_run(agent, intent)
+                    finally:
+                        _current_channel_target.reset(tok)
+                outbound_meta.pop("group_id", None)
+                outbound_meta["agent_id"] = agent.agent_id
             outbound_meta["conversation_id"] = conv_id
             out = OutboundMessage(
                 channel_id=msg.channel_id,
@@ -229,13 +249,23 @@ class ChannelManager:
         ch.send(msg)
 
     def _pick_agent(self, msg: InboundMessage) -> Any:
-        """metadata['agent_id'] > default_agent_id > registry.pick_for_intent."""
+        """Explicit metadata > saved channel assignment > default > intent."""
         explicit = msg.metadata.get("agent_id")
         if isinstance(explicit, str) and explicit:
             if self._agent_registry.has(explicit):
                 return self._agent_registry.get(explicit)
             raise ChannelRoutingError(
                 f"metadata agent_id not found: {explicit!r}",
+            )
+
+        assigned = self._channel_assignments.get(msg.channel_id)
+        if assigned:
+            if self._agent_registry.has(assigned):
+                return self._agent_registry.get(assigned)
+            logger.warning(
+                "channel %r has stale agent assignment %r; falling back",
+                msg.channel_id,
+                assigned,
             )
 
         if self._default_agent_id and self._agent_registry.has(
@@ -256,6 +286,103 @@ class ChannelManager:
                 "set default_agent_id or msg.metadata['agent_id']",
             )
         return picked
+
+    def _pick_group(self, msg: InboundMessage) -> Any | None:
+        """Resolve an explicitly or persistently assigned collaboration team.
+
+        An explicit per-message agent target intentionally bypasses the saved
+        team so adapters can still implement directed mentions.
+        """
+        if msg.metadata.get("agent_id"):
+            return None
+        explicit = msg.metadata.get("group_id")
+        group_id = explicit if isinstance(explicit, str) and explicit else None
+        if group_id is None:
+            group_id = self._channel_group_assignments.get(msg.channel_id)
+        if not group_id:
+            return None
+        if self._group_registry is None or not self._group_registry.has(group_id):
+            if explicit:
+                raise ChannelRoutingError(f"metadata group_id not found: {group_id!r}")
+            logger.warning(
+                "channel %r has stale group assignment %r; falling back",
+                msg.channel_id,
+                group_id,
+            )
+            return None
+        return self._group_registry.get(group_id)
+
+    def _run_group(
+        self,
+        *,
+        group: Any,
+        msg: InboundMessage,
+        conversation_id: str,
+    ) -> tuple[str, dict[str, Any]]:
+        """Run one bounded team turn and render it for a plain IM surface."""
+        from runtime.execution.agents.group_fanout import run_group_fanout
+
+        members: list[dict[str, Any]] = []
+        for agent_id in list(getattr(group, "members", []) or []):
+            if not self._agent_registry.has(agent_id):
+                continue
+            agent = self._agent_registry.get(agent_id)
+            members.append(
+                {
+                    "agent_id": agent.agent_id,
+                    "display_name": agent.display_name,
+                }
+            )
+        if not members:
+            raise ChannelRoutingError(
+                f"assigned group {group.group_id!r} has no available members",
+            )
+
+        def _call_member(*, agent_id: str, prompt: str, timeout_s: int) -> dict[str, Any]:
+            del timeout_s  # The graph runtime owns its per-step timeouts.
+            agent = self._agent_registry.get(agent_id)
+            intent = ParsedIntent(raw=prompt, intent_type="task", normalized_goal=prompt)
+            with journal_context(agent_id=agent_id, conversation_id=conversation_id):
+                tok = _current_channel_target.set((msg.channel_id, msg.thread_id))
+                try:
+                    output = self._plan_and_run(agent, intent)
+                finally:
+                    _current_channel_target.reset(tok)
+            failed = output.startswith(("（无法", "[planner error]", "[runner error]"))
+            return {
+                "success": not failed,
+                "output": output if not failed else "",
+                "error": output if failed else None,
+            }
+
+        result = run_group_fanout(
+            msg.content,
+            members,
+            agent_caller=_call_member,
+            max_members=min(len(members), 8),
+            max_concurrency=min(len(members), 4),
+            turn_id=f"channel:{msg.channel_id}:{conversation_id}",
+            speaker=msg.sender_id or "用户",
+        )
+        successful = [
+            reply
+            for reply in result.get("replies") or []
+            if reply.get("ok") and str(reply.get("reply") or "").strip()
+        ]
+        if successful:
+            title = str(getattr(group, "display_name", "") or group.group_id)
+            blocks = [f"{reply['display_name']}\n{str(reply['reply']).strip()}" for reply in successful]
+            reply_text = f"{title} · 团队回复\n\n" + "\n\n".join(blocks)
+        else:
+            reply_text = f"（团队 {group.group_id} 本轮没有成员生成有效回复）"
+        synthesis = result.get("synthesis") or {}
+        return reply_text, {
+            "group_id": str(group.group_id),
+            "primary_agent_id": str(synthesis.get("primary_agent_id") or ""),
+            "member_agent_ids": [str(member["agent_id"]) for member in members],
+            "collaboration_spoke": int(result.get("spoke") or 0),
+            "collaboration_count": int(result.get("count") or 0),
+        }
 
     def _plan_and_run(self, agent: Any, intent: ParsedIntent) -> str:
         plan_kwargs: dict[str, Any] = {

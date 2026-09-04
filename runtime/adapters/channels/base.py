@@ -39,6 +39,11 @@ class ChannelMetadata(TypedDict, total=False):
     sender_id: str
     conversation_id: str
     agent_id: str
+    group_id: str
+    primary_agent_id: str
+    member_agent_ids: list[str]
+    collaboration_spoke: int
+    collaboration_count: int
     source: str
     discord_channel_id: str
     slack_thread_ts: str

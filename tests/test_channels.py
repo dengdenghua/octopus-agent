@@ -20,7 +20,13 @@ from runtime.adapters.channels import (
     ThreadConversationStore,
 )
 from runtime.core.graph_runtime import GraphRuntime
-from runtime.execution.agents import AgentRegistry, make_general_agent
+from runtime.execution.agents import (
+    AgentGroup,
+    AgentGroupRegistry,
+    AgentRegistry,
+    make_coder_agent,
+    make_general_agent,
+)
 
 
 class _FakeExecutor:
@@ -309,6 +315,67 @@ class TestManagerProcessInbound:
             )
         )
         assert out.metadata["agent_id"] == "coder"
+
+    def test_saved_channel_assignment_is_used_for_real_dispatch(
+        self,
+        stack,
+        agent_reg,
+    ):
+        agent_reg.register(make_coder_agent(_rt()))
+        manager = ChannelManager(
+            stack=stack,
+            agent_registry=agent_reg,
+            default_agent_id="general",
+        )
+        manager.register(_FakeChannel("slack"))
+        manager._channel_assignments["slack"] = "coder"  # noqa: SLF001
+        manager._plan_and_run = (  # type: ignore[method-assign]
+            lambda agent, _intent: f"handled by {agent.agent_id}"
+        )
+
+        out = manager.process_inbound(
+            InboundMessage(channel_id="slack", thread_id="T", content="help")
+        )
+
+        assert out.metadata["agent_id"] == "coder"
+        assert out.content == "handled by coder"
+
+    def test_saved_group_assignment_runs_members_and_returns_team_metadata(
+        self,
+        stack,
+        agent_reg,
+    ):
+        agent_reg.register(make_coder_agent(_rt()))
+        groups = AgentGroupRegistry()
+        groups.create(
+            AgentGroup(
+                group_id="delivery-team",
+                display_name="交付小队",
+                members=["general", "coder"],
+            )
+        )
+        manager = ChannelManager(
+            stack=stack,
+            agent_registry=agent_reg,
+            group_registry=groups,
+            default_agent_id="general",
+        )
+        manager.register(_FakeChannel("slack"))
+        manager._channel_group_assignments["slack"] = "delivery-team"  # noqa: SLF001
+        manager._plan_and_run = (  # type: ignore[method-assign]
+            lambda agent, _intent: f"{agent.agent_id} 已完成验证"
+        )
+
+        out = manager.process_inbound(
+            InboundMessage(channel_id="slack", thread_id="T", content="检查发布")
+        )
+
+        assert out.metadata["group_id"] == "delivery-team"
+        assert out.metadata["member_agent_ids"] == ["general", "coder"]
+        assert out.metadata["collaboration_spoke"] == 2
+        assert "交付小队 · 团队回复" in out.content
+        assert "general 已完成验证" in out.content
+        assert "coder 已完成验证" in out.content
 
     def test_metadata_unknown_agent_raises(
         self,

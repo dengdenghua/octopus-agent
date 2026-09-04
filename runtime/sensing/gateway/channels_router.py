@@ -199,6 +199,7 @@ def create_channels_router(
         registered_ids = set(manager.channel_ids())
         seen: set[str] = set()
         assignments = _assignments()
+        group_assignments = _group_assignments()
         pairings = _pairings(manager)
         out: list[dict[str, Any]] = []
 
@@ -219,6 +220,7 @@ def create_channels_router(
                     "help_url": meta["help_url"],
                     "metrics": pairings.metrics(cid),
                     "assigned_agent_id": assignments.get(cid),
+                    "assigned_group_id": group_assignments.get(cid),
                 }
             )
             seen.add(platform)
@@ -237,6 +239,7 @@ def create_channels_router(
                     "help_url": meta["help_url"],
                     "metrics": _zero_metrics(),
                     "assigned_agent_id": assignments.get(platform),
+                    "assigned_group_id": group_assignments.get(platform),
                 }
             )
             seen.add(platform)
@@ -255,6 +258,14 @@ def create_channels_router(
                 return _FALLBACK_ASSIGNMENTS
         return a
 
+    def _group_assignments() -> dict[str, str]:
+        assignments = getattr(manager, "_channel_group_assignments", None)
+        if assignments is None:
+            assignments = {}
+            with contextlib.suppress(AttributeError, TypeError):
+                manager._channel_group_assignments = assignments
+        return assignments
+
     @router.get("/api/channels/{channel_id}/assistant")
     def get_channel_assignment(
         channel_id: str,
@@ -264,7 +275,11 @@ def create_channels_router(
         safe_channel_id = _normalize_channel_id(channel_id)
         if safe_channel_id is None:
             raise HTTPException(400, "invalid channel_id")
-        return {"channel_id": safe_channel_id, "agent_id": _assignments().get(safe_channel_id)}
+        return {
+            "channel_id": safe_channel_id,
+            "agent_id": _assignments().get(safe_channel_id),
+            "group_id": _group_assignments().get(safe_channel_id),
+        }
 
     @router.post("/api/channels/{channel_id}/assistant")
     async def set_channel_assignment(
@@ -276,18 +291,37 @@ def create_channels_router(
             body = await request.json()
         except (json.JSONDecodeError, TypeError, ValueError) as e:
             raise HTTPException(400, f"body: {e}") from e
-        agent_id = (body or {}).get("agent_id")
+        if not isinstance(body, dict):
+            raise HTTPException(400, "body must be an object")
+        agent_id = body.get("agent_id")
+        group_id = body.get("group_id")
         safe_channel_id = _normalize_channel_id(channel_id)
-        safe_agent_id = _normalize_agent_id(agent_id)
         if safe_channel_id is None:
             raise HTTPException(400, "invalid channel_id")
-        if safe_agent_id is None:
+        supplied = int(agent_id is not None) + int(group_id is not None)
+        if supplied != 1:
+            raise HTTPException(400, "provide exactly one of agent_id or group_id")
+        safe_agent_id = _normalize_agent_id(agent_id) if agent_id is not None else None
+        safe_group_id = _normalize_agent_id(group_id) if group_id is not None else None
+        if agent_id is not None and safe_agent_id is None:
             raise HTTPException(400, "invalid agent_id")
-        _assignments()[safe_channel_id] = safe_agent_id
+        if group_id is not None and safe_group_id is None:
+            raise HTTPException(400, "invalid group_id")
+        if safe_group_id is not None:
+            registry = getattr(manager, "_group_registry", None)
+            if registry is not None and not registry.has(safe_group_id):
+                raise HTTPException(404, f"group not found: {safe_group_id}")
+            _group_assignments()[safe_channel_id] = safe_group_id
+            _assignments().pop(safe_channel_id, None)
+        else:
+            assert safe_agent_id is not None
+            _assignments()[safe_channel_id] = safe_agent_id
+            _group_assignments().pop(safe_channel_id, None)
         _save_state(manager, _state_file)
         return {
             "channel_id": safe_channel_id,
             "agent_id": safe_agent_id,
+            "group_id": safe_group_id,
             "ok": True,
         }
 
@@ -301,8 +335,15 @@ def create_channels_router(
         if safe_channel_id is None:
             raise HTTPException(400, "invalid channel_id")
         dropped = _assignments().pop(safe_channel_id, None)
+        dropped_group = _group_assignments().pop(safe_channel_id, None)
         _save_state(manager, _state_file)
-        return {"channel_id": safe_channel_id, "dropped": dropped, "ok": True}
+        return {
+            "channel_id": safe_channel_id,
+            "dropped": dropped if dropped is not None else dropped_group,
+            "dropped_agent_id": dropped,
+            "dropped_group_id": dropped_group,
+            "ok": True,
+        }
 
     #
     #

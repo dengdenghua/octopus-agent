@@ -802,6 +802,7 @@ def run_serve(
         channel_manager = ChannelManager(
             stack=stack,
             agent_registry=agent_registry,
+            group_registry=group_registry,
             default_agent_id="octopus",
         )
     except Exception as exc:

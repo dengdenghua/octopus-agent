@@ -131,15 +131,16 @@ def _pairings(manager: Any) -> _PairingStore:
 #
 #
 #   {
-#     "version": 1,
+#     "version": 2,
 #     "assignments": {"slack": "coder", "wechat": "general"},
+#     "group_assignments": {"discord": "research-team"},
 #     "users":  {"slack": ["U1", "U2"]},
 #     "groups": {"slack": ["C_ABC"]}
 #   }
 #
 
 
-_STATE_SCHEMA_VERSION = 1
+_STATE_SCHEMA_VERSION = 2
 _MAX_STATE_FILE_BYTES = 2 * 1024 * 1024
 _MAX_CREDENTIALS_FILE_BYTES = 1024 * 1024
 _MAX_ASSIGNMENTS = 512
@@ -256,7 +257,7 @@ def _load_state(manager: Any, state_file: Path | None) -> None:
 
     if not isinstance(data, dict):
         return
-    if data.get("version") != _STATE_SCHEMA_VERSION:
+    if data.get("version") not in {1, _STATE_SCHEMA_VERSION}:
         logger.info(
             "channel state schema v%s unknown · starting empty",
             data.get("version"),
@@ -268,6 +269,12 @@ def _load_state(manager: Any, state_file: Path | None) -> None:
         target.update(_clean_assignments(data.get("assignments") or {}))
     except (AttributeError, TypeError, ValueError):
         logger.exception("channel state: failed to restore assignments")
+
+    try:
+        target = _group_assignments_on(manager)
+        target.update(_clean_assignments(data.get("group_assignments") or {}))
+    except (AttributeError, TypeError, ValueError):
+        logger.exception("channel state: failed to restore group assignments")
 
     try:
         store = _pairings(manager)
@@ -286,6 +293,7 @@ def _save_state(manager: Any, state_file: Path | None) -> None:
         payload = {
             "version": _STATE_SCHEMA_VERSION,
             "assignments": _clean_assignments(assigns),
+            "group_assignments": _clean_assignments(_group_assignments_on(manager)),
             "users": {k: sorted(v) for k, v in _clean_pairing_map(store.users).items()},
             "groups": {k: sorted(v) for k, v in _clean_pairing_map(store.groups).items()},
         }
@@ -310,3 +318,14 @@ def _assignments_on(manager: Any) -> dict[str, str]:
             _FALLBACK_ASSIGNMENTS.clear()
             return _FALLBACK_ASSIGNMENTS
     return a
+
+
+def _group_assignments_on(manager: Any) -> dict[str, str]:
+    assignments = getattr(manager, "_channel_group_assignments", None)
+    if assignments is None:
+        assignments = {}
+        try:
+            manager._channel_group_assignments = assignments
+        except (AttributeError, TypeError):
+            return {}
+    return assignments
