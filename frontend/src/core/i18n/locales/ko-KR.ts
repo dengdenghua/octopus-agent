@@ -2396,6 +2396,7 @@ export const koKR: Translations = {
     healthCheckPassed: "채널이 정상 작동 중입니다",
     healthCheckFailed: "채널 상태 확인에 실패했습니다",
     activeThreads: (n: number) => `활성 스레드 ${n}개`,
+    duplicatesBlocked: (n: number) => `중복 ${n}건 차단`,
   },
 
   // Pairing Authorization

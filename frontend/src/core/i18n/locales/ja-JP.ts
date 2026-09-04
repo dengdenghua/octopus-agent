@@ -2424,6 +2424,7 @@ export const jaJP: Translations = {
     healthCheckPassed: "チャンネルは正常です",
     healthCheckFailed: "チャンネルのヘルスチェックに失敗しました",
     activeThreads: (n: number) => `${n} 件のアクティブスレッド`,
+    duplicatesBlocked: (n: number) => `${n} 件の重複をブロック`,
   },
 
   // Pairing Authorization

@@ -67,6 +67,7 @@ type ChannelRow = {
     inbound_count: number;
     outbound_count: number;
     failure_count: number;
+    duplicate_count: number;
     thread_count: number;
     capabilities: {
       edit: boolean;
@@ -965,6 +966,8 @@ function ChannelCard({
             </span>
             <span className="text-muted-foreground">
               {t.channels.activeThreads(row.operations.thread_count)}
+              {row.operations.duplicate_count > 0 &&
+                ` · ${t.channels.duplicatesBlocked(row.operations.duplicate_count)}`}
               {row.operations.check_latency_ms != null &&
                 ` · ${row.operations.check_latency_ms} ms`}
             </span>

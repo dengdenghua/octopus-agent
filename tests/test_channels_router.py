@@ -373,6 +373,19 @@ class TestPairings:
         assert slack["metrics"]["pairings_count"] == 1
         assert slack["metrics"]["group_count"] == 0
 
+        duplicate = c.post(
+            "/api/channels/slack/inbound",
+            content=body,
+            headers={
+                "content-type": "application/json",
+                "x-slack-request-timestamp": ts,
+                "x-slack-signature": sig,
+            },
+        )
+        assert duplicate.status_code == 200
+        assert duplicate.json()["dispatched"] is False
+        assert duplicate.json()["duplicate"] is True
+
     def test_duplicate_sender_counts_once(self, tmp_path: Path):
         app, _, _ = _build_app(tmp_path, signing_secret="sec")
         c = TestClient(app)
@@ -1173,7 +1186,7 @@ class TestCredentialEncryption:
         app, _, _ = _build_app(tmp_path, signing_secret="sec")
         c = TestClient(app)
         # Implementation note.
-        for user in ("U_ALICE", "U_BOB"):
+        for index, user in enumerate(("U_ALICE", "U_BOB")):
             body = json.dumps(
                 {
                     "type": "event_callback",
@@ -1182,7 +1195,7 @@ class TestCredentialEncryption:
                         "user": user,
                         "channel": "D_DM",
                         "text": "hi",
-                        "ts": "1234.5678",
+                        "ts": f"1234.{5678 + index}",
                     },
                 }
             ).encode()

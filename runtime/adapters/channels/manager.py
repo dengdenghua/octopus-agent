@@ -6,6 +6,7 @@ import contextvars
 import logging
 import sys
 import time
+from hashlib import sha256
 from typing import Any, cast
 
 from runtime.adapters.instrumentation import trace_stage
@@ -157,56 +158,113 @@ class ChannelManager:
         if not msg.content or not msg.content.strip():
             raise ChannelRoutingError("empty content")
 
-        with (
-            self._track_turn(msg.channel_id),
-            trace_stage(
-                "channels.process_inbound",
+        message_key = self._inbound_message_key(msg)
+        if message_key and not self._operations.claim_inbound(msg.channel_id, message_key):
+            conversation_id = self._store.get(msg.channel_id, msg.thread_id) or ""
+            return OutboundMessage(
                 channel_id=msg.channel_id,
                 thread_id=msg.thread_id,
-            ),
-        ):
-            conv_id = self._store.get_or_create(
-                msg.channel_id,
-                msg.thread_id,
-            )
-            intent = ParsedIntent(
-                raw=msg.content,
-                intent_type="task",
-                normalized_goal=msg.content,
+                content="",
+                metadata=cast(
+                    ChannelMetadata,
+                    {
+                        **dict(msg.metadata),
+                        "conversation_id": conversation_id,
+                        "duplicate": True,
+                    },
+                ),
             )
 
-            outbound_meta = cast(ChannelMetadata, dict(msg.metadata))
-            group = self._pick_group(msg)
-            if group is not None:
-                reply_text, collaboration_meta = self._run_group(
-                    group=group,
-                    msg=msg,
-                    conversation_id=conv_id,
+        try:
+            with (
+                self._track_turn(msg.channel_id),
+                trace_stage(
+                    "channels.process_inbound",
+                    channel_id=msg.channel_id,
+                    thread_id=msg.thread_id,
+                ),
+            ):
+                conv_id = self._store.get_or_create(
+                    msg.channel_id,
+                    msg.thread_id,
                 )
-                outbound_meta.pop("agent_id", None)
-                outbound_meta.update(collaboration_meta)
-            else:
-                agent = self._pick_agent(msg)
-                with journal_context(
-                    agent_id=agent.agent_id,
-                    conversation_id=conv_id,
-                ):
-                    tok = _current_channel_target.set((msg.channel_id, msg.thread_id))
-                    try:
-                        reply_text = self._plan_and_run(agent, intent)
-                    finally:
-                        _current_channel_target.reset(tok)
-                outbound_meta.pop("group_id", None)
-                outbound_meta["agent_id"] = agent.agent_id
-            outbound_meta["conversation_id"] = conv_id
-            out = OutboundMessage(
-                channel_id=msg.channel_id,
-                thread_id=msg.thread_id,
-                content=reply_text,
-                metadata=outbound_meta,
-            )
-            self._channels[msg.channel_id].send(out)
+                intent = ParsedIntent(
+                    raw=msg.content,
+                    intent_type="task",
+                    normalized_goal=msg.content,
+                )
+
+                outbound_meta = cast(ChannelMetadata, dict(msg.metadata))
+                group = self._pick_group(msg)
+                if group is not None:
+                    reply_text, collaboration_meta = self._run_group(
+                        group=group,
+                        msg=msg,
+                        conversation_id=conv_id,
+                    )
+                    outbound_meta.pop("agent_id", None)
+                    outbound_meta.update(collaboration_meta)
+                else:
+                    agent = self._pick_agent(msg)
+                    with journal_context(
+                        agent_id=agent.agent_id,
+                        conversation_id=conv_id,
+                    ):
+                        tok = _current_channel_target.set((msg.channel_id, msg.thread_id))
+                        try:
+                            reply_text = self._plan_and_run(agent, intent)
+                        finally:
+                            _current_channel_target.reset(tok)
+                    outbound_meta.pop("group_id", None)
+                    outbound_meta["agent_id"] = agent.agent_id
+                outbound_meta["conversation_id"] = conv_id
+                out = OutboundMessage(
+                    channel_id=msg.channel_id,
+                    thread_id=msg.thread_id,
+                    content=reply_text,
+                    metadata=outbound_meta,
+                )
+                self._channels[msg.channel_id].send(out)
+            if message_key:
+                self._operations.complete_inbound(msg.channel_id, message_key)
             return out
+        except Exception:
+            # Do not turn a transient model/provider failure into a permanent
+            # webhook drop.  The provider can safely retry this event.
+            if message_key:
+                self._operations.release_inbound(msg.channel_id, message_key)
+            raise
+
+    @staticmethod
+    def _inbound_message_key(msg: InboundMessage) -> str | None:
+        """Resolve a stable provider event identity without retaining its body."""
+        for key in (
+            "message_id",
+            "msg_id",
+            "slack_ts",
+            "interaction_id",
+            "mattermost_post_id",
+            "event_id",
+            "teams_activity_id",
+            "google_chat_message",
+            "message_guid",
+            "message_reference_id",
+            "item_id",
+            "message_sid",
+        ):
+            value = msg.metadata.get(key)  # type: ignore[literal-required]
+            if value is not None and str(value).strip():
+                # Provider event IDs are already scoped to the channel.  Do
+                # not include the parsed sender: a retry may omit or format
+                # that field differently while referring to the same event.
+                return f"{key}:{value}"
+        if msg.received_at is not None:
+            content_digest = sha256(msg.content.encode("utf-8", errors="replace")).hexdigest()
+            return (
+                f"fallback:{msg.thread_id}:{msg.sender_id}:"
+                f"{msg.received_at.isoformat()}:{content_digest}"
+            )
+        return None
 
     def send_to_channel(
         self,

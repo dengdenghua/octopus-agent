@@ -8,9 +8,16 @@ import logging
 import time
 import urllib.parse
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
-from .base import Attachment, Channel, InboundMessage, OutboundMessage, _sanitize_url
+from .base import (
+    Attachment,
+    Channel,
+    ChannelMetadata,
+    InboundMessage,
+    OutboundMessage,
+    _sanitize_url,
+)
 
 try:
     import httpx  # type: ignore[import-untyped]
@@ -189,6 +196,7 @@ class DingTalkChannel(Channel):
                 received_at = None
 
         metadata: dict[str, Any] = {
+            "message_id": payload.get("msgId", ""),
             "sender_nick": payload.get("senderNick", ""),
             "conversation_title": payload.get("conversationTitle", ""),
             "conversation_type": payload.get("conversationType", ""),
@@ -201,7 +209,7 @@ class DingTalkChannel(Channel):
             thread_id=conv_id,
             sender_id=sender_id,
             content=content,
-            metadata=metadata,
+            metadata=cast(ChannelMetadata, metadata),
             received_at=received_at,
             attachments=attachments,
         )

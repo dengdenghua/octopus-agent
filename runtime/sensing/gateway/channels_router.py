@@ -219,6 +219,7 @@ def create_channels_router(
                 "inbound_count": 0,
                 "outbound_count": 0,
                 "failure_count": 0,
+                "duplicate_count": 0,
                 "thread_count": 0,
                 "capabilities": {
                     "edit": False,
@@ -742,6 +743,14 @@ def create_channels_router(
             raise HTTPException(400, str(e)) from e
         except (ConnectionError, TimeoutError, OSError) as e:
             raise HTTPException(500, f"dispatch: {e}") from e
+
+        if out.metadata.get("duplicate"):
+            return {
+                "ok": True,
+                "dispatched": False,
+                "duplicate": True,
+                "conversation_id": out.metadata.get("conversation_id"),
+            }
 
         try:
             _pairings(manager).record(

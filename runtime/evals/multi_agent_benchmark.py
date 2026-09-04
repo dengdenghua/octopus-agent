@@ -10,9 +10,11 @@ from __future__ import annotations
 import json
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
+from runtime.adapters.channels.operations import ChannelOperationsStore
 from runtime.execution.agents.group_fanout import run_group_fanout
 from runtime.execution.subagents.governance import (
     SubagentGovernanceStore,
@@ -37,6 +39,7 @@ _THRESHOLDS = {
     "visible_duplicate_count": 0,
     "durable_subtree_concurrency": 1.0,
     "actual_usage_breaker": 1.0,
+    "channel_claim_winners": 1,
     "wall_time_ms": 2_000.0,
 }
 
@@ -137,7 +140,8 @@ def _fanout_metrics() -> dict[str, Any]:
         "addressing_precision": (
             1.0
             if [member["name"] for member in selected] == ["researcher"]
-            and routing["excluded_agent_ids"] == [
+            and routing["excluded_agent_ids"]
+            == [
                 "architect",
                 "coder",
                 "reviewer",
@@ -159,7 +163,7 @@ def _recovery_metrics(root: Path) -> dict[str, Any]:
     log.thread_started("benchmark-thread")
     log.turn_started(
         "benchmark-thread",
-        Turn(id="benchmark-turn", threadId="benchmark-thread"),
+        Turn(id="benchmark-turn", thread_id="benchmark-thread"),
     )
     item = AgentMessageItem(
         id="benchmark-result",
@@ -225,6 +229,22 @@ def _governance_metrics(root: Path) -> dict[str, Any]:
     }
 
 
+def _channel_ingress_metrics(root: Path) -> dict[str, Any]:
+    path = root / "channel-operations.json"
+    stores = [ChannelOperationsStore(path), ChannelOperationsStore(path)]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        claims = list(
+            pool.map(
+                lambda store: store.claim_inbound("slack", "message_id:benchmark-event"),
+                stores,
+            )
+        )
+    return {
+        "channel_claim_winners": sum(bool(claim) for claim in claims),
+        "channel_duplicate_executions": max(0, sum(bool(claim) for claim in claims) - 1),
+    }
+
+
 def run_multi_agent_benchmark(*, workspace: Path | str | None = None) -> dict[str, Any]:
     """Run the fixed suite and return a machine-readable release verdict."""
 
@@ -238,6 +258,7 @@ def run_multi_agent_benchmark(*, workspace: Path | str | None = None) -> dict[st
         **_fanout_metrics(),
         **_recovery_metrics(root),
         **_governance_metrics(root),
+        **_channel_ingress_metrics(root),
     }
     checks = {
         "context_reduction": metrics["context_reduction_ratio"]
@@ -248,17 +269,18 @@ def run_multi_agent_benchmark(*, workspace: Path | str | None = None) -> dict[st
         "addressing": metrics["addressing_precision"] >= _THRESHOLDS["addressing_precision"],
         "response_success": metrics["response_success_ratio"]
         >= _THRESHOLDS["response_success_ratio"],
-        "evidence": metrics["evidence_coverage_ratio"]
-        >= _THRESHOLDS["evidence_coverage_ratio"]
+        "evidence": metrics["evidence_coverage_ratio"] >= _THRESHOLDS["evidence_coverage_ratio"]
         and metrics["semantic_review_ready"],
-        "recovery": metrics["recovery_success_ratio"]
-        >= _THRESHOLDS["recovery_success_ratio"],
+        "recovery": metrics["recovery_success_ratio"] >= _THRESHOLDS["recovery_success_ratio"],
         "deduplication": metrics["visible_duplicate_count"]
         <= _THRESHOLDS["visible_duplicate_count"],
         "durable_subtree_concurrency": metrics["durable_subtree_concurrency"]
         >= _THRESHOLDS["durable_subtree_concurrency"],
         "actual_usage_breaker": metrics["actual_usage_breaker"]
         >= _THRESHOLDS["actual_usage_breaker"],
+        "channel_ingress_dedup": metrics["channel_claim_winners"]
+        == _THRESHOLDS["channel_claim_winners"]
+        and metrics["channel_duplicate_executions"] == 0,
         "latency": metrics["wall_time_ms"] <= _THRESHOLDS["wall_time_ms"],
     }
     return {

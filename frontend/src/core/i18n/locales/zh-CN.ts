@@ -2329,6 +2329,7 @@ export const zhCN: Translations = {
     healthCheckPassed: "渠道运行正常",
     healthCheckFailed: "渠道健康检测失败",
     activeThreads: (n: number) => `${n} 个活跃线程`,
+    duplicatesBlocked: (n: number) => `已拦截 ${n} 次重复投递`,
   },
 
   // Pairing Authorization

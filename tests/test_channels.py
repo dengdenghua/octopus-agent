@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -133,6 +134,60 @@ class TestChannelOperationsStore:
         assert state["health_status"] == "degraded"
         assert state["failure_count"] == 2
         assert state["last_error"] == "provider unavailable"
+
+    def test_redacts_credentials_from_persisted_error(self):
+        store = ChannelOperationsStore()
+        store.record_error(
+            "slack",
+            "request failed Authorization: Bearer secret-token-value "
+            "api_key=abcdefghijklmnop sk-abcdefghijklmnop",
+        )
+
+        error = store.snapshot("slack")["last_error"]
+        assert "secret-token-value" not in error
+        assert "abcdefghijklmnop" not in error
+        assert "Bearer ***" in error
+
+    def test_deduplicates_provider_events_across_restart_without_plaintext_ids(
+        self, tmp_path: Path
+    ):
+        path = tmp_path / "operations.json"
+        store = ChannelOperationsStore(path)
+        assert store.claim_inbound("slack", "message_id:sensitive-event-id") is True
+        assert store.claim_inbound("slack", "message_id:sensitive-event-id") is False
+        assert "sensitive-event-id" not in path.read_text(encoding="utf-8")
+        assert "sensitive-event-id" not in path.with_suffix(
+            ".json.seen.sqlite3"
+        ).read_bytes().decode("utf-8", errors="ignore")
+
+        restored = ChannelOperationsStore(path)
+        assert restored.claim_inbound("slack", "message_id:sensitive-event-id") is False
+        assert restored.snapshot("slack")["duplicate_count"] == 2
+
+    def test_two_runtime_instances_cannot_claim_same_event(self, tmp_path: Path):
+        path = tmp_path / "operations.json"
+        stores = [ChannelOperationsStore(path), ChannelOperationsStore(path)]
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            claims = list(
+                pool.map(
+                    lambda store: store.claim_inbound("slack", "message_id:shared"),
+                    stores,
+                )
+            )
+
+        assert sorted(claims) == [False, True]
+
+    def test_failed_event_claim_can_be_retried_across_runtime_instances(self, tmp_path: Path):
+        path = tmp_path / "operations.json"
+        first = ChannelOperationsStore(path)
+        second = ChannelOperationsStore(path)
+        key = "message_id:retry-after-transient-failure"
+        assert first.claim_inbound("slack", key) is True
+
+        first.release_inbound("slack", key)
+
+        assert second.claim_inbound("slack", key) is True
 
 
 # ═══════════════════════════════════════════════════════════
@@ -324,6 +379,85 @@ class TestManagerProcessInbound:
         assert diagnostics["health_status"] == "healthy"
         assert diagnostics["check_latency_ms"] >= 0
         assert diagnostics["capabilities"]["edit"] is True
+
+    def test_duplicate_provider_event_is_not_executed_or_sent_twice(self, stack, agent_reg):
+        manager = ChannelManager(
+            stack=stack,
+            agent_registry=agent_reg,
+            default_agent_id="general",
+        )
+        channel = _FakeChannel("slack")
+        manager.register(channel)
+        message = InboundMessage(
+            channel_id="slack",
+            thread_id="thread",
+            content="do this once",
+            metadata={"message_id": "evt-123"},
+        )
+
+        first = manager.process_inbound(message)
+        duplicate = manager.process_inbound(message)
+
+        assert first.metadata.get("duplicate") is None
+        assert duplicate.metadata["duplicate"] is True
+        assert duplicate.content == ""
+        assert len(channel.sent) == 1
+        assert manager.channel_diagnostics("slack")["duplicate_count"] == 1
+
+    def test_failed_provider_event_can_be_retried(self, stack, agent_reg):
+        manager = ChannelManager(
+            stack=stack,
+            agent_registry=agent_reg,
+            default_agent_id="general",
+        )
+        channel = _FakeChannel("slack")
+        manager.register(channel)
+        message = InboundMessage(
+            channel_id="slack",
+            thread_id="thread",
+            content="retry this",
+            metadata={"message_id": "evt-retry"},
+        )
+
+        manager._plan_and_run = (  # type: ignore[method-assign]
+            lambda _agent, _intent: (_ for _ in ()).throw(RuntimeError("temporary"))
+        )
+        with pytest.raises(RuntimeError, match="temporary"):
+            manager.process_inbound(message)
+
+        manager._plan_and_run = (  # type: ignore[method-assign]
+            lambda _agent, _intent: "recovered"
+        )
+        retry = manager.process_inbound(message)
+
+        assert retry.metadata.get("duplicate") is None
+        assert retry.content == "recovered"
+        assert len(channel.sent) == 1
+
+    @pytest.mark.parametrize(
+        "metadata",
+        [
+            {"message_guid": "bb-1"},
+            {"message_reference_id": "discord-1"},
+            {"item_id": "simplex-1"},
+            {"message_sid": "sms-1"},
+        ],
+    )
+    def test_provider_specific_message_ids_are_used_for_deduplication(
+        self, metadata, stack, agent_reg
+    ):
+        message = InboundMessage(
+            channel_id="slack",
+            thread_id="thread",
+            sender_id="sender-a",
+            content="same event",
+            metadata=metadata,
+        )
+
+        key = ChannelManager._inbound_message_key(message)  # noqa: SLF001
+
+        assert key is not None
+        assert next(iter(metadata.values())) in key
 
     def test_probe_does_not_report_false_green_when_adapter_has_no_probe(self, stack, agent_reg):
         manager = ChannelManager(

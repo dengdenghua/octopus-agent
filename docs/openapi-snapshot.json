@@ -20187,6 +20187,94 @@
         ]
       }
     },
+    "/api/channels/{channel_id}/diagnostics": {
+      "get": {
+        "operationId": "get_channel_diagnostics_api_channels__channel_id__diagnostics_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channel_id",
+            "required": true,
+            "schema": {
+              "title": "Channel Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Channel Diagnostics Api Channels  Channel Id  Diagnostics Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Channel Diagnostics",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/api/channels/{channel_id}/diagnostics/probe": {
+      "post": {
+        "operationId": "probe_channel_health_api_channels__channel_id__diagnostics_probe_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "channel_id",
+            "required": true,
+            "schema": {
+              "title": "Channel Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Probe Channel Health Api Channels  Channel Id  Diagnostics Probe Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Probe Channel Health",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
     "/api/channels/{channel_id}/inbound": {
       "post": {
         "operationId": "inbound_webhook_api_channels__channel_id__inbound_post",

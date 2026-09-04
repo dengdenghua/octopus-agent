@@ -2444,6 +2444,7 @@ export const enUS: Translations = {
     healthCheckPassed: "Channel is operational",
     healthCheckFailed: "Channel health check failed",
     activeThreads: (n: number) => `${n} active threads`,
+    duplicatesBlocked: (n: number) => `${n} duplicates blocked`,
   },
 
   // Pairing Authorization

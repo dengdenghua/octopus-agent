@@ -2141,6 +2141,7 @@ export interface Translations {
     healthCheckPassed: string;
     healthCheckFailed: string;
     activeThreads: (n: number) => string;
+    duplicatesBlocked: (n: number) => string;
   };
 
   // Pairing Authorization
