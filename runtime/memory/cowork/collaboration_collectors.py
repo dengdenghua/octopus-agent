@@ -560,8 +560,13 @@ class CollaborationCollectorStoreMixin:
                 ),
             )
             latest_results = self._collector_results(conn, run_id)
-            success_count = sum(1 for item in latest_results if item["status"] == "success")
-            completed_count = len(latest_results)
+            effective_results = _effective_results(
+                latest_results,
+                retrying=retrying,
+                generation=generation,
+            )
+            success_count = sum(1 for item in effective_results if item["status"] == "success")
+            completed_count = len(effective_results)
             remaining_count = len(expected) - completed_count
             policy = str(collector[1])
             target = int(collector[2])
@@ -578,7 +583,7 @@ class CollaborationCollectorStoreMixin:
                 policy_satisfied = success_count >= target
                 impossible = success_count + remaining_count < target
             next_status = "completed" if policy_satisfied else "failed" if impossible else "collecting"
-            completed_ids = {str(item["child_id"]) for item in latest_results}
+            completed_ids = {str(item["child_id"]) for item in effective_results}
             cancel_ids = (
                 [registered for registered in expected if registered not in completed_ids]
                 if next_status in _TERMINAL
