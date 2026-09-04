@@ -159,30 +159,42 @@ def _normalize_children(child_ids: list[str] | tuple[str, ...]) -> list[str]:
     return children
 
 
+def _effective_results(
+    results: list[dict[str, Any]],
+    *,
+    retrying: list[str],
+    generation: int,
+) -> list[dict[str, Any]]:
+    retry_set = set(retrying)
+    return [
+        result
+        for result in results
+        if result["child_id"] not in retry_set or int(result.get("attempt") or 1) >= generation
+    ]
+
+
 def _collector_from_row(row: tuple[Any, ...], results: list[dict[str, Any]]) -> dict[str, Any]:
     expected = _load_list(row[3])
     cancelled = _load_list(row[4])
     retrying = _load_list(row[5])
-    successes = sum(1 for result in results if result["status"] == "success")
-    failures = sum(1 for result in results if result["status"] == "failed")
-    child_cancelled = sum(1 for result in results if result["status"] == "cancelled")
-    completed = len(results)
-    completed_ids = {str(result["child_id"]) for result in results}
     generation = int(row[8])
-    current_generation_ids = {
-        str(result["child_id"])
+    effective = _effective_results(results, retrying=retrying, generation=generation)
+    successes = sum(1 for result in effective if result["status"] == "success")
+    failures = sum(1 for result in effective if result["status"] == "failed")
+    child_cancelled = sum(1 for result in effective if result["status"] == "cancelled")
+    completed = len(effective)
+    completed_ids = {str(result["child_id"]) for result in effective}
+    remaining = [child_id for child_id in expected if child_id not in completed_ids]
+    retry_set = set(retrying)
+    projected_results = [
+        {
+            **result,
+            "pending_retry": (
+                result["child_id"] in retry_set
+                and int(result.get("attempt") or 1) < generation
+            ),
+        }
         for result in results
-        if int(result.get("attempt") or 0) >= generation
-    }
-    # A reopened collector keeps the previous failed/cancelled result for
-    # auditability. Those lanes are nevertheless pending until they report in
-    # the new generation; otherwise the snapshot briefly claims ``0 remaining``
-    # while its status is still ``collecting``.
-    remaining = [
-        child_id
-        for child_id in expected
-        if child_id not in completed_ids
-        or (child_id in retrying and child_id not in current_generation_ids)
     ]
     return {
         "schema": _COLLECTOR_SCHEMA,
@@ -206,7 +218,7 @@ def _collector_from_row(row: tuple[Any, ...], results: list[dict[str, Any]]) -> 
         "remaining_child_ids": remaining,
         "cancellation_requested_child_ids": cancelled,
         "active_retry_child_ids": retrying,
-        "results": results,
+        "results": projected_results,
     }
 
 
@@ -256,7 +268,35 @@ class CollaborationCollectorStoreMixin:
         ).fetchone()
         if row is None:
             return None
-        return _collector_from_row(row, cls._collector_results(conn, run_id))
+        snapshot = _collector_from_row(row, cls._collector_results(conn, run_id))
+        snapshot["attempt_count"] = int(
+            conn.execute(
+                "SELECT COUNT(*) FROM collaboration_collector_results WHERE run_id=?",
+                (run_id,),
+            ).fetchone()[0]
+        )
+        return snapshot
+
+    @staticmethod
+    def _collector_attempts(conn: Any, run_id: str) -> list[dict[str, Any]]:
+        rows = conn.execute(
+            "SELECT child_id,attempt,ordinal,status,result_json,result_sha256,completed_at "
+            "FROM collaboration_collector_results WHERE run_id=? ORDER BY ordinal,attempt",
+            (run_id,),
+        ).fetchall()
+        return [
+            {
+                "schema": _CHILD_SCHEMA,
+                "child_id": str(child_id),
+                "attempt": int(attempt),
+                "ordinal": int(ordinal),
+                "status": str(status),
+                "result": _load_object(result_json),
+                "result_sha256": str(result_sha256),
+                "completed_at": str(completed_at),
+            }
+            for child_id, attempt, ordinal, status, result_json, result_sha256, completed_at in rows
+        ]
 
     def create_collaboration_collector(
         self,
@@ -368,6 +408,12 @@ class CollaborationCollectorStoreMixin:
         with self._lock, self._connect() as conn:
             conn.executescript(COLLABORATION_COLLECTOR_SCHEMA)
             return self._collector_snapshot(conn, run_id)
+
+    def collaboration_collector_attempts(self, run_id: str) -> list[dict[str, Any]]:
+        run_id = require_cowork_id(run_id, label="run_id")
+        with self._lock, self._connect() as conn:
+            conn.executescript(COLLABORATION_COLLECTOR_SCHEMA)
+            return self._collector_attempts(conn, run_id)
 
     def reopen_collaboration_collector(
         self,

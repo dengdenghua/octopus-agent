@@ -43,6 +43,7 @@ from runtime.memory.cowork._collaboration_session_writes import upsert_task as _
 from runtime.memory.cowork.collaboration_collectors import (
     COLLABORATION_COLLECTOR_SCHEMA,
     CollaborationCollectorStoreMixin,
+    ensure_collaboration_collector_schema,
 )
 from runtime.memory.cowork.collaboration_deliveries import (
     COLLABORATION_DELIVERY_SCHEMA,
@@ -542,6 +543,7 @@ class CollaborationStore(
         conn = connect_closing(str(self._db), timeout=10.0)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.executescript(_SCHEMA)
+        ensure_collaboration_collector_schema(conn)
         # ``CREATE TABLE IF NOT EXISTS`` does not add columns to installations
         # created before structured messages existed.  Keep the migration
         # inline/idempotent because this store intentionally has no external
