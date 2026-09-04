@@ -4959,7 +4959,15 @@ function RealtimePageContent({
                             lockWorkDirToThread={!isNewThread}
                             onOpenWorkDirInNewTask={openWorkDirInNewTask}
                             codeModeUnlocked={codeModeUnlocked}
-                            projectAgentMode={projectAgentMode}
+                            // The embedded Design Canvas is a distinct surface,
+                            // so seed the shared mode chip from the route on the
+                            // very first render. Waiting for the hydration
+                            // effect would briefly paint General and then
+                            // switch to Design, which looks like a third mode
+                            // flicker to the user.
+                            projectAgentMode={
+                              embeddedDesignChat ? "uxui" : projectAgentMode
+                            }
                             projectDetection={projectDetection}
                             onProjectAgentModeChange={
                               handleProjectAgentModeStateChange
