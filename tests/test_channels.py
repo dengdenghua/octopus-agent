@@ -230,6 +230,11 @@ class _NoProbeChannel(_FakeChannel):
     health_check = Channel.health_check
 
 
+class _FailingStartChannel(_FakeChannel):
+    def start(self) -> None:
+        raise ConnectionError("unavailable")
+
+
 def _build_stack(tmp_path: Path):
     from runtime.core.cerebrum import StaticPlanner
     from runtime.core.cerebrum.planner import Rule
@@ -331,6 +336,45 @@ class TestManagerLifecycle:
         assert ch.started
         m.stop_all()
         assert ch.stopped
+
+    def test_register_after_start_activates_transport(self, stack, agent_reg):
+        manager = ChannelManager(stack=stack, agent_registry=agent_reg)
+        manager.start_all()
+        channel = _FakeChannel("hot")
+
+        manager.register(channel)
+
+        assert channel.started
+        manager.stop_all()
+
+    def test_replace_stops_old_transport_after_new_starts(self, stack, agent_reg):
+        manager = ChannelManager(stack=stack, agent_registry=agent_reg)
+        old = _FakeChannel("live")
+        manager.register(old)
+        manager.start_all()
+        replacement = _FakeChannel("live")
+
+        manager.replace(replacement)
+
+        assert replacement.started
+        assert old.stopped
+        assert manager.get("live") is replacement
+        manager.stop_all()
+
+    def test_failed_hot_replace_preserves_working_transport(self, stack, agent_reg):
+        manager = ChannelManager(stack=stack, agent_registry=agent_reg)
+        old = _FakeChannel("live")
+        manager.register(old)
+        manager.start_all()
+
+        failed = _FailingStartChannel("live")
+        with pytest.raises(ConnectionError, match="unavailable"):
+            manager.replace(failed)
+
+        assert manager.get("live") is old
+        assert old.stopped is False
+        assert failed.stopped is True
+        manager.stop_all()
 
 
 class TestManagerProcessInbound:

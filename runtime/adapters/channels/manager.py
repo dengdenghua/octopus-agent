@@ -88,6 +88,7 @@ class ChannelManager:
         self._budget_usd = budget_usd
         self._strict_gate = strict_gate
         self._channels: dict[str, Channel] = {}
+        self._started = False
         # Populated by the channels settings router and persisted across
         # restarts.  Keeping these on the runtime manager makes the saved UI
         # choice part of the actual dispatch path rather than display-only
@@ -117,6 +118,41 @@ class ChannelManager:
         _audit_channel_for_gate(channel, strict=self._strict_gate)
 
         self._channels[channel.channel_id] = channel
+        if self._started:
+            try:
+                channel.start()
+            except Exception:
+                self._channels.pop(channel.channel_id, None)
+                with contextlib.suppress(Exception):
+                    channel.stop()
+                raise
+
+    def unregister(self, channel_id: str) -> Channel | None:
+        """Remove a channel and stop any active transport it owns."""
+        channel = self._channels.pop(channel_id, None)
+        if channel is not None:
+            with contextlib.suppress(Exception):
+                channel.stop()
+        return channel
+
+    def replace(self, channel: Channel) -> None:
+        """Atomically replace a configured channel, preserving the old one on failure."""
+        old = self._channels.get(channel.channel_id)
+        if old is None:
+            self.register(channel)
+            return
+        channel.bind_dispatcher(self.process_inbound)
+        _audit_channel_for_gate(channel, strict=self._strict_gate)
+        if self._started:
+            try:
+                channel.start()
+            except Exception:
+                with contextlib.suppress(Exception):
+                    channel.stop()
+                raise
+        self._channels[channel.channel_id] = channel
+        with contextlib.suppress(Exception):
+            old.stop()
 
     def has(self, channel_id: str) -> bool:
         return channel_id in self._channels
@@ -133,10 +169,21 @@ class ChannelManager:
     # ─── Lifecycle ──────────────────────────────
 
     def start_all(self) -> None:
-        for ch in self._channels.values():
-            ch.start()
+        if self._started:
+            return
+        self._started = True
+        for channel_id, ch in list(self._channels.items()):
+            try:
+                ch.start()
+            except Exception as exc:
+                self._operations.record_error(channel_id, exc)
+                logger.warning(
+                    "channel.start.failed",
+                    extra={"channel": channel_id, "error": type(exc).__name__},
+                )
 
     def stop_all(self) -> None:
+        self._started = False
         for ch in self._channels.values():
             with contextlib.suppress(Exception):
                 ch.stop()

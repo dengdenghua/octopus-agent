@@ -156,6 +156,18 @@ _PLATFORM_META: dict[str, dict[str, str]] = {
         "description": "腾讯元宝机器人",
         "help_url": "https://docs.octopus.ai/channels/yuanbao",
     },
+    "irc": {
+        "cls_name": "IRCChannel",
+        "display_name": "IRC",
+        "description": "IRC / IRCv3 实时群聊",
+        "help_url": "https://docs.octopus.ai/channels/irc",
+    },
+    "twitch": {
+        "cls_name": "TwitchChannel",
+        "display_name": "Twitch",
+        "description": "Twitch 直播聊天室",
+        "help_url": "https://docs.octopus.ai/channels/twitch",
+    },
 }
 
 _FALLBACK_META = {

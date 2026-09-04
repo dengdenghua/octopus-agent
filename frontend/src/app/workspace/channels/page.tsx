@@ -122,6 +122,8 @@ const PLATFORM_COLORS: Record<string, string> = {
   simplex: "bg-[#f76b1c] text-white",
   open_webui: "bg-[#8b5cf6] text-white",
   yuanbao: "bg-[#006eff] text-white",
+  irc: "bg-[#2563eb] text-white",
+  twitch: "bg-[#9146ff] text-white",
   other: "bg-muted/70 text-muted-foreground",
 };
 
@@ -151,6 +153,8 @@ const PLATFORM_ICONS: Record<string, string> = {
   simplex: "🔐",
   open_webui: "🌐",
   yuanbao: "💎",
+  irc: "⌁",
+  twitch: "🟣",
   other: "•",
 };
 
@@ -172,6 +176,8 @@ const PLATFORM_CATEGORY_MAP: Record<string, string> = {
   mattermost: "im",
   simplex: "im",
   line: "im",
+  irc: "im",
+  twitch: "im",
   wechat: "china",
   feishu: "china",
   dingtalk: "china",

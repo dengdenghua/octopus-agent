@@ -95,6 +95,21 @@ class LocalChannelManager:
             channel.bind_dispatcher(self.process_inbound)
         self._channels[str(channel_id)] = channel
 
+    def unregister(self, channel_id: str) -> Any:
+        channel = self._channels.pop(channel_id, None)
+        if channel is not None and hasattr(channel, "stop"):
+            with contextlib.suppress(Exception):
+                channel.stop()
+        return channel
+
+    def replace(self, channel: Any) -> None:
+        channel_id = str(getattr(channel, "channel_id", ""))
+        old = self._channels.get(channel_id)
+        self.register(channel)
+        if old is not None and old is not channel and hasattr(old, "stop"):
+            with contextlib.suppress(Exception):
+                old.stop()
+
     def has(self, channel_id: str) -> bool:
         return channel_id in self._channels
 
@@ -452,9 +467,21 @@ def create_channels_router(
             raise HTTPException(400, "invalid channel_id")
 
         if manager.has(safe_channel_id):
-            with contextlib.suppress(AttributeError):
-                manager._channels.pop(safe_channel_id, None)  # noqa: SLF001
-        manager.register(channel)
+            replace = getattr(manager, "replace", None)
+            if callable(replace):
+                try:
+                    replace(channel)
+                except (ConnectionError, TimeoutError, OSError, RuntimeError) as e:
+                    raise HTTPException(502, f"channel connection failed: {e}") from e
+                channel = None
+            else:
+                with contextlib.suppress(AttributeError):
+                    manager._channels.pop(safe_channel_id, None)  # noqa: SLF001
+        if channel is not None:
+            try:
+                manager.register(channel)
+            except (ConnectionError, TimeoutError, OSError, RuntimeError) as e:
+                raise HTTPException(502, f"channel connection failed: {e}") from e
 
         _credentials_on(manager)[safe_platform] = clean_body
         _save_credentials(manager, _creds_file)
@@ -483,7 +510,11 @@ def create_channels_router(
             for cid in list(manager.channel_ids()):
                 cls_name = type(manager.get(cid)).__name__
                 if _guess_platform(cid, cls_name) == safe_platform:
-                    manager._channels.pop(cid, None)  # noqa: SLF001
+                    unregister = getattr(manager, "unregister", None)
+                    if callable(unregister):
+                        unregister(cid)
+                    else:
+                        manager._channels.pop(cid, None)  # noqa: SLF001
         except (AttributeError, TypeError):
             pass
         _save_credentials(manager, _creds_file)

@@ -208,6 +208,7 @@ def maybe_setup_prompt_evolution(
 
     evolve_count = 0
     if evolve_interval_s > 0:
+        mutator_router: Any
         if mutator_model.startswith("mock/"):
             mutator_router = MockModelRouter(
                 response="<suffix>prefer shorter plans · check inputs first</suffix>",
@@ -862,6 +863,12 @@ def run_serve(
         # invokes it again (idempotently) for startup failures/test runners that
         # return without entering ASGI lifespan.
         app.router.add_event_handler("shutdown", _shutdown_cron)
+    if channel_manager is not None:
+        # Credential-backed polling and socket channels must share the ASGI
+        # service lifecycle.  This also makes hot credential replacement safe:
+        # ChannelManager.register() starts newly-added transports once active.
+        app.router.add_event_handler("startup", channel_manager.start_all)
+        app.router.add_event_handler("shutdown", channel_manager.stop_all)
 
     # For a single-machine setup, let the regular ``octopus serve`` path own
     # the optional File Agent service too.  This deliberately lives next to
