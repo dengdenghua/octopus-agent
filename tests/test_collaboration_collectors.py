@@ -177,3 +177,30 @@ def test_parent_failure_closes_incomplete_collector_idempotently(tmp_path) -> No
     events = len(store.collaboration_run_events("run-collector"))
     assert store.close_collaboration_collector("run-collector", status="failed") == closed
     assert len(store.collaboration_run_events("run-collector")) == events
+
+
+def test_reopen_retries_only_failed_lanes_without_losing_audit_history(tmp_path) -> None:
+    store = _store(tmp_path)
+    _run(store)
+    store.create_collaboration_collector(run_id="run-collector", child_ids=["a", "b"])
+    store.record_collaboration_collector_result(
+        "run-collector", child_id="a", status="failed", result={"error": "timeout"}
+    )
+    store.record_collaboration_collector_result(
+        "run-collector", child_id="b", status="success", result={"reply": "B"}
+    )
+
+    reopened = store.reopen_collaboration_collector("run-collector")
+    assert reopened["generation"] == 2
+    assert reopened["status"] == "collecting"
+    assert reopened["active_retry_child_ids"] == ["a"]
+    assert reopened["remaining_child_ids"] == ["a"]
+    assert reopened["results"][0]["attempt"] == 1
+
+    settled = store.record_collaboration_collector_result(
+        "run-collector", child_id="a", status="success", result={"reply": "A2"}
+    )
+    assert settled["status"] == "completed"
+    assert settled["success_count"] == 2
+    assert {item["attempt"] for item in settled["results"]} == {2, 1}
+    assert len(store.collaboration_run_events("run-collector")) == 7

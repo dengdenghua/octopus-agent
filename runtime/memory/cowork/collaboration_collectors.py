@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS collaboration_collector_results (
     PRIMARY KEY (run_id, child_id, attempt)
 );
 CREATE INDEX IF NOT EXISTS idx_collab_collector_results_run
-ON collaboration_collector_results(run_id, ordinal, attempt);
+ON collaboration_collector_results(run_id, ordinal);
 """
 
 _COLLECTOR_SCHEMA = "octopus.collaboration_collector.v1"
@@ -57,6 +57,51 @@ _TERMINAL = frozenset({"completed", "failed", "cancelled"})
 _MAX_CHILDREN = 512
 _MAX_CHILD_RESULT_BYTES = 64 * 1024
 _MAX_COLLECTOR_RESULT_BYTES = 4 * 1024 * 1024
+
+
+def ensure_collaboration_collector_schema(conn: Any) -> None:
+    """Apply the additive/rebuild migration for pre-attempt collectors."""
+
+    collector_columns = {
+        str(row[1]) for row in conn.execute("PRAGMA table_info(collaboration_collectors)")
+    }
+    if "retry_json" not in collector_columns:
+        conn.execute(
+            "ALTER TABLE collaboration_collectors "
+            "ADD COLUMN retry_json TEXT NOT NULL DEFAULT '[]'"
+        )
+    if "generation" not in collector_columns:
+        conn.execute(
+            "ALTER TABLE collaboration_collectors "
+            "ADD COLUMN generation INTEGER NOT NULL DEFAULT 1"
+        )
+    result_columns = {
+        str(row[1])
+        for row in conn.execute("PRAGMA table_info(collaboration_collector_results)")
+    }
+    if result_columns and "attempt" not in result_columns:
+        conn.execute(
+            "ALTER TABLE collaboration_collector_results "
+            "RENAME TO collaboration_collector_results_v1"
+        )
+        conn.execute(
+            "CREATE TABLE collaboration_collector_results ("
+            "run_id TEXT NOT NULL,child_id TEXT NOT NULL,"
+            "attempt INTEGER NOT NULL DEFAULT 1,ordinal INTEGER NOT NULL,"
+            "status TEXT NOT NULL,result_json TEXT NOT NULL,result_sha256 TEXT NOT NULL,"
+            "completed_at TEXT NOT NULL,PRIMARY KEY (run_id,child_id,attempt))"
+        )
+        conn.execute(
+            "INSERT INTO collaboration_collector_results"
+            "(run_id,child_id,attempt,ordinal,status,result_json,result_sha256,completed_at) "
+            "SELECT run_id,child_id,1,ordinal,status,result_json,result_sha256,completed_at "
+            "FROM collaboration_collector_results_v1"
+        )
+        conn.execute("DROP TABLE collaboration_collector_results_v1")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_collab_collector_results_run "
+            "ON collaboration_collector_results(run_id,ordinal)"
+        )
 
 
 def _now() -> str:
@@ -122,7 +167,23 @@ def _collector_from_row(row: tuple[Any, ...], results: list[dict[str, Any]]) -> 
     failures = sum(1 for result in results if result["status"] == "failed")
     child_cancelled = sum(1 for result in results if result["status"] == "cancelled")
     completed = len(results)
-    remaining = [child_id for child_id in expected if child_id not in {r["child_id"] for r in results}]
+    completed_ids = {str(result["child_id"]) for result in results}
+    generation = int(row[8])
+    current_generation_ids = {
+        str(result["child_id"])
+        for result in results
+        if int(result.get("attempt") or 0) >= generation
+    }
+    # A reopened collector keeps the previous failed/cancelled result for
+    # auditability. Those lanes are nevertheless pending until they report in
+    # the new generation; otherwise the snapshot briefly claims ``0 remaining``
+    # while its status is still ``collecting``.
+    remaining = [
+        child_id
+        for child_id in expected
+        if child_id not in completed_ids
+        or (child_id in retrying and child_id not in current_generation_ids)
+    ]
     return {
         "schema": _COLLECTOR_SCHEMA,
         "run_id": str(row[0]),
@@ -132,7 +193,7 @@ def _collector_from_row(row: tuple[Any, ...], results: list[dict[str, Any]]) -> 
         "expected_count": len(expected),
         "status": str(row[6]),
         "policy_satisfied": bool(row[7]),
-        "generation": int(row[8]),
+        "generation": generation,
         "revision": int(row[9]),
         "created_at": str(row[10]),
         "settled_at": str(row[11]) if row[11] else None,
@@ -308,6 +369,67 @@ class CollaborationCollectorStoreMixin:
             conn.executescript(COLLABORATION_COLLECTOR_SCHEMA)
             return self._collector_snapshot(conn, run_id)
 
+    def reopen_collaboration_collector(
+        self,
+        run_id: str,
+        *,
+        child_ids: list[str] | tuple[str, ...] | None = None,
+    ) -> dict[str, Any]:
+        """Open a new attempt for failed or explicitly cancelled children.
+
+        Previous attempts remain append-only. The current snapshot projects
+        only the latest attempt per child, so a successful retry replaces a
+        failed lane for policy calculation without erasing its audit trail.
+        """
+
+        run_id = require_cowork_id(run_id, label="run_id")
+        timestamp = _now()
+        with self._lock, self._connect() as conn:
+            conn.executescript(COLLABORATION_COLLECTOR_SCHEMA)
+            conn.execute("BEGIN IMMEDIATE")
+            current = self._collector_snapshot(conn, run_id)
+            if current is None:
+                raise KeyError(f"collaboration collector not found: {run_id}")
+            if current["status"] not in _TERMINAL:
+                raise ValueError("collector must be settled before reopening")
+            expected = list(current["expected_child_ids"])
+            if child_ids is None:
+                requested = [
+                    str(item["child_id"])
+                    for item in current["results"]
+                    if item["status"] in {"failed", "cancelled"}
+                ]
+                requested.extend(current["cancellation_requested_child_ids"])
+                retrying = list(dict.fromkeys(requested))
+            else:
+                retrying = _normalize_children(child_ids)
+            unknown = [child_id for child_id in retrying if child_id not in expected]
+            if unknown:
+                raise ValueError(f"child_id is not registered with this collector: {unknown[0]}")
+            if not retrying:
+                raise ValueError("collector has no failed or cancelled children to retry")
+            generation = int(current["generation"]) + 1
+            conn.execute(
+                "UPDATE collaboration_collectors SET status='collecting',policy_satisfied=0,"
+                "generation=?,revision=revision+1,cancelled_json='[]',retry_json=?,"
+                "settled_at=NULL,updated_at=? WHERE run_id=?",
+                (generation, _dump(retrying), timestamp, run_id),
+            )
+            run_status_row = conn.execute(
+                "SELECT status FROM collaboration_runs WHERE run_id=?", (run_id,)
+            ).fetchone()
+            self._append_run_event(
+                conn,
+                run_id=run_id,
+                event_type="collector_reopened",
+                status=str(run_status_row[0]) if run_status_row else "running",
+                payload={"generation": generation, "child_ids": retrying},
+                created_at=timestamp,
+            )
+            snapshot = self._collector_snapshot(conn, run_id)
+        assert snapshot is not None
+        return snapshot
+
     def record_collaboration_collector_result(
         self,
         run_id: str,
@@ -337,10 +459,12 @@ class CollaborationCollectorStoreMixin:
             expected = _load_list(collector[3])
             if child_id not in expected:
                 raise ValueError("child_id is not registered with this collector")
+            collector_status = str(collector[6])
+            generation = int(collector[8])
             existing = conn.execute(
                 "SELECT status,result_sha256 FROM collaboration_collector_results "
-                "WHERE run_id=? AND child_id=?",
-                (run_id, child_id),
+                "WHERE run_id=? AND child_id=? AND attempt=?",
+                (run_id, child_id, generation),
             ).fetchone()
             if existing is not None:
                 if (str(existing[0]), str(existing[1])) != (child_status, digest):
@@ -348,8 +472,23 @@ class CollaborationCollectorStoreMixin:
                 snapshot = self._collector_snapshot(conn, run_id)
                 assert snapshot is not None
                 return snapshot
-            if str(collector[5]) in _TERMINAL:
+            if collector_status in _TERMINAL:
+                latest = conn.execute(
+                    "SELECT status,result_sha256 FROM collaboration_collector_results "
+                    "WHERE run_id=? AND child_id=? ORDER BY attempt DESC LIMIT 1",
+                    (run_id, child_id),
+                ).fetchone()
+                if latest is not None and (str(latest[0]), str(latest[1])) == (
+                    child_status,
+                    digest,
+                ):
+                    snapshot = self._collector_snapshot(conn, run_id)
+                    assert snapshot is not None
+                    return snapshot
                 raise ValueError("collector is already settled")
+            retrying = _load_list(collector[5])
+            if retrying and child_id not in retrying:
+                raise ValueError("child_id is not active in this collector retry generation")
             stored_bytes = int(
                 conn.execute(
                     "SELECT COALESCE(SUM(length(CAST(result_json AS BLOB))),0) "
@@ -361,19 +500,22 @@ class CollaborationCollectorStoreMixin:
                 raise ValueError("collector aggregate results exceed 4194304 bytes")
             conn.execute(
                 "INSERT INTO collaboration_collector_results"
-                "(run_id,child_id,ordinal,status,result_json,result_sha256,completed_at) "
-                "VALUES (?,?,?,?,?,?,?)",
-                (run_id, child_id, expected.index(child_id), child_status, result_blob, digest, timestamp),
+                "(run_id,child_id,attempt,ordinal,status,result_json,result_sha256,completed_at) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    run_id,
+                    child_id,
+                    generation,
+                    expected.index(child_id),
+                    child_status,
+                    result_blob,
+                    digest,
+                    timestamp,
+                ),
             )
-            counts = dict(
-                conn.execute(
-                    "SELECT status,COUNT(*) FROM collaboration_collector_results "
-                    "WHERE run_id=? GROUP BY status",
-                    (run_id,),
-                ).fetchall()
-            )
-            success_count = int(counts.get("success", 0))
-            completed_count = sum(int(value) for value in counts.values())
+            latest_results = self._collector_results(conn, run_id)
+            success_count = sum(1 for item in latest_results if item["status"] == "success")
+            completed_count = len(latest_results)
             remaining_count = len(expected) - completed_count
             policy = str(collector[1])
             target = int(collector[2])
@@ -390,13 +532,7 @@ class CollaborationCollectorStoreMixin:
                 policy_satisfied = success_count >= target
                 impossible = success_count + remaining_count < target
             next_status = "completed" if policy_satisfied else "failed" if impossible else "collecting"
-            completed_ids = {
-                str(row[0])
-                for row in conn.execute(
-                    "SELECT child_id FROM collaboration_collector_results WHERE run_id=?",
-                    (run_id,),
-                ).fetchall()
-            }
+            completed_ids = {str(item["child_id"]) for item in latest_results}
             cancel_ids = (
                 [registered for registered in expected if registered not in completed_ids]
                 if next_status in _TERMINAL
@@ -404,11 +540,13 @@ class CollaborationCollectorStoreMixin:
             )
             conn.execute(
                 "UPDATE collaboration_collectors SET status=?,policy_satisfied=?,"
-                "cancelled_json=?,revision=revision+1,settled_at=?,updated_at=? WHERE run_id=?",
+                "cancelled_json=?,retry_json=?,revision=revision+1,settled_at=?,updated_at=? "
+                "WHERE run_id=?",
                 (
                     next_status,
                     int(policy_satisfied),
                     _dump(cancel_ids),
+                    "[]" if next_status in _TERMINAL else _dump(retrying),
                     timestamp if next_status in _TERMINAL else None,
                     timestamp,
                     run_id,
@@ -424,6 +562,7 @@ class CollaborationCollectorStoreMixin:
                 status=str(run_status_row[0]) if run_status_row else "running",
                 payload={
                     "child_id": child_id,
+                    "attempt": generation,
                     "child_status": child_status,
                     "result_sha256": digest,
                     "completed_count": completed_count,
@@ -439,4 +578,8 @@ class CollaborationCollectorStoreMixin:
         return snapshot
 
 
-__all__ = ["COLLABORATION_COLLECTOR_SCHEMA", "CollaborationCollectorStoreMixin"]
+__all__ = [
+    "COLLABORATION_COLLECTOR_SCHEMA",
+    "CollaborationCollectorStoreMixin",
+    "ensure_collaboration_collector_schema",
+]
