@@ -2118,12 +2118,17 @@ export interface Translations {
     assignDialogTitle: (name: string) => string;
     assignDialogDesc: string;
     noAgentsAvailable: string;
+    aiTeams: string;
+    singleAgents: string;
+    teamMembers: (n: number) => string;
+    toastTeamBound: string;
     unassignCurrent: string;
     unassignConfirmTitle: string;
     unassignConfirmDescription: string;
     howToSetup: string;
     clickToChangeAgent: string;
     handlingMessages: string;
+    handlingMessagesAsTeam: string;
     rebindOrUnbind: string;
     helpDocsComingSoon: string;
   };

@@ -5,7 +5,7 @@ import contextlib
 import contextvars
 import logging
 import sys
-from typing import Any
+from typing import Any, cast
 
 from runtime.adapters.instrumentation import trace_stage
 from runtime.memory.journal import journal_context
@@ -22,7 +22,7 @@ from runtime.platform.step_format import (
     summarize_step_for_stream as _summarize_step_for_stream,
 )
 
-from .base import Channel, InboundMessage, OutboundMessage
+from .base import Channel, ChannelMetadata, InboundMessage, OutboundMessage
 from .store import ThreadConversationStore
 
 logger = logging.getLogger(__name__)
@@ -169,7 +169,7 @@ class ChannelManager:
                 normalized_goal=msg.content,
             )
 
-            outbound_meta = dict(msg.metadata)
+            outbound_meta = cast(ChannelMetadata, dict(msg.metadata))
             group = self._pick_group(msg)
             if group is not None:
                 reply_text, collaboration_meta = self._run_group(
@@ -318,7 +318,7 @@ class ChannelManager:
         group: Any,
         msg: InboundMessage,
         conversation_id: str,
-    ) -> tuple[str, dict[str, Any]]:
+    ) -> tuple[str, ChannelMetadata]:
         """Run one bounded team turn and render it for a plain IM surface."""
         from runtime.execution.agents.group_fanout import run_group_fanout
 
@@ -376,13 +376,13 @@ class ChannelManager:
         else:
             reply_text = f"（团队 {group.group_id} 本轮没有成员生成有效回复）"
         synthesis = result.get("synthesis") or {}
-        return reply_text, {
-            "group_id": str(group.group_id),
-            "primary_agent_id": str(synthesis.get("primary_agent_id") or ""),
-            "member_agent_ids": [str(member["agent_id"]) for member in members],
-            "collaboration_spoke": int(result.get("spoke") or 0),
-            "collaboration_count": int(result.get("count") or 0),
-        }
+        return reply_text, ChannelMetadata(
+            group_id=str(group.group_id),
+            primary_agent_id=str(synthesis.get("primary_agent_id") or ""),
+            member_agent_ids=[str(member["agent_id"]) for member in members],
+            collaboration_spoke=int(result.get("spoke") or 0),
+            collaboration_count=int(result.get("count") or 0),
+        )
 
     def _plan_and_run(self, agent: Any, intent: ParsedIntent) -> str:
         plan_kwargs: dict[str, Any] = {
@@ -595,6 +595,7 @@ def _audit_channel_for_gate(channel: Channel, *, strict: bool = False) -> None:
                 type(channel).__name__,
             )
             return
+    assert src is not None
 
     # Signal: a CALL to safe_send / check_outbound · not just a
     # mention. Require the ``(`` · so a comment like
