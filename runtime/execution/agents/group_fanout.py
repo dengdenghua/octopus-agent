@@ -26,6 +26,12 @@ import concurrent.futures as _cf
 from collections.abc import Callable
 from typing import Any
 
+from runtime.execution.agents.team_patterns import (
+    is_team_presence_query,
+    pattern_member_role,
+    pattern_role_label,
+)
+
 # Keep the group from getting spammy / expensive: a real group chat has a few
 # people chime in, not 20. Also bounds the parallel LLM fan-out cost.
 _MAX_FANOUT = 6
@@ -44,6 +50,42 @@ _ROOM_TIER_MEMBERS = 2
 
 # Hard bound on debate rounds so a hostile cue can't spin up unbounded LLM cost.
 _MAX_DEBATE_ROUNDS = 3
+
+_ERROR_OUTPUT_PREFIXES = (
+    "[planner error]",
+    "[runner error]",
+    "[subagent error]",
+)
+
+
+def is_group_presence_query(message: str) -> bool:
+    """Return whether a message only asks if the team is available."""
+
+    return is_team_presence_query(message)
+
+
+def format_group_presence_reply(members: list[dict[str, Any]]) -> str:
+    """Build a truthful roster-status answer without spending model calls."""
+
+    names = [
+        str(
+            member.get("display_name") or member.get("name") or member.get("agent_id") or ""
+        ).strip()
+        for member in members
+        if isinstance(member, dict)
+    ]
+    names = [name for name in names if name]
+    if not names:
+        return "当前没有可响应的 AI 成员。"
+    return f"{len(names)} 位 AI 成员均已就绪：{'、'.join(names)}。"
+
+
+def _error_output(output: str) -> str | None:
+    text = str(output or "").strip()
+    lowered = text.lower()
+    if any(lowered.startswith(prefix) for prefix in _ERROR_OUTPUT_PREFIXES):
+        return text
+    return None
 
 
 def _response_id(turn_id: str | None, index: int, agent_id: str) -> str:
@@ -114,6 +156,7 @@ def arbitrate_group_fanout(
             "score": score,
             "reply_chars": len(str(reply.get("reply") or "").strip()),
             "round": int(reply.get("round") or 1),
+            "pattern_role": reply.get("pattern_role"),
             "error": reply.get("error"),
         }
         if status == "failed":
@@ -207,12 +250,33 @@ def synthesize_group_fanout(
     }
 
 
-def build_fanout_prompt(message: str, speaker: str, roster: list[str]) -> str:
+def _pattern_role_instruction(pattern_role: str | None) -> str:
+    instructions = {
+        "proposer": "提出一个具体、可验证的候选方案，不要只给态度。",
+        "critic": "不要附和；优先寻找候选方案的漏洞、反例和失败条件。",
+        "verifier": "依据事实、测试或验收标准检查结论，明确哪些仍未被证明。",
+        "alternative": "尝试一条不同路径，并说明它相对已有方案的取舍。",
+        "explorer": "独立给出你的专业判断，避免重复其他成员可能给出的常识。",
+    }
+    role = str(pattern_role or "").strip()
+    if not role:
+        return ""
+    return f"本轮职责：{pattern_role_label(role)}。{instructions.get(role, '')}\n"
+
+
+def build_fanout_prompt(
+    message: str,
+    speaker: str,
+    roster: list[str],
+    *,
+    pattern_role: str | None = None,
+) -> str:
     """The per-member instruction: answer the actual question in persona."""
     names = "、".join(roster) if roster else "(只有你)"
     return (
         f"你在一个团队群聊里,群成员有:{names}。\n"
         f"群里有人（{speaker or '老板'}）说:「{message}」\n\n"
+        f"{_pattern_role_instruction(pattern_role)}"
         f"请用你自己的人设、第一人称,像在微信群里冒泡那样自然地接一句切题的话"
         f"(1-3 句即可):围绕这句话本身给出你的观点、信息或能直接帮上的具体动作。\n"
         f"硬性要求:\n"
@@ -231,6 +295,7 @@ def build_debate_prompt(
     *,
     round_no: int = 2,
     mentioned: list[str] | None = None,
+    pattern_role: str | None = None,
 ) -> str:
     """Round-2+ instruction: everyone sees the prior round and @-rebuts.
 
@@ -255,10 +320,11 @@ def build_debate_prompt(
         )
     return (
         f"你在一个团队群聊里,群成员有:{names}。\n"
-        f"老板刚才问:「{message}」\n\n"
+        f"{speaker or '用户'}刚才问:「{message}」\n\n"
         f"—— 第 {round_no} 轮 · 成员互见辩论 ——\n"
         f"这是大家上一轮的全部发言（现在所有人都看得到）：\n{transcript_text}\n\n"
         f"{mention_note}"
+        f"{_pattern_role_instruction(pattern_role)}"
         f"请用你自己的人设、第一人称回应（1-3 句，必须围绕上面这条消息本身，"
         f"不要跑题到你的日常话题）：\n"
         f"1) 如果你不同意某位成员的看法，用「@对方名字」点名反驳，只驳观点、不人身攻击；\n"
@@ -278,6 +344,8 @@ def run_group_fanout(
     turn_id: str | None = None,
     debate_rounds: int = 1,
     mentioned: list[str] | None = None,
+    speaker: str = "用户",
+    pattern: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Fan ``message`` out to each member in parallel; collect persona replies.
 
@@ -328,23 +396,39 @@ def run_group_fanout(
         "capacity_tier": _capacity_tier(len(clean), requested_members),
     }
 
+    pattern_payload = dict(pattern) if isinstance(pattern, dict) else {}
+    pattern_id = str(pattern_payload.get("id") or "parallel_roundtable").strip()
+    try:
+        pattern_rounds = int(pattern_payload.get("debate_rounds") or 1)
+    except (TypeError, ValueError):
+        pattern_rounds = 1
     # Debate rounds are clamped so a hostile cue can't spin up unbounded cost.
-    rounds = max(1, min(int(debate_rounds or 1), _MAX_DEBATE_ROUNDS))
+    rounds = max(
+        1,
+        min(max(int(debate_rounds or 1), pattern_rounds), _MAX_DEBATE_ROUNDS),
+    )
 
     def _run_round(round_no: int, transcript: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        def _one(member: dict[str, Any]) -> dict[str, Any]:
+        def _one(index: int, member: dict[str, Any]) -> dict[str, Any]:
             agent_id = str(member.get("name") or member.get("agent_id"))
             display = str(member.get("display_name") or agent_id)
+            pattern_role = pattern_member_role(pattern_id, index)
             if round_no == 1:
-                prompt = build_fanout_prompt(msg, display, roster)
+                prompt = build_fanout_prompt(
+                    msg,
+                    speaker,
+                    roster,
+                    pattern_role=pattern_role,
+                )
             else:
                 prompt = build_debate_prompt(
                     msg,
-                    display,
+                    speaker,
                     roster,
                     transcript,
                     round_no=round_no,
                     mentioned=mentioned,
+                    pattern_role=pattern_role,
                 )
             rec: dict[str, Any] = {
                 "agent_id": agent_id,
@@ -353,6 +437,7 @@ def run_group_fanout(
                 "ok": False,
                 "error": None,
                 "round": round_no,
+                "pattern_role": pattern_role,
             }
             try:
                 res = agent_caller(
@@ -360,16 +445,18 @@ def run_group_fanout(
                     prompt=prompt,
                     timeout_s=90,
                 )
-                rec["ok"] = bool(res.get("success"))
-                rec["reply"] = str(res.get("output") or "")
-                rec["error"] = res.get("error")
+                output = str(res.get("output") or "").strip()
+                output_error = _error_output(output)
+                rec["ok"] = bool(res.get("success")) and output_error is None
+                rec["reply"] = output if output_error is None else ""
+                rec["error"] = res.get("error") or output_error
             except Exception as exc:  # noqa: BLE001 — one member's failure is isolated
                 rec["error"] = f"{type(exc).__name__}: {exc}"
             return rec
 
         results: list[dict[str, Any]] = []
         with _cf.ThreadPoolExecutor(max_workers=workers, thread_name_prefix="group-fanout") as pool:
-            futures = [pool.submit(_one, m) for m in clean]
+            futures = [pool.submit(_one, index, member) for index, member in enumerate(clean)]
             for fut in _cf.as_completed(futures):
                 results.append(fut.result())
 
@@ -424,4 +511,5 @@ def run_group_fanout(
         "arbitration": arbitration,
         "synthesis": synthesis,
         "debate": debate,
+        "pattern": pattern_payload or None,
     }

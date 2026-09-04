@@ -187,8 +187,10 @@ export interface Translations {
     showMoreAgents: (n: number) => string;
     collapseAgents: string;
     viewReport: string;
+    viewReply: string;
     viewReportError: string;
     collapseReport: string;
+    collapseReply: string;
     latestTool: string;
     execution: string;
     verification: string;

@@ -753,8 +753,8 @@ _AUDIT_INTENT_RE = re.compile(
 # phrasing ("哪些问题需要修复？") in audit mode; only imperative language or a
 # bare repair verb opts into mutation.
 _EXPLICIT_CHANGE_RE = re.compile(
-    r"^(?:修复|修改|重构|实现|改造|清理|部署|安装|删除|补上|加上|提交)(?:\b|[\u4e00-\u9fff])|"
-    r"(?:请|帮我|直接|现在|开始|着手|把|将).{0,24}(?:修复|修改|重构|实现|改造|清理|部署|安装|删除|补上|加上|提交)",
+    r"^(?:修复|修改|优化|重构|实现|改造|清理|部署|安装|删除|补上|加上|提交)(?:\b|[\u4e00-\u9fff])|"
+    r"(?:请|帮我|直接|现在|开始|着手|把|将).{0,24}(?:修复|修改|优化|重构|实现|改造|清理|部署|安装|删除|补上|加上|提交)",
     re.IGNORECASE,
 )
 
@@ -778,7 +778,15 @@ def _is_audit_intent(text: str, context_payload: dict[str, Any]) -> bool:
     # A declared read-only / audit capability also opts in.
     mode = str(context_payload.get("mode") or "").strip().lower()
     capability = str(context_payload.get("capability_mode") or "").strip().lower()
-    return mode == "audit" or capability == "audit" or bool(context_payload.get("audit_mode"))
+    agent_mode = str(context_payload.get("agent_mode") or "").strip().lower()
+    workflow = str(context_payload.get("workflow_preset") or "").strip().lower()
+    return bool(
+        mode == "audit"
+        or capability == "audit"
+        or agent_mode == "audit"
+        or workflow.startswith("audit.")
+        or context_payload.get("audit_mode")
+    )
 
 
 def _build_intent(
@@ -979,6 +987,7 @@ def _build_intent(
                 **context_payload,
                 "audit_mode": False,
                 "mode": "code",
+                "agent_mode": "develop",
                 "workflow_mode": "develop",
                 "completion_policy": "develop",
                 "mode_preset": "develop.mode",

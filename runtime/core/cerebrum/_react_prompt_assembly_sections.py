@@ -222,13 +222,7 @@ def _assemble_early_sections(state: _AssemblyState) -> None:
     state.is_goal_mode = _wm.is_goal
     state.is_code_mode = _wm.is_code
     _goal = state.effective_goal or str(state.intent.normalized_goal or state.intent.raw or "")
-    from runtime.execution.misc.skill_policy import is_audit_read_only_context
-
-    state.read_only_turn = (
-        _explicit_read_only_goal(_goal)
-        or _is_read_only_analysis_goal(_goal)
-        or is_audit_read_only_context(_uc)
-    )
+    state.read_only_turn = _explicit_read_only_goal(_goal) or _is_read_only_analysis_goal(_goal)
     state.observed_read_sequence = state.read_only_turn and _explicit_observed_read_sequence(_goal)
     state.observed_read_groups = (
         ordered_explicit_read_groups(_goal) if state.observed_read_sequence else ()
@@ -242,8 +236,8 @@ def _assemble_early_sections(state: _AssemblyState) -> None:
             "Use read/search/list/web/status tools and focused test/lint verification "
             "only, and deliver the report directly "
             "in the conversational Final Answer. If read access is blocked, explain the "
-            "exact blocker instead of attempting a write-based workaround. To apply a "
-            "fix, the user must switch this task to develop first.\n"
+            "exact blocker instead of attempting a write-based workaround. Apply fixes "
+            "only after the user explicitly authorizes a mutating turn.\n"
             "</read-only-contract>"
         )
 

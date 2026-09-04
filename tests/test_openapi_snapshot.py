@@ -63,6 +63,21 @@ import json
 import os
 from pathlib import Path
 
+from runtime.platform.ui import _app_routers_extra
+
+# The contract snapshot covers the stable host API. Bundled workbench plugins
+# contribute their own separately tested routes and change independently, so
+# point PluginHub at empty roots before constructing the app. Without this,
+# merely adding an installed/bundled plugin makes the supposedly hermetic base
+# schema depend on the checkout contents.
+plugin_root = Path(os.environ[{_SCHEMA_OUTPUT_ENV!r}]).parent / "plugins"
+(plugin_root / "user").mkdir(parents=True, exist_ok=True)
+(plugin_root / "bundled").mkdir(parents=True, exist_ok=True)
+_app_routers_extra._plugin_hub_roots = lambda: (
+    plugin_root / "user",
+    plugin_root / "bundled",
+)
+
 from runtime.platform.ui.app import create_app
 
 schema = create_app().openapi()

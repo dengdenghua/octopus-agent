@@ -2,11 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   appendDesignNode,
+  beginDesignStage,
   connectDesignNodes,
   copyDesignSelection,
+  createDramaSeriesCanvas,
   DEFAULT_DESIGN_CANVAS,
   deleteDesignSelection,
   designCanvasRunPrompt,
+  designStageBlockers,
+  designStageRunPrompt,
   disconnectDesignEdge,
   fitDesignMediaNodeDimensions,
   groupDesignNodes,
@@ -14,6 +18,7 @@ import {
   mergeDesignCanvases,
   pasteDesignSelection,
   planDesignSelectionDeletion,
+  setDesignStageStatus,
   switchDesignCanvasMode,
   tidyDesignCanvas,
   ungroupDesignNode,
@@ -38,6 +43,19 @@ describe("design canvas model", () => {
   it("falls back safely for invalid persisted data", () => {
     expect(parseDesignCanvas("not json").nodes).toHaveLength(4);
     expect(parseDesignCanvas('{"version":2}').title).toBe("品牌发布创作流");
+  });
+
+  it("drops malformed persisted stage metadata without losing the node", () => {
+    const malformed = structuredClone(DEFAULT_DESIGN_CANVAS);
+    (malformed.nodes[0] as unknown as { stage: unknown }).stage = {
+      id: "script",
+      order: 1,
+      status: "invented",
+      attempt: -1,
+    };
+    const parsed = parseDesignCanvas(JSON.stringify(malformed));
+    expect(parsed.nodes[0].id).toBe("brief");
+    expect(parsed.nodes[0].stage).toBeUndefined();
   });
 
   it("connects an appended node to the selected source", () => {
@@ -364,6 +382,81 @@ describe("design canvas model", () => {
     expect(restored.nodes.at(-1)?.asset?.projectId).toBe("project-1");
     expect(designCanvasRunPrompt(restored)).toContain("asset:ART-1");
     expect(designCanvasRunPrompt(restored)).toContain("outputs/launch.mp4");
+  });
+
+  it("creates a gated AI drama workflow with stable stage identities", () => {
+    const document = createDramaSeriesCanvas();
+    const stages = document.nodes.filter((node) => node.stage);
+    expect(stages).toHaveLength(7);
+    expect(stages.map((node) => node.stage?.id)).toEqual([
+      "script",
+      "production-plan",
+      "asset-anchors",
+      "storyboard",
+      "keyframes",
+      "visual-generation",
+      "post",
+    ]);
+    expect(stages.map((node) => node.binding?.id).filter(Boolean)).toEqual(
+      expect.arrayContaining([
+        "creative-microdrama-writer",
+        "creative-multi-angle-render",
+        "creative-storyboard-assets",
+        "director-stage",
+        "clip-studio",
+      ]),
+    );
+    expect(designStageBlockers(document, "drama-script")).toEqual([]);
+    expect(
+      designStageBlockers(document, "drama-production-plan").map(
+        (stage) => stage.id,
+      ),
+    ).toEqual(["script"]);
+  });
+
+  it("runs and reviews only one stage without invalidating approved work", () => {
+    let document = createDramaSeriesCanvas();
+    document = setDesignStageStatus(document, "drama-script", "running", {
+      incrementAttempt: true,
+    });
+    expect(document.nodes[0].stage).toMatchObject({
+      status: "running",
+      attempt: 1,
+    });
+    document = setDesignStageStatus(document, "drama-script", "approved");
+    expect(designStageBlockers(document, "drama-production-plan")).toEqual([]);
+    const prompt = designStageRunPrompt(document, "drama-production-plan");
+    expect(prompt).toContain("稳定节点 ID：drama-production-plan");
+    expect(prompt).toContain("script(approved)");
+    expect(prompt).toContain("不要重做其他已通过阶段");
+  });
+
+  it("reopens one stage while preserving upstream and resetting downstream", () => {
+    let document = createDramaSeriesCanvas();
+    document = setDesignStageStatus(document, "drama-script", "approved");
+    document = setDesignStageStatus(
+      document,
+      "drama-production-plan",
+      "approved",
+    );
+    document = setDesignStageStatus(
+      document,
+      "drama-asset-anchors",
+      "approved",
+    );
+    document = beginDesignStage(document, "drama-production-plan");
+    expect(
+      document.nodes.find((node) => node.id === "drama-script")?.stage,
+    ).toMatchObject({ status: "approved" });
+    expect(
+      document.nodes.find((node) => node.id === "drama-production-plan")?.stage,
+    ).toMatchObject({ status: "running", attempt: 1 });
+    expect(
+      document.nodes.find((node) => node.id === "drama-asset-anchors")?.stage,
+    ).toMatchObject({ status: "pending" });
+    expect(designStageRunPrompt(document, "drama-production-plan")).toContain(
+      "本次尝试：1",
+    );
   });
 });
 

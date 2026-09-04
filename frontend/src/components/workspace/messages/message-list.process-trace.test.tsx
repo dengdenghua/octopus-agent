@@ -449,6 +449,35 @@ describe("MessageList process trace lifecycle", () => {
     expect(screen.queryByTestId("agent-report-0")).not.toBeInTheDocument();
   });
 
+  test("labels a conversational cowork result as a reply, not a report", () => {
+    renderWithProviders(
+      <InlineSubagentCards
+        settled
+        agents={[
+          {
+            id: "coder",
+            name: "Kane",
+            role: "cowork",
+            status: "done",
+            task: "回应群聊",
+            summary: "在线，随时可以开始。",
+            filesTouchedCount: 0,
+            index: 0,
+          },
+        ]}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /查看回复/ }));
+    expect(screen.getByTestId("agent-report-0")).toHaveTextContent(
+      "在线，随时可以开始。",
+    );
+    expect(
+      screen.getByRole("button", { name: /收起回复/ }),
+    ).toBeInTheDocument();
+  });
+
   test("expands a failed agent card to reveal the failure reason", () => {
     renderWithProviders(
       <InlineSubagentCards

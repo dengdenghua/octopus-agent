@@ -121,8 +121,8 @@ runtime.execution.all_skills · unified skill catalog.
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | class | `class AgnesConfig` |  |
-| func | `def generate_video(prompt, model, width, height, num_frames, frame_rate, image, seed, wait, max_wait_seconds, poll_interval_seconds, api_key, base_url, extra)` | Create a video generation task and (optionally) wait for completion. |
-| func | `def poll_video(task_id, api_key, base_url)` | One-shot status poll for a previously-submitted task. |
+| func | `def generate_video(prompt, model, width, height, num_frames, frame_rate, seconds, image, seed, wait, max_wait_seconds, poll_interval_seconds, api_key, base_url, extra)` | Create a video generation task and (optionally) wait for completion. |
+| func | `def poll_video(task_id, api_key, base_url, model_name)` | One-shot status poll for a previously-submitted task. |
 
 ### `agnes-video-poll/scripts/agnes_video_poll.py`
 

@@ -355,7 +355,7 @@ def test_connector_bridge_requires_principal_selection_and_removes_octopus_tools
     assert "CONNECTOR BRIDGE" in str(request.developer_instructions)
 
 
-def test_audit_sandbox_is_read_only_for_direct_group_subagent_and_projectos_requests(
+def test_review_workflow_preserves_workspace_write_across_codex_surfaces(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -454,7 +454,7 @@ def test_audit_sandbox_is_read_only_for_direct_group_subagent_and_projectos_requ
             f"{surface} audit",
             context=context,
         )
-        assert request.sandbox_mode == "read-only", surface
+        assert request.sandbox_mode == "workspace-write", surface
         requests[surface] = request
 
     ordinary, _broker, _provider = role_runner.build_codex_role_request(
@@ -477,11 +477,20 @@ def test_audit_sandbox_is_read_only_for_direct_group_subagent_and_projectos_requ
     assert (
         role_runner.resolve_codex_sandbox_mode(
             {
+                "_read_only_turn_enforced": True,
+                "sandbox_policy": {"type": "workspaceWrite"},
+            }
+        )
+        == "read-only"
+    )
+    assert (
+        role_runner.resolve_codex_sandbox_mode(
+            {
                 "workflow_preset": "develop.iterate",
                 "metadata": {"workflow_preset": "audit.deep"},
             }
         )
-        == "read-only"
+        == "workspace-write"
     )
 
     direct = requests["direct"]
@@ -500,7 +509,7 @@ def test_audit_sandbox_is_read_only_for_direct_group_subagent_and_projectos_requ
     )
     config = tomllib.loads(sidecar.config_path.read_text(encoding="utf-8"))
     profile = config["permissions"][PERMISSION_PROFILE]
-    assert profile["filesystem"][str(workspace.resolve())] == "read"
+    assert profile["filesystem"][str(workspace.resolve())] == "write"
     assert profile["filesystem"][str(sidecar.scratch_root)] == "write"
 
 

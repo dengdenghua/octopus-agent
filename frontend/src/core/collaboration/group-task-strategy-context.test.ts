@@ -35,20 +35,26 @@ describe("groupTaskStrategyContext", () => {
   );
 
   it.each([
-    ["develop", "develop.iterate", "standard", false],
-    ["audit", "audit.review", "strict", false],
-    ["uxui", "uxui.regression", "visual", true],
+    ["develop", "develop", "develop.iterate", "standard", false],
+    ["audit", "develop", "develop.iterate", "standard", false],
+    ["uxui", "uxui", "uxui.regression", "visual", true],
   ] as const)(
     "maps %s through the shared project preset",
-    (strategy, workflowPreset, verificationPolicy, browserRegression) => {
+    (
+      strategy,
+      expectedMode,
+      workflowPreset,
+      verificationPolicy,
+      browserRegression,
+    ) => {
       const context = groupTaskStrategyContext(strategy);
 
       expect(context).toMatchObject({
         personal_mode: undefined,
-        agent_mode: strategy,
-        mode_preset: strategy,
+        agent_mode: expectedMode,
+        mode_preset: expectedMode,
         workflow_preset: workflowPreset,
-        skill_pack_profile: strategy,
+        skill_pack_profile: expectedMode,
         verification_policy: verificationPolicy,
       });
       expect(context.default_skill_packs?.length).toBeGreaterThan(0);

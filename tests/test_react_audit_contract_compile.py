@@ -74,7 +74,16 @@ def test_authorized_section_forbids_plan_as_conclusion() -> None:
 
 
 def test_imperative_repair_instructions_authorize() -> None:
-    for goal in ("继续修复", "干活啊", "动手", "改吧", "全修", "我让你修复问题", "开始优化"):
+    for goal in (
+        "继续修复",
+        "干活啊",
+        "动手",
+        "改吧",
+        "全修",
+        "我让你修复问题",
+        "开始优化",
+        "优化",
+    ):
         assert _fix_authorization_present(_state(goal)) is True, goal
 
 
@@ -82,6 +91,43 @@ def test_questions_about_problems_do_not_authorize() -> None:
     """Asking *about* repairs is not a mandate to perform them."""
     for goal in ("审计项目", "有哪些问题需要修复？", "这些问题严重吗", "帮我看看代码质量"):
         assert _fix_authorization_present(_state(goal)) is False, goal
+
+
+def test_design_canvas_context_is_compiled_as_structured_grounding() -> None:
+    state = _state(
+        "调整选中的按钮",
+        design_canvas_context={
+            "version": 1,
+            "title": "登录页",
+            "selected_node_ids": ["primary-button"],
+            "selected_nodes": [
+                {
+                    "id": "primary-button",
+                    "kind": "component",
+                    "title": "主按钮",
+                    "description": "提交登录表单",
+                }
+            ],
+            "nodes": [],
+            "edges": [],
+            "workflow_stages": [
+                {
+                    "id": "storyboard",
+                    "nodeId": "primary-button",
+                    "status": "review",
+                    "dependencies": ["asset-anchors"],
+                }
+            ],
+            "active_stage_node_id": "primary-button",
+        },
+    )
+    _assemble_delegation_guidance(state)
+    prompt = "\n".join(state.system_parts)
+    assert "<design-canvas-context>" in prompt
+    assert "primary-button" in prompt
+    assert "selected_nodes 是用户当前关注对象" in prompt
+    assert "workflow_stages 是带稳定 ID" in prompt
+    assert "active_stage_node_id" in prompt
 
 
 def test_english_imperatives_authorize() -> None:

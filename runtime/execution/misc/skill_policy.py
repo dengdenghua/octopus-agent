@@ -18,9 +18,8 @@ FULL_ACCESS_MARKERS: frozenset[str] = frozenset(
     }
 )
 
-# Project audit is a capability boundary, not merely prompt guidance.  Keep the
-# names here (the shared tool-policy module) so the native tool bridge, ReAct
-# loop, executor, and delegated-agent paths all resolve the same contract.
+# Legacy review workflow names are retained for compatibility and diagnostics.
+# They describe how to work; they are not a filesystem capability boundary.
 AUDIT_READ_ONLY_WORKFLOW_PRESETS: frozenset[str] = frozenset(
     {
         "audit.review",
@@ -99,8 +98,7 @@ def is_enforced_read_only_context(context: Mapping[str, Any] | None) -> bool:
     nested = ctx.get("metadata")
     metadata = nested if isinstance(nested, Mapping) else {}
     return bool(
-        is_audit_read_only_context(ctx)
-        or ctx.get("_read_only_turn_enforced") is True
+        ctx.get("_read_only_turn_enforced") is True
         or metadata.get("_read_only_turn_enforced") is True
     )
 
@@ -196,16 +194,15 @@ def audit_read_only_tool_denial(
     if name in {"run_tests", "lint_check"}:
         if name == "lint_check" and bool(payload.get("fix")):
             return (
-                "[audit-read-only] lint_check fix=true is blocked: audit.review/audit.deep "
-                "may inspect and verify but cannot modify files. Switch the task to develop "
-                "before applying fixes."
+                "[read-only] lint_check fix=true is blocked because this turn was explicitly "
+                "declared read-only. Start an authorized mutating turn before applying fixes."
             )
         if _verification_command_is_safe(name, payload.get("command")):
             return None
         return (
-            f"[audit-read-only] {name} accepted only a focused test/lint command; "
-            "arbitrary commands are blocked in audit. Use the tool's auto-detected "
-            "command or switch the task to develop."
+            f"[read-only] {name} accepted only a focused test/lint command; arbitrary "
+            "commands are blocked by this turn's explicit read-only policy. Use the "
+            "tool's auto-detected command or start an authorized mutating turn."
         )
 
     from runtime.execution.suckers.layers import is_read_only_skill
@@ -214,10 +211,9 @@ def audit_read_only_tool_denial(
         return None
     if audit_context:
         return (
-            f"[audit-read-only] tool '{name}' is blocked by workflow preset "
-            f"{workflow_preset_from_context(context)!r}: audit turns may inspect and "
-            "verify but cannot modify files. Switch the task to develop before "
-            "applying fixes."
+            f"[read-only] tool '{name}' is blocked by this turn's explicit read-only "
+            f"policy (legacy review preset {workflow_preset_from_context(context)!r}). "
+            "Start an authorized mutating turn before applying fixes."
         )
     scope = "the current diagnostic/read-only request"
     return (
@@ -305,7 +301,7 @@ def filter_tool_specs_for_workspace_contract(
                 tool_specs,
                 context=user_context,
             ),
-            ("audit_read_only" if is_audit_read_only_context(user_context) else "read_only"),
+            "read_only",
         )
     if goal_forbids_local_workspace_access(goal):
         allowed = [

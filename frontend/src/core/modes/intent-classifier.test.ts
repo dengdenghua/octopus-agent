@@ -22,14 +22,16 @@ describe("classifyModeIntent", () => {
     expect(r.handle).toBe("auto");
   });
 
-  it("resolves a security review request to audit", () => {
+  it("keeps a security review request in general mode", () => {
     const r = classifyModeIntent(["审查一下这段代码的安全性，有没有注入漏洞"]);
-    expect(r.mode).toBe("audit");
+    expect(r.mode).toBe("develop");
     expect(r.handle).toBe("auto");
   });
 
   it("resolves a UI request to uxui", () => {
-    const r = classifyModeIntent(["帮我把这个界面改好看一点，调整一下配色和圆角"]);
+    const r = classifyModeIntent([
+      "帮我把这个界面改好看一点，调整一下配色和圆角",
+    ]);
     expect(r.mode).toBe("uxui");
     expect(r.handle).toBe("auto");
   });
@@ -82,12 +84,12 @@ describe("classifyModeIntent", () => {
   it("ignores markdown code fences when classifying", () => {
     const r = classifyModeIntent(["```js\nconst inject = 1;\n``` 帮我查一下"]);
     // "inject" is an audit term; it must be stripped inside the fence so the
-    // generic "查一下" query does not accidentally classify as audit.
-    expect(r.mode).not.toBe("audit");
+    // generic "查一下" query does not accidentally switch to Design.
+    expect(r.mode).toBe("develop");
   });
 
   it("returns a valid AgentModeName for mode", () => {
-    const modes: AgentModeName[] = ["develop", "audit", "uxui"];
+    const modes: AgentModeName[] = ["develop", "uxui"];
     const r = classifyModeIntent(["写个组件"]);
     expect(modes).toContain(r.mode);
   });

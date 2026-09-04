@@ -2395,9 +2395,11 @@ def test_unlinked_single_agent_cowork_chat_keeps_one_to_one_react(
     ]
 
 
-def test_cowork_swarm_plan_drives_group_fanout(
+@pytest.mark.parametrize("room_mode", ["chat", "swarm"])
+def test_cowork_group_request_drives_pattern_fanout(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    room_mode: str,
 ) -> None:
     from runtime.memory.cowork.group_store import GroupStore
     from runtime.memory.cowork.service import invite_member, set_mode
@@ -2407,7 +2409,7 @@ def test_cowork_swarm_plan_drives_group_fanout(
     store = GroupStore(base_dir=tmp_path / "cowork")
     invite_member(store, "th-cowork", actor="u", target_id="db-agent", kind="agent")
     invite_member(store, "th-cowork", actor="u", target_id="ui-agent", kind="agent")
-    set_mode(store, "th-cowork", actor="u", mode="swarm")
+    set_mode(store, "th-cowork", actor="u", mode=room_mode)
     seen: dict[str, Any] = {}
 
     def fake_member_call(
@@ -2434,6 +2436,8 @@ def test_cowork_swarm_plan_drives_group_fanout(
     def fake_fanout(message: str, members: list[dict[str, Any]], **_kwargs: Any) -> dict[str, Any]:
         seen["message"] = message
         seen["members"] = members
+        seen["speaker"] = _kwargs.get("speaker")
+        seen["pattern"] = _kwargs.get("pattern")
         caller = _kwargs["agent_caller"]
         for member in members:
             caller(
@@ -2475,6 +2479,7 @@ def test_cowork_swarm_plan_drives_group_fanout(
                 "recommended_next_action": "use_primary_and_retry_failed_members",
                 "ready": True,
             },
+            "pattern": _kwargs.get("pattern"),
             "replies": [
                 {
                     "agent_id": member["name"],
@@ -2522,6 +2527,17 @@ def test_cowork_swarm_plan_drives_group_fanout(
                                 "personal_instructions": "优先引用一手来源。",
                                 "workflow_preset": "audit.deep",
                                 "verification_policy": "strict",
+                                "speaker_display_name": "老板",
+                                "agent_roster": [
+                                    {
+                                        "agent_id": "db-agent",
+                                        "display_name": "数据专家",
+                                    },
+                                    {
+                                        "agent_id": "ui-agent",
+                                        "display_name": "界面专家",
+                                    },
+                                ],
                             }
                         },
                     }
@@ -2532,6 +2548,10 @@ def test_cowork_swarm_plan_drives_group_fanout(
 
     assert seen["message"] == "大家一起看下"
     assert [m["name"] for m in seen["members"]] == ["db-agent", "ui-agent"]
+    assert [m["display_name"] for m in seen["members"]] == ["数据专家", "界面专家"]
+    assert seen["speaker"] == "老板"
+    assert seen["pattern"]["id"] == "parallel_roundtable"
+    assert seen["pattern"]["execution"] == "fanout"
     assert len(seen["member_calls"]) == 2
     for member_call in seen["member_calls"]:
         member_context = member_call["context"]
@@ -2540,10 +2560,11 @@ def test_cowork_swarm_plan_drives_group_fanout(
         assert member_context["personal_instructions"] == "优先引用一手来源。"
         assert member_context["workflow_preset"] == "audit.deep"
         assert member_context["verification_policy"] == "strict"
-        assert member_context["tool_allowlist_read_only"] is True
+        assert member_context["direct_conversation_reply"] is True
+        assert "tool_allowlist_read_only" not in member_context
         assert "audit.deep" in member_context["system_addendum"]
         assert "当前任务类型: research" in member_context["system_addendum"]
-        assert "audit.deep" in member_call["prompt"]
+        assert "audit.deep" not in member_call["prompt"]
     turn = out["response"].result["turn"]
     team_items = [
         item
@@ -2554,7 +2575,9 @@ def test_cowork_swarm_plan_drives_group_fanout(
     assert team_items[0]["status"] == "completed"
     assert team_items[0]["arguments"]["schema"] == "octopus.group_fanout_run.v1"
     assert team_items[0]["arguments"]["capacity"]["schema"] == ("octopus.group_fanout_capacity.v1")
+    assert team_items[0]["arguments"]["pattern"]["id"] == "parallel_roundtable"
     assert team_items[0]["result"]["schema"] == "octopus.group_fanout_result.v1"
+    assert team_items[0]["result"]["pattern"]["id"] == "parallel_roundtable"
     assert team_items[0]["result"]["capacity"]["requested_members"] == 2
     assert team_items[0]["result"]["capacity"]["dispatched_members"] == 2
     subagent_items = [
@@ -2568,6 +2591,7 @@ def test_cowork_swarm_plan_drives_group_fanout(
     assert "db-agent replied" in agent_texts
     assert "ui-agent replied" in agent_texts
     summary_text = next(text for text in agent_texts if text.startswith("协作汇总:"))
+    assert "采用并行圆桌" in summary_text
     assert "采纳主视角，同时补看失败成员" in summary_text
     assert "use_primary_and_retry_failed_members" not in summary_text
     assert "react should not run" not in agent_texts
@@ -2580,6 +2604,69 @@ def test_cowork_swarm_plan_drives_group_fanout(
     assert len(audit_items) == 1
     assert "use_primary_and_retry_failed_members" in audit_items[0]["content"]
     assert "octopus.group_fanout_capacity.v1" in audit_items[0]["content"]
+    assert "parallel_roundtable" in audit_items[0]["content"]
+
+
+def test_cowork_presence_question_uses_roster_without_starting_agents(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member, set_mode
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    store = GroupStore(base_dir=tmp_path / "cowork")
+    invite_member(store, "th-presence", actor="u", target_id="general", kind="agent")
+    invite_member(store, "th-presence", actor="u", target_id="coder", kind="agent")
+    set_mode(store, "th-presence", actor="u", mode="cluster")
+
+    def should_not_fanout(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("presence lookup must not launch member models")
+
+    monkeypatch.setattr(
+        "runtime.execution.agents.group_fanout.run_group_fanout",
+        should_not_fanout,
+    )
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "threads"),
+        cowork_group_store=store,
+    )
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-presence",
+                "input": [
+                    {
+                        "type": "text",
+                        "text": "你们都在线么？",
+                        "metadata": {
+                            "context": {
+                                "response_mode_override": "cluster",
+                                "agent_roster": [
+                                    {"agent_id": "general", "display_name": "Eve"},
+                                    {"agent_id": "coder", "display_name": "Kane"},
+                                ],
+                            }
+                        },
+                    }
+                ],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "completed"
+    agent_texts = [item["text"] for item in turn["items"] if item["type"] == "agentMessage"]
+    assert agent_texts == ["2 位 AI 成员均已就绪：Eve、Kane。"]
+    assert not any(item["type"] == "subagent" for item in turn["items"])
 
 
 def test_cowork_swarm_failure_reports_group_fanout_driver(
@@ -3265,6 +3352,40 @@ def test_non_audit_intent_does_not_set_audit_mode() -> None:
 
     intent = _build_intent("修复登录页的 bug", params, allow_client_auto_approve=True)
     assert intent.user_context.get("audit_mode") is None
+
+
+def test_bare_optimize_request_leaves_legacy_review_and_enters_general_workflow() -> None:
+    from runtime.protocol.items import TurnParams
+    from runtime.sensing.gateway.realtime_cerebrum import _build_intent
+
+    params = TurnParams.model_validate(
+        {
+            "threadId": "th-review-optimize",
+            "input": [
+                {
+                    "type": "text",
+                    "text": "优化",
+                    "metadata": {
+                        "context": {
+                            "mode": "code",
+                            "agent_mode": "audit",
+                            "workflow_preset": "audit.review",
+                            "workspace_path": "/tmp/repo",
+                            "workspace_scope": "project",
+                        },
+                    },
+                },
+            ],
+            "approvalPolicy": "never",
+        }
+    )
+
+    intent = _build_intent("优化", params, allow_client_auto_approve=True)
+
+    assert intent.user_context["audit_mode"] is False
+    assert intent.user_context["agent_mode"] == "develop"
+    assert intent.user_context["workflow_preset"] == "develop.iterate"
+    assert intent.user_context["completion_policy"] == "develop"
 
 
 def test_full_access_backend_includes_local_execution_and_full_network() -> None:

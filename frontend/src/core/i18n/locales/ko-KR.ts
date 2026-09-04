@@ -247,8 +247,10 @@ export const koKR: Translations = {
     showMoreAgents: (n: number) => `다른 에이전트 ${n}개 더 보기`,
     collapseAgents: "에이전트 접기",
     viewReport: "보고서 보기",
+    viewReply: "답변 보기",
     viewReportError: "실패 사유 보기",
     collapseReport: "보고서 접기",
+    collapseReply: "답변 접기",
     latestTool: "최근 작업",
     execution: "작업",
     verification: "검증",
@@ -5186,9 +5188,9 @@ export const koKR: Translations = {
   modes: {
     builder: "Builder",
     coder: "Coder",
-    develop: "Develop",
+    develop: "일반",
     audit: "Audit",
-    uxui: "UX/UI",
+    uxui: "디자인",
     architect: "Architect",
     ultra: "Ultra",
     standard: "표준",
@@ -5196,9 +5198,9 @@ export const koKR: Translations = {
     admin: "Admin",
     builderTooltip: "새 프로젝트/빈 폴더: 먼저 실행 가능한 슬라이스를 구축",
     coderTooltip: "기존 코드베이스: 구조 검사, 작은 수정, 검증",
-    developTooltip: "자동 신규/기존 프로젝트 처리를 통한 개발 구현",
+    developTooltip: "요청에서 구현, 검토, 분석, 조사를 자동 판단하는 일반 작업",
     auditTooltip: "증거, 위험, 우선순위가 있는 품질 감사",
-    uxuiTooltip: "UX/UI: 흐름, 레이아웃, 시각, 회귀 검토",
+    uxuiTooltip: "흐름, 레이아웃, 시각, 상호작용 회귀를 다루는 디자인 작업",
     architectTooltip: "아키텍처/마이그레이션: 영향 평가 및 단계별 작업",
     ultraTooltip:
       "감사 · 최고 오케스트레이션: UltraCode 스타일의 다단계 워크플로 스케줄링, 검증, 검토",
@@ -5206,7 +5208,7 @@ export const koKR: Translations = {
     adminTooltip: "시스템 관리자 — 최고 권한, 모든 Agent와 설정을 관리",
     builderDesc: "새 프로젝트",
     coderDesc: "기존 코드베이스",
-    developDesc: "빌드, 수정, 반복",
+    developDesc: "구현, 검토, 분석, 조사",
     auditDesc: "품질 및 위험",
     uxuiDesc: "경험과 시각",
     architectDesc: "Architecture",
@@ -5216,7 +5218,7 @@ export const koKR: Translations = {
     coderEffect:
       "먼저 기존 구조를 읽고, 작은 단계로 수정하고, 관련 검사를 실행합니다.",
     developEffect:
-      "프로젝트 스캔이 신규/기존을 처리합니다; 작은 검증 단계로 구현합니다.",
+      "요청에서 작업 방식을 판단하고 필요한 변경을 작게 실행한 뒤 검증합니다.",
     auditEffect:
       "먼저 읽고, 그 다음 증거, 심각도, 제안된 수정과 함께 문제를 보고합니다.",
     uxuiEffect:

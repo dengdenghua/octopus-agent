@@ -247,8 +247,10 @@ export const jaJP: Translations = {
     showMoreAgents: (n: number) => `他 ${n} 件のエージェントを表示`,
     collapseAgents: "エージェントを折りたたむ",
     viewReport: "レポートを見る",
+    viewReply: "返信を見る",
     viewReportError: "失敗の理由を見る",
     collapseReport: "レポートを閉じる",
+    collapseReply: "返信を閉じる",
     latestTool: "最新のアクション",
     execution: "アクション",
     verification: "検証",
@@ -5271,9 +5273,9 @@ export const jaJP: Translations = {
   modes: {
     builder: "Builder",
     coder: "Coder",
-    develop: "Develop",
+    develop: "汎用",
     audit: "Audit",
-    uxui: "UX/UI",
+    uxui: "デザイン",
     architect: "Architect",
     ultra: "Ultra",
     standard: "標準",
@@ -5282,9 +5284,9 @@ export const jaJP: Translations = {
     builderTooltip:
       "新規プロジェクト/空フォルダー：先に実行可能な最小スライスを構築",
     coderTooltip: "既存コードベース：構造を読み取り、小さな編集、検証",
-    developTooltip: "新規/既存プロジェクトを自動処理する実装作業",
+    developTooltip: "依頼から実装、レビュー、分析、調査を自動判定する汎用作業",
     auditTooltip: "証拠、リスク、優先度付きの品質監査",
-    uxuiTooltip: "フロー、レイアウト、ビジュアル、回帰の UX/UI レビュー",
+    uxuiTooltip: "フロー、レイアウト、ビジュアル、操作回帰のデザイン作業",
     architectTooltip: "アーキテクチャやマイグレーション：影響評価と段階的作業",
     ultraTooltip:
       "Audit Ultra ワークフロー：段階的計画、ツール/サブタスクスケジューリング、検証、レビュー",
@@ -5293,7 +5295,7 @@ export const jaJP: Translations = {
     adminTooltip: "システム管理者 —最高権限、すべてのエージェントと設定を管理",
     builderDesc: "新規プロジェクト",
     coderDesc: "既存コードベース",
-    developDesc: "ビルド、修正、反復",
+    developDesc: "実装、レビュー、分析、調査",
     auditDesc: "品質とリスク",
     uxuiDesc: "体験とビジュアル",
     architectDesc: "Architecture",
@@ -5302,8 +5304,7 @@ export const jaJP: Translations = {
       "エントリーポイントと受け入れチェックを定義し、最小の実行可能スライスを構築。",
     coderEffect:
       "既存の構造を先に読み、小ステップで編集し、関連チェックを実行。",
-    developEffect:
-      "プロジェクトスキャンが新規か既存かを処理。小さな検証ステップで実装。",
+    developEffect: "依頼から作業方法を判断し、必要な変更を小さく実行して検証。",
     auditEffect: "先に読んでから、証拠、重大度、修正提案とともに問題を報告。",
     uxuiEffect:
       "レイアウト、インタラクション、コピー、仕上げ、レスポンシブ状態のブラウザーウォークスルーを優先。",

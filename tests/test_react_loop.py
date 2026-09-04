@@ -1162,8 +1162,9 @@ def test_code_agent_mode_prompt_distinguishes_audit_and_uxui_modes() -> None:
     audit = _build_code_agent_mode_prompt("audit")
     uxui = _build_code_agent_mode_prompt("uxui")
 
-    assert "audit / 审计" in audit
-    assert "默认只读" in audit
+    assert "audit / 代码审查" in audit
+    assert "默认先检查" in audit
+    assert "当前任务直接修改并验证" in audit
     assert "uxui / 体验与界面" in uxui
     assert "浏览器重新走查" in uxui
 
@@ -1239,7 +1240,7 @@ def test_personal_agent_mode_prompt_is_empty_for_general_and_research() -> None:
 
 def test_workflow_preset_prompts_cover_each_project_work_mode() -> None:
     assert _build_workflow_preset_prompt("AUDIT.ULTRACODE").startswith("<workflow-preset>")
-    assert "默认只读" in _build_workflow_preset_prompt("audit.review")
+    assert "默认先形成证据化发现" in _build_workflow_preset_prompt("audit.review")
     assert "小步实现" in _build_workflow_preset_prompt("develop.iterate")
     assert "窄屏" in _build_workflow_preset_prompt("uxui.regression")
     assert _build_workflow_preset_prompt("") == ""

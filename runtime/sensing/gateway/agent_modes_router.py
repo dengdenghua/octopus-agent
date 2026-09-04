@@ -83,9 +83,9 @@ ARCHITECTURE_DIR_HINTS = {
     "rfcs",
 }
 
-# Detection keeps the original project-kind vocabulary; the interactive
-# selector uses task strategies.  The current-mode endpoint accepts both so a
-# frontend choice never fails merely because it came from the newer UX.
+# Detection keeps the original project-kind vocabulary. The user-facing mode
+# catalog is intentionally only general + design; old names remain accepted so
+# existing tasks and cached clients migrate without failing.
 CURRENT_AGENT_MODES = frozenset(
     {
         "builder",
@@ -94,6 +94,8 @@ CURRENT_AGENT_MODES = frozenset(
         "develop",
         "audit",
         "uxui",
+        "general",
+        "design",
     }
 )
 
@@ -205,10 +207,10 @@ def create_agent_modes_router(
         return ModesResponse(
             modes=[
                 ModeInfo(
-                    name="builder",
-                    display_name="Builder",
-                    description="Create a new project or runnable slice from scratch.",
-                    icon="hammer",
+                    name="develop",
+                    display_name="General",
+                    description=("Build, fix, review, analyze, and research based on the request."),
+                    icon="code",
                     templates=[
                         TemplateInfo(
                             name="web-app",
@@ -229,17 +231,10 @@ def create_agent_modes_router(
                     ],
                 ),
                 ModeInfo(
-                    name="coder",
-                    display_name="Coder",
-                    description="Modify, debug, refactor, and verify an existing codebase.",
-                    icon="code",
-                    templates=None,
-                ),
-                ModeInfo(
-                    name="architect",
-                    display_name="Architect",
-                    description="Plan safer cross-module changes, migrations, and contracts.",
-                    icon="building",
+                    name="uxui",
+                    display_name="Design",
+                    description="Design, inspect, and verify interfaces and interactions.",
+                    icon="palette",
                     templates=None,
                 ),
             ],
@@ -285,10 +280,15 @@ def create_agent_modes_router(
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    "unknown agent mode; expected develop/audit/uxui or builder/coder/architect"
+                    "unknown agent mode; expected develop/uxui (legacy aliases remain accepted)"
                 ),
             )
-        return CurrentModeResponse(ok=True, mode=mode, session_id=body.session_id)
+        canonical_mode = "uxui" if mode in {"uxui", "design"} else "develop"
+        return CurrentModeResponse(
+            ok=True,
+            mode=canonical_mode,
+            session_id=body.session_id,
+        )
 
     return router
 

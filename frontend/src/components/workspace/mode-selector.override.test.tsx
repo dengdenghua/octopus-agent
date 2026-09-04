@@ -67,6 +67,7 @@ describe("ModeSelector.onManualOverrideChange", () => {
 
   it("reports true when the user manually switches modes", async () => {
     const onManualOverrideChange = vi.fn();
+    const onUserModeChange = vi.fn();
     const user = userEvent.setup();
     render(
       <ModeSelector
@@ -74,21 +75,28 @@ describe("ModeSelector.onManualOverrideChange", () => {
         sessionId="s1"
         mode="develop"
         onModeChange={() => {}}
+        onUserModeChange={onUserModeChange}
         onManualOverrideChange={onManualOverrideChange}
       />,
     );
 
-    // Open the popup and pick the audit option.
+    // Open the popup and pick the only specialized option: Design.
     await user.click(screen.getByRole("button", { haspopup: "listbox" }));
     const options = await screen.findAllByRole("option");
-    const audit = options.find((o) => o.textContent?.includes("审查"));
-    expect(audit).toBeTruthy();
-    await user.click(audit!);
+    expect(options).toHaveLength(2);
+    expect(
+      options.every((option) => !option.textContent?.includes("审查")),
+    ).toBe(true);
+    const design = options.find((o) => o.textContent?.includes("界面"));
+    expect(design).toBeTruthy();
+    await user.click(design!);
 
     expect(onManualOverrideChange).toHaveBeenCalledWith(true);
+    expect(onUserModeChange).toHaveBeenCalledOnce();
+    expect(onUserModeChange).toHaveBeenCalledWith("uxui");
   });
 
-  it("restores a persisted mode and audit intensity on mount", () => {
+  it("migrates a persisted audit mode to general on mount", () => {
     window.localStorage.setItem(
       "octopus:modeOverride",
       JSON.stringify({
@@ -96,22 +104,19 @@ describe("ModeSelector.onManualOverrideChange", () => {
       }),
     );
     const onModeChange = vi.fn();
-    const onAuditIntensityChange = vi.fn();
+    const onUserModeChange = vi.fn();
     render(
       <ModeSelector
         workDir="/workspace/a"
         sessionId="s1"
         mode="develop"
-        auditIntensity="standard"
         onModeChange={onModeChange}
-        onAuditIntensityChange={onAuditIntensityChange}
+        onUserModeChange={onUserModeChange}
       />,
     );
 
-    // The persisted choice (audit + 最高) is reapplied after refresh instead
-    // of snapping back to the default develop/标准.
-    expect(onModeChange).toHaveBeenCalledWith("audit");
-    expect(onAuditIntensityChange).toHaveBeenCalledWith("max");
+    expect(onModeChange).toHaveBeenCalledWith("develop");
+    expect(onUserModeChange).not.toHaveBeenCalled();
   });
 
   it("persists a mode only after the server accepts it", async () => {
@@ -120,7 +125,7 @@ describe("ModeSelector.onManualOverrideChange", () => {
     expect(
       JSON.parse(window.localStorage.getItem("octopus:modeOverride")!),
     ).toEqual({
-      "/workspace/a": { mode: "audit" },
+      "/workspace/a": { mode: "develop" },
     });
   });
 

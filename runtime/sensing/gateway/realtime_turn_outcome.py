@@ -767,6 +767,20 @@ def _record_task_run_started(
         _logger.warning("trace store start failed for %s: %s", turn.id, exc)
 
 
+def _turn_user_goal(turn: Turn) -> str:
+    """Return the user text that created a realtime task run."""
+
+    return next(
+        (
+            str(getattr(item, "text", "") or "").strip()
+            for item in turn.items
+            if str(getattr(item, "type", "")) in {"userMessage", "ItemType.USER_MESSAGE"}
+            and str(getattr(item, "text", "") or "").strip()
+        ),
+        "",
+    )
+
+
 def _record_task_run_finished(
     runtime: CerebrumRuntime,
     turn: Turn,
@@ -798,19 +812,24 @@ def _record_task_run_finished(
                 "turn_id": turn.id,
                 "error": turn.error,
             }
-            if supervisor.store.get(supervisor_task_id) is None:
+            created_missing_record = supervisor.store.get(supervisor_task_id) is None
+            if created_missing_record:
                 params = cast(TurnParams, turn.params)
+                goal = _turn_user_goal(turn)
                 supervisor.start_task(
                     task_id=supervisor_task_id,
                     kind="realtime_objective",
                     owner_id=getattr(params, "owner_actor_id", None),
                     thread_id=turn.thread_id,
+                    title=_preview_text(goal, limit=80),
+                    goal=goal,
                     mode=_turn_mode(params) or "direct",
+                    workspace_path=(turn.execution_workspace_path or getattr(params, "cwd", None)),
                     origin_task_id=turn.id,
                     metadata=metadata,
-                    status=TaskRunStatus(supervisor_status),
+                    status=TaskRunStatus.RUNNING,
                 )
-            elif recover_stale_lease:
+            if recover_stale_lease and not created_missing_record:
                 supervisor.recover_stale_turn(
                     supervisor_task_id,
                     supervisor_status,
@@ -863,16 +882,7 @@ def _record_react_trace_event(runtime: CerebrumRuntime, turn: Turn, evt: dict[st
         if supervisor is not None and supervisor_task_id:
             try:
                 params = cast(TurnParams, turn.params)
-                goal = next(
-                    (
-                        str(getattr(item, "text", "") or "").strip()
-                        for item in turn.items
-                        if str(getattr(item, "type", ""))
-                        in {"userMessage", "ItemType.USER_MESSAGE"}
-                        and str(getattr(item, "text", "") or "").strip()
-                    ),
-                    "",
-                )
+                goal = _turn_user_goal(turn)
                 supervisor.start_task(
                     task_id=supervisor_task_id,
                     kind="realtime_objective",

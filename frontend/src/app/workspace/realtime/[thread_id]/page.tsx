@@ -85,12 +85,10 @@ import { ComposerStepProgress } from "@/components/workspace/composer-step-progr
 import {
   persistModeSelection,
   type AgentModeName,
-  type AuditIntensity,
   type DetectResponse,
   type DetectionSignals,
 } from "@/components/workspace/mode-selector";
 import type { ReasoningMode } from "@/components/workspace/reasoning-mode";
-import type { PersonalMode } from "@/components/workspace/personal-mode-selector";
 import { RecRecorderOverlay } from "@/components/workspace/rec-recorder-overlay";
 import { useCapabilitySurface } from "@/core/plugins/use-capability-surface";
 import type { PromptInputFilePart, UploadedFileInfo } from "@/core/uploads";
@@ -179,6 +177,15 @@ import { getControlPlaneBaseURL } from "@/core/config";
 import { toHashRouterShellUrl } from "@/core/router/hash-shell-url";
 import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
 import { useDeferredRouteCommit } from "@/core/router/use-deferred-route-commit";
+import {
+  DESIGN_CANVAS_CONTEXT_MESSAGE,
+  DESIGN_MODE_CHANGE_MESSAGE,
+  DESIGN_RESULT_MESSAGE,
+  DESIGN_THREAD_STATE_MESSAGE,
+  compactDesignResultText,
+  designWorkspaceRoute,
+  type DesignCanvasAgentContext,
+} from "@/core/design/mode-bridge";
 import { useThreadSettings } from "@/core/settings";
 import { applyCoderModelProfileBoundary } from "@/core/coder/api";
 import {
@@ -676,8 +683,6 @@ function RealtimePageContent({
   }, []);
   const [projectAgentMode, setProjectAgentMode] =
     useState<AgentModeName>("develop");
-  const [auditIntensity, setAuditIntensity] =
-    useState<AuditIntensity>("standard");
   const [projectDetection, setProjectDetection] =
     useState<DetectResponse | null>(null);
   // Whether the user manually overrode the auto-detected work mode. When true,
@@ -688,30 +693,6 @@ function RealtimePageContent({
     mode: AgentModeName;
     label: string;
   } | null>(null);
-  // Personal-space work mode (general/build/research) — only meaningful when no
-  // project dir is bound; threaded into the turn context as personal_mode. It no
-  // longer downgrades capability: personal space still runs against an isolated
-  // coding workspace, while a selected folder binds a user project workspace.
-  const [personalMode, setPersonalMode] = useState<PersonalMode>(
-    () => settings.personal_space.default_mode,
-  );
-  const lastPersonalDefaultRef = useRef(settings.personal_space.default_mode);
-  useEffect(() => {
-    const nextDefault = settings.personal_space.default_mode;
-    if (lastPersonalDefaultRef.current === nextDefault) return;
-    lastPersonalDefaultRef.current = nextDefault;
-    setPersonalMode(nextDefault);
-  }, [settings.personal_space.default_mode]);
-  const handlePersonalModeChange = useCallback(
-    (nextMode: PersonalMode) => {
-      setPersonalMode(nextMode);
-      if (settings.personal_space.remember_last_mode) {
-        lastPersonalDefaultRef.current = nextMode;
-        setSettings("personal_space", { default_mode: nextMode });
-      }
-    },
-    [setSettings, settings.personal_space.remember_last_mode],
-  );
   // REC floating recorder overlay (replaces the old confirm() start/stop flow).
   const [recOverlayOpen, setRecOverlayOpen] = useState(false);
   const [recIsRecording, setRecIsRecording] = useState(false);
@@ -1010,6 +991,45 @@ function RealtimePageContent({
     searchParams.get("creation_space")?.trim() || "";
   const embeddedCreativeProject =
     searchParams.get("creative_project")?.trim() || "";
+  const embeddedDesignStageNodeId =
+    searchParams.get("design_stage")?.trim() || "";
+  const embeddedDesignParentOrigin = useMemo(() => {
+    const value = searchParams.get("design_parent_origin")?.trim();
+    if (!value) return window.location.origin;
+    try {
+      const parsed = new URL(value);
+      return parsed.protocol === "http:" || parsed.protocol === "https:"
+        ? parsed.origin
+        : window.location.origin;
+    } catch {
+      return window.location.origin;
+    }
+  }, [searchParams]);
+  const [embeddedDesignContext, setEmbeddedDesignContext] =
+    useState<DesignCanvasAgentContext | null>(null);
+  useEffect(() => {
+    if (!embeddedDesignChat) {
+      setEmbeddedDesignContext(null);
+      return;
+    }
+    // A Design Canvas conversation always executes the Design preset. This is
+    // a surface contract, not a stale preference inherited from another task.
+    setProjectAgentMode("uxui");
+    const onMessage = (event: MessageEvent) => {
+      if (
+        event.source !== window.parent ||
+        event.origin !== embeddedDesignParentOrigin ||
+        event.data?.type !== DESIGN_CANVAS_CONTEXT_MESSAGE ||
+        !event.data?.context ||
+        typeof event.data.context !== "object"
+      ) {
+        return;
+      }
+      setEmbeddedDesignContext(event.data.context as DesignCanvasAgentContext);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [embeddedDesignChat, embeddedDesignParentOrigin]);
   const initialPrompt = useMemo(() => {
     return searchParams.get("prompt") ?? "";
   }, [searchParams]);
@@ -1213,7 +1233,7 @@ function RealtimePageContent({
   );
   const persistedCollaboratorKey = persistedCollaboratorIds.join("\u0000");
   const savedCollaborationMode =
-    collabSessionQuery.data?.mode ?? coworkGroupQuery.data?.state.mode;
+    coworkGroupQuery.data?.state.mode ?? collabSessionQuery.data?.mode;
   const applyTaskCollaboratorPreset = useCallback(
     (preset: TaskCollaboratorPreset) => {
       const nextIds = Array.from(
@@ -1311,8 +1331,12 @@ function RealtimePageContent({
           room_id: collabSessionQuery.data.room_id,
         }
       : null;
+    // Group state is the write target of replaceCoworkRoster and is updated in
+    // the query cache by that mutation. Prefer it over the compatibility
+    // session projection; otherwise two briefly out-of-sync sources can
+    // alternate the selected mode and append an unbounded event loop.
     const currentCoworkState =
-      sessionState ?? coworkGroupQuery.data?.state ?? null;
+      coworkGroupQuery.data?.state ?? sessionState ?? null;
     if (
       currentCoworkState === null &&
       (collabSessionQuery.isPending || coworkGroupQuery.isPending)
@@ -1325,7 +1349,7 @@ function RealtimePageContent({
       collaboratorIds: selectedCollaboratorIds,
       mode:
         pendingRosterModeRef.current ??
-        normalizeTeamResponseMode(savedCollaborationMode),
+        normalizeTeamResponseMode(teamModeIntent),
       current: currentCoworkState,
       keepLeader: Boolean(boundProjectQuery.data),
     });
@@ -1343,6 +1367,7 @@ function RealtimePageContent({
       {
         onSuccess: () => {
           collaboratorSelectionTouchedRef.current = false;
+          responseModeIntentTouchedRef.current = false;
           pendingRosterModeRef.current = null;
         },
         onError: () => {
@@ -1350,7 +1375,9 @@ function RealtimePageContent({
           // Roll back visibly on failure instead of showing members that will
           // disappear on refresh.
           collaboratorSelectionTouchedRef.current = false;
+          responseModeIntentTouchedRef.current = false;
           pendingRosterModeRef.current = null;
+          lastCoworkSyncSignatureRef.current = null;
           setSelectedCollaboratorIds(persistedCollaboratorIds);
           setTeamModeIntent(
             persistedCollaboratorIds.length > 0
@@ -1844,6 +1871,9 @@ function RealtimePageContent({
         query.set("creation_space", embeddedCreationSpace);
       if (embeddedCreativeProject)
         query.set("creative_project", embeddedCreativeProject);
+      if (embeddedDesignParentOrigin !== window.location.origin) {
+        query.set("design_parent_origin", embeddedDesignParentOrigin);
+      }
       return `${path}?${query.toString()}`;
     },
     [
@@ -1851,6 +1881,7 @@ function RealtimePageContent({
       embeddedCreationSpace,
       embeddedDesignChat,
       embeddedDesignProject,
+      embeddedDesignParentOrigin,
     ],
   );
   const markSidebarThreadRunning = useCallback(
@@ -2417,38 +2448,44 @@ function RealtimePageContent({
               : undefined,
           capability_mode: isCodingWorkspaceMode ? "code" : undefined,
           code_mode: isCodingWorkspaceMode ? "solo" : undefined,
-          // Project presets describe how to operate on a bound user project.
-          // Personal space has its own general/build/research contract; sending
-          // the default project "develop" bundle here made all three personal
-          // modes behave like development mode.
-          agent_mode: isProjectCodeMode ? projectAgentMode : undefined,
-          mode_preset: isProjectCodeMode ? projectModePreset.id : undefined,
-          workflow_preset: isProjectCodeMode
-            ? workflowPresetForMode(projectAgentMode, auditIntensity)
+          // Personal and project workspaces share one mode contract. Scope only
+          // decides which directory is bound; it no longer swaps in a second
+          // general/build/research vocabulary.
+          agent_mode: isCodingWorkspaceMode ? projectAgentMode : undefined,
+          mode_preset: isCodingWorkspaceMode ? projectModePreset.id : undefined,
+          workflow_preset: isCodingWorkspaceMode
+            ? workflowPresetForMode(projectAgentMode)
             : undefined,
           // UX/UI is not just a prompt label: enable the runtime's browser
           // regression contract so visual work must be inspected after changes.
           browser_regression_enabled:
-            isProjectCodeMode && projectAgentMode === "uxui" ? true : undefined,
-          // Personal-space work mode. Backend keeps this as scope steering while the
-          // same code capability/tool chain remains available in personal workspace.
-          personal_mode: !isProjectCodeMode ? personalMode : undefined,
+            isCodingWorkspaceMode && projectAgentMode === "uxui"
+              ? true
+              : undefined,
+          // Same-origin Design Canvas sends a compact, structured snapshot of
+          // the live selection. The runtime turns it into grounded design
+          // instructions instead of making the model infer canvas state from
+          // a lossy prose prompt.
+          design_canvas_context:
+            embeddedDesignChat && projectAgentMode === "uxui"
+              ? (embeddedDesignContext ?? undefined)
+              : undefined,
           personal_instructions: !isProjectCodeMode
             ? settings.personal_space.custom_instructions.trim() || undefined
             : undefined,
-          skill_pack_profile: isProjectCodeMode
+          skill_pack_profile: isCodingWorkspaceMode
             ? projectModePreset.skillPackProfile
             : undefined,
-          verification_policy: isProjectCodeMode
+          verification_policy: isCodingWorkspaceMode
             ? projectModePreset.verificationPolicy
             : undefined,
-          default_skill_packs: isProjectCodeMode
+          default_skill_packs: isCodingWorkspaceMode
             ? projectModePreset.defaultSkillPacks
             : undefined,
-          default_plugins: isProjectCodeMode
+          default_plugins: isCodingWorkspaceMode
             ? projectModePreset.defaultPlugins
             : undefined,
-          mode_contract: isProjectCodeMode
+          mode_contract: isCodingWorkspaceMode
             ? projectModePreset.promptContract
             : undefined,
           project_signals: projectSignals,
@@ -2513,13 +2550,13 @@ function RealtimePageContent({
       },
     }),
     [
-      auditIntensity,
       activeGroupTaskContext,
       automationTarget,
       clearSidebarThreadStatus,
       collaborationContext,
       commitThreadRoute,
       embeddedDesignChat,
+      embeddedDesignContext,
       effectiveAgentId,
       effectiveMode,
       effectiveReasoningEffort,
@@ -2527,7 +2564,6 @@ function RealtimePageContent({
       isGroupConversation,
       isProjectCodeMode,
       markSidebarThreadRunning,
-      personalMode,
       personalWorkspacePath,
       projectAgentMode,
       projectModePreset,
@@ -3029,6 +3065,92 @@ function RealtimePageContent({
   ]);
   const sidebarThreadId =
     thread.threadId ?? localStartedThreadIdRef.current ?? threadId;
+  useEffect(() => {
+    if (!embeddedDesignChat || window.parent === window) return;
+    window.parent.postMessage(
+      {
+        type: DESIGN_THREAD_STATE_MESSAGE,
+        threadId: sidebarThreadId,
+        targetStageNodeId: embeddedDesignStageNodeId || undefined,
+        runState: agentRunInterrupted
+          ? "interrupted"
+          : agentRunFailed
+            ? "failed"
+            : hasCompletedAgentOutput
+              ? "completed"
+              : sidebarRunState || "idle",
+      },
+      embeddedDesignParentOrigin,
+    );
+  }, [
+    agentRunFailed,
+    agentRunInterrupted,
+    embeddedDesignChat,
+    embeddedDesignParentOrigin,
+    embeddedDesignStageNodeId,
+    hasCompletedAgentOutput,
+    sidebarRunState,
+    sidebarThreadId,
+  ]);
+
+  const latestDesignAnswer = useMemo(() => {
+    for (let index = lastTurnMessages.length - 1; index >= 0; index -= 1) {
+      const message = lastTurnMessages[index];
+      if (
+        !message ||
+        !isSettledAssistantAnswer(message, { allowToolCalls: true })
+      ) {
+        continue;
+      }
+      const text = compactDesignResultText(extractTextFromMessage(message));
+      if (!text) continue;
+      return {
+        messageId: message.id || `answer-${index}`,
+        text,
+      };
+    }
+    return null;
+  }, [lastTurnMessages]);
+  const postedDesignResultRef = useRef("");
+  useEffect(() => {
+    if (
+      !embeddedDesignChat ||
+      !hasCompletedAgentOutput ||
+      !latestDesignAnswer ||
+      window.parent === window
+    ) {
+      return;
+    }
+    const key = `${sidebarThreadId}:${latestDesignAnswer.messageId}`;
+    if (postedDesignResultRef.current === key) return;
+    postedDesignResultRef.current = key;
+    window.parent.postMessage(
+      {
+        type: DESIGN_RESULT_MESSAGE,
+        threadId: sidebarThreadId,
+        messageId: latestDesignAnswer.messageId,
+        title: String(thread.values?.title || "").trim() || "设计 Agent 输出",
+        text: latestDesignAnswer.text,
+        previewUrl: resultPreviewUrl || undefined,
+        artifacts: finalArtifactEntries.slice(0, 12).map((entry) => ({
+          path: entry.path,
+          title: entry.title,
+        })),
+        targetStageNodeId: embeddedDesignStageNodeId || undefined,
+      },
+      embeddedDesignParentOrigin,
+    );
+  }, [
+    embeddedDesignChat,
+    embeddedDesignParentOrigin,
+    embeddedDesignStageNodeId,
+    finalArtifactEntries,
+    hasCompletedAgentOutput,
+    latestDesignAnswer,
+    resultPreviewUrl,
+    sidebarThreadId,
+    thread.values?.title,
+  ]);
   // Forward the derived run state to the Godot desktop pet (no-op in browser).
   // The in-page sprite pet was removed — the desktop sidecar is the only pet
   // now, so the returned mood is unused and the call is kept for its effect.
@@ -3351,6 +3473,15 @@ function RealtimePageContent({
       try {
         await persistModeSelection(mode, threadId, effectiveWorkDir);
         toast.success(t.modeIntent.autoSwitched(label));
+        if (mode === "uxui" && !embeddedDesignChat) {
+          navigate(
+            designWorkspaceRoute({
+              threadId: sidebarThreadId,
+              projectId: boundProjectState?.project.id,
+              projectName: boundProjectState?.project.name,
+            }),
+          );
+        }
       } catch (error) {
         setProjectAgentMode(previousMode);
         setModeManualOverride(previousManualOverride);
@@ -3359,7 +3490,63 @@ function RealtimePageContent({
         throw error;
       }
     },
-    [effectiveWorkDir, modeManualOverride, projectAgentMode, t, threadId],
+    [
+      boundProjectState?.project.id,
+      boundProjectState?.project.name,
+      effectiveWorkDir,
+      embeddedDesignChat,
+      modeManualOverride,
+      navigate,
+      projectAgentMode,
+      sidebarThreadId,
+      t,
+      threadId,
+    ],
+  );
+
+  const handleProjectAgentModeStateChange = useCallback(
+    (mode: AgentModeName) => {
+      // The embedded surface is the Design mode itself. A persisted General
+      // preference may hydrate here, but only an explicit user action should
+      // close the canvas (handled separately below).
+      setProjectAgentMode(embeddedDesignChat ? "uxui" : mode);
+    },
+    [embeddedDesignChat],
+  );
+
+  const handleProjectAgentModeUserChange = useCallback(
+    (mode: AgentModeName) => {
+      if (embeddedDesignChat) {
+        if (mode === "develop" && window.parent !== window) {
+          window.parent.postMessage(
+            {
+              type: DESIGN_MODE_CHANGE_MESSAGE,
+              mode: "develop",
+              threadId: sidebarThreadId,
+            },
+            embeddedDesignParentOrigin,
+          );
+        }
+        return;
+      }
+      if (mode === "uxui") {
+        navigate(
+          designWorkspaceRoute({
+            threadId: sidebarThreadId,
+            projectId: boundProjectState?.project.id,
+            projectName: boundProjectState?.project.name,
+          }),
+        );
+      }
+    },
+    [
+      boundProjectState?.project.id,
+      boundProjectState?.project.name,
+      embeddedDesignChat,
+      embeddedDesignParentOrigin,
+      navigate,
+      sidebarThreadId,
+    ],
   );
 
   const handleDismissModeIntent = useCallback(() => {
@@ -3406,7 +3593,11 @@ function RealtimePageContent({
       // when the user has hand-picked a mode we only suggest, never silently
       // switch. High-confidence verdicts auto-switch + toast; medium ones
       // surface the lightweight suggestion bar above the composer.
-      if (isProjectCodeMode && !isOctopusAssistant && !isGroupConversation) {
+      if (
+        isCodingWorkspaceMode &&
+        !isOctopusAssistant &&
+        !isGroupConversation
+      ) {
         const verdict = classifyModeIntent(
           recentHumanMessageTexts(thread.messages),
         );
@@ -3487,7 +3678,7 @@ function RealtimePageContent({
     [
       isOctopusAssistant,
       isGroupConversation,
-      isProjectCodeMode,
+      isCodingWorkspaceMode,
       legacyOnDemandThreadOwnerId,
       markSidebarThreadRunning,
       modeManualOverride,
@@ -4491,7 +4682,19 @@ function RealtimePageContent({
                             ) : undefined
                           }
                           statusTrailing={
-                            !embeddedDesignChat && isGroupConversation ? (
+                            embeddedDesignChat ? (
+                              <span
+                                data-testid="design-canvas-context-status"
+                                className="whitespace-nowrap text-[11px] text-violet-600"
+                              >
+                                {embeddedDesignContext
+                                  ? embeddedDesignContext.selected_node_ids
+                                      .length > 0
+                                    ? `已连接画布 · 已选 ${embeddedDesignContext.selected_node_ids.length}`
+                                    : "已连接画布"
+                                  : "正在连接画布…"}
+                              </span>
+                            ) : isGroupConversation ? (
                               <ConversationRosterStrip
                                 seats={collaborationRosterSeats}
                                 onMemberClick={openAgentPanel}
@@ -4510,17 +4713,19 @@ function RealtimePageContent({
                           workDir={effectiveWorkDir}
                           displayAgent={composerDisplayAgent}
                           showWorkDirSelector={!embeddedDesignChat}
+                          showModeSelector
                           onWorkDirChange={handleWorkDirChange}
                           lockWorkDirToThread={!isNewThread}
                           onOpenWorkDirInNewTask={openWorkDirInNewTask}
                           codeModeUnlocked={codeModeUnlocked}
                           projectAgentMode={projectAgentMode}
-                          auditIntensity={auditIntensity}
-                          personalMode={personalMode}
                           projectDetection={projectDetection}
-                          onProjectAgentModeChange={setProjectAgentMode}
-                          onAuditIntensityChange={setAuditIntensity}
-                          onPersonalModeChange={handlePersonalModeChange}
+                          onProjectAgentModeChange={
+                            handleProjectAgentModeStateChange
+                          }
+                          onProjectAgentModeUserChange={
+                            handleProjectAgentModeUserChange
+                          }
                           onProjectDetectionChange={setProjectDetection}
                           onManualOverrideChange={setModeManualOverride}
                           modeIntentSuggestion={modeIntentSuggestion}

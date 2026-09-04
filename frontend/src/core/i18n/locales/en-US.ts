@@ -251,8 +251,10 @@ export const enUS: Translations = {
     showMoreAgents: (n: number) => `Show ${n} more agents`,
     collapseAgents: "Collapse agents",
     viewReport: "View report",
+    viewReply: "View reply",
     viewReportError: "View failure reason",
     collapseReport: "Collapse report",
+    collapseReply: "Collapse reply",
     latestTool: "Latest action",
     execution: "Action",
     verification: "Verification",
@@ -5286,9 +5288,9 @@ Strategy:
   modes: {
     builder: "Builder",
     coder: "Coder",
-    develop: "Develop",
+    develop: "General",
     audit: "Audit",
-    uxui: "UX/UI",
+    uxui: "Design",
     architect: "Architect",
     ultra: "Ultra",
     standard: "Standard",
@@ -5298,9 +5300,10 @@ Strategy:
       "New project or empty folder: create a runnable slice first",
     coderTooltip: "Existing codebase: inspect, make small edits, verify",
     developTooltip:
-      "Implementation work with automatic new/existing project handling",
+      "General work that infers implementation, review, analysis, and research from the request",
     auditTooltip: "Quality audit with evidence, risk, and priorities",
-    uxuiTooltip: "UX/UI review for flows, layout, visuals, and regressions",
+    uxuiTooltip:
+      "Design work for flows, layout, visuals, and interaction regressions",
     architectTooltip:
       "Architecture or migration: assess impact and stage the work",
     ultraTooltip:
@@ -5311,7 +5314,7 @@ Strategy:
       "System Admin — highest privileges, manages all agents and settings",
     builderDesc: "New project",
     coderDesc: "Existing codebase",
-    developDesc: "Build, fix, iterate",
+    developDesc: "Build, review, analyze, research",
     auditDesc: "Quality and risk",
     uxuiDesc: "Experience and visuals",
     architectDesc: "Architecture",
@@ -5321,7 +5324,7 @@ Strategy:
     coderEffect:
       "Read the existing structure first, edit in small steps, and run relevant checks.",
     developEffect:
-      "Project scan handles new vs existing; implement in small verified steps.",
+      "Infer the workflow from the request; make deliberate changes in small verified steps when needed.",
     auditEffect:
       "Read first, then report issues with evidence, severity, and suggested fixes.",
     ultraEffect:

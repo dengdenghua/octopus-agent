@@ -8,6 +8,7 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, cast
 
+from runtime.execution.agents.group_fanout import is_group_presence_query
 from runtime.execution.tool_engine.session_reference_uri import (
     SUPPORTED_SESSION_REFERENCE_SCHEMES,
 )
@@ -877,13 +878,26 @@ async def _start_turn(
                 intent=intent,
             )
         explicit_project_command = _is_project_os_command(text)
-        if (intent.user_context or {}).get(
-            "cowork_waiting_for_mention"
-        ) and not explicit_project_command:
+        _planned_team_pattern = (intent.user_context or {}).get("team_pattern")
+        _planned_pattern_execution = (
+            str(_planned_team_pattern.get("execution") or "").strip()
+            if isinstance(_planned_team_pattern, dict)
+            else ""
+        )
+        if (
+            (intent.user_context or {}).get("cowork_waiting_for_mention")
+            and not explicit_project_command
+            and _planned_pattern_execution
+            not in {
+                "fanout",
+                "presence",
+            }
+        ):
             # A durable chat room accepts ordinary human conversation without
             # manufacturing an assistant response.  Close this as a successful
-            # user-only turn before approval/model routing; the canonical room
-            # mirror above keeps Project actions and reconnect replay available.
+            # user-only turn before approval/model routing. Explicit natural
+            # group work requests and presence checks are selected by the
+            # server-owned team pattern and therefore continue to dispatch.
             runtime._set_turn_steering_accepting(turn, False)
             turn.status = TurnStatus.COMPLETED
             turn.outcome_reason = "cowork_waiting_for_mention"
@@ -987,6 +1001,13 @@ async def _start_turn(
 
         try:
             topology_id = getattr(validated, "topology_id", None)
+            _cowork_context = intent.user_context or {}
+            _team_pattern = _cowork_context.get("team_pattern")
+            _team_pattern_execution = (
+                str(_team_pattern.get("execution") or "").strip()
+                if isinstance(_team_pattern, dict)
+                else ""
+            )
             # Mode-level guard: single-agent modes MUST NOT route
             # through ``_drive_team_topology`` even if a leftover
             # ``topology_id`` slipped through (e.g. settings
@@ -1050,9 +1071,27 @@ async def _start_turn(
                     thread_id=thread_id,
                     text=text,
                 )
-            elif str((intent.user_context or {}).get("serve_mesh") or "").strip() == "1" or (
-                bool((intent.user_context or {}).get("cowork_is_multi"))
-                and len((intent.user_context or {}).get("cowork_responders") or []) > 1
+            elif bool(_cowork_context.get("cowork_group")) and (
+                _team_pattern_execution == "presence" or is_group_presence_query(text)
+            ):
+                # Presence is deterministic collaboration state. It should be
+                # available in every response mode without waking a planner or
+                # launching the full roster.
+                turn_driver = "group_presence"
+                await runtime._drive_group_fanout(
+                    turn,
+                    log,
+                    emitter,
+                    intent,
+                    text=text,
+                )
+            elif (
+                _team_pattern_execution == "fanout"
+                or str(_cowork_context.get("serve_mesh") or "").strip() == "1"
+                or (
+                    bool(_cowork_context.get("cowork_is_multi"))
+                    and len(_cowork_context.get("cowork_responders") or []) > 1
+                )
             ):
                 # 蜂群 / 冒泡: the user picked the leaderless group mode. Fan the
                 # message out to every member agent in parallel — each chimes in

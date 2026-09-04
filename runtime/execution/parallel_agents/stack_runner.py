@@ -13,11 +13,71 @@ from runtime.platform.models import (
     ParsedIntent,
     Trajectory,
 )
+from runtime.platform.models.llm import Message, ModelRequest
 from runtime.platform.process.session import Session, current_session, session_scope
 
 from .orchestrator import TaskRunner
 
 _log = logging.getLogger(__name__)
+
+_DIRECT_CONVERSATION_MAX_TOKENS = 512
+
+
+def _run_direct_conversation_reply(
+    planner: Any,
+    description: str,
+    *,
+    soul: str,
+    model: str | None,
+) -> str:
+    """Generate a short, tool-free member reply without task planning.
+
+    Group-chat fanout asks members to contribute natural-language bubbles. It
+    must not send those bubbles through the JSON task planner: a perfectly
+    valid conversational answer is not a task graph and should never become a
+    ``[planner error]`` pseudo-success.
+    """
+
+    router = getattr(planner, "router", None)
+    if router is None or not callable(getattr(router, "call", None)):
+        raise RuntimeError("direct conversation reply is unavailable")
+    requested_model = str(model or "").strip()
+    selected_model = str(
+        requested_model
+        if requested_model and requested_model != "octopus-agent"
+        else getattr(planner, "planner_model", "") or ""
+    ).strip()
+    if not selected_model:
+        raise RuntimeError("direct conversation reply has no model")
+    system = "\n\n".join(
+        part
+        for part in (
+            soul.strip(),
+            (
+                "You are replying as one member of a team conversation. "
+                "Follow the user's requested language and length. Return only "
+                "the natural-language reply: no JSON, task plan, tool call, or "
+                "meta commentary."
+            ),
+        )
+        if part
+    )
+    response = router.call(
+        ModelRequest(
+            model=selected_model,
+            messages=[
+                Message(role="system", content=system),
+                Message(role="user", content=description),
+            ],
+            max_tokens=_DIRECT_CONVERSATION_MAX_TOKENS,
+            temperature=0.2,
+            system_provider="anthropic",
+        )
+    )
+    output = str(getattr(response, "text", "") or "").strip()
+    if not output:
+        raise RuntimeError("direct conversation reply was empty")
+    return output
 
 
 def _summarize_trajectory(traj: Trajectory, *, max_chars: int = 1200) -> str:
@@ -176,6 +236,31 @@ def make_stack_subagent_runner(
                 )
 
         ctx: dict[str, Any] = context if isinstance(context, dict) else {}
+        runtime_soul = ""
+        model = ctx.get("model_name")
+        if agent is not None:
+            try:
+                from runtime.execution.agents.loader import compose_runtime_soul
+
+                runtime_soul = compose_runtime_soul(agent, metadata=context or {})
+            except (ImportError, AttributeError):  # noqa: BLE001
+                runtime_soul = agent.soul
+            if not model:
+                model = agent.model
+
+        # A group-chat bubble is a plain conversational response, not a task
+        # graph. Keep it on a tool-free one-call lane so natural prose is not
+        # rejected for failing the planner's JSON contract.
+        if bool(ctx.get("direct_conversation_reply")):
+            if cancel_event is not None and cancel_event.is_set():
+                return ""
+            return _run_direct_conversation_reply(
+                planner,
+                description,
+                soul=runtime_soul,
+                model=str(model).strip() if model else None,
+            )
+
         if agent is not None:
             from runtime.execution.codex_backend.role_runner import (
                 agent_uses_codex_execution_backend,
@@ -198,17 +283,8 @@ def make_stack_subagent_runner(
         plan_kwargs: dict[str, Any] = {}
         if agent is not None:
             plan_kwargs["allowed_skills"] = agent.allowed_skill_union() or None
-            try:
-                from runtime.execution.agents.loader import compose_runtime_soul
-
-                runtime_soul = compose_runtime_soul(agent, metadata=context or {})
-            except (ImportError, AttributeError):  # noqa: BLE001
-                runtime_soul = agent.soul
             if runtime_soul:
                 plan_kwargs["soul"] = runtime_soul
-        model = ctx.get("model_name")
-        if not model and agent is not None:
-            model = agent.model
         if model and model not in ("octopus-agent", ""):
             plan_kwargs["model"] = model
 
@@ -280,7 +356,7 @@ def make_stack_subagent_runner(
                 graph = planner.plan(intent, **safe_kwargs)
             except PlannerError as e:
                 _log.info("planner error for subagent=%s · msg=%s", subagent_name, e)
-                return f"[planner error] {e}"
+                raise RuntimeError(f"planner error: {e}") from e
 
             if cancel_event is not None and cancel_event.is_set():
                 return ""

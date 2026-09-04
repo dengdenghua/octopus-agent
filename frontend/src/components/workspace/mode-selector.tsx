@@ -1,10 +1,9 @@
 /**
- * Task-oriented mode selector for Agent project/code mode.
+ * Unified work-mode selector for both personal and project workspaces.
  *
- * Project detection decides whether the workspace is new or existing.
- * User-facing modes decide the work strategy: develop, audit, UX/UI.
- * (architect maps to audit; uxui has no backend detection signal and is only
- * selectable manually.)
+ * Only two choices are user-facing: general-purpose work and design. Review,
+ * research, implementation, and debugging are inferred from the request
+ * inside general mode instead of requiring another manual mode switch.
  */
 
 import {
@@ -13,7 +12,6 @@ import {
   LoaderIcon,
   LockIcon,
   PaletteIcon,
-  ShieldCheckIcon,
 } from "lucide-react";
 import {
   useCallback,
@@ -99,6 +97,13 @@ const PANEL_WIDTH = 340;
 const PANEL_GAP = 6;
 const PANEL_MARGIN = 12;
 const PANEL_MIN_HEIGHT = 180;
+const PERSONAL_MODE_STORAGE_KEY = "__personal__";
+
+function canonicalUserMode(mode: AgentModeName): AgentModeName {
+  // `audit` is retained in the type only to read old task/local-storage data.
+  // Code review now belongs to the general-purpose mode.
+  return mode === "audit" ? "develop" : mode;
+}
 
 async function fetchDetection(workspacePath: string): Promise<DetectResponse> {
   const url = `${getBackendBaseURL()}/api/agent-modes/detect?workspace_path=${encodeURIComponent(workspacePath)}`;
@@ -145,16 +150,17 @@ export async function persistModeSelection(
   sessionId: string,
   workspacePath: string,
 ): Promise<void> {
+  const canonicalMode = canonicalUserMode(mode);
   const url = `${getBackendBaseURL()}/api/agent-modes/current`;
   const response = await fetch(url, {
     method: "PUT",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ mode, session_id: sessionId }),
+    body: JSON.stringify({ mode: canonicalMode, session_id: sessionId }),
   });
   if (!response.ok) {
     throw new Error(`Mode update failed: ${response.status}`);
   }
-  writeStoredModeOverride(workspacePath, mode);
+  writeStoredModeOverride(workspacePath, canonicalMode);
 }
 
 interface ModeSelectorProps {
@@ -170,6 +176,9 @@ interface ModeSelectorProps {
   labelOverrides?: Partial<Record<AgentModeName, string>>;
   permissionLabel?: string;
   onModeChange: (mode: AgentModeName) => void;
+  /** Runs only after a user-initiated selection has been persisted. Hydration
+   * and auto-detection never call it, so route changes can safely live here. */
+  onUserModeChange?: (mode: AgentModeName) => void;
   onAuditIntensityChange?: (intensity: AuditIntensity) => void;
   onDetectionChange?: (detection: DetectResponse | null) => void;
   /** Notify the parent when the user manually overrides the auto-detected
@@ -184,14 +193,13 @@ export function ModeSelector({
   workDir,
   sessionId,
   mode,
-  auditIntensity = "standard",
   codeModeUnlocked = false,
   readOnlyHint,
   chromeless = false,
   labelOverrides,
   permissionLabel,
   onModeChange,
-  onAuditIntensityChange,
+  onUserModeChange,
   onDetectionChange,
   onManualOverrideChange,
   className,
@@ -213,6 +221,7 @@ export function ModeSelector({
   const manualOverrideRef = useRef(false);
   const [manualOverride, setManualOverride] = useState(false);
   const [panelRect, setPanelRect] = useState<PanelRect | null>(null);
+  const storageKey = workDir.trim() || PERSONAL_MODE_STORAGE_KEY;
 
   const modeOptions = getModeOptions(t);
   const activeOption = modeOptions.find((option) => option.name === mode) ?? {
@@ -229,10 +238,9 @@ export function ModeSelector({
   };
 
   useEffect(() => {
-    if (!workDir) return;
-    const workspaceChanged = prevWorkDir.current !== workDir;
+    const workspaceChanged = prevWorkDir.current !== storageKey;
     if (workspaceChanged) {
-      prevWorkDir.current = workDir;
+      prevWorkDir.current = storageKey;
       manualOverrideRef.current = false;
       setManualOverride(false);
       onManualOverrideChange?.(false);
@@ -240,18 +248,13 @@ export function ModeSelector({
 
     // A persisted manual override for this workspace wins over auto-detection
     // (e.g. after a refresh), so the recommended mode never pre-empts it.
-    const storedMode = readStoredModeOverride(workDir);
+    const storedMode = readStoredModeOverride(storageKey);
     if (storedMode) {
       manualOverrideRef.current = true;
       setManualOverride(true);
       onManualOverrideChange?.(true);
       onModeChange(storedMode);
     }
-
-    // Restore the audit intensity (标准 / 最高) alongside the mode so a
-    // refresh/restart doesn't snap it back to the default.
-    const storedIntensity = readStoredAuditIntensity(workDir);
-    if (storedIntensity) onAuditIntensityChange?.(storedIntensity);
 
     let cancelled = false;
     const doDetect = async () => {
@@ -273,15 +276,15 @@ export function ModeSelector({
       }
     };
 
-    void doDetect();
+    if (workDir.trim()) void doDetect();
     return () => {
       cancelled = true;
     };
   }, [
-    onAuditIntensityChange,
     onDetectionChange,
     onManualOverrideChange,
     onModeChange,
+    storageKey,
     workDir,
   ]);
 
@@ -373,7 +376,8 @@ export function ModeSelector({
       triggerRef.current?.focus();
       setSwitching(true);
       try {
-        await persistModeSelection(newMode, sessionId, workDir);
+        await persistModeSelection(newMode, sessionId, storageKey);
+        onUserModeChange?.(newMode);
       } catch (e) {
         swallow(e);
         manualOverrideRef.current = previousManualOverride;
@@ -385,7 +389,14 @@ export function ModeSelector({
         setSwitching(false);
       }
     },
-    [mode, onManualOverrideChange, onModeChange, sessionId, workDir],
+    [
+      mode,
+      onManualOverrideChange,
+      onModeChange,
+      onUserModeChange,
+      sessionId,
+      storageKey,
+    ],
   );
 
   const closeAndRefocusTrigger = useCallback(() => {
@@ -589,41 +600,6 @@ export function ModeSelector({
                   })}
                 </div>
 
-                {mode === "audit" && (
-                  <div className="border-t px-3 py-2">
-                    <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-0.5">
-                      {(["standard", "max"] as const).map((level) => {
-                        const active = auditIntensity === level;
-                        const label =
-                          level === "max" ? t.modes.ultra : t.modes.standard;
-                        return (
-                          <button
-                            key={level}
-                            type="button"
-                            onClick={() => {
-                              onAuditIntensityChange?.(level);
-                              writeStoredAuditIntensity(workDir, level);
-                            }}
-                            className={cn(
-                              "flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
-                              active
-                                ? "bg-background text-foreground shadow-[var(--shadow-xs)] ring-1 ring-border-subtle"
-                                : "text-muted-foreground hover:text-foreground",
-                            )}
-                          >
-                            {label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <p className="mt-1.5 text-xs leading-tight text-muted-foreground">
-                      {auditIntensity === "max"
-                        ? t.modes.ultraTooltip
-                        : t.modes.auditEffect}
-                    </p>
-                  </div>
-                )}
-
                 {modeInfo && (
                   <div className="border-t px-3 py-2 text-xs text-muted-foreground leading-tight">
                     {modeInfo.description}
@@ -702,7 +678,7 @@ export function readStoredModeOverride(
 ): AgentModeName | null {
   const entry = readStoredEntries()[workspacePath];
   const mode = typeof entry === "string" ? entry : entry?.mode;
-  return isValidMode(mode) ? mode : null;
+  return isValidMode(mode) ? canonicalUserMode(mode) : null;
 }
 
 /**
@@ -734,7 +710,7 @@ export function writeStoredModeOverride(
     const existingIntensity =
       typeof existing === "object" ? existing.auditIntensity : undefined;
     current[workspacePath] = {
-      mode,
+      mode: canonicalUserMode(mode),
       ...(isValidAuditIntensity(existingIntensity)
         ? { auditIntensity: existingIntensity }
         : {}),
@@ -782,12 +758,10 @@ export function writeStoredAuditIntensity(
 export function modeFromProjectKind(kind: DetectedProjectKind): AgentModeName {
   switch (kind) {
     case "architect":
-      // architect → audit: quality/risk review fits the audit work strategy.
-      return "audit";
     case "builder":
     case "coder":
     default:
-      // builder/coder both resolve to the develop work strategy.
+      // Project kind changes context, not the user's two-mode choice.
       return "develop";
   }
 }
@@ -805,18 +779,6 @@ function getModeOptions(t: ReturnType<typeof useI18n>["t"]): ModeOption[] {
       desc: t.modes.developDesc,
       effect: t.modes.developEffect,
       tooltip: t.modes.developTooltip,
-    },
-    {
-      name: "audit",
-      icon: ShieldCheckIcon,
-      tone: "bg-destructive/15 text-destructive hover:bg-destructive/25 dark:bg-destructive/30 dark:text-destructive",
-      activeTone:
-        "bg-destructive/15 text-destructive dark:bg-destructive/40 dark:text-destructive ring-1 ring-destructive/20",
-      ring: "ring-destructive/20",
-      label: t.modes.audit,
-      desc: t.modes.auditDesc,
-      effect: t.modes.auditEffect,
-      tooltip: t.modes.auditTooltip,
     },
     {
       name: "uxui",

@@ -714,12 +714,15 @@ def _assert_team_scope(calls: list[dict], explicit_runner) -> None:
         assert trusted.metadata == context["runtime_session_metadata"]
         from runtime.execution.codex_backend.role_runner import resolve_codex_sandbox_mode
 
+        # A legacy review workflow guides how the agent works; it is not a
+        # filesystem capability boundary.  Only an explicit read-only turn
+        # may narrow a delegated ProjectOS worker to read-only.
         assert (
             resolve_codex_sandbox_mode(
                 context,
                 trusted_parent_metadata=trusted.metadata,
             )
-            == "read-only"
+            == "workspace-write"
         )
 
 

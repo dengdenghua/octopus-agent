@@ -19,8 +19,8 @@ describe("modeFromProjectKind", () => {
     expect(modeFromProjectKind("coder")).toBe("develop");
   });
 
-  test("maps architect to audit", () => {
-    expect(modeFromProjectKind("architect")).toBe("audit");
+  test("maps architect to the unified general mode", () => {
+    expect(modeFromProjectKind("architect")).toBe("develop");
   });
 });
 
@@ -41,14 +41,14 @@ describe("readStoredModeOverride / writeStoredModeOverride", () => {
     writeStoredModeOverride("/workspace/a", "audit");
     writeStoredModeOverride("/workspace/b", "uxui");
 
-    expect(readStoredModeOverride("/workspace/a")).toBe("audit");
+    expect(readStoredModeOverride("/workspace/a")).toBe("develop");
     expect(readStoredModeOverride("/workspace/b")).toBe("uxui");
 
     const raw = window.localStorage.getItem(STORAGE_KEY);
     expect(raw).not.toBeNull();
     const parsed = JSON.parse(raw!) as Record<string, unknown>;
     expect(parsed).toEqual({
-      "/workspace/a": { mode: "audit" },
+      "/workspace/a": { mode: "develop" },
       "/workspace/b": { mode: "uxui" },
     });
   });
@@ -58,7 +58,7 @@ describe("readStoredModeOverride / writeStoredModeOverride", () => {
       STORAGE_KEY,
       JSON.stringify({ "/workspace/a": "audit" }),
     );
-    expect(readStoredModeOverride("/workspace/a")).toBe("audit");
+    expect(readStoredModeOverride("/workspace/a")).toBe("develop");
     expect(readStoredAuditIntensity("/workspace/a")).toBeNull();
   });
 
@@ -109,13 +109,13 @@ describe("readStoredAuditIntensity / writeStoredAuditIntensity", () => {
     writeStoredModeOverride("/workspace/a", "audit");
     writeStoredAuditIntensity("/workspace/a", "max");
 
-    expect(readStoredModeOverride("/workspace/a")).toBe("audit");
+    expect(readStoredModeOverride("/workspace/a")).toBe("develop");
     expect(readStoredAuditIntensity("/workspace/a")).toBe("max");
 
     const raw = window.localStorage.getItem(STORAGE_KEY);
     const parsed = JSON.parse(raw!) as Record<string, unknown>;
     expect(parsed["/workspace/a"]).toEqual({
-      mode: "audit",
+      mode: "develop",
       auditIntensity: "max",
     });
   });
@@ -125,14 +125,14 @@ describe("readStoredAuditIntensity / writeStoredAuditIntensity", () => {
     writeStoredModeOverride("/workspace/a", "audit");
 
     expect(readStoredAuditIntensity("/workspace/a")).toBe("max");
-    expect(readStoredModeOverride("/workspace/a")).toBe("audit");
+    expect(readStoredModeOverride("/workspace/a")).toBe("develop");
   });
 
   test("writing the intensity preserves an existing mode", () => {
     writeStoredModeOverride("/workspace/a", "audit");
     writeStoredAuditIntensity("/workspace/a", "max");
 
-    expect(readStoredModeOverride("/workspace/a")).toBe("audit");
+    expect(readStoredModeOverride("/workspace/a")).toBe("develop");
     expect(readStoredAuditIntensity("/workspace/a")).toBe("max");
   });
 
@@ -145,7 +145,7 @@ describe("readStoredAuditIntensity / writeStoredAuditIntensity", () => {
     );
     expect(readStoredAuditIntensity("/workspace/a")).toBeNull();
     // The mode is still read independently of the intensity.
-    expect(readStoredModeOverride("/workspace/a")).toBe("audit");
+    expect(readStoredModeOverride("/workspace/a")).toBe("develop");
   });
 
   test("migrates a legacy flat-string row when the intensity is written", () => {
@@ -155,7 +155,7 @@ describe("readStoredAuditIntensity / writeStoredAuditIntensity", () => {
     );
     writeStoredAuditIntensity("/workspace/a", "max");
 
-    expect(readStoredModeOverride("/workspace/a")).toBe("audit");
+    expect(readStoredModeOverride("/workspace/a")).toBe("develop");
     expect(readStoredAuditIntensity("/workspace/a")).toBe("max");
   });
 });

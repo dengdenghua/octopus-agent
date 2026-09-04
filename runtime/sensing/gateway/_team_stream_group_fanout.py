@@ -105,6 +105,9 @@ def _fanout_member_context(ctx: dict[str, Any]) -> tuple[dict[str, Any], str]:
     """
 
     member_context = dict(ctx)
+    # Fanout lanes produce short conversational bubbles. The stack runner uses
+    # this trusted internal flag to bypass JSON task planning and tool setup.
+    member_context["direct_conversation_reply"] = True
     # These are group-driver implementation details, not child work policy.
     member_context.pop("agent_roster", None)
     member_context.pop("conversation_messages", None)
@@ -114,7 +117,7 @@ def _fanout_member_context(ctx: dict[str, Any]) -> tuple[dict[str, Any], str]:
         _build_personal_agent_mode_prompt,
         _build_workflow_preset_prompt,
     )
-    from runtime.execution.misc.skill_policy import is_audit_read_only_context
+    from runtime.execution.misc.skill_policy import is_enforced_read_only_context
 
     sections: list[str] = []
     workflow_preset = str(member_context.get("workflow_preset") or "").strip()
@@ -148,7 +151,7 @@ def _fanout_member_context(ctx: dict[str, Any]) -> tuple[dict[str, Any], str]:
             "<inherited-mode-contract>" + mode_contract[:2000] + "</inherited-mode-contract>"
         )
 
-    if is_audit_read_only_context(member_context):
+    if is_enforced_read_only_context(member_context):
         member_context["tool_allowlist_read_only"] = True
     policy_prompt = "\n".join(sections)
     existing_addendum = str(member_context.get("system_addendum") or "").strip()
@@ -174,6 +177,8 @@ async def _drive_group_fanout(
     room has <2 member agents or nobody answers, so the turn never stalls.
     """
     ctx = getattr(intent, "user_context", None) or {}
+    raw_team_pattern = ctx.get("team_pattern")
+    team_pattern = dict(raw_team_pattern) if isinstance(raw_team_pattern, dict) else {}
     try:
         from runtime.platform.process.session import Session, current_session
 
@@ -197,7 +202,7 @@ async def _drive_group_fanout(
                 )
     except (ImportError, LookupError):
         parent_session = None
-    member_context, member_policy_prompt = _fanout_member_context(ctx)
+    member_context, _member_policy_prompt = _fanout_member_context(ctx)
     # Standard Coder members execute on worker threads, but approvals must
     # still round-trip through this parent realtime turn.  This object is
     # server-created and deliberately replaces any similarly named client key.
@@ -260,6 +265,22 @@ async def _drive_group_fanout(
         with contextlib.suppress(Exception):
             await emitter.notify(ServerMethod.ITEM_STARTED, payload)
             await emitter.notify(ServerMethod.ITEM_COMPLETED, payload)
+
+    # Availability is roster state, not a reasoning task. Answer it once from
+    # the server-owned active roster instead of launching every model and then
+    # waiting for the slowest one to say "在线".
+    from runtime.execution.agents.group_fanout import (
+        format_group_presence_reply,
+        is_group_presence_query,
+    )
+
+    if is_group_presence_query(text):
+        await _emit(
+            format_group_presence_reply(members),
+            display_name="协作状态",
+            icon="●",
+        )
+        return
 
     async def _fallback_to_react() -> None:
         loop = asyncio.get_running_loop()
@@ -370,15 +391,20 @@ async def _drive_group_fanout(
             if len(dispatched_members) >= 2
             else "single",
         }
-        specs = [
-            {
-                "agent_id": member["name"],
-                "display_name": member["display_name"],
-                "role": "cowork",
-                "task": text[:500],
-            }
-            for member in dispatched_members
-        ]
+        from runtime.execution.agents.team_patterns import pattern_member_role
+
+        pattern_id = str(team_pattern.get("id") or "parallel_roundtable")
+        specs = []
+        for index, member in enumerate(dispatched_members):
+            specs.append(
+                {
+                    "agent_id": member["name"],
+                    "display_name": member["display_name"],
+                    "role": "cowork",
+                    "pattern_role": pattern_member_role(pattern_id, index),
+                    "task": text[:500],
+                }
+            )
         team_trace_item = McpToolCallItem(
             server="team",
             tool="team_swarm",
@@ -388,6 +414,7 @@ async def _drive_group_fanout(
                 "message": text[:1000],
                 "specs": specs,
                 "capacity": planned_group_capacity,
+                "pattern": team_pattern or None,
             },
             status=ItemStatus.IN_PROGRESS,
         )
@@ -431,6 +458,7 @@ async def _drive_group_fanout(
                 "capacity": result.get("capacity") or planned_group_capacity,
                 "arbitration": result.get("arbitration"),
                 "synthesis": result.get("synthesis"),
+                "pattern": result.get("pattern") or team_pattern or None,
                 "replies": replies,
             }
             team_trace_item.error = None if ok else str(result.get("error") or "no member replied")
@@ -482,16 +510,30 @@ async def _drive_group_fanout(
         # Multi-round debate double-counts the same member across rounds —
         # the summary should report distinct members, not bubble count.
         distinct_answered = list(dict.fromkeys(answered))
+        primary_display = primary
+        outcomes = arbitration.get("outcomes")
+        if isinstance(outcomes, list):
+            for outcome in outcomes:
+                if not isinstance(outcome, dict):
+                    continue
+                if str(outcome.get("agent_id") or "").strip() != primary:
+                    continue
+                primary_display = str(outcome.get("display_name") or primary).strip()
+                break
         parts = [
             f"协作汇总: {len(distinct_answered)} 位成员已回应",
         ]
+        pattern = result.get("pattern")
+        pattern_label = str(pattern.get("label") or "").strip() if isinstance(pattern, dict) else ""
+        if pattern_label:
+            parts.append(f"采用{pattern_label}")
         debate = result.get("debate")
         debate_rounds = debate.get("rounds") if isinstance(debate, dict) else None
         rounds = int(debate_rounds or arbitration.get("rounds") or 1)
         if rounds > 1:
             parts.append(f"共 {rounds} 轮成员互见辩论")
-        if primary:
-            parts.append(f"优先采纳 {primary} 的视角继续")
+        if primary_display:
+            parts.append(f"优先采纳 {primary_display} 的视角继续")
         if recommended and recommended != "use_primary_response":
             parts.append(f"下一步建议: {_group_next_action_label(recommended)}")
         blocked = [str(x) for x in [*failed, *empty] if x]
@@ -543,6 +585,15 @@ async def _drive_group_fanout(
         )
 
         def _wants_debate() -> int:
+            # The server-selected declarative pattern is the normal source of
+            # verification depth. Explicit bounded context remains available
+            # to internal callers and tests.
+            try:
+                pattern_rounds = int(team_pattern.get("debate_rounds") or 0)
+            except (TypeError, ValueError):
+                pattern_rounds = 0
+            if pattern_rounds >= 2:
+                return min(pattern_rounds, 3)
             # Explicit context flag wins.
             for key in ("swarm_debate_rounds", "debate_rounds"):
                 raw = ctx.get(key)
@@ -579,12 +630,13 @@ async def _drive_group_fanout(
 
         def _member_caller(agent_id: str, prompt: str, timeout_s: int = 90) -> dict[str, Any]:
             """Run every group member through the in-process agent boundary."""
-            effective_prompt = (
-                member_policy_prompt + "\n\n" + prompt if member_policy_prompt else prompt
-            )
             return _call_agent(
                 agent_id=agent_id,
-                prompt=effective_prompt,
+                # The member's persona is injected by the runner. Repeating
+                # the coordinator's full mode contract in every 1–3 sentence
+                # bubble only burns context and can steer it back into task
+                # planning.
+                prompt=prompt,
                 timeout_s=timeout_s,
                 context=member_context,
                 session=parent_session,
@@ -635,6 +687,10 @@ async def _drive_group_fanout(
                 turn_id=turn.id,
                 debate_rounds=debate_rounds,
                 mentioned=mentioned,
+                speaker=str(
+                    ctx.get("speaker_display_name") or ctx.get("human_display_name") or "用户"
+                ),
+                pattern=team_pattern or None,
             )
             await _complete_group_trace(result)
             arbitration = result.get("arbitration")
@@ -646,6 +702,7 @@ async def _drive_group_fanout(
                                 "schema": "octopus.group_fanout_audit.v1",
                                 "arbitration": arbitration,
                                 "capacity": result.get("capacity") or planned_group_capacity,
+                                "pattern": result.get("pattern") or team_pattern or None,
                             },
                             ensure_ascii=False,
                             sort_keys=True,

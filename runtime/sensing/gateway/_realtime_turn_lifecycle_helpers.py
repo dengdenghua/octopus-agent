@@ -209,8 +209,41 @@ def _inject_cowork_turn_plan(
         for member in state.roster
         if member.kind == "agent" and member.role == "participant" and not member.muted
     ]
+    try:
+        from runtime.execution.agents.team_patterns import select_team_pattern
+
+        addressed = plan.get("addressed")
+        pattern = select_team_pattern(
+            text,
+            mode=str(plan.get("mode") or "chat"),
+            member_count=len(active_agents),
+            addressed_count=len(addressed) if isinstance(addressed, list) else 0,
+        )
+        # This value is server-owned.  It replaces any client-supplied pattern
+        # so callers cannot forge extra rounds or a broader dispatch.
+        context["team_pattern"] = pattern.to_dict()
+    except Exception as exc:  # noqa: BLE001 — planning metadata must not break a turn
+        _logger.debug("team pattern selection skipped: %s", exc, exc_info=True)
+    # The roster ids are server-authoritative, while display names are
+    # presentation metadata. Preserve a client-provided name only for an id
+    # that survived the durable membership filter; otherwise every reply and
+    # synthesis regresses to internal ids such as ``desktop_operator``.
+    requested_roster = context.get("agent_roster")
+    display_names: dict[str, str] = {}
+    if isinstance(requested_roster, list):
+        for item in requested_roster:
+            if not isinstance(item, dict):
+                continue
+            agent_id = str(item.get("agent_id") or "").strip()
+            display_name = str(item.get("display_name") or "").strip()
+            if agent_id and display_name:
+                display_names[agent_id] = display_name
     context["agent_roster"] = [
-        {"agent_id": agent_id, "display_name": agent_id} for agent_id in active_agents
+        {
+            "agent_id": agent_id,
+            "display_name": display_names.get(agent_id, agent_id),
+        }
+        for agent_id in active_agents
     ]
 
     # Enforce the responder's context grant on the single-responder react path.

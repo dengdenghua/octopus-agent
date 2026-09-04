@@ -37,7 +37,7 @@ graph LR
   execution -- 119 --> platform
   safety -- 98 --> platform
   sensing -- 95 --> memory
-  sensing -- 78 --> execution
+  sensing -- 80 --> execution
   execution -- 75 --> safety
   memory -- 68 --> platform
   core -- 58 --> platform
@@ -47,7 +47,7 @@ graph LR
   sensing -- 37 --> adapters
   sensing -- 34 --> core
   execution -- 32 --> memory
-  core -- 28 --> execution
+  core -- 27 --> execution
   core -- 27 --> safety
   memory -- 24 --> safety
   safety -- 22 --> memory

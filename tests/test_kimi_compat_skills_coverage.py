@@ -55,6 +55,11 @@ class _FakeClient:
 
 @pytest.fixture(autouse=True)
 def _client_fixture(monkeypatch):
+    # Unit tests must never inherit live bundled-provider credentials from the
+    # developer machine: the negative-path cases below intentionally call the
+    # public helpers and would otherwise launch real, billable media jobs.
+    for key in ("VOLCENGINE_API_KEY", "ARK_API_KEY", "AGNES_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr(kcs, "HTTPX_AVAILABLE", True)
     monkeypatch.setenv("OPENAI_MEDIA_API_KEY", "test-key")
 

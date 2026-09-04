@@ -5,6 +5,8 @@ from __future__ import annotations
 from runtime.execution.agents.group_fanout import (
     arbitrate_group_fanout,
     build_fanout_prompt,
+    format_group_presence_reply,
+    is_group_presence_query,
     run_group_fanout,
     synthesize_group_fanout,
 )
@@ -165,6 +167,53 @@ def test_prompt_is_persona_and_brief() -> None:
     assert "第一人称" in p and "冒泡" in p  # persona + group-chat framing
 
 
+def test_each_member_sees_the_actual_human_speaker_not_itself() -> None:
+    prompts: list[str] = []
+
+    def caller(*, agent_id, prompt, **_kw):
+        prompts.append(prompt)
+        return {"success": True, "output": f"{agent_id} 收到", "error": None}
+
+    run_group_fanout(
+        "开始吧",
+        _MEMBERS,
+        agent_caller=caller,
+        speaker="用户",
+    )
+
+    assert len(prompts) == len(_MEMBERS)
+    assert all("群里有人（用户）说" in prompt for prompt in prompts)
+
+
+def test_planner_error_text_is_a_failure_not_a_completed_reply() -> None:
+    def caller(*, agent_id, prompt, **_kw):
+        if agent_id == "coder":
+            return {
+                "success": True,
+                "output": "[planner error] LLM response lacks JSON: '在线'",
+                "error": None,
+            }
+        return {"success": True, "output": "正常回复", "error": None}
+
+    out = run_group_fanout("hi", _MEMBERS, agent_caller=caller)
+    coder = next(reply for reply in out["replies"] if reply["agent_id"] == "coder")
+
+    assert coder["ok"] is False
+    assert coder["reply"] == ""
+    assert "planner error" in coder["error"]
+    assert "coder" in out["arbitration"]["failed_agent_ids"]
+    assert "coder" not in out["arbitration"]["answered_agent_ids"]
+
+
+def test_presence_query_is_answered_from_roster_state() -> None:
+    assert is_group_presence_query("你们都在线么？") is True
+    assert is_group_presence_query("大家到齐了吗") is True
+    assert is_group_presence_query("你们在线的话分析这个方案") is False
+    assert format_group_presence_reply(_MEMBERS) == (
+        "3 位 AI 成员均已就绪：Aoi、Coder、Market Researcher。"
+    )
+
+
 def test_arbitration_handles_all_failed_members() -> None:
     replies = [
         {
@@ -273,6 +322,49 @@ def test_debate_runs_second_round_with_transcript() -> None:
     assert "@对方名字" in r2_prompts[1]
     # Arbitration reports the round span.
     assert out["arbitration"]["rounds"] == 2
+
+
+def test_adversarial_pattern_assigns_roles_and_enforces_two_rounds() -> None:
+    members = [
+        *_MEMBERS,
+        {"name": "qa", "display_name": "QA"},
+    ]
+    calls: list[tuple[str, str]] = []
+    pattern = {
+        "schema": "octopus.team_pattern_decision.v1",
+        "id": "adversarial_review",
+        "label": "对抗评审",
+        "execution": "fanout",
+        "debate_rounds": 2,
+    }
+
+    def caller(*, agent_id, prompt, **_kw):
+        calls.append((agent_id, prompt))
+        return {"success": True, "output": f"{agent_id} reply", "error": None}
+
+    out = run_group_fanout(
+        "大家评审方案并验证风险",
+        members,
+        agent_caller=caller,
+        pattern=pattern,
+        turn_id="turn-pattern",
+    )
+
+    assert out["pattern"] == pattern
+    assert out["debate"]["rounds"] == 2
+    assert out["count"] == 8
+    assert [reply["pattern_role"] for reply in out["replies"][:4]] == [
+        "proposer",
+        "critic",
+        "verifier",
+        "alternative",
+    ]
+    first_round_prompts = {agent_id: prompt for agent_id, prompt in calls[:4]}
+    assert "候选提出者" in first_round_prompts["aoi"]
+    assert "质疑者" in first_round_prompts["coder"]
+    assert "验证者" in first_round_prompts["market_researcher"]
+    assert "替代方案探索者" in first_round_prompts["qa"]
+    assert out["arbitration"]["outcomes"][0]["pattern_role"] is not None
 
 
 def test_debate_does_not_run_when_off() -> None:

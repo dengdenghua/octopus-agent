@@ -204,7 +204,7 @@ it("keeps an accepted mode suggestion reflected in the status strip", async () =
         showWorkDirSelector
         projectAgentMode={projectMode}
         onProjectAgentModeChange={setProjectMode}
-        modeIntentSuggestion={{ mode: "audit", label: "Audit" }}
+        modeIntentSuggestion={{ mode: "uxui", label: "Design" }}
         onAcceptModeIntent={async (next) => setProjectMode(next)}
       />
     );
@@ -216,7 +216,7 @@ it("keeps an accepted mode suggestion reflected in the status strip", async () =
 
   await waitFor(() =>
     expect(screen.getByTestId("chat-status-strip")).toHaveTextContent(
-      /Audit|审计/,
+      /Design|设计|UX\/UI/,
     ),
   );
   fetchSpy.mockRestore();
@@ -352,7 +352,7 @@ describe("<ChatInputBox /> cowork materials", () => {
     expect(screen.getByTestId("chat-send-button")).toBeInTheDocument();
   });
 
-  it("moves restore-auto into + and removes it after use", async () => {
+  it("uses the same two-mode selector in personal group space", async () => {
     const onStrategyChange = vi.fn();
     const onSubmit = vi.fn();
 
@@ -379,33 +379,20 @@ describe("<ChatInputBox /> cowork materials", () => {
     expect(
       screen.getByRole("button", { name: "Add content" }),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Auto" }));
-    fireEvent.click(screen.getByRole("option", { name: /Deep research/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^General/ }));
+    expect(screen.getAllByRole("option")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("option", { name: /Design/ }));
 
-    expect(onStrategyChange).toHaveBeenLastCalledWith("research");
+    expect(onStrategyChange).toHaveBeenLastCalledWith("uxui");
     expect(onSubmit).not.toHaveBeenCalled();
     expect(screen.queryByTestId("group-task-strategy-chip")).toBeNull();
     expect(screen.queryByTestId("group-task-strategy-indicator")).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Deep research" }),
-    ).toBeInTheDocument();
-    expect(
-      within(screen.getByTestId("chat-composer")).queryByText("Deep research"),
-    ).toBeNull();
+    expect(screen.getByRole("button", { name: /^Design/ })).toBeInTheDocument();
 
-    const menu = await openToolsMenu();
-    fireEvent.click(within(menu).getByTestId("group-task-clear-action"));
-
-    expect(onStrategyChange).toHaveBeenLastCalledWith("auto");
-    expect(screen.queryByTestId("group-task-strategy-chip")).toBeNull();
-    expect(screen.queryByTestId("group-task-strategy-indicator")).toBeNull();
-    const reopenedMenu = await openToolsMenu();
-    expect(
-      within(reopenedMenu).queryByTestId("group-task-clear-action"),
-    ).toBeNull();
+    expect(screen.getByRole("button", { name: /^Design/ })).toBeInTheDocument();
   });
 
-  it("offers create-deliverable without a folder and develop with a folder", async () => {
+  it("offers the same general and design modes with or without a folder", async () => {
     const first = renderWithProviders(
       <ChatInputBox
         mode="react"
@@ -417,11 +404,10 @@ describe("<ChatInputBox /> cowork materials", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Auto" }));
-    expect(
-      screen.getByRole("option", { name: /Create deliverable/ }),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: /Develop/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^General/ }));
+    expect(screen.getByRole("option", { name: /General/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Design/ })).toBeInTheDocument();
+    expect(screen.getAllByRole("option")).toHaveLength(2);
     first.unmount();
 
     renderWithProviders(
@@ -436,11 +422,27 @@ describe("<ChatInputBox /> cowork materials", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /^Develop/ }));
-    expect(screen.getByRole("option", { name: /Develop/ })).toBeInTheDocument();
-    expect(
-      screen.queryByRole("option", { name: /Create deliverable/ }),
-    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^General/ }));
+    expect(screen.getByRole("option", { name: /General/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Design/ })).toBeInTheDocument();
+    expect(screen.getAllByRole("option")).toHaveLength(2);
+  });
+
+  it("shows the mode selector without a folder inside Design Canvas", () => {
+    renderWithProviders(
+      <ChatInputBox
+        mode="code"
+        threadId="thread-embedded-design"
+        showModeSelector
+        showWorkDirSelector={false}
+        projectAgentMode="uxui"
+        onProjectAgentModeChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("chat-status-strip")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Design/ })).toBeInTheDocument();
+    expect(screen.queryByTestId("workdir-selector")).toBeNull();
   });
 
   it("keeps project planning separate from the per-turn task strategy", async () => {
@@ -484,15 +486,15 @@ describe("<ChatInputBox /> cowork materials", () => {
         }
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /^Develop/ }));
-    fireEvent.click(screen.getByRole("option", { name: /Read-only audit/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^General/ }));
+    fireEvent.click(screen.getByRole("option", { name: /Design/ }));
     menu = await openToolsMenu();
     expect(
       within(menu).getByText("Open project workbench"),
     ).toBeInTheDocument();
     expect(within(menu).queryByText("Create project plan")).toBeNull();
     expect(within(menu).queryByTestId("group-task-strategy-audit")).toBeNull();
-    expect(onBoundStrategyChange).toHaveBeenCalledWith("audit");
+    expect(onBoundStrategyChange).toHaveBeenCalledWith("uxui");
     expect(onProjectCapabilityAction).toHaveBeenCalledTimes(1);
     expect(
       screen.getByTestId("bound-project-response-mode"),
@@ -521,9 +523,9 @@ describe("<ChatInputBox /> cowork materials", () => {
         .contains(screen.getByTestId("group-roster-inline")),
     ).toBe(true);
     expect(screen.getByTitle("Personal space")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Auto" }));
-    fireEvent.click(screen.getByRole("option", { name: /Create deliverable/ }));
-    expect(onGroupTaskStrategyChange).toHaveBeenCalledWith("build");
+    fireEvent.click(screen.getByRole("button", { name: /^General/ }));
+    fireEvent.click(screen.getByRole("option", { name: /Design/ }));
+    expect(onGroupTaskStrategyChange).toHaveBeenCalledWith("uxui");
     expect(screen.queryByTestId("permission-mode-trigger")).toBeNull();
     group.unmount();
 

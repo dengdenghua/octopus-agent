@@ -1135,10 +1135,14 @@ function KimiStyleSubagentCard({
               <ChevronDownIcon className="size-3" />
             )}
             {reportOpen
-              ? t.message.collapseReport
+              ? agent.role === "cowork"
+                ? t.message.collapseReply
+                : t.message.collapseReport
               : agent.error
                 ? t.message.viewReportError
-                : t.message.viewReport}
+                : agent.role === "cowork"
+                  ? t.message.viewReply
+                  : t.message.viewReport}
           </button>
           {reportOpen && (
             <div

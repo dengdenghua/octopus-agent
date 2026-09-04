@@ -55,6 +55,10 @@ describe("Echo Design platform contract", () => {
     expect(pageSource).toContain('data-echo-design-chat="true"');
     expect(pageSource).toContain("Design 使用指南");
     expect(pageSource).toContain("模型使用指南");
+    expect(pageSource).toContain('aria-label="开始制作"');
+    expect(pageSource).toContain('["home", "创作首页"]');
+    expect(pageSource).toContain('searchParams.get("new_task")');
+    expect(pageSource).toContain('next.delete("new_task")');
     expect(pageSource).toContain("新建本地项目");
     expect(pageSource).toContain("当前角色的独立创作房间");
     expect(pageSource).toContain("红人带货");
@@ -100,11 +104,10 @@ describe("Echo Design platform contract", () => {
     expect(pageSource).toContain("<PluginNodeFrame");
     expect(pageSource).toContain("NATIVE_NODE_TEMPLATES.filter");
     expect(pageSource).toContain("useAgents()");
-    expect(pageSource).toContain("designCanvasRunPrompt(document)");
-    expect(pageSource).toContain('embedded: "design"');
-    expect(pageSource).toContain(
-      "#/workspace/realtime/new?${params.toString()}",
-    );
+    expect(pageSource).toContain("designCanvasRunPrompt(executionDocument)");
+    expect(pageSource).toContain("embeddedDesignChatRoute");
+    expect(pageSource).toContain("buildDesignCanvasAgentContext");
+    expect(pageSource).toContain("DESIGN_RESULT_MESSAGE");
     expect(pageSource).toContain("setEmbeddedChatUrl");
   });
 
@@ -131,11 +134,11 @@ describe("Echo Design platform contract", () => {
     expect(pageSource).toContain("data-add-node-trigger");
     expect(pageSource).toContain("画布 + 个人工作台");
     expect(pageSource).toContain("仅个人工作台");
-    expect(pageSource).toContain('title="Echo 个人工作台"');
+    expect(pageSource).toContain('title="Echo 设计工作台"');
     expect(pageSource).not.toContain("交给 AI");
     expect(pageSource).toContain("在个人工作台发送需求时");
     expect(pageSource).toContain("<CreativeProjectSelector");
-    expect(pageSource).toContain("creation_space");
+    expect(pageSource).toContain("creationSpace");
     expect(pageSource).toContain("仅画布");
     expect(pageSource).toContain("ComfyUI 工作流");
     expect(pageSource).toContain("导入本地工作流");
@@ -244,14 +247,14 @@ describe("Echo Design platform contract", () => {
     expect(catalogSource).toContain('to: "/workspace/design"');
   });
 
-  it("isolates local projects and creation rooms by persona", () => {
+  it("isolates creation rooms by persona and preserves an originating project", () => {
     expect(pageSource).toContain("useSearchParams()");
     expect(pageSource).toContain("creativeCanvasStorageKey(");
     expect(pageSource).toContain('searchParams.get("creative_project")');
-    expect(pageSource).toContain('params.set("creation_space", personaId)');
+    expect(pageSource).toContain("creationSpace: !embeddedProject ? personaId");
     expect(pageSource).toContain("useActiveAgentId()");
     expect(pageSource).toContain("readLocalCreativeProjects(personaId)");
-    expect(pageSource).not.toContain('searchParams.get("project")');
+    expect(pageSource).toContain('searchParams.get("project")');
     expect(pageSource).not.toContain("useProjects()");
     expect(pageSource).not.toContain("<WorkDirSelector");
   });
@@ -356,5 +359,16 @@ describe("Echo Design platform contract", () => {
     expect(comfyEditorSource).toContain("/api/design/comfyui/object-info");
     expect(comfyEditorSource).toContain("添加 ComfyUI 节点");
     expect(comfyEditorSource).toContain("版本冲突，请重新打开");
+  });
+
+  it("offers a gated AI drama template with review and partial retry", () => {
+    expect(pageSource).toContain("createDramaSeriesCanvas");
+    expect(pageSource).toContain('data-testid="design-stage-plan"');
+    expect(pageSource).toContain('data-testid="design-stage-controls"');
+    expect(pageSource).toContain("等待前置阶段");
+    expect(pageSource).toContain("审核通过");
+    expect(pageSource).toContain("仅重试此阶段");
+    expect(pageSource).toContain("targetStageNodeId");
+    expect(designCatalogSource).toContain("微短剧剧集编剧");
   });
 });

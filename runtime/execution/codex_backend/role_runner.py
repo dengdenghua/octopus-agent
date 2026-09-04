@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from runtime.execution.misc.skill_policy import is_audit_read_only_context
 from runtime.platform.process.paths import app_paths
 from runtime.platform.process.session import Session, current_session
 from runtime.platform.runtime_policy.feature_flags import is_on, resolution
@@ -195,7 +194,7 @@ def _mapping_requires_read_only(context: Mapping[str, Any]) -> bool:
         # Check nested metadata independently.  The shared helper's normal
         # flat-over-nested precedence is useful for display policy, but a
         # security restriction must survive an attempted flat override.
-        if is_audit_read_only_context(candidate):
+        if candidate.get("_read_only_turn_enforced") is True:
             return True
         policy = candidate.get("sandbox_policy")
         raw_type = policy.get("type") if isinstance(policy, Mapping) else None
@@ -217,10 +216,9 @@ def resolve_codex_sandbox_mode(
 ) -> CodexSandboxMode:
     """Resolve the tightest sandbox declared by child and trusted parent.
 
-    Audit presets are a filesystem capability boundary for Codex' built-in
-    shell and patch tools, not only for Octopus dynamic tools.  Evaluate the
-    two mappings independently so an ordinary child context cannot overwrite
-    a trusted parent's audit/read-only declaration during a dict merge.
+    Explicit read-only policy is a filesystem capability boundary for Codex'
+    built-in shell and patch tools. Evaluate child and trusted-parent mappings
+    independently so an ordinary child cannot overwrite that restriction.
     """
 
     if _mapping_requires_read_only(context) or (

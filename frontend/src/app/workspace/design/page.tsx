@@ -88,6 +88,16 @@ import {
   type LocalCreativeProject,
 } from "@/core/design/local-projects";
 import {
+  DESIGN_CANVAS_CONTEXT_MESSAGE,
+  DESIGN_MODE_CHANGE_MESSAGE,
+  DESIGN_RESULT_MESSAGE,
+  DESIGN_THREAD_STATE_MESSAGE,
+  buildDesignCanvasAgentContext,
+  embeddedDesignChatRoute,
+  type DesignCanvasAgentContext,
+  type DesignResultMessage,
+} from "@/core/design/mode-bridge";
+import {
   useEnableMarketSkill,
   useEnableSkill,
   useSkills,
@@ -98,18 +108,24 @@ import { useAuth } from "@/providers/AuthProvider";
 
 import {
   appendDesignNode,
+  beginDesignStage,
   connectDesignNodes,
   copyDesignSelection,
+  createDramaSeriesCanvas,
   deleteDesignSelection,
   DESIGN_CANVAS_STORAGE_KEY,
   designCanvasRunPrompt,
+  designStageBlockers,
+  designStageRunPrompt,
   disconnectDesignEdge,
   fitDesignMediaNodeDimensions,
   groupDesignNodes,
+  listDesignWorkflowStages,
   mergeDesignCanvases,
   parseDesignCanvas,
   pasteDesignSelection,
   planDesignSelectionDeletion,
+  setDesignStageStatus,
   switchDesignCanvasMode,
   tidyDesignCanvas,
   ungroupDesignNode,
@@ -119,6 +135,7 @@ import {
   type DesignCanvasNode,
   type DesignCanvasTidyMode,
   type DesignNodeKind,
+  type DesignStageStatus,
 } from "./canvas-model";
 import {
   COMFY_WORKFLOWS,
@@ -211,6 +228,27 @@ const COMFY_WORKFLOW_COVERS = [
 const CANVAS_VIEW_STORAGE_KEY = "octopus.design.canvas-view.v1";
 const WORKSPACE_LAYOUT_STORAGE_KEY = "octopus.design.workspace-layout.v1";
 
+function workspaceHostOrigin(): string {
+  const requested = new URLSearchParams(window.location.search).get(
+    "octopus_host_origin",
+  );
+  if (requested) {
+    try {
+      const parsed = new URL(requested);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+        return parsed.origin;
+      }
+    } catch {
+      // Fall back to the current origin for a directly mounted workbench.
+    }
+  }
+  return window.location.origin;
+}
+
+function workspaceShellBase(): string {
+  return `${workspaceHostOrigin().replace(/\/$/, "")}/`;
+}
+
 type CanvasBackgroundPattern = "dots" | "grid" | "none";
 type CanvasBackgroundTone =
   | "default"
@@ -299,6 +337,10 @@ const KIND_STYLE: Record<
   agent: { label: "角色", tint: "bg-violet-50", accent: "bg-violet-500" },
   skill: { label: "Skill", tint: "bg-blue-50", accent: "bg-blue-500" },
   plugin: { label: "插件", tint: "bg-emerald-50", accent: "bg-emerald-500" },
+  frame: { label: "画板", tint: "bg-blue-50", accent: "bg-blue-600" },
+  component: { label: "组件", tint: "bg-violet-50", accent: "bg-violet-600" },
+  token: { label: "规范", tint: "bg-fuchsia-50", accent: "bg-fuchsia-500" },
+  preview: { label: "预览", tint: "bg-cyan-50", accent: "bg-cyan-600" },
   text: { label: "文本", tint: "bg-zinc-50", accent: "bg-zinc-500" },
   table: { label: "表格", tint: "bg-cyan-50", accent: "bg-cyan-500" },
   image: { label: "图片", tint: "bg-pink-50", accent: "bg-pink-500" },
@@ -312,6 +354,42 @@ const KIND_STYLE: Record<
   editor: { label: "剪辑", tint: "bg-rose-50", accent: "bg-rose-500" },
   comfyui: { label: "ComfyUI", tint: "bg-sky-50", accent: "bg-sky-500" },
   output: { label: "交付", tint: "bg-purple-50", accent: "bg-purple-500" },
+};
+
+const STAGE_STATUS_STYLE: Record<
+  DesignStageStatus,
+  { label: string; dot: string; pill: string }
+> = {
+  pending: {
+    label: "待执行",
+    dot: "bg-zinc-300",
+    pill: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
+  },
+  running: {
+    label: "执行中",
+    dot: "bg-blue-500 animate-pulse",
+    pill: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+  },
+  review: {
+    label: "待审核",
+    dot: "bg-amber-500",
+    pill: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+  },
+  approved: {
+    label: "已通过",
+    dot: "bg-emerald-500",
+    pill: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
+  },
+  failed: {
+    label: "失败",
+    dot: "bg-red-500",
+    pill: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
+  },
+  skipped: {
+    label: "已跳过",
+    dot: "bg-slate-400",
+    pill: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+  },
 };
 
 const GROUP_TONES = {
@@ -448,6 +526,7 @@ function CanvasNode({
   onCompleteConnection: () => void;
 }) {
   const style = KIND_STYLE[node.kind] ?? KIND_STYLE.text;
+  const stageStyle = node.stage ? STAGE_STATUS_STYLE[node.stage.status] : null;
   const assetPreviewUrl = node.asset?.url
     ? node.asset.url.startsWith("/")
       ? `${getBackendBaseURL()}${node.asset.url}`
@@ -567,9 +646,20 @@ function CanvasNode({
           <span className="min-w-0 flex-1 truncate font-medium text-foreground/85">
             {node.title}
           </span>
-          <span className="shrink-0 text-[9px] text-muted-foreground opacity-0 transition-opacity group-hover/media:opacity-100">
-            {style.label}
-          </span>
+          {stageStyle ? (
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-1.5 py-0.5 text-[8px] font-medium",
+                stageStyle.pill,
+              )}
+            >
+              {stageStyle.label}
+            </span>
+          ) : (
+            <span className="shrink-0 text-[9px] text-muted-foreground opacity-0 transition-opacity group-hover/media:opacity-100">
+              {style.label}
+            </span>
+          )}
         </div>
         <div
           className={cn(
@@ -714,7 +804,18 @@ function CanvasNode({
               {style.label}
             </div>
           </div>
-          <span className="size-1.5 rounded-full bg-emerald-500" />
+          {stageStyle ? (
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-2 py-1 text-[8px] font-medium",
+                stageStyle.pill,
+              )}
+            >
+              {stageStyle.label}
+            </span>
+          ) : (
+            <span className="size-1.5 rounded-full bg-emerald-500" />
+          )}
         </div>
         {node.kind === "image" && assetPreviewUrl ? (
           <img
@@ -763,6 +864,9 @@ function CanvasNode({
 
 function ChatPanel({
   chatUrl,
+  canvasContext,
+  bridgeTargetOrigin,
+  onFrameWindowChange,
   onRun,
   onNew,
   onClose,
@@ -770,6 +874,9 @@ function ChatPanel({
   side = "right",
 }: {
   chatUrl: string | null;
+  canvasContext: DesignCanvasAgentContext;
+  bridgeTargetOrigin: string;
+  onFrameWindowChange: (frameWindow: Window | null) => void;
   onRun: (prompt?: string) => void;
   onNew: () => void;
   onClose: () => void;
@@ -777,6 +884,19 @@ function ChatPanel({
   side?: "left" | "right";
 }) {
   const [prompt, setPrompt] = useState("");
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const sendCanvasContext = useCallback(() => {
+    frameRef.current?.contentWindow?.postMessage(
+      { type: DESIGN_CANVAS_CONTEXT_MESSAGE, context: canvasContext },
+      bridgeTargetOrigin,
+    );
+  }, [bridgeTargetOrigin, canvasContext]);
+  useEffect(() => {
+    if (!chatUrl) return;
+    onFrameWindowChange(frameRef.current?.contentWindow ?? null);
+    sendCanvasContext();
+    return () => onFrameWindowChange(null);
+  }, [chatUrl, onFrameWindowChange, sendCanvasContext]);
   const profile =
     surface === "editor"
       ? {
@@ -815,9 +935,14 @@ function ChatPanel({
         )}
       >
         <iframe
-          title="Echo 个人工作台"
+          ref={frameRef}
+          title="Echo 设计工作台"
           data-echo-design-chat="true"
           src={chatUrl}
+          onLoad={() => {
+            onFrameWindowChange(frameRef.current?.contentWindow ?? null);
+            sendCanvasContext();
+          }}
           className="size-full border-0 bg-background"
           allow="clipboard-read; clipboard-write"
         />
@@ -1132,6 +1257,7 @@ function CreativeProjectSelector({
 
 function DesignHomeView({
   onStart,
+  onUseTemplate,
   onOpenSkills,
   onAddFiles,
   personaId,
@@ -1140,6 +1266,7 @@ function DesignHomeView({
   onSelectProject,
 }: {
   onStart: (prompt: string, enabledModels: string[]) => void;
+  onUseTemplate: (templateId: "ai-drama-series") => void;
   onOpenSkills: () => void;
   onAddFiles: (files: FileList) => void;
   personaId: string;
@@ -1220,7 +1347,26 @@ function DesignHomeView({
       JSON.stringify(Array.from(enabledModels)),
     );
   }, [enabledModels]);
-  const showcases = [
+  const showcases: Array<{
+    category: string;
+    title: string;
+    description: string;
+    duration: string;
+    cover: string;
+    prompt: string;
+    templateId?: "ai-drama-series";
+  }> = [
+    {
+      category: "短剧漫剧",
+      title: "AI 漫剧分阶段制作",
+      description:
+        "从剧本、锚点和分镜到镜头与成片，支持逐阶段审核、续跑和局部重试。",
+      duration: "工作流",
+      cover: "/community/gacha.jpg",
+      prompt:
+        "创建一套 AI 漫剧制作流程，先确认目标集数、单集时长、画幅和视觉风格。",
+      templateId: "ai-drama-series",
+    },
     {
       category: "官方 Skill",
       title: "产品发布视觉套件",
@@ -1335,6 +1481,7 @@ function DesignHomeView({
     "二次元PV",
     "品牌广告",
     "UI动效",
+    "短剧漫剧",
   ];
   const visible =
     category === "精选"
@@ -1472,7 +1619,8 @@ function DesignHomeView({
               className="size-9 rounded-full"
               disabled={!prompt.trim()}
               onClick={submit}
-              aria-label="开始创作"
+              aria-label="开始制作"
+              title="开始制作"
             >
               <SendIcon className="size-4" />
             </Button>
@@ -1635,10 +1783,14 @@ function DesignHomeView({
                 <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                   <button
                     type="button"
-                    onClick={() => setPrompt(item.prompt)}
+                    onClick={() =>
+                      item.templateId
+                        ? onUseTemplate(item.templateId)
+                        : setPrompt(item.prompt)
+                    }
                     className="rounded-md bg-black/65 px-2 py-1 text-[8px] text-white backdrop-blur-sm"
                   >
-                    使用提示词
+                    {item.templateId ? "使用模板" : "使用提示词"}
                   </button>
                   <button
                     type="button"
@@ -4764,8 +4916,15 @@ export default function DesignPage({
     return () =>
       window.removeEventListener(CREATIVE_PROJECTS_CHANGED_EVENT, refresh);
   }, [personaId]);
-  const projectId = embeddedProject?.id || null;
-  const projectName = embeddedProject?.name || null;
+  // Standalone Design mode may be opened from a project task. Keep that
+  // project identity instead of discarding it simply because this page is not
+  // mounted inside the project workbench wrapper.
+  const projectId =
+    embeddedProject?.id || searchParams.get("project")?.trim() || null;
+  const projectName =
+    embeddedProject?.name || searchParams.get("name")?.trim() || null;
+  const sourceThreadId = searchParams.get("thread")?.trim() || null;
+  const newTaskNonce = searchParams.get("new_task")?.trim() || null;
   const creativeProjectId = embeddedProject
     ? null
     : searchParams.get("creative_project")?.trim() || null;
@@ -4787,6 +4946,7 @@ export default function DesignPage({
     projectId || creativeProjectId ? "canvas" : "home",
   );
   const [layout, setLayout] = useState<WorkspaceLayout>(() => {
+    if (sourceThreadId) return "chat-left";
     if (embeddedProject) return "canvas";
     if (typeof window === "undefined") return "chat-left";
     const saved = window.localStorage.getItem(WORKSPACE_LAYOUT_STORAGE_KEY);
@@ -4817,16 +4977,9 @@ export default function DesignPage({
   );
   useEffect(() => {
     if (embeddedProject) return;
-    if (
-      !searchParams.has("workspace_path") &&
-      !searchParams.has("project") &&
-      !searchParams.has("name")
-    )
-      return;
+    if (!searchParams.has("workspace_path")) return;
     const next = new URLSearchParams(searchParams);
     next.delete("workspace_path");
-    next.delete("project");
-    next.delete("name");
     const query = next.toString();
     navigate(`/workspace/design${query ? `?${query}` : ""}`, {
       replace: true,
@@ -5029,7 +5182,52 @@ export default function DesignPage({
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [embeddedSurface, setEmbeddedSurface] = useState<EmbeddedSurface>(null);
   const [comfyNative, setComfyNative] = useState(false);
-  const [embeddedChatUrl, setEmbeddedChatUrl] = useState<string | null>(null);
+  const [designThreadId, setDesignThreadId] = useState<string | null>(
+    sourceThreadId,
+  );
+  const designChatWindowRef = useRef<Window | null>(null);
+  const handleDesignFrameWindowChange = useCallback(
+    (frameWindow: Window | null) => {
+      designChatWindowRef.current = frameWindow;
+    },
+    [],
+  );
+  const [embeddedChatUrl, setEmbeddedChatUrl] = useState<string | null>(() => {
+    if (!sourceThreadId || typeof window === "undefined") return null;
+    const route = embeddedDesignChatRoute({
+      threadId: sourceThreadId,
+      projectId,
+      creativeProjectId,
+      creationSpace: personaId,
+      parentOrigin: window.location.origin,
+    });
+    return `${workspaceShellBase()}#${route}`;
+  });
+  const handledNewTaskNonceRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!newTaskNonce || handledNewTaskNonceRef.current === newTaskNonce)
+      return;
+    handledNewTaskNonceRef.current = newTaskNonce;
+    setDesignThreadId(null);
+    setEmbeddedChatUrl(null);
+    setEmbeddedSurface(null);
+    setSection("home");
+    if (layout === "canvas") setLayout("chat-left");
+  }, [layout, newTaskNonce]);
+  useEffect(() => {
+    if (!sourceThreadId) return;
+    const route = embeddedDesignChatRoute({
+      threadId: sourceThreadId,
+      projectId,
+      creativeProjectId,
+      creationSpace: personaId,
+      parentOrigin: window.location.origin,
+    });
+    setDesignThreadId(sourceThreadId);
+    setEmbeddedChatUrl(`${workspaceShellBase()}#${route}`);
+    setSection("canvas");
+    setLayout("chat-left");
+  }, [creativeProjectId, personaId, projectId, sourceThreadId]);
   const { skills, isLoading: skillsLoading } = useSkills();
   useEffect(() => {
     window.localStorage.setItem(
@@ -5361,13 +5559,220 @@ export default function DesignPage({
   );
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
+      if (event.origin !== workspaceHostOrigin()) return;
       if (event.data?.type === "octopus.design.close-surface") {
         setEmbeddedSurface(null);
+        return;
+      }
+      if (event.source !== designChatWindowRef.current) return;
+      if (event.data?.type === DESIGN_THREAD_STATE_MESSAGE) {
+        const nextThreadId = String(event.data.threadId || "").trim();
+        const targetStageNodeId = String(
+          event.data.targetStageNodeId || "",
+        ).trim();
+        const runState = String(event.data.runState || "");
+        if (
+          targetStageNodeId &&
+          (runState === "failed" || runState === "interrupted")
+        ) {
+          setDocument((current) => {
+            const stage = current.nodes.find(
+              (node) => node.id === targetStageNodeId,
+            )?.stage;
+            if (!stage || stage.status !== "running") return current;
+            return setDesignStageStatus(current, targetStageNodeId, "failed", {
+              error:
+                runState === "interrupted"
+                  ? "阶段执行已中断，可从当前阶段重试。"
+                  : "阶段执行失败；已保留已通过阶段，可仅重试当前阶段。",
+            });
+          });
+        }
+        // Treat the child thread-state message as its ready handshake. The
+        // iframe load event can fire before React installs the child's message
+        // listener, so reply here to guarantee that canvas context arrives.
+        designChatWindowRef.current?.postMessage(
+          {
+            type: DESIGN_CANVAS_CONTEXT_MESSAGE,
+            context: buildDesignCanvasAgentContext({
+              document: documentRef.current,
+              selectedNodeIds: selectedIds,
+              revision: serverRevisionRef.current,
+              projectId,
+              creativeProjectId,
+            }),
+          },
+          workspaceHostOrigin(),
+        );
+        if (nextThreadId && nextThreadId !== "new") {
+          setDesignThreadId(nextThreadId);
+          if (searchParams.get("thread") !== nextThreadId) {
+            const next = new URLSearchParams(searchParams);
+            next.set("thread", nextThreadId);
+            next.delete("new_task");
+            navigate(`/workspace/design?${next.toString()}`, { replace: true });
+          }
+        }
+        return;
+      }
+      if (event.data?.type === DESIGN_MODE_CHANGE_MESSAGE) {
+        const nextThreadId = String(
+          event.data.threadId || designThreadId || "",
+        ).trim();
+        navigate(
+          nextThreadId && nextThreadId !== "new"
+            ? `/workspace/realtime/${encodeURIComponent(nextThreadId)}`
+            : "/workspace/realtime/new",
+        );
+        return;
+      }
+      if (event.data?.type === DESIGN_RESULT_MESSAGE) {
+        const result = event.data as DesignResultMessage;
+        const threadResultId = `${result.threadId}:${result.messageId}`;
+        if (
+          documentRef.current.nodes.some(
+            (node) =>
+              node.origin?.type === "agent-result" &&
+              `${node.origin.threadId}:${node.origin.messageId}` ===
+                threadResultId,
+          )
+        ) {
+          return;
+        }
+        const nodeId = nextNodeId("output");
+        setDocument((current) => {
+          if (
+            current.nodes.some(
+              (node) =>
+                node.origin?.type === "agent-result" &&
+                `${node.origin.threadId}:${node.origin.messageId}` ===
+                  threadResultId,
+            )
+          ) {
+            return current;
+          }
+          const anchorId = result.targetStageNodeId || selectedId;
+          const anchor = anchorId
+            ? current.nodes.find((node) => node.id === anchorId)
+            : null;
+          const maxX = current.nodes.reduce(
+            (value, node) =>
+              Math.max(value, node.x + (node.width ?? NODE_WIDTH)),
+            0,
+          );
+          const description = [result.text, result.previewUrl]
+            .filter(Boolean)
+            .join("\n\n预览：");
+          let nextDocument = appendDesignNode(
+            current,
+            {
+              id: nodeId,
+              kind: "output",
+              title: result.title || "设计 Agent 输出",
+              description,
+              x: anchor
+                ? anchor.x + (anchor.width ?? NODE_WIDTH) + 80
+                : maxX + 80,
+              y: anchor?.y ?? 160,
+              width: 300,
+              height: 180,
+              origin: {
+                type: "agent-result",
+                threadId: result.threadId,
+                messageId: result.messageId,
+              },
+            },
+            current.mode === "workflow" ? anchor?.id : null,
+          );
+          const artifactNodeIds: string[] = [];
+          for (const [index, artifact] of (result.artifacts ?? []).entries()) {
+            if (!artifact.path?.trim()) continue;
+            const artifactNodeId = nextNodeId("file");
+            artifactNodeIds.push(artifactNodeId);
+            nextDocument = appendDesignNode(
+              nextDocument,
+              {
+                id: artifactNodeId,
+                kind: "file",
+                title:
+                  artifact.title ||
+                  artifact.path.split(/[\\/]/).at(-1) ||
+                  "交付文件",
+                description: artifact.path,
+                x:
+                  (anchor
+                    ? anchor.x + (anchor.width ?? NODE_WIDTH) + 420
+                    : maxX + 420) +
+                  Math.floor(index / 4) * 270,
+                y: (anchor?.y ?? 160) + (index % 4) * 150,
+                asset: {
+                  id: `${threadResultId}:${index}`,
+                  kind: "file",
+                  path: artifact.path,
+                  source: result.threadId,
+                },
+              },
+              current.mode === "workflow" ? nodeId : null,
+            );
+          }
+          if (artifactNodeIds.length >= 2) {
+            const groupId = nextNodeId("group");
+            nextDocument = groupDesignNodes(
+              nextDocument,
+              artifactNodeIds,
+              groupId,
+            );
+            nextDocument = {
+              ...nextDocument,
+              nodes: nextDocument.nodes.map((node) =>
+                node.id === groupId
+                  ? {
+                      ...node,
+                      title: `本轮输出 · ${result.title || "设计 Agent"}`,
+                    }
+                  : node,
+              ),
+            };
+          }
+          if (
+            result.targetStageNodeId &&
+            nextDocument.nodes.some(
+              (node) => node.id === result.targetStageNodeId && node.stage,
+            )
+          ) {
+            const target = nextDocument.nodes.find(
+              (node) => node.id === result.targetStageNodeId,
+            );
+            nextDocument = setDesignStageStatus(
+              nextDocument,
+              result.targetStageNodeId,
+              target?.stage?.reviewRequired === false ? "approved" : "review",
+            );
+          }
+          return nextDocument;
+        });
+        const nextSelection = result.targetStageNodeId || nodeId;
+        setSelectedId(nextSelection);
+        setSelectedIds([nextSelection]);
+        toast.success(
+          result.targetStageNodeId
+            ? "阶段结果已放回画布，请审核后继续"
+            : "Agent 结果已放回画布",
+        );
       }
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, []);
+  }, [
+    creativeProjectId,
+    designThreadId,
+    navigate,
+    projectId,
+    searchParams,
+    selectedId,
+    selectedIds,
+    setDocument,
+  ]);
   const selectedNode = document.nodes.find((node) => node.id === selectedId);
   const selectNode = useCallback((id: string, additive: boolean) => {
     if (!additive) {
@@ -5899,37 +6304,66 @@ export default function DesignPage({
     },
     [document, setDocument],
   );
+  const canvasAgentContext = useMemo(
+    () =>
+      buildDesignCanvasAgentContext({
+        document,
+        selectedNodeIds: selectedIds,
+        revision: canvasSyncState === "local" ? 0 : serverRevisionRef.current,
+        projectId,
+        creativeProjectId,
+      }),
+    [canvasSyncState, creativeProjectId, document, projectId, selectedIds],
+  );
   const runCanvas = useCallback(
     (extra?: string) => {
-      const base = designCanvasRunPrompt(document);
+      const activeStage = selectedId
+        ? document.nodes.find(
+            (node) => node.id === selectedId && Boolean(node.stage),
+          )
+        : null;
+      let executionDocument = document;
+      if (activeStage) {
+        const blockers = designStageBlockers(document, activeStage.id);
+        if (blockers.length > 0) {
+          toast.info(
+            `请先通过前置阶段：${blockers.map((stage) => stage.title).join("、")}`,
+          );
+          return;
+        }
+        executionDocument = beginDesignStage(document, activeStage.id);
+        setDocument(executionDocument);
+      }
+      const base = activeStage
+        ? designStageRunPrompt(executionDocument, activeStage.id)
+        : designCanvasRunPrompt(executionDocument);
       const prompt = extra?.trim() ? `${extra.trim()}\n\n${base}` : base;
       const agent =
         document.nodes.find((node) => node.binding?.type === "agent")?.binding
           ?.id ?? "general";
-      const params = new URLSearchParams({
+      const route = embeddedDesignChatRoute({
+        threadId: designThreadId,
         prompt,
         agent,
-        embedded: "design",
+        projectId,
+        creationSpace: !embeddedProject ? personaId : undefined,
+        creativeProjectId: !embeddedProject ? creativeProjectId : undefined,
+        parentOrigin: window.location.origin,
+        targetStageNodeId: activeStage?.id,
       });
-      if (projectId) params.set("project", projectId);
-      if (!embeddedProject) {
-        params.set("creation_space", personaId);
-        if (creativeProjectId)
-          params.set("creative_project", creativeProjectId);
-      }
-      const shellBase = window.location.href.split("#", 1)[0];
-      setEmbeddedChatUrl(
-        `${shellBase}#/workspace/realtime/new?${params.toString()}`,
-      );
+      setEmbeddedChatUrl(`${workspaceShellBase()}#${route}`);
       if (layout === "canvas") setLayout("chat-left");
     },
     [
       creativeProjectId,
+      designThreadId,
       document,
       embeddedProject,
       layout,
       personaId,
       projectId,
+      selectedId,
+      setDocument,
     ],
   );
   const nodeAssetFile = useCallback(async (node: DesignCanvasNode) => {
@@ -6263,6 +6697,16 @@ export default function DesignPage({
       height: Math.max(1, maxY - minY),
     };
   }, [document.nodes]);
+  const workflowStages = useMemo(
+    () => listDesignWorkflowStages(document),
+    [document],
+  );
+  const completedWorkflowStages = workflowStages.filter(
+    (stage) => stage.status === "approved" || stage.status === "skipped",
+  ).length;
+  const selectedStageBlockers = selectedNode?.stage
+    ? designStageBlockers(document, selectedNode.id)
+    : [];
 
   const canvasSurface = (
     <main
@@ -6322,6 +6766,53 @@ export default function DesignPage({
           event.target.value = "";
         }}
       />
+      {workflowStages.length > 0 ? (
+        <div
+          data-testid="design-stage-plan"
+          className="absolute left-3 top-3 z-20 w-[min(420px,calc(100%-24px))] rounded-[14px] border border-black/[0.08] bg-white/92 p-2.5 shadow-[0_8px_24px_-18px_rgba(0,0,0,.45)] backdrop-blur dark:border-white/10 dark:bg-[#181818]/92"
+        >
+          <div className="flex items-center gap-2 px-1">
+            <span className="text-[10px] font-semibold">阶段计划</span>
+            <span className="text-[9px] text-muted-foreground">
+              {completedWorkflowStages}/{workflowStages.length} 已完成
+            </span>
+            <span className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+              <span
+                className="block h-full rounded-full bg-emerald-500 transition-all"
+                style={{
+                  width: `${(completedWorkflowStages / workflowStages.length) * 100}%`,
+                }}
+              />
+            </span>
+          </div>
+          <div className="mt-2 flex gap-1 overflow-x-auto pb-0.5">
+            {workflowStages.map((stage) => {
+              const status = STAGE_STATUS_STYLE[stage.status];
+              return (
+                <button
+                  key={stage.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedId(stage.nodeId);
+                    setSelectedIds([stage.nodeId]);
+                  }}
+                  className={cn(
+                    "flex h-7 shrink-0 items-center gap-1.5 rounded-lg border px-2 text-[9px] transition hover:bg-muted",
+                    selectedId === stage.nodeId
+                      ? "border-foreground/30 bg-muted font-medium"
+                      : "border-transparent",
+                  )}
+                  title={`${stage.title} · 第 ${stage.attempt} 次尝试`}
+                >
+                  <span className={cn("size-1.5 rounded-full", status.dot)} />
+                  <span>{stage.order}</span>
+                  <span>{status.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
       {canvasView.pattern !== "none" ? (
         <div
           aria-hidden
@@ -7520,7 +8011,7 @@ export default function DesignPage({
         />
       ) : null}
       {selectedNode ? (
-        <div className="absolute bottom-4 right-4 z-30 w-64 rounded-[12px] border border-[#e6e6e6] bg-white p-3 shadow-[0_8px_32px_rgba(0,0,0,.08),0_2px_8px_rgba(0,0,0,.04)] dark:border-[#454545] dark:bg-[#1a1a1a]">
+        <div className="absolute bottom-4 right-4 z-30 max-h-[calc(100%-32px)] w-64 overflow-y-auto rounded-[12px] border border-[#e6e6e6] bg-white p-3 shadow-[0_8px_32px_rgba(0,0,0,.08),0_2px_8px_rgba(0,0,0,.04)] dark:border-[#454545] dark:bg-[#1a1a1a]">
           <div className="flex items-center">
             <span className="text-xs font-semibold">节点设置</span>
             <span className="flex-1" />
@@ -7555,6 +8046,100 @@ export default function DesignPage({
             }
             className="mt-2 min-h-20 resize-none text-xs"
           />
+          {selectedNode.stage ? (
+            <div
+              data-testid="design-stage-controls"
+              className="mt-3 rounded-xl border border-border-subtle bg-muted/35 p-2.5"
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    "size-2 rounded-full",
+                    STAGE_STATUS_STYLE[selectedNode.stage.status].dot,
+                  )}
+                />
+                <span className="text-[10px] font-semibold">
+                  {STAGE_STATUS_STYLE[selectedNode.stage.status].label}
+                </span>
+                <span className="flex-1" />
+                <span className="text-[9px] text-muted-foreground">
+                  尝试 {selectedNode.stage.attempt} 次
+                </span>
+              </div>
+              {selectedStageBlockers.length > 0 ? (
+                <p className="mt-2 text-[9px] leading-4 text-amber-700 dark:text-amber-300">
+                  等待前置阶段：
+                  {selectedStageBlockers.map((stage) => stage.title).join("、")}
+                </p>
+              ) : null}
+              {selectedNode.stage.lastError ? (
+                <p className="mt-2 line-clamp-3 text-[9px] leading-4 text-red-600">
+                  {selectedNode.stage.lastError}
+                </p>
+              ) : null}
+              <div className="mt-2 flex gap-1.5">
+                {selectedNode.stage.status === "review" ? (
+                  <Button
+                    size="sm"
+                    className="h-7 flex-1 rounded-lg text-[10px]"
+                    onClick={() => {
+                      setDocument((current) =>
+                        setDesignStageStatus(
+                          current,
+                          selectedNode.id,
+                          "approved",
+                        ),
+                      );
+                      toast.success("阶段已通过，可继续下一阶段");
+                    }}
+                  >
+                    <CheckIcon className="mr-1 size-3" />
+                    审核通过
+                  </Button>
+                ) : null}
+                <Button
+                  size="sm"
+                  variant={
+                    selectedNode.stage.status === "review"
+                      ? "outline"
+                      : "default"
+                  }
+                  className="h-7 flex-1 rounded-lg text-[10px]"
+                  disabled={
+                    selectedNode.stage.status === "running" ||
+                    selectedStageBlockers.length > 0
+                  }
+                  onClick={() => runCanvas()}
+                >
+                  {selectedNode.stage.status === "running" ? (
+                    <Loader2Icon className="mr-1 size-3 animate-spin" />
+                  ) : (
+                    <Redo2Icon className="mr-1 size-3" />
+                  )}
+                  {selectedNode.stage.status === "pending"
+                    ? "运行此阶段"
+                    : selectedNode.stage.status === "running"
+                      ? "正在执行"
+                      : "仅重试此阶段"}
+                </Button>
+              </div>
+              {selectedNode.stage.status === "pending" &&
+              selectedStageBlockers.length === 0 ? (
+                <button
+                  type="button"
+                  className="mt-2 w-full text-center text-[9px] text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    setDocument((current) =>
+                      setDesignStageStatus(current, selectedNode.id, "skipped"),
+                    );
+                    toast.info("阶段已标记为使用现有内容");
+                  }}
+                >
+                  已有合格内容，跳过生成
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           {document.mode === "workflow" &&
           document.edges.some(
             (edge) =>
@@ -7737,10 +8322,10 @@ export default function DesignPage({
             <span className="text-[13px] font-semibold">Echo Design</span>
           ) : (
             <>
-              {embeddedProject ? (
+              {projectId ? (
                 <span className="flex h-8 max-w-44 items-center gap-1.5 px-2 text-[11px] font-medium">
                   <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                  <span className="truncate">{projectName || "当前目录"}</span>
+                  <span className="truncate">{projectName || "当前项目"}</span>
                 </span>
               ) : (
                 <CreativeProjectSelector
@@ -7836,12 +8421,12 @@ export default function DesignPage({
         <nav
           className={cn(
             "ml-5 h-full items-center gap-1 text-[11px]",
-            embeddedProject ? "hidden xl:flex" : "flex",
+            projectId ? "hidden xl:flex" : "flex",
           )}
         >
           {(
             [
-              ["home", "开始创作"],
+              ["home", "创作首页"],
               ["canvas", "创作画布"],
               ["assets", "资产中心"],
               ["skills", "Skill"],
@@ -7942,6 +8527,7 @@ export default function DesignPage({
       <div className="min-h-0 flex-1">
         {section === "home" ? (
           <DesignHomeView
+            key={newTaskNonce || "current-design-task"}
             onStart={(prompt, enabledModels) => {
               const capabilityNote = enabledModels.length
                 ? `\n\n可调用创作能力：${enabledModels.join("、")}`
@@ -7949,6 +8535,15 @@ export default function DesignPage({
               addNode("brief", "创作需求", `${prompt}${capabilityNote}`);
               setSection("canvas");
               runCanvas(`${prompt}${capabilityNote}`);
+            }}
+            onUseTemplate={() => {
+              const template = createDramaSeriesCanvas();
+              setDocument(template);
+              setSelectedId(template.nodes[0]?.id ?? null);
+              setSelectedIds(template.nodes[0] ? [template.nodes[0].id] : []);
+              setSection("canvas");
+              if (layout === "canvas") setLayout("chat-left");
+              toast.success("AI 漫剧工作流已创建，可从第一阶段开始");
             }}
             onOpenSkills={() => setSection("skills")}
             onAddFiles={(files) => void uploadHomeFiles(files)}
@@ -8006,6 +8601,9 @@ export default function DesignPage({
             {layout === "chat-left" || layout === "chat" ? (
               <ChatPanel
                 chatUrl={embeddedChatUrl}
+                canvasContext={canvasAgentContext}
+                bridgeTargetOrigin={workspaceHostOrigin()}
+                onFrameWindowChange={handleDesignFrameWindowChange}
                 onRun={runCanvas}
                 onNew={() => setEmbeddedChatUrl(null)}
                 onClose={() => setLayout("canvas")}
@@ -8026,6 +8624,9 @@ export default function DesignPage({
             {layout === "split" ? (
               <ChatPanel
                 chatUrl={embeddedChatUrl}
+                canvasContext={canvasAgentContext}
+                bridgeTargetOrigin={workspaceHostOrigin()}
+                onFrameWindowChange={handleDesignFrameWindowChange}
                 onRun={runCanvas}
                 onNew={() => setEmbeddedChatUrl(null)}
                 onClose={() => setLayout("canvas")}

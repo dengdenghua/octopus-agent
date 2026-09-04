@@ -11,10 +11,10 @@ describe("modePresetForAgentMode", () => {
       verificationPolicy: "standard",
     });
     expect(modePresetForAgentMode("audit")).toMatchObject({
-      id: "audit",
-      workflowPreset: "audit.review",
-      skillPackProfile: "audit",
-      verificationPolicy: "strict",
+      id: "develop",
+      workflowPreset: "develop.iterate",
+      skillPackProfile: "develop",
+      verificationPolicy: "standard",
     });
     expect(modePresetForAgentMode("uxui")).toMatchObject({
       id: "uxui",
@@ -24,23 +24,22 @@ describe("modePresetForAgentMode", () => {
     });
   });
 
-  it("keeps audit as the only user-facing audit mode", () => {
+  it("migrates legacy audit selections into general mode", () => {
     expect(modePresetForAgentMode("audit")).toMatchObject({
-      id: "audit",
-      agentMode: "audit",
-      workflowPreset: "audit.review",
-      skillPackProfile: "audit",
-      verificationPolicy: "strict",
+      id: "develop",
+      agentMode: "develop",
+      workflowPreset: "develop.iterate",
+      skillPackProfile: "develop",
+      verificationPolicy: "standard",
     });
   });
 });
 
 describe("workflowPresetForMode", () => {
-  it("upgrades audit to deep only at max intensity", () => {
-    expect(workflowPresetForMode("audit", "standard")).toBe("audit.review");
-    expect(workflowPresetForMode("audit", "max")).toBe("audit.deep");
-    // Default intensity is the conservative single-pass review.
-    expect(workflowPresetForMode("audit")).toBe("audit.review");
+  it("maps legacy audit intensity values to general mode", () => {
+    expect(workflowPresetForMode("audit", "standard")).toBe("develop.iterate");
+    expect(workflowPresetForMode("audit", "max")).toBe("develop.iterate");
+    expect(workflowPresetForMode("audit")).toBe("develop.iterate");
   });
 
   it("ignores intensity for non-audit modes (no deep leak)", () => {

@@ -13,6 +13,7 @@ CODEX PLAN lock blocks). Never imports ``react_loop``.
 
 from __future__ import annotations
 
+import json
 import logging
 
 from runtime.core.cerebrum._react_prompt_assembly_state import _AssemblyState
@@ -141,6 +142,10 @@ _FIX_AUTHORIZATION_PATTERNS = (
     "直接改",
     "去改",
     "开始优化",
+    "继续优化",
+    "直接优化",
+    "帮我优化",
+    "优化吧",
     "帮我修",
     "让你修",
     "现在修",
@@ -173,6 +178,8 @@ def _fix_authorization_present(state: _AssemblyState) -> bool:
     if not goal:
         return False
     lowered = goal.lower()
+    if goal == "优化":
+        return True
     if any(token in goal for token in _FIX_AUTHORIZATION_PATTERNS):
         return True
     return any(token in lowered for token in _FIX_AUTHORIZATION_EN)
@@ -435,6 +442,30 @@ def _assemble_delegation_guidance(state: _AssemblyState) -> None:
         state.system_parts.append(
             "\n<mode-contract>\n" + state.mode_contract_value[:4000] + "\n</mode-contract>"
         )
+    design_canvas_context = state.user_context.get("design_canvas_context")
+    if not isinstance(design_canvas_context, dict):
+        design_canvas_context = state.metadata.get("design_canvas_context")
+    if isinstance(design_canvas_context, dict):
+        try:
+            rendered_canvas_context = json.dumps(
+                design_canvas_context,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )[:40_000]
+        except (TypeError, ValueError):
+            rendered_canvas_context = ""
+        if rendered_canvas_context:
+            state.system_parts.append(
+                "\n<design-canvas-context>\n"
+                "这是设计画布在本轮发送前的结构化快照。selected_nodes 是用户当前"
+                "关注对象，应优先作为修改与回答范围；nodes/edges 提供周边关系。"
+                "workflow_stages 是带稳定 ID、前置依赖、尝试次数和审核状态的执行计划；"
+                "active_stage_node_id 存在时只处理该阶段，不要重新生成 approved/skipped 阶段。"
+                "阶段产出应可供用户审核，失败时明确指出对应阶段和可重试原因。"
+                "不要凭空声称已经修改画布；只有实际工具或界面操作成功才算修改。\n"
+                + rendered_canvas_context
+                + "\n</design-canvas-context>"
+            )
     if state.work_mode.scope == "personal":
         _personal_instructions = str(
             state.user_context.get("personal_instructions")
@@ -467,7 +498,7 @@ def _assemble_delegation_guidance(state: _AssemblyState) -> None:
         if _fix_authorization_present(state):
             state.system_parts.append(
                 "\n<audit-mode>\n"
-                "本轮为审计模式下的已授权修复阶段。用户已明确要求动手修复，"
+                "本轮为代码审查后的已授权修复阶段。用户已明确要求动手修复，"
                 "只读约束不再适用。\n"
                 "直接落地写操作：先改代码，再运行验证，最后在回复中列出"
                 "每一处改动（文件与行为）和验证结果。\n"
@@ -478,7 +509,7 @@ def _assemble_delegation_guidance(state: _AssemblyState) -> None:
         else:
             state.system_parts.append(
                 "\n<audit-mode>\n"
-                "当前为审计/审查模式。默认行为是只读检查并输出审计报告："
+                "当前请求是代码审查。默认先检查并输出审查报告："
                 "先逐项核对目标并给出证据与结论，最后汇总发现的问题和风险。\n"
                 "不要在没有明确说明的情况下静默修改代码或配置；"
                 "若审计中发现需要修复的问题，先在报告中指出，"
