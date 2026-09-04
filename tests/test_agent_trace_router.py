@@ -288,6 +288,29 @@ def test_trace_events_support_runtime_filters(tmp_path: Path) -> None:
     assert data["events"][0]["payload"] == {"phase": "start"}
 
 
+def test_execution_trace_endpoint_returns_provider_neutral_read_model(tmp_path: Path) -> None:
+    client = _client_with_trace(tmp_path)
+
+    response = client.get(
+        "/api/agent-trace/execution-trace",
+        params={"turn_id": "turn-1", "thread_id": "thread-1"},
+    )
+    missing = client.get(
+        "/api/agent-trace/execution-trace",
+        params={"turn_id": "missing"},
+    )
+
+    assert response.status_code == 200
+    trace = response.json()["trace"]
+    assert trace["schema"] == "octopus.execution_trace.v1"
+    assert trace["turn_id"] == "turn-1"
+    assert trace["engine"] == "unknown"
+    assert [step["tool"] for step in trace["steps"]] == ["read_file"]
+    assert trace["steps"][0]["status"] == "completed"
+    assert trace["integrity"]["complete"] is True
+    assert missing.status_code == 404
+
+
 def test_trace_task_runs_are_readable_as_run_summaries(tmp_path: Path) -> None:
     client = _client_with_trace(tmp_path)
 

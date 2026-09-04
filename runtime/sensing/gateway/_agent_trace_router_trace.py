@@ -61,6 +61,33 @@ def register_trace_endpoints(router, deps: RouterDeps) -> None:
         )
         return {"events": rows, "limit": limit, "offset": offset}
 
+    @router.get("/api/agent-trace/execution-trace")
+    def api_agent_trace_execution_trace(
+        request: Request,
+        turn_id: str = Query(..., min_length=1, max_length=256),
+        thread_id: str | None = Query(default=None, max_length=256),
+        task_id: str | None = Query(default=None, max_length=256),
+        agent_id: str | None = Query(default=None, max_length=256),
+    ) -> dict[str, Any]:
+        """Return the provider-neutral execution read model for one turn.
+
+        The trace is assembled from the tenant-scoped append-only event store,
+        so consumers never need to infer lifecycle state from provider/UI
+        payloads.  A missing turn is a 404 rather than an empty ``running``
+        trace; this avoids presenting a nonexistent execution as active.
+        """
+
+        trace = _get_store(store=deps.store, db_path=deps.db_path).execution_trace(
+            turn_id=turn_id,
+            thread_id=thread_id,
+            task_id=task_id,
+            agent_id=agent_id,
+            scope=_scope_for_request(request),
+        )
+        if trace["integrity"]["event_count"] == 0:
+            raise HTTPException(404, "execution trace not found")
+        return {"trace": trace}
+
     @router.get("/api/agent-trace/task-runs")
     def api_agent_trace_task_runs(
         request: Request,

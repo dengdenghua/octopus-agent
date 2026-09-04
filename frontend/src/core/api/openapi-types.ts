@@ -1440,6 +1440,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agent-trace/execution-trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Api Agent Trace Execution Trace
+         * @description Return the provider-neutral execution read model for one turn.
+         *
+         *     The trace is assembled from the tenant-scoped append-only event store,
+         *     so consumers never need to infer lifecycle state from provider/UI
+         *     payloads.  A missing turn is a 404 rather than an empty ``running``
+         *     trace; this avoids presenting a nonexistent execution as active.
+         */
+        get: operations["api_agent_trace_execution_trace_api_agent_trace_execution_trace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent-trace/experience-ledger": {
         parameters: {
             query?: never;
@@ -21551,6 +21576,42 @@ export interface operations {
                 event_type?: string | null;
                 limit?: number;
                 offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_agent_trace_execution_trace_api_agent_trace_execution_trace_get: {
+        parameters: {
+            query: {
+                turn_id: string;
+                thread_id?: string | null;
+                task_id?: string | null;
+                agent_id?: string | null;
             };
             header?: never;
             path?: never;
