@@ -27,7 +27,7 @@ Octopus 不是“所有维度都领先”。当前优势集中在**真实群聊�
 | 交付质量 | 相关性/证据/具体性/独立性矩阵；语义验证 fail-closed | 父 Agent 被要求复核子结果 | 主要由主 Agent 汇总 | Octopus 领先 |
 | 跨系统协作 | A2A v1 双向：客户端发现/发送/持久任务/事件/刷新/取消/SSE；服务端 Agent Card、JSON-RPC、REST、流式、按调用者持久任务 | A2A、ACP、渠道与 Agent-to-Agent 工具成熟 | RPC 工具流水线、多运行后端 | Octopus 双向控制面完整；缺少同版本互测，不判绝对领先 |
 | 自我学习 | 子 Agent 结果进入 trace-linked review queue，经人工晋升可写入经验账本、策略或 forged skill；有回放证据和 holdout 门槛 | 有技能与 Memory Wiki | 闭环技能生成与持续改进是核心能力 | Octopus 治理与审计更强，Hermes 自动化程度更高，尚无同任务实测胜负 |
-| 外部消息渠道 | 24 个适配器；可绑定单 Agent 或持久 AI 团队；统一保存真实健康探测、延迟、最近收发/错误、失败计数、线程绑定数和能力矩阵；跨重启按事件摘要幂等去重，避免团队重复执行；未实现主动探测的适配器明确显示“不支持”，不造假绿灯 | 当前公开目录约 32 个入口（含内置、官方和外部插件），账户/线程绑定、诊断、清理和投递运维成熟 | Telegram、Discord、Slack、WhatsApp、Signal、CLI | OpenClaw 仍在覆盖和长期运维成熟度领先；Octopus 在原生团队路由、持久幂等及“配置/运行”状态分离上有差异化 |
+| 外部消息渠道 | 26 个适配器；新增 IRC/IRCv3 与 Twitch 长连接、断线重连、UTF-8 协议分片和热替换回滚；可绑定单 Agent 或持久 AI 团队；统一保存真实健康探测、延迟、最近收发/错误、失败计数、线程绑定数和能力矩阵；跨重启按事件摘要幂等去重，避免团队重复执行；未实现主动探测的适配器明确显示“不支持”，不造假绿灯 | 当前公开目录约 32 个入口（含内置、官方和外部插件），账户/线程绑定、诊断、清理和投递运维成熟 | Telegram、Discord、Slack、WhatsApp、Signal、CLI | OpenClaw 仍在覆盖和长期运维成熟度领先；Octopus 在原生团队路由、持久幂等、长连接生命周期及“配置/运行”状态分离上有差异化 |
 | 执行后端生态 | 桌面群聊体验强，已有 Local/Docker/K8s/SSH 与远程 backend | 本地 Gateway 与节点体系成熟 | 本地/Docker/SSH/Modal/Daytona/Vercel Sandbox 等后端广 | Hermes 云后端产品化领先 |
 
 ## 已建立的不可退化门槛
@@ -53,6 +53,6 @@ Octopus 不是“所有维度都领先”。当前优势集中在**真实群聊�
 
 按影响优先级继续推进：
 
-1. **渠道覆盖与运维深度**：在现有 24 渠道、单 Agent / AI 团队绑定和统一诊断之上，补齐 OpenClaw 已覆盖的 IRC、Nextcloud Talk、Nostr、Twitch、Zalo 等入口，并完善滞留投递批量处理、线程绑定明细和保留策略。
+1. **渠道覆盖与运维深度**：在现有 26 渠道、单 Agent / AI 团队绑定、统一诊断和 IRC/Twitch 长连接生命周期之上，继续补齐 OpenClaw 已覆盖的 Nextcloud Talk、Nostr、Zalo 等入口，并完善滞留投递批量处理、线程绑定明细和保留策略。
 2. **云执行后端产品化**：现有 Local/Docker/K8s/SSH 已具备底层能力，继续补 Modal/Daytona 类托管沙箱的一键配置与统一可观测面。
 3. **跨项目外部基准**：在锁定版本和同模型/同预算条件下运行真实任务集；没有可复现结果，不宣称“所有维度领先”。
