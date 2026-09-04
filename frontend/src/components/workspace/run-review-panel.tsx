@@ -11,7 +11,7 @@ import {
   ShieldCheckIcon,
   WrenchIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,11 +44,55 @@ export interface RunReviewEvent {
     tokens?: number;
     usd?: number;
   };
+  /** Stable id assigned by the journal/SSE stream when available. */
+  event_id?: string | number;
   usage?: {
     total_tokens?: number;
     tokens?: number;
   };
   [key: string]: unknown;
+}
+
+/**
+ * Collapse replayed journal frames before deriving run cards.
+ *
+ * ``/api/stream`` deliberately replays a cursor gap after reconnect.  The
+ * previous panel appended every frame blindly, so a reconnect could inflate
+ * tool/file/error counts and make one run look like several reports.  Prefer
+ * the server event id; the deterministic fallback handles older emitters that
+ * do not attach one yet.
+ */
+export function dedupeRunReviewEvents(
+  events: RunReviewEvent[],
+): RunReviewEvent[] {
+  const seen = new Set<string>();
+  const unique: RunReviewEvent[] = [];
+  for (const event of events) {
+    const explicitId =
+      event.event_id ??
+      (typeof event.id === "string" || typeof event.id === "number"
+        ? event.id
+        : undefined);
+    const key = explicitId != null
+      ? `id:${String(explicitId)}`
+      : `payload:${stableEventPayload(event)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(event);
+  }
+  return unique;
+}
+
+function stableEventPayload(event: RunReviewEvent): string {
+  const keys = Object.keys(event)
+    .filter((key) => key !== "event_id" && key !== "id")
+    .sort();
+  return JSON.stringify(
+    keys.reduce<Record<string, unknown>>((result, key) => {
+      result[key] = event[key];
+      return result;
+    }, {}),
+  );
 }
 
 export interface RunReview {
@@ -304,17 +348,39 @@ export function RunReviewPanel() {
   const [events, setEvents] = useState<RunReviewEvent[]>([]);
   const [connected, setConnected] = useState(false);
   const [paused, setPaused] = useState(false);
+  const lastEventIdRef = useRef<string | null>(null);
+  const seenEventKeysRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     return openSseStream({
       url: `${getBackendBaseURL()}/api/stream`,
+      lastEventId: () => lastEventIdRef.current,
       onOpen: () => setConnected(true),
       onReconnecting: () => setConnected(false),
       onEvent: (msg) => {
         if (paused) return;
+        if (msg.id != null) lastEventIdRef.current = msg.id;
         try {
-          const event = JSON.parse(msg.data) as RunReviewEvent;
-          setEvents((prev) => [...prev, event].slice(-600));
+          const parsed = JSON.parse(msg.data) as RunReviewEvent;
+          const event =
+            msg.id != null ? { ...parsed, event_id: msg.id } : parsed;
+          const explicitKey =
+            event.event_id != null
+              ? `id:${String(event.event_id)}`
+              : `payload:${stableEventPayload(event)}`;
+          if (seenEventKeysRef.current.has(explicitKey)) return;
+          seenEventKeysRef.current.add(explicitKey);
+          // Keep the dedupe index bounded during a long-lived observability
+          // tab. The rendered window is 600 events, so retaining 2,000 ids is
+          // enough to cover reconnect replay without unbounded growth.
+          while (seenEventKeysRef.current.size > 2000) {
+            const oldest = seenEventKeysRef.current.values().next().value;
+            if (typeof oldest !== "string") break;
+            seenEventKeysRef.current.delete(oldest);
+          }
+          setEvents((prev) =>
+            dedupeRunReviewEvents([...prev, event]).slice(-600),
+          );
         } catch (e) {
           swallow(e);
         }
