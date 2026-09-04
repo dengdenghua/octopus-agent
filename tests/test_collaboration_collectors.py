@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -177,6 +178,91 @@ def test_parent_failure_closes_incomplete_collector_idempotently(tmp_path) -> No
     events = len(store.collaboration_run_events("run-collector"))
     assert store.close_collaboration_collector("run-collector", status="failed") == closed
     assert len(store.collaboration_run_events("run-collector")) == events
+
+
+def test_failed_child_can_retry_without_erasing_previous_attempt(tmp_path) -> None:
+    store = _store(tmp_path)
+    _run(store)
+    store.create_collaboration_collector(run_id="run-collector", child_ids=["a", "b"])
+    store.record_collaboration_collector_result(
+        "run-collector", child_id="a", status="failed", result={"error": "first"}
+    )
+    store.record_collaboration_collector_result(
+        "run-collector", child_id="b", status="success", result={"answer": "stable"}
+    )
+
+    reopened = store.reopen_collaboration_collector("run-collector")
+    assert reopened["status"] == "collecting"
+    assert reopened["generation"] == 2
+    assert reopened["active_retry_child_ids"] == ["a"]
+    assert reopened["remaining_child_ids"] == ["a"]
+    assert reopened["success_count"] == 1
+    assert reopened["completed_count"] == 1
+    assert next(item for item in reopened["results"] if item["child_id"] == "a")[
+        "pending_retry"
+    ] is True
+
+    settled = store.record_collaboration_collector_result(
+        "run-collector", child_id="a", status="success", result={"answer": "recovered"}
+    )
+    assert settled["status"] == "completed"
+    assert settled["success_count"] == 2
+    assert settled["attempt_count"] == 3
+    assert next(item for item in settled["results"] if item["child_id"] == "a")["attempt"] == 2
+    attempts = store.collaboration_collector_attempts("run-collector")
+    assert [(item["child_id"], item["attempt"], item["status"]) for item in attempts] == [
+        ("a", 1, "failed"),
+        ("a", 2, "success"),
+        ("b", 1, "success"),
+    ]
+    assert [event["event_type"] for event in store.collaboration_run_events("run-collector")][
+        -2:
+    ] == ["collector_reopened", "collector_child_recorded"]
+
+
+def test_pre_attempt_collector_schema_migrates_without_losing_results(tmp_path) -> None:
+    base = tmp_path / "cowork"
+    base.mkdir()
+    db = base / "collaboration.db"
+    with sqlite3.connect(db) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE collaboration_collectors (
+                run_id TEXT PRIMARY KEY,
+                completion_policy TEXT NOT NULL,
+                completion_target INTEGER NOT NULL,
+                expected_json TEXT NOT NULL,
+                cancelled_json TEXT NOT NULL DEFAULT '[]',
+                status TEXT NOT NULL,
+                policy_satisfied INTEGER NOT NULL DEFAULT 0,
+                revision INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                settled_at TEXT,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE collaboration_collector_results (
+                run_id TEXT NOT NULL,
+                child_id TEXT NOT NULL,
+                ordinal INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                result_json TEXT NOT NULL,
+                result_sha256 TEXT NOT NULL,
+                completed_at TEXT NOT NULL,
+                PRIMARY KEY (run_id, child_id)
+            );
+            INSERT INTO collaboration_collectors VALUES
+                ('legacy-run','all',1,'["a"]','[]','completed',1,2,'t','t','t');
+            INSERT INTO collaboration_collector_results VALUES
+                ('legacy-run','a',0,'success','{"answer":"kept"}','digest','t');
+            """
+        )
+
+    store = CollaborationStore(base_dir=base)
+    collector = store.collaboration_collector("legacy-run")
+    assert collector is not None
+    assert collector["generation"] == 1
+    assert collector["results"][0]["attempt"] == 1
+    assert collector["results"][0]["result"] == {"answer": "kept"}
 
 
 def test_reopen_retries_only_failed_lanes_without_losing_audit_history(tmp_path) -> None:
