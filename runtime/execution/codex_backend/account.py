@@ -735,6 +735,14 @@ class CodexAccountService:
                 "TEMP": str(temporary),
                 "PATH": os.environ.get("PATH") or os.defpath,
             }
+            if os.name == "nt":
+                # Node's Windows native runtime expects the standard system
+                # root variables even when the rest of the host environment
+                # is intentionally isolated from the Codex control process.
+                for name in ("SYSTEMROOT", "COMSPEC", "PATHEXT", "WINDIR"):
+                    value = os.environ.get(name)
+                    if value:
+                        environment[name] = value
             config = CodexAppServerConfig(
                 command=command,
                 cwd=str(home.parent),
