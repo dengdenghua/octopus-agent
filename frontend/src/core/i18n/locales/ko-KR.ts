@@ -4691,7 +4691,7 @@ export const koKR: Translations = {
     toggleDevice: "기기 전환",
     deviceDesktop: "데스크톱 뷰",
     deviceTablet: "태블릿 뷰 · 768×1024",
-    deviceMobile: "Mobile view · 375×812",
+    deviceMobile: "모바일 뷰 · 375×812",
     viewportHint: (label, w, h) =>
       `${label} · 뷰포트 ${w}×${h} · 반응형 CSS 활성; UA 기반 전환 사이트는 Playwright 모드 사용`,
     startBrowsingHint: "URL을 입력해 탐색 시작",

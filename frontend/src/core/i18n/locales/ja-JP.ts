@@ -4739,9 +4739,9 @@ export const jaJP: Translations = {
 
   // Browser
   browser: {
-    back: "Back",
-    forward: "Forward",
-    reload: "Reload",
+    back: "戻る",
+    forward: "進む",
+    reload: "更新",
     urlPlaceholder: "URL を入力...",
     closeSession: "ブラウザーセッションを閉じる",
     actionLog: "操作ログ",
@@ -4760,7 +4760,7 @@ export const jaJP: Translations = {
     toggleDevice: "デバイスを切り替え",
     deviceDesktop: "デスクトップビュー",
     deviceTablet: "タブレットビュー · 768×1024",
-    deviceMobile: "Mobile view · 375×812",
+    deviceMobile: "モバイルビュー · 375×812",
     viewportHint: (label, w, h) =>
       `${label} · ビューポート ${w}×${h} · レスポンシブ CSS 有効;UA 判別サイトは Playwright モードを使用`,
     startBrowsingHint: "URL を入力してブラウジングを開始",
@@ -4769,7 +4769,7 @@ export const jaJP: Translations = {
     embeddedBlockedDescription:
       "外部で開くか、デスクトップブラウザーモードに切り替えて続行。",
     assistant: {
-      stopAgent: "Stop",
+      stopAgent: "停止",
       stopAgentTooltip: "エージェントの自動操作を停止",
       autoBrowseOnTooltip: "AI が現在のページを操作可能 · クリックで無効化",
       autoBrowseOffTooltip: "AI は回答のみ · クリックで操作を有効化",
@@ -4780,10 +4780,10 @@ export const jaJP: Translations = {
       recorderDesc:
         "プラットフォームはブラウザーデスクトップから開く。ここはスケジューリング、記録、ブリーフィングを担当",
       researchGoalPlaceholder: "調査目標、空欄で下の入力を使用",
-      start: "Start",
+      start: "開始",
       recordCurrentPage: "現在のページを記録",
       clearLog: "ログをクリア",
-      copied: "Copied",
+      copied: "コピーしました",
       copyBrief: "ブリーフをコピー",
       exportMd: ".md をエクスポート",
       emptyHint: "このページについて質問 · または上のクイックアクションを使用",
@@ -4832,7 +4832,7 @@ export const jaJP: Translations = {
         "中国語調査、中国語書き換え、国内コンテキスト",
       researchPlatformHintPerplexity:
         "ウェブ検索、ソース手がかり、ファクトチェック",
-      researchLogDispatchLabel: "Dispatch",
+      researchLogDispatchLabel: "ディスパッチ",
       researchStartTitle: "外部 AI 調査を開始",
       researchPlatformsPrefix: "プラットフォーム:",
       currentPageFallback: "現在のページ",
@@ -4867,7 +4867,7 @@ export const jaJP: Translations = {
       unknownPlatform: "page",
     },
     extensionMarketplace: {
-      title: "Extensions",
+      title: "拡張機能",
       subtitle: "Echo ブラウザー拡張機能を管理",
       installLocal: "ローカル拡張機能をインストール",
       refreshAriaLabel: "拡張機能を更新",
@@ -4879,20 +4879,20 @@ export const jaJP: Translations = {
       webPreviewOnly:
         "サードパーティ拡張機能のインストールにはデスクトップ Electron が必要",
       webPreview: "Web プレビュー",
-      enabled: "Enabled",
-      disabled: "Disabled",
+      enabled: "有効",
+      disabled: "無効",
       removeAriaLabel: (name: string) => `${name} を削除`,
       noExtensionsElectron:
         "まだサードパーティ拡張機能がインストールされていません。",
       noExtensionsWeb:
         "localhost プレビューは Electron 拡張機能 API にアクセスできません。",
-      comingSoonBadge: "Preview",
-      installedBadge: "Installed",
-      installableBadge: "Installable",
-      install: "Install",
-      rating: "Rating",
-      installs: "Installs",
-      status: "Status",
+      comingSoonBadge: "プレビュー",
+      installedBadge: "インストール済み",
+      installableBadge: "インストール可能",
+      install: "インストール",
+      rating: "評価",
+      installs: "インストール数",
+      status: "状態",
       capabilityTags: "機能タグ",
       errorListFailed: "拡張機能リストの読み取りに失敗",
       errorInstallFailed: "拡張機能のインストールに失敗",
@@ -4900,11 +4900,11 @@ export const jaJP: Translations = {
       errorRemoveFailed: "拡張機能の削除に失敗",
       confirmRemove:
         "この拡張機能を Echo から削除しますか？ローカルファイルは削除されません。",
-      categoryFeatured: "Featured",
-      categoryEfficiency: "Efficiency",
-      categoryResearch: "Research",
-      categorySecurity: "Security",
-      categoryDevelopment: "Development",
+      categoryFeatured: "おすすめ",
+      categoryEfficiency: "効率化",
+      categoryResearch: "調査",
+      categorySecurity: "セキュリティ",
+      categoryDevelopment: "開発",
       categoryComingSoon: "近日公開",
       taglinePageAgent: "現在のページを実行可能なタスクコンテキストに変換",
       taglineResearchClipper:
