@@ -351,6 +351,120 @@ export const workspaceComputerJaJP: WorkspaceComputerCopy = {
   Running: "実行中",
   Paused: "一時停止",
   Expired: "期限切れ",
+  "Connection timed out. Please retry.":
+    "接続がタイムアウトしました。もう一度お試しください。",
+  "Unable to check this computer.": "このコンピューターを確認できません。",
+  "The computer view is now live. Clicking the view only selects a point; it does not execute anything.":
+    "コンピューター画面がライブになりました。画面をクリックするとポイントを選択するだけで、操作は実行されません。",
+  "The current workspace layout is preserved. Restart the live screen when needed.":
+    "現在のワークスペースレイアウトは保持されます。必要に応じてライブ画面を再起動してください。",
+  "Screenshot request failed": "スクリーンショットのリクエストに失敗しました",
+  "Point-click preview failed": "ポイントクリックのプレビューに失敗しました",
+  "Agent loop preview failed": "Agentループのプレビューに失敗しました",
+  "No candidate action was generated. Describe the goal more specifically.":
+    "候補操作が生成されませんでした。目的をもう少し具体的に入力してください。",
+  "Failed to parse vision output": "ビジョン出力の解析に失敗しました",
+  "Vision model returned actions": "ビジョンモデルが操作を返しました",
+  "Other projects can now take control of this computer.":
+    "他のプロジェクトがこのコンピューターを制御できるようになりました。",
+  " controls the physical input; ": "が物理入力を制御中です。",
+  " unavailable; observation, preview, and confirmed execution still work.":
+    "は利用できませんが、観察、プレビュー、確認後の実行は引き続き利用できます。",
+  "actions awaiting confirmation": "件の操作が確認待ちです",
+  "An action is awaiting confirmation": "確認待ちの操作があります",
+  "Another project": "別のプロジェクト",
+  "candidate actions awaiting confirmation": "件の候補操作が確認待ちです",
+  "candidate actions. Select one to add it to the confirmation queue.":
+    "件の候補操作があります。選択すると確認キューに追加されます。",
+  "Capabilities required": "必要な機能",
+  "Capture the screen or describe what you want the Agent to do.":
+    "画面を取得するか、Agentに実行してほしい内容を入力してください。",
+  "Checking computer assistant": "コンピューターアシスタントを確認中",
+  "Checking whether the Agent can observe and operate this computer.":
+    "Agentがこのコンピューターを観察・操作できるか確認しています。",
+  "Click the live screen to select a point. Press Enter to select the center.":
+    "ライブ画面をクリックしてポイントを選択します。Enterで中央を選択できます。",
+  "Click the screenshot to select a point. Press Enter to select the center.":
+    "スクリーンショットをクリックしてポイントを選択します。Enterで中央を選択できます。",
+  "Computer assistant available with limits":
+    "コンピューターアシスタントは制限付きで利用可能",
+  "Computer assistant blocked":
+    "コンピューターアシスタントはブロックされています",
+  "Computer assistant ready": "コンピューターアシスタントの準備完了",
+  "Confirmation tokens are short-lived": "確認トークンの有効期間は短時間です",
+  "Could not load the model list. You can enter a model ID manually.":
+    "モデル一覧を読み込めませんでした。モデルIDを手動入力できます。",
+  "ctrl+l or enter": "ctrl+l または enter",
+  "Current: ": "現在：",
+  "For example: open Edge and visit https://gemini.google.com":
+    "例：Edgeを開いて https://gemini.google.com にアクセス",
+  "Let the Agent see and operate this computer. Every step is previewed before you confirm it.":
+    "Agentにこのコンピューターを見せて操作させます。すべてのステップは確認前にプレビューされます。",
+  Milliseconds: "ミリ秒",
+  "Mouse and keyboard actions awaiting confirmation appear here. Nothing touches the system before confirmation.":
+    "確認待ちのマウス・キーボード操作がここに表示されます。確認前にシステムへ変更は加えません。",
+  "Mouse and keyboard actions never run automatically":
+    "マウスとキーボードの操作は自動実行されません",
+  "New computer actions wait until the current action finishes.":
+    "現在の操作が終わるまで新しい操作は待機します。",
+  "No model is marked supports_vision. Enable vision for a custom model in Settings.":
+    "supports_vision対応のモデルがありません。設定でカスタムモデルのビジョン機能を有効にしてください。",
+  "No project currently controls the physical mouse or keyboard.":
+    "現在、物理マウスとキーボードを制御しているプロジェクトはありません。",
+  "Only observes the screen when you request it":
+    "要求されたときだけ画面を観察します",
+  "Parse actions": "操作を解析",
+  "Previews, executions, and screenshots are retained as control evidence.":
+    "プレビュー、実行、スクリーンショットは制御の証拠として保存されます。",
+  "pyautogui is unavailable": "pyautoguiを利用できません",
+  "remaining before another project can take over.":
+    "後に別のプロジェクトが引き継げます。",
+  "remaining before automatic release.": "後に自動解放されます。",
+  "Request vision model": "ビジョンモデルにリクエスト",
+  "Required capabilities passed runtime checks.":
+    "必要な機能はランタイムチェックに合格しました。",
+  "Required capabilities passed runtime checks. ":
+    "必要な機能はランタイムチェックに合格しました。",
+  "Required computer automation capabilities failed runtime checks.":
+    "必要なコンピューター自動化機能がランタイムチェックに失敗しました。",
+  Retry: "再試行",
+  "Risk: ": "リスク：",
+  "Screen connected": "画面に接続済み",
+  "Screen screenshot captured": "画面のスクリーンショットを取得しました",
+  "Select “Capture screen” to take a desktop screenshot.":
+    "「画面を取得」を選択してデスクトップを撮影します。",
+  "Select “Start live” to open the computer view.":
+    "「ライブを開始」を選択してコンピューター画面を開きます。",
+  "Select a point on the screenshot or ask the vision model for the next step.":
+    "スクリーンショットでポイントを選択するか、ビジョンモデルに次のステップを尋ねてください。",
+  "Some optional capabilities are unavailable. Observation, preview, and confirmed execution still work.":
+    "一部のオプション機能は利用できませんが、観察、プレビュー、確認後の実行は利用できます。",
+  "Switch live screen": "ライブ画面を切り替え",
+  "Text to type into the focused control":
+    "フォーカス中のコントロールに入力するテキスト",
+  "The backend is running, but required automation capabilities are not ready. Screenshots, previews, mouse, and keyboard actions are temporarily unavailable.":
+    "バックエンドは動作していますが、必要な自動化機能の準備ができていません。スクリーンショット、プレビュー、マウス、キーボード操作は一時的に利用できません。",
+  "The backend responded, but computer control capabilities are not ready.":
+    "バックエンドは応答しましたが、コンピューター制御機能の準備ができていません。",
+  "The current screenshot is sent to the selected vision model. Returned actions still require confirmation.":
+    "現在のスクリーンショットは選択したビジョンモデルに送信されます。返された操作も確認が必要です。",
+  "The screen can be observed and actions can run after confirmation. ":
+    "画面を観察でき、確認後に操作を実行できます。",
+  "The server cleared the token. Preview the action again.":
+    "サーバーがトークンを消去しました。操作をもう一度プレビューしてください。",
+  "This computer": "このコンピューター",
+  "This environment cannot read the screen or perform computer actions.":
+    "この環境では画面の読み取りやコンピューター操作を実行できません。",
+  "This project": "このプロジェクト",
+  "This project controls the physical input; ":
+    "このプロジェクトが物理入力を制御中です。",
+  "UIA match: ": "UIAの一致：",
+  "Unnamed control": "名前のないコントロール",
+  "until automatic removal": "後に自動削除",
+  "until expiry": "後に期限切れ",
+  "Vision model ID, for example glm-vision":
+    "ビジョンモデルID（例：glm-vision）",
+  "vision models": "個のビジョンモデル",
 };
 
 export const workspaceComputerKoKR: WorkspaceComputerCopy = {
@@ -474,4 +588,117 @@ export const workspaceComputerKoKR: WorkspaceComputerCopy = {
   Running: "실행 중",
   Paused: "일시 중지",
   Expired: "만료됨",
+  "Connection timed out. Please retry.":
+    "연결 시간이 초과되었습니다. 다시 시도해 주세요.",
+  "Unable to check this computer.": "이 컴퓨터를 확인할 수 없습니다.",
+  "The computer view is now live. Clicking the view only selects a point; it does not execute anything.":
+    "컴퓨터 화면이 실시간으로 표시됩니다. 화면을 클릭하면 지점만 선택되며 작업은 실행되지 않습니다.",
+  "The current workspace layout is preserved. Restart the live screen when needed.":
+    "현재 작업 공간 배치는 유지됩니다. 필요할 때 실시간 화면을 다시 시작하세요.",
+  "Screenshot request failed": "스크린샷 요청에 실패했습니다",
+  "Point-click preview failed": "지점 클릭 미리보기에 실패했습니다",
+  "Agent loop preview failed": "Agent 루프 미리보기에 실패했습니다",
+  "No candidate action was generated. Describe the goal more specifically.":
+    "후보 작업이 생성되지 않았습니다. 목표를 더 구체적으로 설명해 주세요.",
+  "Failed to parse vision output": "비전 출력 분석에 실패했습니다",
+  "Vision model returned actions": "비전 모델이 작업을 반환했습니다",
+  "Other projects can now take control of this computer.":
+    "이제 다른 프로젝트가 이 컴퓨터를 제어할 수 있습니다.",
+  " controls the physical input; ": "이 물리 입력을 제어 중입니다.",
+  " unavailable; observation, preview, and confirmed execution still work.":
+    "은(는) 사용할 수 없지만 관찰, 미리보기, 확인 후 실행은 계속 사용할 수 있습니다.",
+  "actions awaiting confirmation": "개의 작업이 확인을 기다리고 있습니다",
+  "An action is awaiting confirmation": "확인을 기다리는 작업이 있습니다",
+  "Another project": "다른 프로젝트",
+  "candidate actions awaiting confirmation":
+    "개의 후보 작업이 확인을 기다리고 있습니다",
+  "candidate actions. Select one to add it to the confirmation queue.":
+    "개의 후보 작업이 있습니다. 선택하면 확인 큐에 추가됩니다.",
+  "Capabilities required": "필요한 기능",
+  "Capture the screen or describe what you want the Agent to do.":
+    "화면을 캡처하거나 Agent가 수행할 작업을 설명해 주세요.",
+  "Checking computer assistant": "컴퓨터 어시스턴트 확인 중",
+  "Checking whether the Agent can observe and operate this computer.":
+    "Agent가 이 컴퓨터를 관찰하고 조작할 수 있는지 확인하고 있습니다.",
+  "Click the live screen to select a point. Press Enter to select the center.":
+    "실시간 화면을 클릭해 지점을 선택하세요. Enter를 누르면 가운데를 선택합니다.",
+  "Click the screenshot to select a point. Press Enter to select the center.":
+    "스크린샷을 클릭해 지점을 선택하세요. Enter를 누르면 가운데를 선택합니다.",
+  "Computer assistant available with limits":
+    "컴퓨터 어시스턴트를 제한적으로 사용할 수 있습니다",
+  "Computer assistant blocked": "컴퓨터 어시스턴트가 차단되었습니다",
+  "Computer assistant ready": "컴퓨터 어시스턴트가 준비되었습니다",
+  "Confirmation tokens are short-lived":
+    "확인 토큰은 짧은 시간 동안만 유효합니다",
+  "Could not load the model list. You can enter a model ID manually.":
+    "모델 목록을 불러오지 못했습니다. 모델 ID를 직접 입력할 수 있습니다.",
+  "ctrl+l or enter": "ctrl+l 또는 enter",
+  "Current: ": "현재: ",
+  "For example: open Edge and visit https://gemini.google.com":
+    "예: Edge를 열고 https://gemini.google.com 방문",
+  "Let the Agent see and operate this computer. Every step is previewed before you confirm it.":
+    "Agent가 이 컴퓨터를 보고 조작하게 합니다. 모든 단계는 확인 전에 미리 표시됩니다.",
+  Milliseconds: "밀리초",
+  "Mouse and keyboard actions awaiting confirmation appear here. Nothing touches the system before confirmation.":
+    "확인을 기다리는 마우스·키보드 작업이 여기에 표시됩니다. 확인 전에는 시스템을 변경하지 않습니다.",
+  "Mouse and keyboard actions never run automatically":
+    "마우스와 키보드 작업은 자동으로 실행되지 않습니다",
+  "New computer actions wait until the current action finishes.":
+    "현재 작업이 끝날 때까지 새 컴퓨터 작업은 대기합니다.",
+  "No model is marked supports_vision. Enable vision for a custom model in Settings.":
+    "supports_vision 모델이 없습니다. 설정에서 사용자 지정 모델의 비전 기능을 켜세요.",
+  "No project currently controls the physical mouse or keyboard.":
+    "현재 물리 마우스와 키보드를 제어하는 프로젝트가 없습니다.",
+  "Only observes the screen when you request it":
+    "요청할 때만 화면을 관찰합니다",
+  "Parse actions": "작업 분석",
+  "Previews, executions, and screenshots are retained as control evidence.":
+    "미리보기, 실행, 스크린샷은 제어 증거로 보관됩니다.",
+  "pyautogui is unavailable": "pyautogui를 사용할 수 없습니다",
+  "remaining before another project can take over.":
+    "후 다른 프로젝트가 인계받을 수 있습니다.",
+  "remaining before automatic release.": "후 자동으로 해제됩니다.",
+  "Request vision model": "비전 모델 요청",
+  "Required capabilities passed runtime checks.":
+    "필요한 기능이 런타임 검사를 통과했습니다.",
+  "Required capabilities passed runtime checks. ":
+    "필요한 기능이 런타임 검사를 통과했습니다. ",
+  "Required computer automation capabilities failed runtime checks.":
+    "필요한 컴퓨터 자동화 기능이 런타임 검사에 실패했습니다.",
+  Retry: "다시 시도",
+  "Risk: ": "위험: ",
+  "Screen connected": "화면 연결됨",
+  "Screen screenshot captured": "화면 스크린샷을 캡처했습니다",
+  "Select “Capture screen” to take a desktop screenshot.":
+    "‘화면 캡처’를 선택해 데스크톱을 촬영하세요.",
+  "Select “Start live” to open the computer view.":
+    "‘실시간 시작’을 선택해 컴퓨터 화면을 여세요.",
+  "Select a point on the screenshot or ask the vision model for the next step.":
+    "스크린샷에서 지점을 선택하거나 비전 모델에 다음 단계를 요청하세요.",
+  "Some optional capabilities are unavailable. Observation, preview, and confirmed execution still work.":
+    "일부 선택 기능을 사용할 수 없지만 관찰, 미리보기, 확인 후 실행은 계속 사용할 수 있습니다.",
+  "Switch live screen": "실시간 화면 전환",
+  "Text to type into the focused control": "포커스된 컨트롤에 입력할 텍스트",
+  "The backend is running, but required automation capabilities are not ready. Screenshots, previews, mouse, and keyboard actions are temporarily unavailable.":
+    "백엔드는 실행 중이지만 필요한 자동화 기능이 준비되지 않았습니다. 스크린샷, 미리보기, 마우스, 키보드 작업을 일시적으로 사용할 수 없습니다.",
+  "The backend responded, but computer control capabilities are not ready.":
+    "백엔드가 응답했지만 컴퓨터 제어 기능이 준비되지 않았습니다.",
+  "The current screenshot is sent to the selected vision model. Returned actions still require confirmation.":
+    "현재 스크린샷은 선택한 비전 모델로 전송됩니다. 반환된 작업도 확인이 필요합니다.",
+  "The screen can be observed and actions can run after confirmation. ":
+    "화면을 관찰할 수 있으며 확인 후 작업을 실행할 수 있습니다. ",
+  "The server cleared the token. Preview the action again.":
+    "서버가 토큰을 삭제했습니다. 작업을 다시 미리 보세요.",
+  "This computer": "이 컴퓨터",
+  "This environment cannot read the screen or perform computer actions.":
+    "이 환경에서는 화면을 읽거나 컴퓨터 작업을 수행할 수 없습니다.",
+  "This project": "이 프로젝트",
+  "This project controls the physical input; ":
+    "이 프로젝트가 물리 입력을 제어 중입니다. ",
+  "UIA match: ": "UIA 일치: ",
+  "Unnamed control": "이름 없는 컨트롤",
+  "until automatic removal": "후 자동 삭제",
+  "until expiry": "후 만료",
+  "Vision model ID, for example glm-vision": "비전 모델 ID(예: glm-vision)",
+  "vision models": "개의 비전 모델",
 };

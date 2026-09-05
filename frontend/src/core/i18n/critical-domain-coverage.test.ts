@@ -102,4 +102,26 @@ describe("critical locale coverage", () => {
       workspaceComputerKoKR,
     );
   });
+
+  it("does not ship explicit source-key placeholders in dynamic locale maps", () => {
+    const technicalTokens = new Set(["pass^k"]);
+    for (const [locale, copy] of [
+      ["ja-JP agentOperator", agentOperatorJaJP],
+      ["ko-KR agentOperator", agentOperatorKoKR],
+      ["ja-JP workspaceComputer", workspaceComputerJaJP],
+      ["ko-KR workspaceComputer", workspaceComputerKoKR],
+    ] as const) {
+      for (const [source, translated] of Object.entries(copy)) {
+        expect(
+          translated,
+          `${locale} has an empty translation for “${source}”`,
+        ).toBeTruthy();
+        if (technicalTokens.has(source)) continue;
+        expect(
+          translated,
+          `${locale} explicitly repeats the source key “${source}”`,
+        ).not.toBe(source);
+      }
+    }
+  });
 });

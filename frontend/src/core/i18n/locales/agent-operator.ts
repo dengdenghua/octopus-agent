@@ -408,6 +408,171 @@ export const agentOperatorJaJP: AgentOperatorCopy = {
   Archive: "アーカイブ",
   browser: "ブラウザー",
   desktop: "デスクトップ",
+  "Accepted from operator panel.": "オペレーターパネルから承認しました。",
+  active: "アクティブ",
+  "Apply gap": "ギャップを適用",
+  "Applying…": "適用中…",
+  "Architecture is estimated; static certification and same-task behavioral evidence are tracked separately.":
+    "アーキテクチャは推定値です。静的認証と同一タスクの行動証拠は別々に追跡します。",
+  "Auto verifier": "自動検証",
+  "automation gaps": "自動化ギャップ",
+  "Base64 Ed25519 public key": "Base64 Ed25519公開鍵",
+  "Behavior blocked": "動作がブロックされています",
+  "Behavioral head-to-head is not certified":
+    "行動の直接比較は認証されていません",
+  best: "最良",
+  "Browser, desktop, visual replay, and signed automation policy coverage.":
+    "ブラウザー、デスクトップ、ビジュアルリプレイ、署名付き自動化ポリシーのカバレッジ。",
+  "bucket experience": "経験バケット",
+  cases: "ケース",
+  chain: "チェーン",
+  checked: "確認済み",
+  compat: "互換性",
+  contra: "矛盾",
+  "deep research": "深い調査",
+  dimensions: "次元",
+  down: "低下",
+  "E2E surpass certification": "E2E超越認証",
+  "Echo has no tracked effective scorecard gaps":
+    "Echoには追跡中の有効なスコアカードギャップがありません",
+  "Ed25519 public key": "Ed25519公開鍵",
+  "Ed25519 publisher keys · atomic rotation · audited revocation":
+    "Ed25519発行者キー · アトミックローテーション · 監査可能な失効",
+  "effective gap": "有効なギャップ",
+  "Evidence link": "証拠リンク",
+  "external leader gaps": "外部リーダーとの差",
+  fail: "失敗",
+  failed: "失敗",
+  gap: "ギャップ",
+  "Gap counters": "ギャップカウンター",
+  gate: "ゲート",
+  halt: "停止",
+  history: "履歴",
+  impl: "実装",
+  "Install deny rule": "拒否ルールをインストール",
+  "Install signed rule": "署名付きルールをインストール",
+  "Installed Codex plugins passed local smoke checks":
+    "インストール済みCodexプラグインはローカルスモークチェックに合格しました",
+  "Key ID": "キーID",
+  links: "リンク",
+  low: "低",
+  mem: "メモリ",
+  "New key ID": "新しいキーID",
+  "No active topology is affected by subagent policy":
+    "サブエージェントポリシーの影響を受けるアクティブなトポロジーはありません",
+  "No auto-verifier decisions recorded yet":
+    "自動検証の判断はまだ記録されていません",
+  "No automation rule drafts available.":
+    "利用できる自動化ルール草案はありません。",
+  "No blocked gate overrides recorded":
+    "ブロックされたゲートの上書き記録はありません",
+  "No committed experience memories yet": "確定した経験メモリはまだありません",
+  "No install, upgrade, or rollback transactions":
+    "インストール、アップグレード、ロールバックのトランザクションはありません",
+  "No process timeline available": "プロセスのタイムラインはありません",
+  "No publisher keys registered.": "登録済みの発行者キーはありません。",
+  "No reason provided": "理由が指定されていません",
+  "No signed policy-review rule drafts yet":
+    "署名付きポリシーレビューのルール草案はまだありません",
+  "No static tool denials recorded in current trace window":
+    "現在のトレース期間に静的ツール拒否の記録はありません",
+  "No subagent-derived team promotions yet":
+    "サブエージェント由来のチーム昇格はまだありません",
+  "No watch or retirement candidates in current fitness evidence":
+    "現在の適合度証拠に監視・停止候補はありません",
+  "not queued": "未キュー",
+  "Octo auto": "Echo自動化",
+  ok: "正常",
+  open: "未完了",
+  "Operator policy blocked team topology attempts":
+    "オペレーターポリシーがチームトポロジーの試行をブロックしました",
+  "Operator-retired subagents are present in active topologies":
+    "アクティブなトポロジーにオペレーターが停止したサブエージェントがあります",
+  over: "上書き",
+  "Override gate": "ゲートを上書き",
+  "Override reason": "上書き理由",
+  "Override reason is required.": "上書き理由が必要です。",
+  "Overrides were used after replay gate blocked apply":
+    "リプレイゲートが適用をブロックした後に上書きが使用されました",
+  pass: "合格",
+  "pass^k": "pass^k",
+  "Placed on watch from operator panel using subagent fitness route evidence.":
+    "サブエージェント適合度のルート証拠に基づき、オペレーターパネルから監視対象にしました。",
+  "policy drafts": "ポリシー草案",
+  "Policy review rules": "ポリシーレビューのルール",
+  "Previous key ID": "以前のキーID",
+  "Previous key ID (optional)": "以前のキーID（任意）",
+  "Promotion lift is being tracked from team performance":
+    "チームのパフォーマンスから昇格効果を追跡しています",
+  "Promotion was stopped because replay gate did not pass. Override only when you have reviewed the failing cases.":
+    "リプレイゲートに合格しなかったため昇格を停止しました。失敗ケースを確認した場合のみ上書きしてください。",
+  "provider blocked": "プロバイダーでブロック",
+  "Publisher ID": "発行者ID",
+  "Queue real gaps": "実際のギャップをキューに追加",
+  "Queue routes": "ルートをキューに追加",
+  "Queue this gap": "このギャップをキューに追加",
+  Reason: "理由",
+  "Recall memories are fresh and contradiction-clean":
+    "想起されたメモリは新鮮で矛盾がありません",
+  "Record why this replay gate override is acceptable.":
+    "このリプレイゲートの上書きが許容される理由を記録してください。",
+  "Refresh queue item": "キュー項目を更新",
+  "Register a new Ed25519 public key and retire the previous key atomically.":
+    "新しいEd25519公開鍵を登録し、以前のキーをアトミックに停止します。",
+  reliable: "信頼可能",
+  "Remediation queue": "修正キュー",
+  "repair-route promotion candidate(s)": "修正ルートの昇格候補",
+  Replace: "置換",
+  "Replay gate blocked apply": "リプレイゲートが適用をブロックしました",
+  "Replay gate did not pass": "リプレイゲートに合格しませんでした",
+  "Replay-backed policy review rule":
+    "リプレイに基づくポリシーレビューのルール",
+  "Replay-backed policy reviews produced signed install drafts":
+    "リプレイに基づくポリシーレビューが署名付きインストール草案を生成しました",
+  roles: "ロール",
+  "Retired from operator panel using subagent fitness route evidence.":
+    "サブエージェント適合度のルート証拠に基づき、オペレーターパネルから停止しました。",
+  "Revocation takes effect immediately and is written to the governance audit chain.":
+    "失効は直ちに有効になり、ガバナンス監査チェーンに記録されます。",
+  "Revoke publisher key": "発行者キーを失効",
+  "Rotate key": "キーをローテーション",
+  "Rotate publisher key": "発行者キーをローテーション",
+  "route evidence": "ルート証拠",
+  routes: "ルート",
+  runs: "実行",
+  "same-task repeated behavioral runs and static release gates clear the Codex bar":
+    "同一タスクの反復行動実行と静的リリースゲートがCodex基準を上回っています",
+  "Scorecard gap drill-down for": "スコアカードギャップの詳細：",
+  "scorecard gaps": "スコアカードギャップ",
+  signed: "署名済み",
+  "Signed automation rule drafts": "署名付き自動化ルール草案",
+  "Some local plugins need operator review":
+    "一部のローカルプラグインはオペレーターのレビューが必要です",
+  "Some plugins failed local smoke checks":
+    "一部のプラグインがローカルスモークチェックに失敗しました",
+  stale: "古い",
+  "Strong subagents are ready for team topology promotion":
+    "優れたサブエージェントはチームトポロジーへの昇格準備ができています",
+  sub: "サブ",
+  "surpass gap": "超越ギャップ",
+  surpassed: "超越済み",
+  teams: "チーム",
+  topo: "トポロジー",
+  tx: "トランザクション",
+  up: "上昇",
+  "vs best external": "最良の外部対象との比較",
+  "vs Codex": "Codexとの比較",
+  "vs effective target": "有効な目標との比較",
+  wait: "待機",
+  "waiting for E2E certification evidence": "E2E認証の証拠を待機中",
+  warn: "警告",
+  "Watched subagents are present in active topologies":
+    "監視中のサブエージェントがアクティブなトポロジーに存在します",
+  drafts: "草案",
+  drift: "ドリフト",
+  due: "期限間近",
+  "Route evidence has identified watch or retirement candidates":
+    "ルート証拠が監視または停止候補を特定しました",
 };
 
 export const agentOperatorKoKR: AgentOperatorCopy = {
@@ -515,4 +680,168 @@ export const agentOperatorKoKR: AgentOperatorCopy = {
   Archive: "보관",
   browser: "브라우저",
   desktop: "데스크톱",
+  "Accepted from operator panel.": "운영자 패널에서 승인했습니다.",
+  active: "활성",
+  "Apply gap": "격차 적용",
+  "Applying…": "적용 중…",
+  "Architecture is estimated; static certification and same-task behavioral evidence are tracked separately.":
+    "아키텍처는 추정치이며 정적 인증과 동일 작업 행동 증거는 별도로 추적합니다.",
+  "Auto verifier": "자동 검증기",
+  "automation gaps": "자동화 격차",
+  "Base64 Ed25519 public key": "Base64 Ed25519 공개 키",
+  "Behavior blocked": "동작이 차단됨",
+  "Behavioral head-to-head is not certified":
+    "행동 직접 비교가 인증되지 않았습니다",
+  best: "최고",
+  "Browser, desktop, visual replay, and signed automation policy coverage.":
+    "브라우저, 데스크톱, 시각적 리플레이 및 서명된 자동화 정책 범위입니다.",
+  "bucket experience": "경험 버킷",
+  cases: "사례",
+  chain: "체인",
+  checked: "확인됨",
+  compat: "호환성",
+  contra: "모순",
+  "deep research": "심층 조사",
+  dimensions: "차원",
+  down: "하락",
+  "E2E surpass certification": "E2E 초월 인증",
+  "Echo has no tracked effective scorecard gaps":
+    "Echo에 추적 중인 유효한 스코어카드 격차가 없습니다",
+  "Ed25519 public key": "Ed25519 공개 키",
+  "Ed25519 publisher keys · atomic rotation · audited revocation":
+    "Ed25519 게시자 키 · 원자적 교체 · 감사 가능한 폐기",
+  "effective gap": "유효한 격차",
+  "Evidence link": "증거 링크",
+  "external leader gaps": "외부 선두와의 격차",
+  fail: "실패",
+  failed: "실패함",
+  gap: "격차",
+  "Gap counters": "격차 카운터",
+  gate: "게이트",
+  halt: "중지",
+  history: "기록",
+  impl: "구현",
+  "Install deny rule": "거부 규칙 설치",
+  "Install signed rule": "서명된 규칙 설치",
+  "Installed Codex plugins passed local smoke checks":
+    "설치된 Codex 플러그인이 로컬 스모크 검사를 통과했습니다",
+  "Key ID": "키 ID",
+  links: "링크",
+  low: "낮음",
+  mem: "메모리",
+  "New key ID": "새 키 ID",
+  "No active topology is affected by subagent policy":
+    "서브에이전트 정책의 영향을 받는 활성 토폴로지가 없습니다",
+  "No auto-verifier decisions recorded yet":
+    "아직 자동 검증기 결정이 기록되지 않았습니다",
+  "No automation rule drafts available.":
+    "사용 가능한 자동화 규칙 초안이 없습니다.",
+  "No blocked gate overrides recorded":
+    "차단된 게이트의 재정의 기록이 없습니다",
+  "No committed experience memories yet": "아직 확정된 경험 메모리가 없습니다",
+  "No install, upgrade, or rollback transactions":
+    "설치, 업그레이드 또는 롤백 트랜잭션이 없습니다",
+  "No process timeline available": "사용 가능한 프로세스 타임라인이 없습니다",
+  "No publisher keys registered.": "등록된 게시자 키가 없습니다.",
+  "No reason provided": "제공된 이유가 없습니다",
+  "No signed policy-review rule drafts yet":
+    "아직 서명된 정책 검토 규칙 초안이 없습니다",
+  "No static tool denials recorded in current trace window":
+    "현재 추적 구간에 정적 도구 거부 기록이 없습니다",
+  "No subagent-derived team promotions yet":
+    "아직 서브에이전트 기반 팀 승격이 없습니다",
+  "No watch or retirement candidates in current fitness evidence":
+    "현재 적합성 증거에 관찰 또는 중지 후보가 없습니다",
+  "not queued": "큐에 없음",
+  "Octo auto": "Echo 자동화",
+  ok: "정상",
+  open: "열림",
+  "Operator policy blocked team topology attempts":
+    "운영자 정책이 팀 토폴로지 시도를 차단했습니다",
+  "Operator-retired subagents are present in active topologies":
+    "활성 토폴로지에 운영자가 중지한 서브에이전트가 있습니다",
+  over: "재정의",
+  "Override gate": "게이트 재정의",
+  "Override reason": "재정의 이유",
+  "Override reason is required.": "재정의 이유가 필요합니다.",
+  "Overrides were used after replay gate blocked apply":
+    "리플레이 게이트가 적용을 차단한 후 재정의를 사용했습니다",
+  pass: "통과",
+  "pass^k": "pass^k",
+  "Placed on watch from operator panel using subagent fitness route evidence.":
+    "서브에이전트 적합성 경로 증거를 사용해 운영자 패널에서 관찰 대상으로 지정했습니다.",
+  "policy drafts": "정책 초안",
+  "Policy review rules": "정책 검토 규칙",
+  "Previous key ID": "이전 키 ID",
+  "Previous key ID (optional)": "이전 키 ID(선택 사항)",
+  "Promotion lift is being tracked from team performance":
+    "팀 성과에서 승격 효과를 추적하고 있습니다",
+  "Promotion was stopped because replay gate did not pass. Override only when you have reviewed the failing cases.":
+    "리플레이 게이트를 통과하지 못해 승격이 중지되었습니다. 실패 사례를 검토한 경우에만 재정의하세요.",
+  "provider blocked": "제공자 차단",
+  "Publisher ID": "게시자 ID",
+  "Queue real gaps": "실제 격차를 큐에 추가",
+  "Queue routes": "경로를 큐에 추가",
+  "Queue this gap": "이 격차를 큐에 추가",
+  Reason: "이유",
+  "Recall memories are fresh and contradiction-clean":
+    "불러온 메모리가 최신이며 모순이 없습니다",
+  "Record why this replay gate override is acceptable.":
+    "이 리플레이 게이트 재정의가 허용되는 이유를 기록하세요.",
+  "Refresh queue item": "큐 항목 새로 고침",
+  "Register a new Ed25519 public key and retire the previous key atomically.":
+    "새 Ed25519 공개 키를 등록하고 이전 키를 원자적으로 중지합니다.",
+  reliable: "신뢰 가능",
+  "Remediation queue": "수정 큐",
+  "repair-route promotion candidate(s)": "수정 경로 승격 후보",
+  Replace: "교체",
+  "Replay gate blocked apply": "리플레이 게이트가 적용을 차단했습니다",
+  "Replay gate did not pass": "리플레이 게이트를 통과하지 못했습니다",
+  "Replay-backed policy review rule": "리플레이 기반 정책 검토 규칙",
+  "Replay-backed policy reviews produced signed install drafts":
+    "리플레이 기반 정책 검토가 서명된 설치 초안을 생성했습니다",
+  roles: "역할",
+  "Retired from operator panel using subagent fitness route evidence.":
+    "서브에이전트 적합성 경로 증거를 사용해 운영자 패널에서 중지했습니다.",
+  "Revocation takes effect immediately and is written to the governance audit chain.":
+    "폐기는 즉시 적용되며 거버넌스 감사 체인에 기록됩니다.",
+  "Revoke publisher key": "게시자 키 폐기",
+  "Rotate key": "키 교체",
+  "Rotate publisher key": "게시자 키 교체",
+  "route evidence": "경로 증거",
+  routes: "경로",
+  runs: "실행",
+  "same-task repeated behavioral runs and static release gates clear the Codex bar":
+    "동일 작업 반복 행동 실행과 정적 릴리스 게이트가 Codex 기준을 넘었습니다",
+  "Scorecard gap drill-down for": "스코어카드 격차 상세:",
+  "scorecard gaps": "스코어카드 격차",
+  signed: "서명됨",
+  "Signed automation rule drafts": "서명된 자동화 규칙 초안",
+  "Some local plugins need operator review":
+    "일부 로컬 플러그인은 운영자 검토가 필요합니다",
+  "Some plugins failed local smoke checks":
+    "일부 플러그인이 로컬 스모크 검사에 실패했습니다",
+  stale: "오래됨",
+  "Strong subagents are ready for team topology promotion":
+    "우수한 서브에이전트가 팀 토폴로지 승격 준비를 마쳤습니다",
+  sub: "서브",
+  "surpass gap": "초월 격차",
+  surpassed: "초월함",
+  teams: "팀",
+  topo: "토폴로지",
+  tx: "트랜잭션",
+  up: "상승",
+  "vs best external": "최고 외부 대상과 비교",
+  "vs Codex": "Codex와 비교",
+  "vs effective target": "유효 목표와 비교",
+  wait: "대기",
+  "waiting for E2E certification evidence": "E2E 인증 증거 대기 중",
+  warn: "경고",
+  "Watched subagents are present in active topologies":
+    "관찰 중인 서브에이전트가 활성 토폴로지에 있습니다",
+  drafts: "초안",
+  drift: "드리프트",
+  due: "기한 임박",
+  "Route evidence has identified watch or retirement candidates":
+    "경로 증거가 관찰 또는 중지 후보를 식별했습니다",
 };
