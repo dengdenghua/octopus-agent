@@ -223,7 +223,7 @@ def _mobile_mcp_entries(mobile_skills_root: str | Path | None) -> list[dict[str,
                 "group": group,
                 "provider": {
                     "id": "octopus-tentacle",
-                    "display_name": "Octopus Tentacle",
+                    "display_name": "Echo Tentacle",
                     "ready": True,
                     "feature_flags": ["mobile", "mcp"],
                 },

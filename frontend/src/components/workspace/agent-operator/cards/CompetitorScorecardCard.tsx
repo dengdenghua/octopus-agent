@@ -111,7 +111,7 @@ export function CompetitorScorecardCard({
                         passed: certification.passed,
                         total: certification.total,
                       })
-                    : to("Octopus has no tracked effective scorecard gaps")}
+                    : to("Echo has no tracked effective scorecard gaps")}
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
             {to(

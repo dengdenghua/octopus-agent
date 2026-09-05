@@ -123,7 +123,7 @@ class IRCChannel(Channel):
         port: int = 6697,
         password: str = "",
         username: str | None = None,
-        realname: str = "Octopus Agent",
+        realname: str = "Echo Agent",
         use_tls: bool = True,
         channel_id: str = "irc",
         connect_timeout_s: float = 10.0,
@@ -139,7 +139,7 @@ class IRCChannel(Channel):
         if not _NICK_RE.fullmatch(self.nickname):
             raise ValueError("invalid nickname")
         self.username = _validate_atom(username or nickname, "username", max_length=31)
-        self.realname = realname.strip() or "Octopus Agent"
+        self.realname = realname.strip() or "Echo Agent"
         if _CONTROL_RE.search(self.realname):
             raise ValueError("invalid realname")
         if _CONTROL_RE.search(password):

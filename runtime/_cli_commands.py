@@ -394,7 +394,7 @@ def run_quickstart(
     c = _Colors(color)
     config_path = output
 
-    print(c.bold("Octopus quickstart"))
+    print(c.bold("Echo quickstart"))
     print(c.dim("─" * 60))
 
     if force or not config_path.exists():

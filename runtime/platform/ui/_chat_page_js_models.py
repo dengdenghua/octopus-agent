@@ -185,7 +185,7 @@ function renderNoBackend(display) {
         <div class="who">
           <span style="font-size:22px">🐙</span>
           <div style="min-width:0">
-            <h2>Octopus Chat</h2>
+            <h2>Echo Chat</h2>
             <div class="info">
               <span class="badge plain">💻 本地</span>
               <span style="color:var(--slate)">${escapeHtml(display || '')}</span>

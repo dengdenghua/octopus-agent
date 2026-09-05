@@ -830,7 +830,7 @@ function ConnectDialog({
 
         {isPlugin && (
           <p className="text-xs leading-5 text-muted-foreground">
-            插件(Octopus
+            插件(Echo
             插件)无需认证,安装后技能即可用。点「保存凭据」直接确认就绪。
           </p>
         )}
@@ -878,7 +878,7 @@ function ConnectDialog({
                   "直连模型 API，不安装或检测任何 CLI"}
               </p>
               <p className="mt-0.5 text-muted-foreground">
-                Key 会加密保存在本机；模型继续使用 Octopus
+                Key 会加密保存在本机；模型继续使用 Echo
                 的流式输出、工具调用和记忆。
               </p>
               {modelProvider.dashboard_url ? (

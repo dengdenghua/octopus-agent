@@ -68,7 +68,7 @@ class NtfyChannel(Channel):
 
         url = f"{self._server_url}/{self._topic}"
         headers = {
-            "Title": "Octopus Agent",
+            "Title": "Echo Agent",
             "Priority": "default",
         }
         if self._http is not None:

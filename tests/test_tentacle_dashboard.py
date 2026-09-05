@@ -75,7 +75,7 @@ def test_dashboard_html(client):
     """Dashboard 应返回 HTML 页面."""
     r = client.get("/api/tentacle/dashboard")
     assert r.status_code == 200
-    assert "Octopus Tentacle Dashboard" in r.text
+    assert "Echo Tentacle Dashboard" in r.text
 
 
 def test_list_devices(client):

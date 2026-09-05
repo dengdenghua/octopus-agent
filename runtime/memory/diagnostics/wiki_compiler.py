@@ -215,7 +215,7 @@ class WikiCompiler:
         path.write_text(content, encoding="utf-8")
 
     def _write_index(self, pages: list[str], now: str) -> None:
-        lines = ["# Octopus Agent Wiki\n"]
+        lines = ["# Echo Agent Wiki\n"]
         lines.append(f"_Last compiled: {now}_\n")
         lines.append("## Pages\n")
         page_files = sorted(self._dir.glob("*.md"))

@@ -234,7 +234,7 @@ class CodexAppServerConfig:
     env_overrides: Mapping[str, str] = field(default_factory=dict, repr=False)
     source_environment: Mapping[str, str] | None = field(default=None, repr=False)
     client_name: str = "octopus_agent"
-    client_title: str = "Octopus Agent"
+    client_title: str = "Echo Agent"
     client_version: str = "0.2.0"
     experimental_api: bool = False
     opt_out_notification_methods: tuple[str, ...] = ()

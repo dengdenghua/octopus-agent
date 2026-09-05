@@ -9,7 +9,7 @@ import {
   ExecutionEnginePicker,
 } from "./execution-engine-picker";
 
-it("explains unavailable Codex while keeping Auto and Octopus selectable", async () => {
+it("explains unavailable Codex while keeping Auto and Echo selectable", async () => {
   const user = userEvent.setup();
   const onChange = vi.fn();
   renderWithProviders(
@@ -27,7 +27,7 @@ it("explains unavailable Codex while keeping Auto and Octopus selectable", async
     screen.getByRole("menuitem", { name: /Codex Connect a Codex account/ }),
   ).toHaveAttribute("aria-disabled", "true");
   await user.click(
-    screen.getByRole("menuitem", { name: /Octopus Use native/ }),
+    screen.getByRole("menuitem", { name: /Echo Use native/ }),
   );
   expect(onChange).toHaveBeenCalledExactlyOnceWith("octopus");
 });

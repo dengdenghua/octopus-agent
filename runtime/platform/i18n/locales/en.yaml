@@ -1,7 +1,7 @@
 # Auto-extracted from runtime/platform/i18n/__init__.py
 # Keys are dot-namespaced (e.g. cli.version).
 
-"cli.version": "Octopus-Agent {version}"
+"cli.version": "Echo {version}"
 "cli.demo.start": "Starting end-to-end demo..."
 "cli.demo.done": "Demo complete. {steps} steps, {events} events, elapsed {elapsed:.2f}s"
 "cli.run.planning": "Planning: {goal}"
@@ -323,7 +323,7 @@
 "cli.loop.done_summary": "Done · {success}/{total} succeeded · journal={events} events"
 "cli.ui.not_installed": "uvicorn not installed · `pip install uvicorn fastapi`"
 "cli.ui.starting_fmt": "octopus-agent · UI at http://{host}:{port} (journal={journal})"
-"cli.tour.title": "🐙 Octopus-Agent · 5-Min Tour"
+"cli.tour.title": "Echo · 5-Min Tour"
 "cli.tour.subtitle": "Will demo {total} chapters · ≤20 lines each · proves each organ is alive"
 "cli.tour.pause": "\n[Enter to continue · Ctrl-C to quit]"
 "cli.tour.chapter_fmt": "Chapter {i}/{total} · {title}"

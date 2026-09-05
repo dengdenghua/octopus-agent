@@ -218,7 +218,7 @@ describe("DualHelixEvolutionPanel", () => {
     expect(
       await screen.findByRole("heading", { name: "双引擎螺旋进化" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Octopus Native")).toBeInTheDocument();
+        expect(screen.getByText("Echo Native")).toBeInTheDocument();
     expect(screen.getByText("OpenAI Codex")).toBeInTheDocument();
     expect(await screen.findByText("9/12")).toBeInTheDocument();
     expect(

@@ -1,12 +1,13 @@
-# Windows 本地运行
+# Echo Windows 本地运行
 
 项目目录：`D:\echo agent`。完整 Git 历史已下载，默认分支为 `main`。
 
 ## 启动与停止
 
-- 双击根目录 `Start-Octopus.cmd`：启动 Python 后端、Vite 前端和 Electron 桌面窗口。
-- 浏览器模式：运行 `Start-Octopus.cmd -Web`，地址为 http://127.0.0.1:3000 。
-- 双击 `Stop-Octopus.cmd`：停止这些脚本启动的本地进程。
+- 双击根目录 `Start-Echo.cmd`：启动 Python 后端、Vite 前端和 Electron 桌面窗口。
+- 浏览器模式：运行 `Start-Echo.cmd -Web`，地址为 http://127.0.0.1:3000 。
+- 双击 `Stop-Echo.cmd`：停止这些脚本启动的本地进程。
+- `Start-Octopus.cmd` / `Stop-Octopus.cmd` 仍保留为兼容入口。
 - 关闭桌面窗口不会停止后端；需要完全退出时使用停止脚本。
 
 登录页可选择“本地登录”，输入自己的用户名。已使用 `local` 验证进入工作台，你也可以使用这个用户名。真实 AI 对话需要在应用中配置模型提供商或登录相应服务；安装过程没有配置 API 密钥或验证付费模型调用。

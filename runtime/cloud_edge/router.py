@@ -40,7 +40,7 @@ _RELAY_OWNER_SCOPE_RE = re.compile(r"^relay_[a-f0-9]{64}$")
 
 
 class PairingBody(BaseModel):
-    device_name: str = Field(default="Octopus Desktop", min_length=1, max_length=80)
+    device_name: str = Field(default="Echo Desktop", min_length=1, max_length=80)
     ttl_seconds: int = Field(default=600, ge=60, le=3600)
 
 

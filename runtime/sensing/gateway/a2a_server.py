@@ -145,7 +145,7 @@ def mount_a2a_server(
     public_base = os.getenv("OCTOPUS_A2A_PUBLIC_URL", "http://localhost:8888").rstrip("/")
     rpc_path = "/api/a2a/rpc"
     card = AgentCard(
-        name="Octopus Multi-Agent Workspace",
+        name="Echo Multi-Agent Workspace",
         description=(
             "Durable multi-agent collaboration with selective context, evidence checks, "
             "recovery, and isolated specialist execution."

@@ -86,8 +86,8 @@ export function CodexUpdateRadar() {
           </h3>
           <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
             {zh
-              ? "自动发现 OpenAI 上游版本；批准后仅进入下一次 Octopus 发版，不会热替换当前引擎。"
-              : "Detects OpenAI upstream releases. Approval only queues a version for the next Octopus release; it never hot-swaps the running engine."}
+              ? "自动发现 OpenAI 上游版本；批准后仅进入下一次 Echo 发版，不会热替换当前引擎。"
+              : "Detects OpenAI upstream releases. Approval only queues a version for the next Echo release; it never hot-swaps the running engine."}
           </p>
         </div>
         <Button
@@ -155,8 +155,8 @@ export function CodexUpdateRadar() {
           <p className="text-xs">
             {isApproved
               ? zh
-                ? `v${data.approved_version} 已批准，等待随下一版 Octopus 发布。`
-                : `v${data.approved_version} is approved for the next Octopus release.`
+                ? `v${data.approved_version} 已批准，等待随下一版 Echo 发布。`
+                : `v${data.approved_version} is approved for the next Echo release.`
               : zh
                 ? `发现 v${data.latest_version}，等待管理员批准。`
                 : `v${data.latest_version} is available and awaiting approval.`}

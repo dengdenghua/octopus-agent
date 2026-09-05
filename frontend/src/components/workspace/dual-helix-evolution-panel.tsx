@@ -575,7 +575,7 @@ export function DualHelixEvolutionPanel({
                 paired.data ? (controlled?.paired_count ?? 0) : "—",
               ],
               [
-                "Octopus 胜出",
+                "Echo 胜出",
                 paired.data ? (controlled?.octopus_wins ?? 0) : "—",
               ],
               ["Codex 胜出", paired.data ? (controlled?.codex_wins ?? 0) : "—"],
@@ -719,8 +719,8 @@ export function DualHelixEvolutionPanel({
                 </h2>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {zh
-                    ? "Codex 提供能力基线，Octopus 沉淀可验证的行为基因。"
-                    : "Codex supplies the capability baseline; Octopus promotes verified behavior genes."}
+                    ? "Codex 提供能力基线，Echo 沉淀可验证的行为基因。"
+                    : "Codex supplies the capability baseline; Echo promotes verified behavior genes."}
                 </p>
               </div>
             </div>
@@ -762,7 +762,7 @@ export function DualHelixEvolutionPanel({
 
         <div className="mt-4 grid items-stretch gap-3 md:grid-cols-[1fr_80px_1fr]">
           <EngineCard
-            name="Octopus Native"
+            name="Echo Native"
             label={zh ? "行为基因链" : "Behavior gene strand"}
             value={localizeVerdict(gap.data?.verdict, zh)}
             score={gap.data?.advantage_score}
@@ -905,7 +905,7 @@ export function DualHelixEvolutionPanel({
                       {formatLedgerDescription(record.description, zh)}
                     </div>
                     <div className="mt-0.5 text-[10px] text-muted-foreground">
-                      {codex ? "Codex" : "Octopus"} ·{" "}
+                      {codex ? "Codex" : "Echo"} ·{" "}
                       {zh && record.status === "proposed"
                         ? "候选"
                         : record.status}

@@ -189,7 +189,7 @@ function buildVisualPrompt(
     basePrompt,
     "Use agent-visual-kit metaskill workflow.",
     "Generate three high-definition character turnaround views plus a separate square avatar for this Agent.",
-    "Visual target: premium Octopus Hub agent art, calm readable pose, attractive face, role-first costume language.",
+    "Visual target: premium Echo Hub agent art, calm readable pose, attractive face, role-first costume language.",
     "Composition rule: body should read large in the Hub, while the avatar should behave like Zero with the face filling most of the icon.",
     ...optionPrompts,
     customPrompt.trim() ? `user additions: ${customPrompt.trim()}` : "",

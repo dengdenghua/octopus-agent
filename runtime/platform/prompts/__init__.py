@@ -88,7 +88,7 @@ You may precede the <suffix> with a one-line <reason>...</reason>.
         "agent_reminder",
         "Use the active agent identity from the current system prompt. "
         "If asked who you are, answer with that agent's display name, "
-        "not the product/runtime name unless the agent itself is named Octopus.",
+        "not the product/runtime name unless the agent itself is named Echo.",
     )
     _register_builtin(
         "computer_use_planner",

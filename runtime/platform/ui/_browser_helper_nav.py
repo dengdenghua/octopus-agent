@@ -150,7 +150,7 @@ class _NavigationBackendMixin:
                     }
                 except self._browser_runtime_errors():
                     self._close_real_browser_session(session)
-        title = html.escape(str(session.get("current_title") or "Octopus Browser Session"))
+        title = html.escape(str(session.get("current_title") or "Echo Browser Session"))
         url = html.escape(
             str(session.get("current_url") or "Navigate to a URL to start browser automation")
         )

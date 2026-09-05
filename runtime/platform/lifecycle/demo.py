@@ -39,7 +39,7 @@ class InteractiveDemo:
     def _intro(self) -> None:
         print()
         print("  ╔══════════════════════════════════════════════╗")
-        print("  ║        Octopus-Agent Interactive Demo        ║")
+        print("  ║            Echo Interactive Demo             ║")
         print("  ║        仿生自进化智能体 · 5 分钟体验         ║")
         print("  ╚══════════════════════════════════════════════╝")
         print()
@@ -48,7 +48,7 @@ class InteractiveDemo:
         self._print("    · 双路决策：反射（快）+ 深思（慢）")
         self._print("    · 墨汁防御 + 断腕自愈")
         self._print()
-        self._print("  Octopus-Agent 把这些能力映射到软件架构：")
+        self._print("  Echo 把这些能力映射到软件架构：")
         self._print("    · Cerebrum  → 中央大脑（LLM Planner）")
         self._print("    · Ganglia   → 触手神经节（Graph Runtime）")
         self._print("    · Arms      → 8 条触手（Skill 执行）")
@@ -96,7 +96,7 @@ class InteractiveDemo:
 
     def _demo_skill_registry(self) -> None:
         self._print_step("2. Skill Registry · 技能注册中心")
-        self._print("  Octopus 内置多种 Skill，开箱即用：")
+        self._print("  Echo 内置多种 Skill，开箱即用：")
         self._print()
 
         try:
@@ -119,7 +119,7 @@ class InteractiveDemo:
 
     def _demo_reflection(self) -> None:
         self._print_step("3. Reflection · 6 条反思产出闭环")
-        self._print("  每次任务执行后，Octopus 自动反思：")
+        self._print("  每次任务执行后，Echo 自动反思：")
         self._print()
         reflections = [
             ("RuleExtractor", "失败模式 → 规则", "避免重复犯错"),

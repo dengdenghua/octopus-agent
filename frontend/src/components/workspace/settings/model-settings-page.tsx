@@ -182,7 +182,7 @@ function DefaultEffortSelect({
 // API key input · ``suggestedModels`` shows a small hint below the
 // Model ID field so users don't have to remember model names.
 //
-// Compatibility note · all entries work with Octopus's native
+// Compatibility note · all entries work with Echo's native
 // tool_use pipeline as long as the backing model supports function
 // calling (see docs/custom-models.md for per-provider gotchas).
 interface ProviderPreset {
@@ -730,7 +730,7 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     scanLocalModels: "扫描本地模型",
     advancedTitle: "高级能力与兼容诊断",
     advancedSubtitle:
-      "网关排障、连接兼容详情、Cookbook、Octopus Mix 和 OpenAI-compatible 矩阵统一收在这里。",
+      "网关排障、连接兼容详情、Cookbook、Echo Mix 和 OpenAI-compatible 矩阵统一收在这里。",
     advancedBadge: "高级",
     sameOriginProxy: "同源代理",
     compatDetails: "查看兼容处理规则",
@@ -769,7 +769,7 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
   en: {
     overviewTitle: "Model setup overview",
     overviewSubtitle:
-      "Manage models used by Octopus chat and automatic routing here. Add hosted providers through explicitly installed API model adapters or scan local models; external CLIs are not auto-detected.",
+      "Manage models used by Echo chat and automatic routing here. Add hosted providers through explicitly installed API model adapters or scan local models; external CLIs are not auto-detected.",
     currentDefault: "Chat default model",
     noDefault: "Not set",
     configuredModels: "API model connections",
@@ -786,7 +786,7 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     scanLocalModels: "Scan local models",
     advancedTitle: "Advanced capabilities and diagnostics",
     advancedSubtitle:
-      "Gateway troubleshooting, connection compatibility, Cookbook, Octopus Mix, and the OpenAI-compatible matrix stay grouped here.",
+      "Gateway troubleshooting, connection compatibility, Cookbook, Echo Mix, and the OpenAI-compatible matrix stay grouped here.",
     advancedBadge: "Advanced",
     sameOriginProxy: "Same-origin proxy",
     compatDetails: "View compatibility rules",
@@ -831,7 +831,7 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
   ja: {
     overviewTitle: "モデル設定の概要",
     overviewSubtitle:
-      "ここでは Octopus の会話と自動ルーティング用モデルを管理します。外部サービスは明示的にインストールした API モデルアダプター、端末内推論はローカルスキャンから追加します。外部 CLI は自動検出しません。",
+      "ここでは Echo の会話と自動ルーティング用モデルを管理します。外部サービスは明示的にインストールした API モデルアダプター、端末内推論はローカルスキャンから追加します。外部 CLI は自動検出しません。",
     currentDefault: "現在の既定",
     noDefault: "未設定",
     configuredModels: "API モデル接続",
@@ -848,7 +848,7 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     scanLocalModels: "ローカルモデルをスキャン",
     advancedTitle: "高度な機能と互換診断",
     advancedSubtitle:
-      "ゲートウェイ診断、接続互換性、Cookbook、Octopus Mix、OpenAI 互換マトリクスをここにまとめています。",
+      "ゲートウェイ診断、接続互換性、Cookbook、Echo Mix、OpenAI 互換マトリクスをここにまとめています。",
     advancedBadge: "上級",
     sameOriginProxy: "同一オリジンプロキシ",
     compatDetails: "互換処理ルールを表示",
@@ -889,7 +889,7 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
   ko: {
     overviewTitle: "모델 설정 개요",
     overviewSubtitle:
-      "여기서는 Octopus 대화와 자동 라우팅 모델을 관리합니다. 외부 서비스는 명시적으로 설치한 API 모델 어댑터로 연결하고 기기 내 추론은 로컬 스캔으로 추가합니다. 외부 CLI는 자동 감지하지 않습니다.",
+      "여기서는 Echo 대화와 자동 라우팅 모델을 관리합니다. 외부 서비스는 명시적으로 설치한 API 모델 어댑터로 연결하고 기기 내 추론은 로컬 스캔으로 추가합니다. 외부 CLI는 자동 감지하지 않습니다.",
     currentDefault: "현재 기본값",
     noDefault: "미설정",
     configuredModels: "API 모델 연결",
@@ -906,7 +906,7 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     scanLocalModels: "로컬 모델 스캔",
     advancedTitle: "고급 기능 및 호환성 진단",
     advancedSubtitle:
-      "게이트웨이 진단, 연결 호환성, Cookbook, Octopus Mix, OpenAI 호환 매트릭스를 여기에 모았습니다.",
+      "게이트웨이 진단, 연결 호환성, Cookbook, Echo Mix, OpenAI 호환 매트릭스를 여기에 모았습니다.",
     advancedBadge: "고급",
     sameOriginProxy: "동일 출처 프록시",
     compatDetails: "호환 처리 규칙 보기",

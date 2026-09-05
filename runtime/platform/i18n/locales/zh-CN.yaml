@@ -1,7 +1,7 @@
 # Auto-extracted from runtime/platform/i18n/__init__.py
 # Keys are dot-namespaced (e.g. cli.version).
 
-"cli.version": "Octopus-Agent {version}"
+"cli.version": "Echo {version}"
 "cli.demo.start": "开始端到端演示..."
 "cli.demo.done": "演示完成。共 {steps} 步，{events} 个事件，耗时 {elapsed:.2f}s"
 "cli.run.planning": "规划中：{goal}"
@@ -322,7 +322,7 @@
 "cli.loop.done_summary": "完成 · {success}/{total} 成功 · journal={events} 事件"
 "cli.ui.not_installed": "uvicorn 未安装 · `pip install uvicorn fastapi`"
 "cli.ui.starting_fmt": "octopus-agent · UI 在 http://{host}:{port} (journal={journal})"
-"cli.tour.title": "🐙 Octopus-Agent · 5 分钟导览"
+"cli.tour.title": "Echo · 5 分钟导览"
 "cli.tour.subtitle": "将演示 {total} 章 · 每章 ≤ 20 行代码 · 证明对应 organ 活着"
 "cli.tour.pause": "\n[Enter 继续 · Ctrl-C 退出]"
 "cli.tour.chapter_fmt": "章 {i}/{total} · {title}"

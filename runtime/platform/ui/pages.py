@@ -6,7 +6,7 @@ _INDEX_HTML = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>octopus-agent dashboard</title>
+<title>Echo dashboard</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 20px; background: #0a0e14; color: #d3d7de; }
   h1 { color: #fff; margin: 0 0 8px 0; font-weight: 600; }
@@ -28,7 +28,7 @@ _INDEX_HTML = """<!doctype html>
 </style>
 </head>
 <body>
-<h1>🐙 octopus-agent</h1>
+<h1>Echo</h1>
 <p class="tagline" id="tagline">loading…</p>
 
 <div class="grid">
@@ -79,7 +79,7 @@ _INDEX_HTML = """<!doctype html>
   </div>
 
 </div>
-<footer>octopus-agent · <span id="version">?</span> · <a href="/docs" style="color:#6e7278;">API docs</a></footer>
+<footer>Echo · <span id="version">?</span> · <a href="/docs" style="color:#6e7278;">API docs</a></footer>
 
 <script>
 function authHeaders() {
@@ -262,7 +262,7 @@ _REFLEX_PANEL_HTML = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Reflex monitor · octopus-agent</title>
+<title>Reflex monitor · Echo</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 20px; background: #0a0e14; color: #d3d7de; font-size: 13px; }
   h1 { color: #fff; margin: 0; font-weight: 600; font-size: 18px; }
@@ -455,7 +455,7 @@ _REFLEX_EDITOR_HTML = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Reflex rules editor · octopus-agent</title>
+<title>Reflex rules editor · Echo</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 16px; background: #0a0e14; color: #d3d7de; font-size: 13px; }
   h1 { color: #fff; margin: 0; font-weight: 600; font-size: 18px; }

@@ -121,7 +121,7 @@ def _render_agent_identity_banner(agent_id: str, display_name: str) -> str:
         "# HARD SYSTEM RULE - AGENT IDENTITY\n\n"
         f"You are **{display_name}**"
         + (f" (agent id: `{agent_id}`)" if agent_id else "")
-        + ". This is your active persona for this turn. Octopus is the "
+        + ". This is your active persona for this turn. Echo is the "
         "runtime/product name, not your speaking name.\n\n"
         "When asked who you are / 你是谁 / 你叫什么, answer as this agent. "
         f'Begin with "我是 {display_name}" in Chinese or '
@@ -261,7 +261,7 @@ def _compose_soul(
             "## REMINDER\n\n"
             f"You are {display_name}. If asked who you are, say "
             f'"我是 {display_name}" or "I\'m {display_name}". '
-            "Do not collapse this agent persona into the Octopus product name."
+            "Do not collapse this agent persona into the Echo product name."
         )
     return "\n\n".join(parts)
 

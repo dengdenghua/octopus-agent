@@ -230,7 +230,7 @@ class TentacleCoordinator:
                             "dashboard runs unauthenticated (loopback only)"
                         )
 
-                app = FastAPI(title="Octopus Tentacle Dashboard")
+                app = FastAPI(title="Echo Tentacle Dashboard")
                 app.include_router(
                     create_tentacle_router(
                         self,

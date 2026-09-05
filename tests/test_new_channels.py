@@ -1637,7 +1637,7 @@ class TestNtfyChannel:
         call = http.calls[0]
         assert call["url"] == "https://ntfy.example.com/alerts"
         assert call["content"] == "fire!"
-        assert call["headers"]["Title"] == "Octopus Agent"
+        assert call["headers"]["Title"] == "Echo Agent"
 
     def test_send_http_error_raises(self):
         http = _FakeHttpClient(_FakeHttpResp(status_code=500, body={}))

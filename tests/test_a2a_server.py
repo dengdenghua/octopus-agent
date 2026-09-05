@@ -44,7 +44,7 @@ def test_well_known_card_and_jsonrpc_send_are_official_a2a_v1(tmp_path, monkeypa
         card = client.get("/.well-known/agent-card.json")
         assert card.status_code == 200, card.text
         body = card.json()
-        assert body["name"] == "Octopus Multi-Agent Workspace"
+        assert body["name"] == "Echo Multi-Agent Workspace"
         assert body["supportedInterfaces"][0]["protocolVersion"] == "1.0"
         assert body["capabilities"]["streaming"] is True
 

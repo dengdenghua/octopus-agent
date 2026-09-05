@@ -129,7 +129,7 @@ def register_client(
     registration_url: str,
     *,
     redirect_uri: str,
-    client_name: str = "Octopus Agent",
+    client_name: str = "Echo Agent",
     timeout: float = 15.0,
 ) -> str | None:
     """Dynamic client registration (RFC 7591) for a public PKCE client."""

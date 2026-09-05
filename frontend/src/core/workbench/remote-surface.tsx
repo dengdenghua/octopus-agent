@@ -64,7 +64,7 @@ function issueFromError(error: unknown): SurfaceIssue {
   if (error instanceof TypeError) {
     return {
       kind: "offline",
-      message: "无法连接本地服务。请确认 Octopus 服务正在运行，然后重试。",
+      message: "无法连接本地服务。请确认 Echo 服务正在运行，然后重试。",
     };
   }
   return {
@@ -111,7 +111,7 @@ export async function fetchRemoteWorkbenchManifest(
     if (response.status === 409) {
       throw new RemoteWorkbenchLoadError(
         "incompatible",
-        detail || "当前应用版本与 Octopus 宿主不兼容，请更新应用。",
+        detail || "当前应用版本与 Echo 宿主不兼容，请更新应用。",
       );
     }
     if (response.status === 422) {
@@ -271,7 +271,7 @@ export function RemoteWorkbenchSurface({
         if (packageStatus?.lifecycle_state === "incompatible") {
           throw new RemoteWorkbenchLoadError(
             "incompatible",
-            packageStatus.error || "应用版本与当前 Octopus 宿主不兼容。",
+            packageStatus.error || "应用版本与当前 Echo 宿主不兼容。",
           );
         }
         if (packageStatus && !packageStatus.installed) {
@@ -323,7 +323,7 @@ export function RemoteWorkbenchSurface({
           if (status.lifecycle_state === "incompatible") {
             throw new RemoteWorkbenchLoadError(
               "incompatible",
-              status.error || "应用版本与当前 Octopus 宿主不兼容。",
+              status.error || "应用版本与当前 Echo 宿主不兼容。",
             );
           }
         } catch (statusError) {

@@ -452,7 +452,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
     const confirmed = await confirm({
       title: "清除浏览数据",
       description:
-        "将清除 Octopus 浏览器中的 Cookie、缓存、网站存储、浏览历史和下载记录。所有网站会退出登录，但不会删除已下载的文件。",
+        "将清除 Echo 浏览器中的 Cookie、缓存、网站存储、浏览历史和下载记录。所有网站会退出登录，但不会删除已下载的文件。",
       confirmLabel: "确认清除",
     });
     if (!confirmed) return;
@@ -1151,7 +1151,7 @@ function BrowserDataCenterDialog({
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold">Cookie 与站点数据</div>
               <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
-                登录状态保存在独立的 Octopus 浏览器配置中，不与系统浏览器混用。
+                登录状态保存在独立的 Echo 浏览器配置中，不与系统浏览器混用。
               </div>
             </div>
             <Button

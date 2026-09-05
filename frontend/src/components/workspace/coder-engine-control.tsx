@@ -103,7 +103,7 @@ const COPY = {
     systemModel: "系统模型",
     title: "Coder 引擎",
     subtitle:
-      "Coder 是普通角色；人设、技能和小队规则由 Octopus 管理，代码执行由 Codex 引擎完成。",
+      "Coder 是普通角色；人设、技能和小队规则由 Echo 管理，代码执行由 Codex 引擎完成。",
     sourceTitle: "模型来源",
     systemSource: "系统模型",
     subscriptionSource: "ChatGPT 订阅",
@@ -147,7 +147,7 @@ const COPY = {
     resetCredits: "可用额度重置",
     usageUnavailable: "此登录方式不提供 ChatGPT 账户用量。",
     connectors: "OpenAI Connectors",
-    connectorsHint: "仅启用你明确选择的连接；调用仍需经过 Octopus 审批。",
+    connectorsHint: "仅启用你明确选择的连接；调用仍需经过 Echo 审批。",
     connectorUnavailable: "当前账号没有可访问的 Connector。",
     accountDetails: "Connector 与用量",
     saved: "已更新 Coder 模型配置",
@@ -197,7 +197,7 @@ const COPY = {
     systemModel: "System model",
     title: "Coder engine",
     subtitle:
-      "Coder remains a regular role. Octopus owns its persona, skills, and team rules; Codex runs the coding work.",
+      "Coder remains a regular role. Echo owns its persona, skills, and team rules; Codex runs the coding work.",
     sourceTitle: "Model source",
     systemSource: "System models",
     subscriptionSource: "ChatGPT subscription",
@@ -245,7 +245,7 @@ const COPY = {
       "This login method does not expose ChatGPT account usage.",
     connectors: "OpenAI connectors",
     connectorsHint:
-      "Only explicitly selected connections are exposed. Calls still require Octopus approval.",
+      "Only explicitly selected connections are exposed. Calls still require Echo approval.",
     connectorUnavailable:
       "No accessible connectors are available for this account.",
     accountDetails: "Connectors and usage",
@@ -386,7 +386,7 @@ function profileProblem(profile: CoderModelProfile, locale: string) {
     }
     if (
       profile.compatibility_reason?.includes(
-        "no exact Octopus ModelRouter route",
+        "no exact Echo ModelRouter route",
       )
     )
       return copy.routeHint;

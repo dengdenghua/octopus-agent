@@ -79,13 +79,13 @@ def _build_reflex_router() -> ReflexRouter:
         RegexMatcher(
             rule_id="greeting_zh",
             pattern=r"^(你好|您好|嗨|哈喽)[!。?\.\?\!,~\u3002\uff01\uff1f]*$",
-            response={"reply": "你好 👋 我是 Octopus,有什么可以帮你的?"},
+            response={"reply": "你好 👋 我是 Echo，有什么可以帮你的?"},
             priority=20,
         ),
         RegexMatcher(
             rule_id="greeting_en",
             pattern=r"^(hi|hello|hey|yo)[!\.\?,]*$",
-            response={"reply": "Hi 👋 I'm Octopus. What can I help you with?"},
+            response={"reply": "Hi 👋 I'm Echo. What can I help you with?"},
             priority=20,
         ),
         RegexMatcher(

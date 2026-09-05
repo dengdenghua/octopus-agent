@@ -289,8 +289,8 @@ export function BrowserAutomationSettingsPage() {
         title={zh ? "浏览器自动化" : "Browser automation"}
         description={
           zh
-            ? "让 Octopus 在你授权的浏览器标签页中查看、点击和输入。连接状态和开关都在这里集中管理。"
-            : "Let Octopus inspect, click, and type in browser tabs you authorize. Manage access and connection status here."
+            ? "让 Echo 在你授权的浏览器标签页中查看、点击和输入。连接状态和开关都在这里集中管理。"
+            : "Let Echo inspect, click, and type in browser tabs you authorize. Manage access and connection status here."
         }
       />
       <CapabilitySwitchCard
@@ -454,7 +454,7 @@ export function BrowserAutomationSettingsPage() {
               {zh ? "外部浏览器" : "External browser"}
             </SelectItem>
             <SelectItem value="in_app">
-              {zh ? "Octopus 应用内" : "Inside Octopus"}
+              {zh ? "Echo 应用内" : "Inside Echo"}
             </SelectItem>
           </SelectContent>
         </Select>
@@ -525,8 +525,8 @@ export function DesktopAutomationSettingsPage() {
         title={zh ? "桌面自动化" : "Desktop automation"}
         description={
           zh
-            ? "让 Octopus 读取屏幕并操作本机应用。Web 端只展示能力状态，macOS 桌面端负责真实权限探测。"
-            : "Let Octopus read the screen and operate local apps. The macOS desktop app performs the real permission checks."
+            ? "让 Echo 读取屏幕并操作本机应用。Web 端只展示能力状态，macOS 桌面端负责真实权限探测。"
+            : "Let Echo read the screen and operate local apps. The macOS desktop app performs the real permission checks."
         }
       />
       <CapabilitySwitchCard
@@ -552,8 +552,8 @@ export function DesktopAutomationSettingsPage() {
                 ? "权限改变后会自动刷新。"
                 : "Permission changes refresh automatically."
               : zh
-                ? "请在 Octopus macOS 桌面端查看并授权。"
-                : "Open the Octopus macOS desktop app to inspect and grant permissions."}
+                ? "请在 Echo macOS 桌面端查看并授权。"
+                : "Open the Echo macOS desktop app to inspect and grant permissions."}
           </p>
         </div>
         <StatusRow
@@ -604,8 +604,8 @@ export function DesktopAutomationSettingsPage() {
         )}
         <span>
           {zh
-            ? "系统权限与 Octopus 总开关是两层控制：两者都就绪时桌面操控才可用。"
-            : "System permissions and the Octopus capability switch are separate gates; both must be ready."}
+            ? "系统权限与 Echo 总开关是两层控制：两者都就绪时桌面操控才可用。"
+            : "System permissions and the Echo capability switch are separate gates; both must be ready."}
         </span>
       </div>
     </div>

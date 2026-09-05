@@ -95,7 +95,7 @@ const COPY: Record<Locale, SettingsUxCopy> = {
     privacy: {
       identityTitle: "产品身份保护",
       identityDescription:
-        "开启后，回复会统一使用 Octopus 的产品身份，不展示底层模型或服务商名称。仅在排查模型路由时临时关闭。",
+        "开启后，回复会统一使用 Echo 的产品身份，不展示底层模型或服务商名称。仅在排查模型路由时临时关闭。",
       identityOn: "已开启",
       identityOff: "已关闭",
       enableIdentity: "开启产品身份保护",
@@ -150,7 +150,7 @@ const COPY: Record<Locale, SettingsUxCopy> = {
     },
     mcp: {
       title: "MCP 服务",
-      description: "管理 MCP 等外部工具集成，让 Octopus 在获得你的信任后使用其能力。",
+      description: "管理 MCP 等外部工具集成，让 Echo 在获得你的信任后使用其能力。",
       loading: "正在读取 MCP 服务…",
       loadFailed: "暂时无法读取 MCP 服务。现有配置没有被更改。",
       retry: "重新加载",
@@ -196,7 +196,7 @@ const COPY: Record<Locale, SettingsUxCopy> = {
     privacy: {
       identityTitle: "Product identity protection",
       identityDescription:
-        "Keeps replies under the Octopus product identity instead of exposing the underlying model or provider. Turn this off only while diagnosing model routing.",
+        "Keeps replies under the Echo product identity instead of exposing the underlying model or provider. Turn this off only while diagnosing model routing.",
       identityOn: "On",
       identityOff: "Off",
       enableIdentity: "Turn on product identity protection",
@@ -255,7 +255,7 @@ const COPY: Record<Locale, SettingsUxCopy> = {
     mcp: {
       title: "MCP services",
       description:
-        "Connect external tool services that Octopus can use after you trust them.",
+        "Connect external tool services that Echo can use after you trust them.",
       loading: "Loading MCP services…",
       loadFailed:
         "MCP services could not be loaded. Your existing configuration was not changed.",
@@ -306,7 +306,7 @@ const COPY: Record<Locale, SettingsUxCopy> = {
     privacy: {
       identityTitle: "製品アイデンティティ保護",
       identityDescription:
-        "基盤モデルや提供元を表示せず、Octopus の製品名で応答します。モデル経路の調査時のみ一時的にオフにしてください。",
+        "基盤モデルや提供元を表示せず、Echo の製品名で応答します。モデル経路の調査時のみ一時的にオフにしてください。",
       identityOn: "オン",
       identityOff: "オフ",
       enableIdentity: "製品アイデンティティ保護をオンにする",
@@ -361,7 +361,7 @@ const COPY: Record<Locale, SettingsUxCopy> = {
     mcp: {
       title: "MCP サービス",
       description:
-        "信頼後に Octopus が利用できる外部ツールサービスを接続します。",
+        "信頼後に Echo が利用できる外部ツールサービスを接続します。",
       loading: "MCP サービスを読み込み中…",
       loadFailed:
         "MCP サービスを読み込めませんでした。既存設定は変更されていません。",
@@ -412,7 +412,7 @@ const COPY: Record<Locale, SettingsUxCopy> = {
     privacy: {
       identityTitle: "제품 정체성 보호",
       identityDescription:
-        "기반 모델이나 공급자 이름 대신 Octopus 제품 정체성으로 응답합니다. 모델 경로를 점검할 때만 잠시 끄세요.",
+        "기반 모델이나 공급자 이름 대신 Echo 제품 정체성으로 응답합니다. 모델 경로를 점검할 때만 잠시 끄세요.",
       identityOn: "켜짐",
       identityOff: "꺼짐",
       enableIdentity: "제품 정체성 보호 켜기",
@@ -468,7 +468,7 @@ const COPY: Record<Locale, SettingsUxCopy> = {
     },
     mcp: {
       title: "MCP 서비스",
-      description: "신뢰한 뒤 Octopus가 사용할 외부 도구 서비스를 연결합니다.",
+      description: "신뢰한 뒤 Echo가 사용할 외부 도구 서비스를 연결합니다.",
       loading: "MCP 서비스를 불러오는 중…",
       loadFailed:
         "MCP 서비스를 불러오지 못했습니다. 기존 설정은 변경되지 않았습니다.",

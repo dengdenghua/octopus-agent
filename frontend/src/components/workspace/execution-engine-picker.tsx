@@ -31,8 +31,8 @@ const REASONS: Record<string, [string, string]> = {
   ],
   workspace_required: ["需要先选择工作目录", "Select a workspace first"],
   orchestration_required: [
-    "团队由 Octopus 编排，成员任务可使用 Codex",
-    "Octopus coordinates teams; member tasks can use Codex",
+    "团队由 Echo 编排，成员任务可使用 Codex",
+    "Echo coordinates teams; member tasks can use Codex",
   ],
   configuration_unavailable: [
     "暂时无法读取 Codex 配置",
@@ -58,7 +58,7 @@ export function ExecutionEnginePicker({
   const title = zh ? "执行引擎" : "Execution engine";
   const labels = {
     auto: zh ? "自动" : "Auto",
-    octopus: "Octopus",
+    octopus: "Echo",
     codex: "Codex",
   };
   const unavailable = !codexAvailable
@@ -97,8 +97,8 @@ export function ExecutionEnginePicker({
             <span className="text-xs text-muted-foreground">
               {engine === "auto"
                 ? zh
-                  ? "代码优先 Codex，办公与流程优先 Octopus"
-                  : "Codex for code; Octopus for tools and workflows"
+                  ? "代码优先 Codex，办公与流程优先 Echo"
+                  : "Codex for code; Echo for tools and workflows"
                 : engine === "octopus"
                   ? zh
                     ? "使用原生工具与任务流程"
@@ -119,7 +119,7 @@ export function ExecutionEnginePicker({
 export function ExecutionEngineBadge({ engine }: { engine: unknown }) {
   const { locale } = useI18n();
   if (engine !== "codex" && engine !== "octopus") return null;
-  const name = engine === "codex" ? "Codex" : "Octopus";
+  const name = engine === "codex" ? "Codex" : "Echo";
   return (
     <span
       className="mb-1 inline-block rounded border border-border/60 px-1.5 text-[10px] leading-4 text-muted-foreground"

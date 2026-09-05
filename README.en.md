@@ -1,6 +1,6 @@
-# Octopus-Agent v0.2.0 Beta
+# Echo v0.2.0 Beta
 
-Octopus-Agent is an Agent OS. It runs agents with planning, tool execution,
+Echo is an Agent OS. It runs agents with planning, tool execution,
 memory, reflection, safety governance, browser/workspace access, and
 self-improvement loops.
 
@@ -56,7 +56,7 @@ cd frontend && pnpm typecheck
 
 ## What It Is
 
-Octopus-Agent turns a user request into an observable, governed agent execution:
+Echo turns a user request into an observable, governed agent execution:
 
 ```text
 user request

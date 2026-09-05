@@ -77,7 +77,7 @@ async function renderLogin() {
   const root = document.getElementById('root');
   root.innerHTML = `
     <div class="login-root">
-      <h1>🐙 Octopus</h1>
+      <h1>Echo</h1>
       <p class="sub">登录使用 agent + 官方大模型</p>
       <div class="card" id="login-card">
         <div class="loading">加载登录方式…</div>

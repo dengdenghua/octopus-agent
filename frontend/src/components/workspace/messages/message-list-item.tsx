@@ -220,7 +220,7 @@ export function ShadowReviewAction({
       });
       setRun(queued);
       toast.success(
-        `已交给${queued.shadow_engine === "codex" ? " Codex" : " Octopus"} 影子复核`,
+        `已交给${queued.shadow_engine === "codex" ? " Codex" : " Echo"} 影子复核`,
       );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "影子复核提交失败");
@@ -267,7 +267,7 @@ export function ShadowReviewAction({
           <DialogHeader>
             <DialogTitle>双引擎影子复核</DialogTitle>
             <DialogDescription>
-              {run?.shadow_engine === "codex" ? "Codex" : "Octopus"}
+              {run?.shadow_engine === "codex" ? "Codex" : "Echo"}
               在隔离的只读副本中给出的复核结果。
             </DialogDescription>
           </DialogHeader>

@@ -47,11 +47,11 @@ if (!(Test-Endpoint 'http://127.0.0.1:3000/@vite/client')) {
     $frontend = Start-LocalProcess 'frontend' $nodePath ('"' + $vitePath + '" --host 127.0.0.1 --port 3000 --strictPort') $frontendDir
     Wait-Endpoint 'http://127.0.0.1:3000/@vite/client' $frontend 'frontend'
 }
-Write-Host 'Octopus is ready: http://127.0.0.1:3000'
+Write-Host 'Echo is ready: http://127.0.0.1:3000'
 Write-Host "Logs: $stateDir"
 if ($NoOpen) { exit 0 }
 if ($Web) { Start-Process 'http://127.0.0.1:3000'; exit 0 }
 $electronPath = Join-Path $frontendDir 'node_modules\electron\dist\electron.exe'
-if (!(Test-Path -LiteralPath $electronPath)) { throw 'Electron is missing. Use Start-Octopus.cmd -Web or reinstall frontend dependencies.' }
+if (!(Test-Path -LiteralPath $electronPath)) { throw 'Electron is missing. Use Start-Echo.cmd -Web or reinstall frontend dependencies.' }
 $desktop = Start-Process -FilePath $electronPath -ArgumentList ('"' + (Join-Path $frontendDir 'electron\main.cjs') + '"') -WorkingDirectory $frontendDir -PassThru
 $desktop.Id | Set-Content -LiteralPath (Join-Path $stateDir 'desktop.pid')

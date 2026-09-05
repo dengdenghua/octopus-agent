@@ -153,7 +153,7 @@ async function renderChat() {
         <div class="who">
           <span style="font-size:22px">🐙</span>
           <div style="min-width:0">
-            <h2>Octopus Chat</h2>
+            <h2>Echo Chat</h2>
             <div class="info">
               <span class="badge ${isOct?'accent':'plain'}">${isOct?'✉️ 邮箱':'💻 本地'}</span>
               <span style="color:var(--slate)">${escapeHtml(display || '')}</span>

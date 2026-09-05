@@ -50,6 +50,7 @@ def _runtime_identity() -> dict[str, Any]:
 
     identity: dict[str, Any] = {
         "name": "octopus-agent-runtime",
+        "product": "EchoAI",
         "version": __version__,
         "verifiedBundle": False,
     }

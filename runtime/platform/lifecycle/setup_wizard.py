@@ -69,7 +69,7 @@ class SetupWizard:
     def _print_banner(self) -> None:
         print()
         print("  ╔══════════════════════════════════════════╗")
-        print("  ║   Octopus-Agent Setup Wizard             ║")
+        print("  ║   Echo Setup Wizard                      ║")
         print("  ║   仿生自进化智能体 · 3 分钟上手          ║")
         print("  ╚══════════════════════════════════════════╝")
         print()

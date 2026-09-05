@@ -84,7 +84,7 @@ class HomeAssistantChannel(Channel):
         url = f"{self._ha_url}/api/services/notify/persistent_notification"
         body: dict[str, Any] = {
             "message": content,
-            "title": "Octopus Agent",
+            "title": "Echo Agent",
         }
 
         self._post_json(url, body=body)

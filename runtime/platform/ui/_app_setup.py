@@ -84,7 +84,7 @@ def setup_app(
     )
     from runtime import __version__
 
-    app = FastAPI(title="octopus-agent", version=__version__)
+    app = FastAPI(title="Echo", version=__version__)
     app.state.octopus_state = state
     # Plugins are process-wide today.  Expose the host auth posture before
     # PluginHub loads so plugins with singleton account/state cannot

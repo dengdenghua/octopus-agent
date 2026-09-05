@@ -5,7 +5,7 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Octopus Tentacle Dashboard</title>
+<title>Echo Tentacle Dashboard</title>
 <style>
   :root {
     --bg: #0d1117; --surface: #161b22; --border: #30363d;
@@ -67,7 +67,7 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
 </style>
 </head>
 <body>
-<h1><span class="icon">🐙</span> Octopus Tentacle Dashboard</h1>
+<h1><span class="icon">◌</span> Echo Tentacle Dashboard</h1>
 
 <div class="grid">
   <!-- 左列 -->
