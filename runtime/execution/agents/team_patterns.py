@@ -58,7 +58,10 @@ _DELIVERABLE_WORK_RE = re.compile(
     r"(?:"
     r"研究|调研|检索|搜索|查(?:一?下|找|资料|官网)|"
     r"实现|开发|编写|写(?:代码|脚本|文档|报告)|修改|修复|优化|重构|"
-    r"测试|验收|回归|运行|执行|安装|配置|部署|发布|提交|推送|"
+    # A bare mention of ``验收`` is not execution intent: people often ask
+    # everyone for one short reply "用于界面验收".  ``测试``/``回归`` still route
+    # real verification work through the coordinator.
+    r"测试|回归|运行|执行|安装|配置|部署|发布|提交|推送|"
     r"生成|制作|导出|下载|制定|规划|策划|"
     r"做.{0,12}(?:报告|方案|策划|计划|清单|表格)|"
     r"整理(?:成|一份|报告|文档)"

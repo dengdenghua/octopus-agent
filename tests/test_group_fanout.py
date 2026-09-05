@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+
 from runtime.execution.agents.group_fanout import (
     arbitrate_group_fanout,
     build_fanout_prompt,
@@ -70,6 +72,90 @@ def test_each_reply_is_reported_to_durable_collector_callback_as_it_finishes() -
     assert {item["response_id"] for item in collected} == {
         item["response_id"] for item in out["replies"]
     }
+
+
+def test_reply_preserves_member_steering_audit_position() -> None:
+    def caller(*, agent_id, prompt, **_kw):
+        return {
+            "success": True,
+            "output": f"{agent_id} applied the correction",
+            "error": None,
+            "steering_count": 2,
+            "steering_generation": 3,
+            "steering_seq": 2,
+            "session_compaction": {
+                "checkpoint_valid": True,
+                "checkpoint_through_turn": 12,
+                "raw_turns_retained": 16,
+            },
+        }
+
+    out = run_group_fanout("apply corrections", [_MEMBERS[0]], agent_caller=caller)
+
+    reply = out["replies"][0]
+    assert reply["steering_count"] == 2
+    assert reply["steering_generation"] == 3
+    assert reply["steering_seq"] == 2
+    assert reply["session_compaction"]["checkpoint_through_turn"] == 12
+
+
+def test_newer_steering_atomically_supersedes_an_obsolete_reply() -> None:
+    calls: list[int] = []
+    committed: list[int] = []
+
+    def caller(*, agent_id, prompt, **_kw):
+        sequence = len(calls)
+        calls.append(sequence)
+        return {
+            "success": True,
+            "output": f"{agent_id} answer after steering {sequence}",
+            "error": None,
+            "steering_count": sequence,
+            "steering_generation": 1,
+            "steering_seq": sequence,
+        }
+
+    def commit(reply: dict) -> bool:
+        sequence = int(reply["steering_seq"])
+        committed.append(sequence)
+        return sequence == 1
+
+    out = run_group_fanout(
+        "apply corrections",
+        [_MEMBERS[0]],
+        agent_caller=caller,
+        result_committer=commit,
+    )
+
+    reply = out["replies"][0]
+    assert calls == [0, 1]
+    assert committed == [0, 1]
+    assert reply["ok"] is True
+    assert reply["reply"].endswith("steering 1")
+    assert reply["steering_seq"] == 1
+    assert reply["validation"]["attempts"][0]["status"] == "superseded_by_steering"
+
+
+def test_one_member_can_be_cancelled_while_other_members_continue() -> None:
+    calls: list[str] = []
+
+    def caller(*, agent_id, prompt, **_kw):
+        calls.append(agent_id)
+        return {"success": True, "output": f"{agent_id} done", "error": None}
+
+    out = run_group_fanout(
+        "continue useful lanes",
+        _MEMBERS,
+        agent_caller=caller,
+        should_cancel_member=lambda agent_id: agent_id == "coder",
+    )
+
+    by_id = {reply["agent_id"]: reply for reply in out["replies"]}
+    assert "coder" not in calls
+    assert by_id["coder"]["cancelled"] is True
+    assert by_id["aoi"]["ok"] is True
+    assert by_id["market_researcher"]["ok"] is True
+    assert out["cancelled"] is False
 
 
 def test_one_member_failure_is_isolated() -> None:
@@ -503,9 +589,7 @@ def test_delivery_preserves_quality_identity_across_debate_rounds() -> None:
 
     contributions = out["delivery"]["contributions"]
     assert len(contributions) == 6
-    assert all(
-        item["quality"]["response_id"] == item["response_id"] for item in contributions
-    )
+    assert all(item["quality"]["response_id"] == item["response_id"] for item in contributions)
     assert [item["round"] for item in contributions] == [1, 1, 1, 2, 2, 2]
 
 
@@ -540,10 +624,7 @@ def test_semantic_reviewer_must_accept_every_contribution_before_delivery_is_rea
     assert out["quality"]["semantic_review"]["verdict"] == "pass"
     assert out["quality"]["semantic_review_required"] is False
     assert out["delivery"]["ready"] is True
-    assert all(
-        item["semantic_status"] == "accepted"
-        for item in out["delivery"]["contributions"]
-    )
+    assert all(item["semantic_status"] == "accepted" for item in out["delivery"]["contributions"])
 
 
 def test_semantic_reviewer_fails_closed_on_invalid_or_partial_output() -> None:
@@ -776,3 +857,45 @@ def test_fanout_emits_failure_rows() -> None:
     # 网关失败分支应产出一条带 ⚠️ 的文本（该逻辑在 _drive_group_fanout 内，
     # 此处通过协议层验证 error 信息可承载即可）。
     assert "quota exceeded" in str(coder["error"])
+
+
+def test_fanout_cancellation_returns_promptly_and_skips_queued_members() -> None:
+    started = threading.Event()
+    release = threading.Event()
+    stopped = threading.Event()
+    calls: list[str] = []
+    emitted: list[dict] = []
+    output: dict = {}
+
+    def caller(*, agent_id, prompt, **_kw):
+        calls.append(agent_id)
+        started.set()
+        assert release.wait(timeout=2)
+        return {"success": True, "output": f"late {agent_id}", "error": None}
+
+    def run() -> None:
+        output.update(
+            run_group_fanout(
+                "slow collaboration",
+                _MEMBERS,
+                agent_caller=caller,
+                max_concurrency=1,
+                on_reply=emitted.append,
+                should_cancel=stopped.is_set,
+            )
+        )
+
+    coordinator = threading.Thread(target=run)
+    coordinator.start()
+    assert started.wait(timeout=1)
+    stopped.set()
+    coordinator.join(timeout=1)
+    release.set()
+
+    assert not coordinator.is_alive()
+    assert output["cancelled"] is True
+    assert output["ok"] is False
+    assert calls == ["aoi"]
+    assert len(output["replies"]) == len(_MEMBERS)
+    assert all(reply["cancelled"] for reply in output["replies"])
+    assert len(emitted) == len(_MEMBERS)

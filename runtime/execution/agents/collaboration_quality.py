@@ -115,8 +115,7 @@ def assess_collaboration_quality(
     query_terms = _terms(message)
     pattern_id = str((pattern or {}).get("id") or "")
     evidence_required = bool(
-        _EVIDENCE_REQUIRED_RE.search(str(message or ""))
-        or pattern_id == "adversarial_review"
+        _EVIDENCE_REQUIRED_RE.search(str(message or "")) or pattern_id == "adversarial_review"
     )
     outcomes: list[dict[str, Any]] = []
     accepted_terms: list[set[str]] = []
@@ -216,10 +215,14 @@ def build_collaboration_delivery(
                     "round": int(reply.get("round") or 1),
                     "role": reply.get("pattern_role"),
                     "claim": text[:2000],
-                    "evidence_refs": list(dict.fromkeys([
-                        *_URL_RE.findall(text),
-                        *_FILE_RE.findall(text),
-                    ]))[:16],
+                    "evidence_refs": list(
+                        dict.fromkeys(
+                            [
+                                *_URL_RE.findall(text),
+                                *_FILE_RE.findall(text),
+                            ]
+                        )
+                    )[:16],
                     "quality": quality_by_response.get(str(reply.get("response_id") or "")),
                 }
             )
@@ -271,9 +274,7 @@ def build_semantic_review_prompt(
         '"confidence":0.0,"accepted_response_ids":[],"issues":['
         '{"response_id":"...","code":"...","message":"..."}],"summary":"..."}。'
         "只有所有关键主张都满足用户请求且证据足够时才可 verdict=pass。\n"
-        "<semantic-review-input>"
-        + encoded
-        + "</semantic-review-input>"
+        "<semantic-review-input>" + encoded + "</semantic-review-input>"
     )
 
 

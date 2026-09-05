@@ -52,6 +52,8 @@ import {
 import { useSubtask } from "@/core/tasks/context";
 import { RoutedWebLink } from "@/components/ui/routed-web-link";
 import { SubtaskHoverPreview } from "./messages/parallel-subtasks-grid";
+import { CollaborationCollectorPanel } from "./collaboration-collector-panel";
+import type { LiveToolEvent } from "./live-tool-timeline";
 import {
   Tooltip,
   TooltipContent,
@@ -936,6 +938,8 @@ export function AgentSummaryPage({
   onSelectTab,
   onOpenArtifact,
   resultPreviewUrl: _resultPreviewUrl,
+  threadId,
+  collaborationEvents = [],
 }: {
   phases: AgentPhase[];
   diffEntries: DiffEntry[];
@@ -963,6 +967,9 @@ export function AgentSummaryPage({
   onOpenArtifact?: (path: string) => void;
   /** A deployed or local result preview for the current completed case. */
   resultPreviewUrl?: string | null;
+  /** Durable group-run coordinates and member lifecycle events. */
+  threadId?: string;
+  collaborationEvents?: LiveToolEvent[];
 }) {
   const { t } = useI18n();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
@@ -1170,6 +1177,15 @@ export function AgentSummaryPage({
       .map((agent) => agent.taskLabel ?? agent.name ?? agent.role ?? agent.id);
     return { done, failed, failedLabels, pending, running, total };
   }, [agentTiles]);
+  const isCoworkResponseGroup =
+    agentTiles.length > 0 &&
+    agentTiles.every((agent) => agent.role === "cowork");
+  const settledAgentSummary = isCoworkResponseGroup
+    ? `${agentHealth.done}/${agentHealth.total} ${t.message.statusResponded}`
+    : t.agentWorkbenchPages.subagentsCompleted(
+        agentHealth.done,
+        agentHealth.total,
+      );
 
   const recoveredCount = blocks.filter(
     (block) => block.status === "warning",
@@ -1517,6 +1533,11 @@ export function AgentSummaryPage({
           </section>
         )}
 
+        <CollaborationCollectorPanel
+          events={collaborationEvents}
+          threadId={threadId}
+        />
+
         {/* 产物 */}
         {diffEntries.length > 0 && (
           <section className="border-b border-border-subtle py-4">
@@ -1601,10 +1622,7 @@ export function AgentSummaryPage({
                 {t.agentWorkbenchPages.subagents}
               </h3>
               <span className="ml-auto text-xs text-muted-foreground">
-                {t.agentWorkbenchPages.subagentsCompleted(
-                  agentHealth.done,
-                  agentHealth.total,
-                )}
+                {settledAgentSummary}
               </span>
               {expandedSections.has("subagents") ? (
                 <ChevronDownIcon className="size-3.5 text-muted-foreground" />
@@ -1630,10 +1648,7 @@ export function AgentSummaryPage({
                       )}
                     />
                     <span className="font-medium text-foreground">
-                      {t.agentWorkbenchPages.subagentsCompleted(
-                        agentHealth.done,
-                        agentHealth.total,
-                      )}
+                      {settledAgentSummary}
                     </span>
                     {agentHealth.failed > 0 && (
                       <span className="font-medium text-destructive">
@@ -1677,10 +1692,7 @@ export function AgentSummaryPage({
                   ? t.agentWorkbenchPages.subagentsRunning(agentHealth.running)
                   : agentHealth.failed > 0
                     ? t.agentWorkbenchPages.subagentsFailed(agentHealth.failed)
-                    : t.agentWorkbenchPages.subagentsCompleted(
-                        agentHealth.done,
-                        agentHealth.total,
-                      )}
+                    : settledAgentSummary}
               </div>
             )}
           </section>
@@ -2042,7 +2054,9 @@ export function AgentCreationCard({
                     )}
                   >
                     {active && <Loader2Icon className="size-3 animate-spin" />}
-                    {agentStatusLabel(agent.status)}
+                    {agent.status === "done" && agent.role === "cowork"
+                      ? t.message.statusResponded
+                      : agentStatusLabel(agent.status)}
                   </span>
                   {agent.iterationCount !== undefined && (
                     <span className="text-xs text-muted-foreground">

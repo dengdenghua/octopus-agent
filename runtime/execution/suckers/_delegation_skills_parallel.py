@@ -209,6 +209,14 @@ def _call_agent_parallel(
                 "bb_key": str(raw.get("bb_key") or raw.get("key") or "").strip(),
                 "prompt": _wrap_prompt_with_role_label(str(prm), role_label),
                 "task_preview": str(prm).replace("\n", " ").strip()[:240],
+                "task_id": str(
+                    raw.get("task_id") or raw.get("bb_key") or f"task-{len(cleaned) + 1}"
+                ).strip()[:160],
+                "objective": str(raw.get("objective") or prm).strip()[:4000],
+                "inputs": raw.get("inputs") if raw.get("inputs") is not None else [],
+                "deliverable": str(raw.get("deliverable") or "").strip()[:2000],
+                "dependencies": raw.get("dependencies") or [],
+                "acceptance_criteria": raw.get("acceptance_criteria") or [],
                 "role_label": role_label,
                 "cheap": cheap_flag,
                 "context": _skill_context_from_spec(raw, context),

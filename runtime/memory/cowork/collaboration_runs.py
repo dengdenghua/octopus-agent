@@ -412,7 +412,9 @@ class CollaborationRunStoreMixin:
                     raise ValueError("completed collaboration run result is immutable")
                 return current
             if target not in _LEGAL_TRANSITIONS[current_status]:
-                raise ValueError(f"illegal collaboration run transition: {current_status} -> {target}")
+                raise ValueError(
+                    f"illegal collaboration run transition: {current_status} -> {target}"
+                )
             if worker and current.get("lease_owner") not in {None, worker}:
                 raise RuntimeError("collaboration run is leased by another worker")
             completed_at = timestamp if target in _TERMINAL_STATUSES else None

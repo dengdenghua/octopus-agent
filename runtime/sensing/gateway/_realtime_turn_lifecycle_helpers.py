@@ -10,6 +10,7 @@ under the god-file line budget.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -186,6 +187,106 @@ def _turn_has_cowork_delivery_evidence(turn: Turn) -> bool:
     )
 
 
+def _string_list(value: Any, *, limit: int = 32) -> list[str]:
+    values = value if isinstance(value, list) else [value] if value else []
+    return [str(item).strip()[:1000] for item in values if str(item).strip()][:limit]
+
+
+def _delegation_result_statuses(item: Any) -> tuple[dict[int, str], dict[str, str]]:
+    raw = str(getattr(item, "aggregated_output", "") or "").strip()
+    if not raw:
+        return {}, {}
+    candidates = [raw]
+    first, last = raw.find("{"), raw.rfind("}")
+    if first >= 0 and last > first:
+        candidates.append(raw[first : last + 1])
+    envelope: dict[str, Any] | None = None
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            envelope = parsed
+            break
+    if envelope is None:
+        return {}, {}
+    by_index: dict[int, str] = {}
+    by_label: dict[str, str] = {}
+    for key, status in (("successes", "completed"), ("failures", "failed")):
+        for result in envelope.get(key) or []:
+            if not isinstance(result, dict):
+                continue
+            raw_index = result.get("spec_index")
+            if isinstance(raw_index, int | str):
+                with contextlib.suppress(TypeError, ValueError):
+                    by_index[int(raw_index)] = status
+            for label_key in ("task_label", "bb_key", "agent_id"):
+                label = str(result.get(label_key) or "").strip()
+                if label:
+                    by_label[label] = status
+    return by_index, by_label
+
+
+def _coordination_task_graph(turn: Turn) -> list[dict[str, Any]]:
+    """Extract recoverable task nodes from delegation tool arguments."""
+
+    nodes: list[dict[str, Any]] = []
+    for item in turn.items:
+        item_type = getattr(item, "type", None)
+        if item_type != ItemType.COMMAND_EXECUTION:
+            continue
+        if str(getattr(item, "command", "") or "") != "call_agent_parallel":
+            continue
+        preview = getattr(item, "input_preview", None)
+        if not isinstance(preview, dict):
+            continue
+        specs = preview.get("specs")
+        if not isinstance(specs, list):
+            arguments = preview.get("arguments")
+            specs = arguments.get("specs") if isinstance(arguments, dict) else None
+        if not isinstance(specs, list):
+            continue
+        status_by_index, status_by_label = _delegation_result_statuses(item)
+        for index, raw in enumerate(specs[:64]):
+            if not isinstance(raw, dict):
+                continue
+            objective = str(
+                raw.get("objective") or raw.get("prompt") or raw.get("task") or ""
+            ).strip()[:4000]
+            owner = str(raw.get("agent_id") or raw.get("role") or "").strip()[:160]
+            deliverable = str(raw.get("deliverable") or "").strip()[:2000]
+            criteria = _string_list(raw.get("acceptance_criteria"))
+            task_id = str(raw.get("task_id") or raw.get("bb_key") or f"task-{index + 1}").strip()[
+                :160
+            ]
+            task_status = status_by_index.get(index) or status_by_label.get(task_id) or "unknown"
+            missing_fields = [
+                field
+                for field, value in (
+                    ("objective", objective),
+                    ("owner", owner),
+                    ("deliverable", deliverable),
+                    ("acceptance_criteria", criteria),
+                )
+                if not value
+            ]
+            nodes.append(
+                {
+                    "id": task_id,
+                    "objective": objective,
+                    "owner": owner,
+                    "inputs": _string_list(raw.get("inputs")),
+                    "deliverable": deliverable,
+                    "dependencies": _string_list(raw.get("dependencies")),
+                    "acceptance_criteria": criteria,
+                    "status": task_status,
+                    "missing_fields": missing_fields,
+                }
+            )
+    return nodes
+
+
 def _project_is_bound_to_thread(runtime: Any, thread_id: str) -> bool:
     """Return whether ``thread_id`` is a Project OS home.
 
@@ -356,12 +457,19 @@ def _sync_cowork_orchestration_run(
             delegations.append(payload)
         elif item_type in {ItemType.FILE_CHANGE.value, ItemType.ARTIFACT.value}:
             artifacts.append(payload)
+    structured_tasks = _coordination_task_graph(turn)
     result = {
         "schema": "octopus.coordinated_execution_result.v1",
         "turn_id": turn.id,
         "turn_status": status_value,
         "outcome_reason": turn.outcome_reason,
-        "task_graph": todos,
+        "task_graph": structured_tasks or todos,
+        "task_graph_complete": bool(structured_tasks)
+        and all(
+            not node["missing_fields"] and node["status"] == "completed"
+            for node in structured_tasks
+        ),
+        "todo_snapshots": todos,
         "subagents": subagents,
         "delegations": delegations,
         "coordination_evidence": _turn_has_cowork_coordination_evidence(turn),
@@ -631,6 +739,8 @@ def _inject_cowork_turn_plan(
             coordinator_contract = (
                 "<cowork-coordinator-contract>你是本轮队长/TL。先理解用户目标并把它改写成"
                 "互不重叠、可验收的子任务，再按成员能力分派；不要把用户原话广播给所有人。"
+                "使用 call_agent_parallel 时，每个 specs 节点必须显式填写 task_id、objective、"
+                "inputs、deliverable、dependencies 和 acceptance_criteria，作为可恢复任务图；"
                 "成员结果必须由你检查相关性与证据，未交付结果不得标记完成。最后由你去重、"
                 "处理冲突并向用户给出一个统一交付物。若上一任务中断，优先基于历史状态恢复，"
                 "不要把短追问当成新主题。</cowork-coordinator-contract>"
@@ -721,15 +831,33 @@ def _inject_cowork_turn_plan(
     msgs = context.get("conversation_messages")
     if isinstance(msgs, list) and active_agents:
         try:
-            from runtime.memory.cowork.context_view import resolve_view, slice_messages
+            from runtime.memory.cowork.context_view import materialize_messages, resolve_view
 
             member_histories: dict[str, list[Any]] = {}
+            member_authorizations: dict[str, dict[str, Any]] = {}
             for agent_id in active_agents:
                 view = resolve_view(state, agent_id, max(0, len(msgs) - 1))
-                member_histories[agent_id] = slice_messages(view, msgs) if view is not None else []
+                member_histories[agent_id] = (
+                    materialize_messages(view, msgs, current_message=text)
+                    if view is not None
+                    else []
+                )
+                member = state.member(agent_id)
+                if view is not None and member is not None:
+                    # Keep only the stable authorization boundary.  The upper
+                    # edge of an ``all``/``from_join`` view grows on every
+                    # message and is content state, not a permission change.
+                    member_authorizations[agent_id] = {
+                        "scope": member.grant.scope,
+                        "from_msg": member.grant.from_msg,
+                        "to_msg": member.grant.to_msg,
+                        "joined_at_message": member.joined_at_message,
+                    }
             context["cowork_member_context_messages"] = member_histories
+            context["cowork_member_context_authorizations"] = member_authorizations
         except Exception as exc:  # noqa: BLE001 — safest fallback is no group history
             context["cowork_member_context_messages"] = {agent_id: [] for agent_id in active_agents}
+            context["cowork_member_context_authorizations"] = {}
             _logger.debug("cowork member history planning skipped: %s", exc, exc_info=True)
 
     # Enforce the responder's context grant on the single-responder react path.
@@ -742,13 +870,17 @@ def _inject_cowork_turn_plan(
         if isinstance(msgs, list) and msgs:
             try:
                 from runtime.memory.cowork.context_view import (
+                    materialize_messages,
                     resolve_view,
-                    slice_messages,
                 )
 
                 view = resolve_view(store.state(thread_id), responders[0], len(msgs))
                 if view is not None and view.scope != "all":
-                    context["conversation_messages"] = slice_messages(view, msgs)
+                    context["conversation_messages"] = (
+                        []
+                        if view.summary_only
+                        else materialize_messages(view, msgs, current_message=text)
+                    )
             except Exception as exc:  # noqa: BLE001 — grant slice is best-effort
                 _logger.debug("cowork grant slice skipped: %s", exc, exc_info=True)
 
@@ -777,16 +909,31 @@ def _inject_cowork_turn_plan(
                     "display_name": responder_id,
                 }
             )
+            raw_member_histories = context.get("cowork_member_context_messages")
+            raw_authorizations = context.get("cowork_member_context_authorizations")
+            responder_authorization = (
+                raw_authorizations.get(responder_id)
+                if isinstance(raw_authorizations, dict)
+                else None
+            )
+            summary_history = (
+                raw_member_histories.get(responder_id, [])
+                if isinstance(raw_member_histories, dict)
+                and isinstance(responder_authorization, dict)
+                and responder_authorization.get("scope") == "summary"
+                else []
+            )
             focused_plan = plan_group_context(
                 text,
                 [profile],
                 [],
-                member_histories={responder_id: []},
+                member_histories={responder_id: list(summary_history)},
                 durable_context=(
                     dict(context["cowork_durable_context"])
                     if isinstance(context.get("cowork_durable_context"), dict)
                     else None
                 ),
+                selection_engine=getattr(runtime, "_cowork_context_engine", None),
             )
             manifest = focused_plan.prompt_for(responder_id)
             if manifest:

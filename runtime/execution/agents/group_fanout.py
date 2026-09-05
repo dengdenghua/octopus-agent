@@ -162,6 +162,8 @@ def _score_reply(reply: dict[str, Any]) -> int:
 
 
 def _reply_status(reply: dict[str, Any]) -> str:
+    if reply.get("cancelled"):
+        return "cancelled"
     if not reply.get("ok"):
         return "failed"
     if str(reply.get("reply") or "").strip():
@@ -213,7 +215,9 @@ def arbitrate_group_fanout(
             "validation": reply.get("validation"),
             "quality": reply.get("quality"),
         }
-        if status == "failed":
+        if status == "cancelled":
+            row["recommended_action"] = "none"
+        elif status == "failed":
             row["recommended_action"] = "retry_member"
         elif status == "empty":
             row["recommended_action"] = "ask_member_to_expand"
@@ -235,9 +239,12 @@ def arbitrate_group_fanout(
     primary = next((row for row in ranked if row["status"] == "answered"), None)
     answered = [row["agent_id"] for row in rows if row["status"] == "answered"]
     failed = [row["agent_id"] for row in rows if row["status"] == "failed"]
+    cancelled = [row["agent_id"] for row in rows if row["status"] == "cancelled"]
     empty = [row["agent_id"] for row in rows if row["status"] == "empty"]
 
-    if primary and failed:
+    if cancelled and not primary and not failed and not empty:
+        next_action = "collaboration_cancelled"
+    elif primary and failed:
         next_action = "use_primary_and_retry_failed_members"
     elif primary:
         next_action = "use_primary_response"
@@ -256,6 +263,7 @@ def arbitrate_group_fanout(
         "recommended_next_action": next_action,
         "answered_agent_ids": answered,
         "failed_agent_ids": failed,
+        "cancelled_agent_ids": cancelled,
         "empty_agent_ids": empty,
         "rounds": max([int(r.get("round") or 1) for r in rows], default=1),
         "ranking": ranked,
@@ -405,6 +413,9 @@ def run_group_fanout(
     semantic_reviewer: Callable[..., dict[str, Any]] | None = None,
     semantic_reviewer_agent_id: str | None = None,
     on_reply: Callable[[dict[str, Any]], None] | None = None,
+    result_committer: Callable[[dict[str, Any]], bool] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
+    should_cancel_member: Callable[[str], bool] | None = None,
 ) -> dict[str, Any]:
     """Fan ``message`` out to each member in parallel; collect persona replies.
 
@@ -468,6 +479,26 @@ def run_group_fanout(
     )
     quality_retries = max(0, min(int(max_quality_retries or 0), 2))
 
+    def _cancelled() -> bool:
+        if should_cancel is None:
+            return False
+        try:
+            return bool(should_cancel())
+        except Exception as exc:  # noqa: BLE001 - cancellation checks must fail open
+            _LOG.warning("group fanout cancellation check failed: %s", exc)
+            return False
+
+    def _member_cancelled(agent_id: str) -> bool:
+        if _cancelled():
+            return True
+        if should_cancel_member is None:
+            return False
+        try:
+            return bool(should_cancel_member(agent_id))
+        except Exception as exc:  # noqa: BLE001 - cancellation checks must fail open
+            _LOG.warning("group member cancellation check failed: %s", exc)
+            return False
+
     def _run_round(round_no: int, transcript: list[dict[str, Any]]) -> list[dict[str, Any]]:
         def _one(index: int, member: dict[str, Any]) -> dict[str, Any]:
             agent_id = str(member.get("name") or member.get("agent_id"))
@@ -510,50 +541,109 @@ def run_group_fanout(
                     "attempts": [],
                 },
             }
+
+            def _mark_cancelled() -> dict[str, Any]:
+                rec["cancelled"] = True
+                rec["error"] = "collaboration cancelled"
+                rec["validation"] = {
+                    "status": "cancelled",
+                    "reason": rec["error"],
+                    "attempt_count": len(attempts),
+                    "attempts": attempts,
+                }
+                return rec
+
             attempts: list[dict[str, Any]] = []
             try:
                 attempt_prompt = prompt
                 for attempt_index in range(quality_retries + 1):
-                    res = agent_caller(
-                        agent_id=agent_id,
-                        prompt=attempt_prompt,
-                        timeout_s=90,
-                    )
-                    output = str(res.get("output") or "").strip()
-                    output_error = _error_output(output)
-                    transport_ok = bool(res.get("success"))
-                    rejection = str(res.get("error") or output_error or "").strip() or None
-                    attempts.append(
-                        {
-                            "attempt": attempt_index + 1,
-                            "status": (
-                                "accepted" if transport_ok and output_error is None else "rejected"
-                            ),
-                            "reason": rejection,
-                        }
-                    )
-                    if (
-                        transport_ok
-                        and output_error is not None
-                        and attempt_index < quality_retries
-                    ):
-                        attempt_prompt = (
-                            prompt
-                            + "\n\n<quality-retry>上一版回复未通过验收："
-                            + output_error
-                            + "。请直接重写并在本轮给出与原问题相关的具体判断、依据或明确阻塞；"
-                            + "不要解释返工过程。</quality-retry>"
+                    retry_quality = False
+                    for steering_restart in range(3):
+                        if _member_cancelled(agent_id):
+                            return _mark_cancelled()
+                        res = agent_caller(
+                            agent_id=agent_id,
+                            prompt=attempt_prompt,
+                            timeout_s=90,
                         )
+                        # Cancellation wins over a simultaneously arriving result.
+                        # This prevents a late provider response from reappearing
+                        # after the user has stopped the collaboration.
+                        if _member_cancelled(agent_id):
+                            return _mark_cancelled()
+                        output = str(res.get("output") or "").strip()
+                        output_error = _error_output(output)
+                        transport_ok = bool(res.get("success"))
+                        rejection = str(res.get("error") or output_error or "").strip() or None
+                        attempts.append(
+                            {
+                                "attempt": len(attempts) + 1,
+                                "status": (
+                                    "accepted"
+                                    if transport_ok and output_error is None
+                                    else "rejected"
+                                ),
+                                "reason": rejection,
+                            }
+                        )
+                        if (
+                            transport_ok
+                            and output_error is not None
+                            and attempt_index < quality_retries
+                        ):
+                            attempt_prompt = (
+                                prompt
+                                + "\n\n<quality-retry>上一版回复未通过验收："
+                                + output_error
+                                + "。请直接重写并在本轮给出与原问题相关的具体判断、依据或明确阻塞；"
+                                + "不要解释返工过程。</quality-retry>"
+                            )
+                            retry_quality = True
+                            break
+                        rec["ok"] = transport_ok and output_error is None
+                        rec["reply"] = output if rec["ok"] else ""
+                        rec["error"] = rejection
+                        rec["validation"] = {
+                            "status": "accepted" if rec["ok"] else "rejected",
+                            "reason": rec["error"],
+                            "attempt_count": len(attempts),
+                            "attempts": attempts,
+                        }
+                        for audit_key in (
+                            "context_delivery",
+                            "session_compaction",
+                            "steering_count",
+                            "steering_generation",
+                            "steering_seq",
+                        ):
+                            if audit_key in res:
+                                rec[audit_key] = res[audit_key]
+                        committed = True
+                        if result_committer is not None:
+                            try:
+                                committed = bool(result_committer(dict(rec)))
+                            except Exception as exc:  # noqa: BLE001 - isolate callback faults
+                                _LOG.warning(
+                                    "group fanout result committer failed: %s",
+                                    exc,
+                                    exc_info=True,
+                                )
+                        if committed:
+                            break
+                        attempts[-1]["status"] = "superseded_by_steering"
+                        attempts[-1]["reason"] = "newer member steering arrived"
+                        if steering_restart == 2:
+                            rec["ok"] = False
+                            rec["reply"] = ""
+                            rec["error"] = "member steering did not stabilize; retry the member"
+                            rec["validation"] = {
+                                "status": "rejected",
+                                "reason": rec["error"],
+                                "attempt_count": len(attempts),
+                                "attempts": attempts,
+                            }
+                    if retry_quality:
                         continue
-                    rec["ok"] = transport_ok and output_error is None
-                    rec["reply"] = output if rec["ok"] else ""
-                    rec["error"] = rejection
-                    rec["validation"] = {
-                        "status": "accepted" if rec["ok"] else "rejected",
-                        "reason": rec["error"],
-                        "attempt_count": len(attempts),
-                        "attempts": attempts,
-                    }
                     break
             except Exception as exc:  # noqa: BLE001 — one member's failure is isolated
                 rec["error"] = f"{type(exc).__name__}: {exc}"
@@ -572,17 +662,76 @@ def run_group_fanout(
                 }
             return rec
 
+        def _cancelled_reply(index: int, member: dict[str, Any]) -> dict[str, Any]:
+            agent_id = str(member.get("name") or member.get("agent_id"))
+            return {
+                "response_id": _response_id(
+                    turn_id,
+                    (round_no - 1) * len(clean) + index,
+                    agent_id,
+                ),
+                "agent_id": agent_id,
+                "display_name": str(member.get("display_name") or agent_id),
+                "reply": "",
+                "ok": False,
+                "cancelled": True,
+                "error": "collaboration cancelled",
+                "round": round_no,
+                "pattern_role": pattern_member_role(pattern_id, index),
+                "validation": {
+                    "status": "cancelled",
+                    "reason": "collaboration cancelled",
+                    "attempt_count": 0,
+                    "attempts": [],
+                },
+            }
+
+        def _emit(reply: dict[str, Any]) -> None:
+            if on_reply is None:
+                return
+            try:
+                on_reply(dict(reply))
+            except Exception as exc:  # noqa: BLE001 - observability must not fail work
+                _LOG.warning("group fanout reply collector failed: %s", exc, exc_info=True)
+
         results: list[dict[str, Any]] = []
-        with _cf.ThreadPoolExecutor(max_workers=workers, thread_name_prefix="group-fanout") as pool:
-            futures = [pool.submit(_one, index, member) for index, member in enumerate(clean)]
-            for fut in _cf.as_completed(futures):
-                reply = fut.result()
-                results.append(reply)
-                if on_reply is not None:
-                    try:
-                        on_reply(dict(reply))
-                    except Exception as exc:  # noqa: BLE001 - observability must not fail work
-                        _LOG.warning("group fanout reply collector failed: %s", exc, exc_info=True)
+        if _cancelled():
+            results = [_cancelled_reply(index, member) for index, member in enumerate(clean)]
+            for reply in results:
+                _emit(reply)
+            return results
+
+        pool = _cf.ThreadPoolExecutor(max_workers=workers, thread_name_prefix="group-fanout")
+        futures = {
+            pool.submit(_one, index, member): (index, member) for index, member in enumerate(clean)
+        }
+        pending = set(futures)
+        stopped = False
+        try:
+            while pending:
+                if _cancelled():
+                    stopped = True
+                    for future in pending:
+                        future.cancel()
+                    # Treat every not-yet-collected lane as cancelled even if
+                    # its provider thread is still unwinding. Late values are
+                    # deliberately ignored and never reach ``on_reply``.
+                    cancelled_rows = [_cancelled_reply(*futures[future]) for future in pending]
+                    results.extend(cancelled_rows)
+                    for reply in cancelled_rows:
+                        _emit(reply)
+                    break
+                done, pending = _cf.wait(
+                    pending,
+                    timeout=0.05,
+                    return_when=_cf.FIRST_COMPLETED,
+                )
+                for future in done:
+                    reply = future.result()
+                    results.append(reply)
+                    _emit(reply)
+        finally:
+            pool.shutdown(wait=not stopped, cancel_futures=stopped)
 
         order = {str(m.get("name") or m.get("agent_id")): i for i, m in enumerate(clean)}
         results.sort(key=lambda r: order.get(r["agent_id"], len(order)))
@@ -593,6 +742,8 @@ def run_group_fanout(
     for round_no in range(1, rounds + 1):
         round_replies = _run_round(round_no, transcript)
         all_replies.extend(round_replies)
+        if _cancelled():
+            break
         # Feed the next round only the successful, non-empty replies.
         transcript = [
             {
@@ -625,7 +776,11 @@ def run_group_fanout(
     arbitration = arbitrate_group_fanout(all_replies, turn_id=turn_id)
     synthesis = synthesize_group_fanout(all_replies, arbitration)
     delivery = build_collaboration_delivery(all_replies, quality)
-    if semantic_reviewer is not None and bool(quality.get("evidence_required")):
+    if (
+        semantic_reviewer is not None
+        and not _cancelled()
+        and bool(quality.get("evidence_required"))
+    ):
         valid_response_ids = {
             str(item.get("response_id") or "")
             for item in delivery.get("contributions") or []
@@ -670,6 +825,7 @@ def run_group_fanout(
     )
     return {
         "ok": spoke > 0,
+        "cancelled": _cancelled(),
         "replies": all_replies,
         "count": len(all_replies),
         "spoke": spoke,

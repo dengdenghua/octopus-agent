@@ -68,6 +68,20 @@ const NULLISH_PLACEHOLDER_RE = /^\s*(?:null|undefined|none|n\/a)\s*$/i;
 const REPEATED_NULL_PLACEHOLDER_RE = /^\s*(?:null\s*)+$/i;
 const STATUS_ONLY_MESSAGE_MAX_LENGTH = 320;
 const LEGACY_GROUP_SUMMARY_RE = /^\s*协作汇总[:：]/;
+const LEGACY_PRIMARY_VIEWPOINT_RE =
+  /[；;]\s*(?:主要观点来自|优先采纳)\s*[^。.!！\n]+[。.!！]?\s*$/;
+
+function sanitizeLegacyGroupSummary(content: string): string {
+  if (
+    !LEGACY_GROUP_SUMMARY_RE.test(content) ||
+    !LEGACY_PRIMARY_VIEWPOINT_RE.test(content)
+  ) {
+    return content;
+  }
+  const summary = content.replace(LEGACY_PRIMARY_VIEWPOINT_RE, "").trimEnd();
+  const punctuation = /[。.!！]$/.test(summary) ? "" : "。";
+  return `${summary}${punctuation} 历史记录未经过新版协作验收。`;
+}
 
 /**
  * Convert a realtime ``Conversation`` into the ``AgentThreadState``
@@ -780,7 +794,9 @@ function turnToMessages(turn: Turn): Message[] {
               : hasLegacyMemberFailure &&
                   LEGACY_GROUP_SUMMARY_RE.test(visibleContent)
                 ? "协作汇总：本轮部分成员未能生成有效回复，已按失败状态展示。"
-                : sanitizeLegacyInternalAgentError(visibleContent),
+                : sanitizeLegacyGroupSummary(
+                    sanitizeLegacyInternalAgentError(visibleContent),
+                  ),
           additional_kwargs: kwargs,
         };
         pushAiMessage(ai);

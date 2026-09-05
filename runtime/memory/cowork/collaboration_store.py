@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -78,7 +79,8 @@ _TASK_STATUSES = frozenset(
     }
 )
 
-_SCHEMA = """
+_SCHEMA = (
+    """
 CREATE TABLE IF NOT EXISTS collaboration_rooms (
     session_id TEXT PRIMARY KEY,
     room_id    TEXT NOT NULL UNIQUE,
@@ -237,7 +239,34 @@ CREATE TABLE IF NOT EXISTS collaboration_pinned_messages (
 );
 CREATE INDEX IF NOT EXISTS idx_collab_pinned_messages_session
 ON collaboration_pinned_messages(session_id, created_at DESC);
-""" + COLLABORATION_RUN_SCHEMA + COLLABORATION_DELIVERY_SCHEMA + COLLABORATION_COLLECTOR_SCHEMA
+
+CREATE TABLE IF NOT EXISTS collaboration_member_runtime_sessions (
+    collaboration_session_id TEXT NOT NULL,
+    agent_id                 TEXT NOT NULL,
+    subagent_session_id      TEXT NOT NULL,
+    context_hashes_json      TEXT NOT NULL DEFAULT '{}',
+    revision                 INTEGER NOT NULL DEFAULT 1,
+    updated_at               TEXT NOT NULL,
+    PRIMARY KEY (collaboration_session_id, agent_id)
+);
+CREATE INDEX IF NOT EXISTS idx_collab_member_runtime_subagent
+ON collaboration_member_runtime_sessions(subagent_session_id);
+
+CREATE TABLE IF NOT EXISTS collaboration_member_runtime_leases (
+    collaboration_session_id TEXT NOT NULL,
+    agent_id                  TEXT NOT NULL,
+    owner_id                  TEXT NOT NULL,
+    expires_at                REAL NOT NULL,
+    updated_at                TEXT NOT NULL,
+    PRIMARY KEY (collaboration_session_id, agent_id)
+);
+CREATE INDEX IF NOT EXISTS idx_collab_member_runtime_lease_expiry
+ON collaboration_member_runtime_leases(expires_at);
+"""
+    + COLLABORATION_RUN_SCHEMA
+    + COLLABORATION_DELIVERY_SCHEMA
+    + COLLABORATION_COLLECTOR_SCHEMA
+)
 
 
 def _default_dir() -> Path:
@@ -537,6 +566,216 @@ class CollaborationStore(
     @property
     def base_dir(self) -> Path:
         return self._dir
+
+    @staticmethod
+    def _normalize_context_hashes(value: Any) -> dict[str, str]:
+        if not isinstance(value, dict):
+            return {}
+        allowed = {
+            "contract",
+            "durable_project_state",
+            "role_relevant_context",
+            "shared_brief",
+        }
+        normalized: dict[str, str] = {}
+        for key, digest in list(value.items())[:512]:
+            name = str(key or "").strip()
+            text = str(digest or "").strip().lower()
+            is_source_cursor = name.startswith(
+                (
+                    "source:durable_project_state:ctx_",
+                    "source:shared_brief:ctx_",
+                    "source:role_relevant_context:ctx_",
+                )
+            )
+            is_authorization_cursor = name.startswith(
+                (
+                    "authorized_history_count:",
+                    "authorized_project:ctx_",
+                )
+            )
+            if name not in allowed and not is_source_cursor and not is_authorization_cursor:
+                continue
+            if len(name) > 96:
+                continue
+            if len(text) != 64 or any(char not in "0123456789abcdef" for char in text):
+                raise ValueError("context hash must be a SHA-256 hex digest")
+            normalized[name] = text
+        return normalized
+
+    def collaboration_member_runtime(
+        self,
+        session_id: str,
+        agent_id: str,
+    ) -> dict[str, Any] | None:
+        """Return one member's durable subagent continuation checkpoint."""
+
+        session_id = require_cowork_id(session_id, label="session_id")
+        agent_id = require_cowork_id(agent_id, label="agent_id")
+        with self._lock, self._connect() as conn:
+            row = conn.execute(
+                "SELECT subagent_session_id,context_hashes_json,revision,updated_at "
+                "FROM collaboration_member_runtime_sessions "
+                "WHERE collaboration_session_id=? AND agent_id=?",
+                (session_id, agent_id),
+            ).fetchone()
+        if row is None:
+            return None
+        hashes = _load(str(row[1])) or {}
+        return {
+            "schema": "octopus.collaboration_member_runtime.v1",
+            "session_id": session_id,
+            "agent_id": agent_id,
+            "subagent_session_id": str(row[0]),
+            "context_hashes": self._normalize_context_hashes(hashes),
+            "revision": int(row[2]),
+            "updated_at": str(row[3]),
+        }
+
+    def save_collaboration_member_runtime(
+        self,
+        session_id: str,
+        agent_id: str,
+        *,
+        subagent_session_id: str,
+        context_hashes: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Upsert a successful member turn's continuation and context cursor."""
+
+        session_id = require_cowork_id(session_id, label="session_id")
+        agent_id = require_cowork_id(agent_id, label="agent_id")
+        subagent_session_id = require_cowork_id(
+            subagent_session_id,
+            label="subagent_session_id",
+        )
+        hashes = self._normalize_context_hashes(context_hashes)
+        timestamp = _now()
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "INSERT INTO collaboration_member_runtime_sessions"
+                "(collaboration_session_id,agent_id,subagent_session_id,"
+                "context_hashes_json,revision,updated_at) VALUES(?,?,?,?,1,?) "
+                "ON CONFLICT(collaboration_session_id,agent_id) DO UPDATE SET "
+                "subagent_session_id=excluded.subagent_session_id,"
+                "context_hashes_json=excluded.context_hashes_json,"
+                "revision=collaboration_member_runtime_sessions.revision+1,"
+                "updated_at=excluded.updated_at",
+                (session_id, agent_id, subagent_session_id, _dump(hashes), timestamp),
+            )
+        saved = self.collaboration_member_runtime(session_id, agent_id)
+        assert saved is not None
+        return saved
+
+    def clear_collaboration_member_runtime(
+        self,
+        session_id: str,
+        agent_id: str,
+        *,
+        subagent_session_id: str | None = None,
+    ) -> bool:
+        """Forget a missing or unsafe continuation without touching its audit log."""
+
+        session_id = require_cowork_id(session_id, label="session_id")
+        agent_id = require_cowork_id(agent_id, label="agent_id")
+        params: list[str] = [session_id, agent_id]
+        sql = (
+            "DELETE FROM collaboration_member_runtime_sessions "
+            "WHERE collaboration_session_id=? AND agent_id=?"
+        )
+        if subagent_session_id:
+            sql += " AND subagent_session_id=?"
+            params.append(
+                require_cowork_id(
+                    subagent_session_id,
+                    label="subagent_session_id",
+                )
+            )
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            return bool(conn.execute(sql, tuple(params)).rowcount)
+
+    def acquire_collaboration_member_runtime_lease(
+        self,
+        session_id: str,
+        agent_id: str,
+        *,
+        owner_id: str,
+        lease_seconds: float = 300.0,
+    ) -> dict[str, Any] | None:
+        """Exclusively serialize turns that continue one member session.
+
+        The row lives in SQLite rather than a process lock, so two gateway
+        workers cannot concurrently mutate the same provider-side session.
+        Re-acquiring as the same owner renews the lease; an expired owner is
+        safely replaced after a crash.
+        """
+
+        session_id = require_cowork_id(session_id, label="session_id")
+        agent_id = require_cowork_id(agent_id, label="agent_id")
+        owner_id = require_cowork_id(owner_id, label="owner_id")
+        duration = max(1.0, min(float(lease_seconds), 3600.0))
+        now_epoch = time.time()
+        expires_at = now_epoch + duration
+        timestamp = _now()
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "INSERT INTO collaboration_member_runtime_leases"
+                "(collaboration_session_id,agent_id,owner_id,expires_at,updated_at) "
+                "VALUES(?,?,?,?,?) "
+                "ON CONFLICT(collaboration_session_id,agent_id) DO UPDATE SET "
+                "owner_id=excluded.owner_id,expires_at=excluded.expires_at,"
+                "updated_at=excluded.updated_at "
+                "WHERE collaboration_member_runtime_leases.expires_at<=? "
+                "OR collaboration_member_runtime_leases.owner_id=excluded.owner_id",
+                (
+                    session_id,
+                    agent_id,
+                    owner_id,
+                    expires_at,
+                    timestamp,
+                    now_epoch,
+                ),
+            )
+            row = conn.execute(
+                "SELECT owner_id,expires_at,updated_at "
+                "FROM collaboration_member_runtime_leases "
+                "WHERE collaboration_session_id=? AND agent_id=?",
+                (session_id, agent_id),
+            ).fetchone()
+        if row is None or str(row[0]) != owner_id:
+            return None
+        return {
+            "schema": "octopus.collaboration_member_runtime_lease.v1",
+            "session_id": session_id,
+            "agent_id": agent_id,
+            "owner_id": owner_id,
+            "expires_at": float(row[1]),
+            "updated_at": str(row[2]),
+        }
+
+    def release_collaboration_member_runtime_lease(
+        self,
+        session_id: str,
+        agent_id: str,
+        *,
+        owner_id: str,
+    ) -> bool:
+        """Release only the caller's lease; never unlock a newer owner."""
+
+        session_id = require_cowork_id(session_id, label="session_id")
+        agent_id = require_cowork_id(agent_id, label="agent_id")
+        owner_id = require_cowork_id(owner_id, label="owner_id")
+        with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            return bool(
+                conn.execute(
+                    "DELETE FROM collaboration_member_runtime_leases "
+                    "WHERE collaboration_session_id=? AND agent_id=? AND owner_id=?",
+                    (session_id, agent_id, owner_id),
+                ).rowcount
+            )
 
     def _connect(self) -> sqlite3.Connection:
         self._dir.mkdir(parents=True, exist_ok=True)
@@ -1074,10 +1313,7 @@ class CollaborationStore(
                     effective_status = str(existing[0])
                 if existing[1] is not None:
                     effective_seq = max(int(existing[1]), normalized_seq or 0)
-                if (
-                    effective_status == str(existing[0])
-                    and effective_seq == existing[1]
-                ):
+                if effective_status == str(existing[0]) and effective_seq == existing[1]:
                     return {
                         "room_id": room_id,
                         "message_id": message_id,
@@ -1208,12 +1444,21 @@ class CollaborationStore(
             cur = conn.execute(
                 "UPDATE collaboration_annotations SET resolved=?, updated_at=? "
                 "WHERE session_id=? AND annotation_id=?",
-                (1 if resolved else 0, int(datetime.now(UTC).timestamp()), session_id, annotation_id),
+                (
+                    1 if resolved else 0,
+                    int(datetime.now(UTC).timestamp()),
+                    session_id,
+                    annotation_id,
+                ),
             )
             if cur.rowcount == 0:
                 return None
         return next(
-            (item for item in self.annotations_for_session(session_id) if item["annotation_id"] == annotation_id),
+            (
+                item
+                for item in self.annotations_for_session(session_id)
+                if item["annotation_id"] == annotation_id
+            ),
             None,
         )
 
@@ -1257,7 +1502,14 @@ class CollaborationStore(
             conn.execute(
                 "INSERT INTO collaboration_annotation_replies "
                 "(reply_id,annotation_id,author_id,author_json,body,created_at) VALUES (?,?,?,?,?,?)",
-                (reply_id, annotation_id, author_id, _dump(author_payload, label="annotation reply author"), body, now),
+                (
+                    reply_id,
+                    annotation_id,
+                    author_id,
+                    _dump(author_payload, label="annotation reply author"),
+                    body,
+                    now,
+                ),
             )
         return {
             "reply_id": reply_id,

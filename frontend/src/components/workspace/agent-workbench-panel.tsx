@@ -471,11 +471,15 @@ function AgentWorkbenchPanelImpl({
     !selectedAgent &&
     visibleRosterSeats.length === 0 &&
     (progressOutline?.length ?? 0) === 0;
+  const coworkResponseOnly =
+    agentTiles.length > 0 &&
+    agentTiles.every((agent) => agent.role === "cowork");
   const mainRunStatus = workbenchStatus(mainBlocks, mainPhases, {
     settled: runSettled,
     failed: runFailed,
     interrupted: runInterrupted,
     blocked: runBlocked,
+    responded: coworkResponseOnly,
   });
   const mainRunState: AgentRunState = runFailed
     ? "error"
@@ -730,6 +734,8 @@ function AgentWorkbenchPanelImpl({
       setSelectedBlockId={setSelectedBlockId}
       setManualBlockSelection={setManualBlockSelection}
       visibilityEvents={visibilityEvents}
+      collaborationEvents={events}
+      threadId={threadId ?? undefined}
     />
   );
 

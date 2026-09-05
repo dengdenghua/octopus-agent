@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from threading import Barrier
 
 import pytest
 
@@ -9,6 +11,131 @@ from runtime.memory.cowork.collaboration_store import CollaborationStore
 
 def _store(tmp_path):
     return CollaborationStore(base_dir=tmp_path / "cowork")
+
+
+def test_member_runtime_checkpoint_is_durable_scoped_and_clearable(tmp_path) -> None:
+    hashes = {
+        "contract": "a" * 64,
+        "shared_brief": "b" * 64,
+        "source:shared_brief:ctx_1234567890abcdef": "c" * 64,
+        "authorized_history_count:7": "d" * 64,
+        "authorized_project:ctx_fedcba0987654321": "e" * 64,
+    }
+    saved = _store(tmp_path).save_collaboration_member_runtime(
+        "thread-1",
+        "coder",
+        subagent_session_id="subagent-session-1",
+        context_hashes=hashes,
+    )
+
+    assert saved["context_hashes"] == hashes
+    assert saved["revision"] == 1
+    reopened = _store(tmp_path)
+    assert reopened.collaboration_member_runtime("thread-1", "coder") == saved
+    assert reopened.collaboration_member_runtime("thread-1", "reviewer") is None
+    assert (
+        reopened.clear_collaboration_member_runtime(
+            "thread-1",
+            "coder",
+            subagent_session_id="another-session",
+        )
+        is False
+    )
+    assert reopened.clear_collaboration_member_runtime("thread-1", "coder") is True
+    assert reopened.collaboration_member_runtime("thread-1", "coder") is None
+
+
+def test_member_runtime_lease_serializes_workers_and_recovers_after_expiry(tmp_path) -> None:
+    first = _store(tmp_path)
+    lease = first.acquire_collaboration_member_runtime_lease(
+        "thread-1",
+        "coder",
+        owner_id="turn-a",
+        lease_seconds=30,
+    )
+    assert lease is not None
+    second = _store(tmp_path)
+    assert (
+        second.acquire_collaboration_member_runtime_lease(
+            "thread-1",
+            "coder",
+            owner_id="turn-b",
+            lease_seconds=30,
+        )
+        is None
+    )
+    # Other members retain parallelism.
+    assert (
+        second.acquire_collaboration_member_runtime_lease(
+            "thread-1",
+            "reviewer",
+            owner_id="turn-b",
+            lease_seconds=30,
+        )
+        is not None
+    )
+    assert (
+        second.release_collaboration_member_runtime_lease(
+            "thread-1",
+            "coder",
+            owner_id="turn-b",
+        )
+        is False
+    )
+    assert (
+        first.release_collaboration_member_runtime_lease(
+            "thread-1",
+            "coder",
+            owner_id="turn-a",
+        )
+        is True
+    )
+    assert (
+        second.acquire_collaboration_member_runtime_lease(
+            "thread-1",
+            "coder",
+            owner_id="turn-b",
+            lease_seconds=30,
+        )
+        is not None
+    )
+
+    with second._lock, second._connect() as conn:
+        conn.execute(
+            "UPDATE collaboration_member_runtime_leases SET expires_at=? "
+            "WHERE collaboration_session_id=? AND agent_id=?",
+            (0, "thread-1", "coder"),
+        )
+    recovered = first.acquire_collaboration_member_runtime_lease(
+        "thread-1",
+        "coder",
+        owner_id="turn-c",
+        lease_seconds=30,
+    )
+    assert recovered is not None
+    assert recovered["owner_id"] == "turn-c"
+
+
+def test_member_runtime_lease_has_one_winner_under_concurrent_claim(tmp_path) -> None:
+    stores = [_store(tmp_path), _store(tmp_path)]
+    barrier = Barrier(2)
+
+    def claim(index: int) -> bool:
+        barrier.wait(timeout=5)
+        return (
+            stores[index].acquire_collaboration_member_runtime_lease(
+                "thread-race",
+                "coder",
+                owner_id=f"turn-{index}",
+                lease_seconds=30,
+            )
+            is not None
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        winners = list(pool.map(claim, range(2)))
+
+    assert winners.count(True) == 1
 
 
 def test_run_lifecycle_is_durable_and_result_is_idempotent(tmp_path) -> None:
@@ -44,9 +171,9 @@ def test_run_lifecycle_is_durable_and_result_is_idempotent(tmp_path) -> None:
 
     # Retrying delivery with the exact terminal result is a no-op; restart and
     # readback prove the state is not process-local.
-    assert store.transition_collaboration_run(
-        "run-1", status="completed", result=result
-    ) == completed
+    assert (
+        store.transition_collaboration_run("run-1", status="completed", result=result) == completed
+    )
     reopened = _store(tmp_path)
     assert reopened.collaboration_run("run-1") == completed
     assert [event["event_type"] for event in reopened.collaboration_run_events("run-1")] == [
@@ -65,9 +192,7 @@ def test_terminal_result_cannot_be_silently_replaced(tmp_path) -> None:
     )
 
     with pytest.raises(ValueError, match="immutable"):
-        store.transition_collaboration_run(
-            "run-immutable", status="completed", result={"value": 2}
-        )
+        store.transition_collaboration_run("run-immutable", status="completed", result={"value": 2})
 
 
 def test_live_lease_blocks_second_worker_and_expired_run_is_recoverable(tmp_path) -> None:
@@ -151,9 +276,7 @@ def test_startup_reconciliation_turns_expired_worker_into_resumable_interruption
     assert run["status"] == "interrupted"
     assert run["lease_owner"] is None
     assert "lease expired" in run["error"]
-    assert [item["run_id"] for item in store.recoverable_collaboration_runs()] == [
-        "run-orphan"
-    ]
+    assert [item["run_id"] for item in store.recoverable_collaboration_runs()] == ["run-orphan"]
     assert store.collaboration_run_events("run-orphan")[-1] == {
         "schema": "octopus.collaboration_run_event.v1",
         "run_id": "run-orphan",

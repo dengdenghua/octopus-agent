@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import time
 from typing import TYPE_CHECKING, Any, cast
@@ -14,6 +15,7 @@ from runtime.execution.tool_engine.session_reference_uri import (
 )
 from runtime.platform.models.primitives import now_utc
 from runtime.protocol import (
+    AgentMessageItem,
     ErrorItem,
     ItemStatus,
     ServerMethod,
@@ -1335,14 +1337,24 @@ async def _start_turn(
                 if has_coordination
                 else "missing_delegation_evidence"
             )
+            # The repair pass receives a synthetic instruction. Bind it to the
+            # current turn explicitly because its frozen conversation snapshot
+            # may end at an older unfinished task. Without this objective
+            # anchor, a valid new request can accidentally resume that old task
+            # during orchestration repair.
+            repair_objective = json.dumps(str(text or "").strip(), ensure_ascii=False)
             repair_prompt = (
                 "协调执行验收未通过：成员调用已有记录，但缺少队长在成员结果之后的统一结论。"
                 "请核验已有成员结果并立即给出最终综合交付，不要再次重复分派。"
+                f"本轮唯一目标（JSON 字符串）是：{repair_objective}。"
+                "只围绕这个目标修复，不得恢复其他历史任务。"
                 if has_coordination
                 else (
                     "协调执行验收未通过：本轮只有计划或文字结论，没有服务端可核验的成员调用记录。"
                     "请现在实际调用合适的成员代理完成拆分任务，核验成员结果后再统一交付；"
                     "不要只声称‘已分派’或重复计划。"
+                    f"本轮唯一目标（JSON 字符串）是：{repair_objective}。"
+                    "只围绕这个目标修复，不得恢复其他历史任务。"
                 )
             )
             repair_context = dict(intent.user_context or {})
@@ -1351,6 +1363,18 @@ async def _start_turn(
                 "max_attempts": 1,
                 "reason": repair_reason,
             }
+            repair_notice = AgentMessageItem(
+                text=(
+                    "成员结果已经返回，但缺少队长综合，正在自动补齐最终交付。"
+                    if has_coordination
+                    else "首次交付缺少真实成员执行记录，正在自动重新分派并验收。"
+                ),
+                message_kind="commentary",
+            )
+            turn.items.append(repair_notice)
+            await runtime._emit_item_started(turn, log, emitter, repair_notice)
+            repair_notice.status = ItemStatus.COMPLETED
+            await runtime._emit_item_completed(turn, log, emitter, repair_notice)
             repair_intent = intent.model_copy(
                 update={
                     "raw": repair_prompt,

@@ -353,6 +353,26 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     ).toBe(false);
   });
 
+  it("marks legacy length-ranked group summaries as not newly validated", () => {
+    const state = conversationToAgentThreadState(
+      makeConv([
+        makeTurn([
+          agentMsg(
+            "协作汇总: 6 位成员已回应；采用并行圆桌；主要观点来自 Kane。",
+          ),
+        ]),
+      ]),
+    );
+
+    const answer = state.messages.find(
+      (message) => message.type === "ai" && message.content,
+    ) as AIMessage;
+    expect(answer.content).toBe(
+      "协作汇总: 6 位成员已回应；采用并行圆桌。 历史记录未经过新版协作验收。",
+    );
+    expect(answer.content).not.toContain("主要观点来自 Kane");
+  });
+
   it("keeps the terminal narrative stable across reversed turn lifecycle events", () => {
     const completed = makeTurn(
       [

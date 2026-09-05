@@ -50,6 +50,17 @@ def test_natural_group_work_request_uses_parallel_roundtable() -> None:
     assert decision.spec.debate_rounds == 1
 
 
+def test_ui_acceptance_wording_does_not_force_a_short_group_reply_into_orchestration() -> None:
+    decision = select_team_pattern(
+        "请大家各用一句话说明自己的当前职责，用于多人协作界面验收。",
+        mode="swarm",
+        member_count=5,
+    )
+
+    assert decision.spec.id == "parallel_roundtable"
+    assert decision.spec.execution == "fanout"
+
+
 def test_review_request_uses_two_round_adversarial_pattern() -> None:
     decision = select_team_pattern(
         "大家评审这个方案，找出风险并验证",

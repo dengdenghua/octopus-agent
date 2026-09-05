@@ -2428,7 +2428,12 @@ def test_cowork_group_request_drives_pattern_fanout(
                 "context": dict(context or {}),
             }
         )
-        return {"success": True, "output": f"{agent_id} replied", "error": None}
+        return {
+            "success": True,
+            "output": f"{agent_id} replied",
+            "error": None,
+            "session_id": f"private-{agent_id}",
+        }
 
     monkeypatch.setattr(
         "runtime.execution.suckers.delegation_skills._call_agent",
@@ -2441,24 +2446,31 @@ def test_cowork_group_request_drives_pattern_fanout(
         seen["speaker"] = _kwargs.get("speaker")
         seen["pattern"] = _kwargs.get("pattern")
         caller = _kwargs["agent_caller"]
-        for member in members:
-            caller(
+        replies = []
+        for index, member in enumerate(members):
+            result = caller(
                 agent_id=member["name"],
                 prompt=f"fanout prompt for {member['name']}",
             )
+            replies.append(
+                {
+                    "response_id": f"fake:resp:{index}:{member['name']}",
+                    "agent_id": member["name"],
+                    "display_name": member["display_name"],
+                    "ok": bool(result.get("success")),
+                    "reply": str(result.get("output") or ""),
+                    "round": 1,
+                    "context_delivery": result.get("context_delivery"),
+                }
+            )
+        committer = _kwargs.get("result_committer")
+        if callable(committer):
+            for reply in replies:
+                committer(reply)
         callback = _kwargs.get("on_reply")
         if callable(callback):
-            for index, member in enumerate(members):
-                callback(
-                    {
-                        "response_id": f"fake:resp:{index}:{member['name']}",
-                        "agent_id": member["name"],
-                        "display_name": member["display_name"],
-                        "ok": True,
-                        "reply": f"{member['name']} replied",
-                        "round": 1,
-                    }
-                )
+            for reply in replies:
+                callback(reply)
         return {
             "ok": True,
             "count": len(members),
@@ -2510,6 +2522,13 @@ def test_cowork_group_request_drives_pattern_fanout(
         "runtime.execution.agents.group_fanout.run_group_fanout",
         fake_fanout,
     )
+
+    class RuntimeContextSelector:
+        name = "runtime-fixture"
+
+        def select_context(self, *, candidates, **_kwargs):
+            return [candidate.source_id for candidate in candidates]
+
     _set_script(
         [
             {"type": "text_delta", "delta": "react should not run"},
@@ -2522,6 +2541,7 @@ def test_cowork_group_request_drives_pattern_fanout(
         logs_root=str(tmp_path / "threads"),
         cowork_group_store=store,
         collaboration_store=collaboration,
+        cowork_context_engine=RuntimeContextSelector(),
     )
     gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
     app = FastAPI()
@@ -2595,11 +2615,13 @@ def test_cowork_group_request_drives_pattern_fanout(
     assert len(team_items) == 1
     assert team_items[0]["status"] == "completed"
     assert team_items[0]["arguments"]["schema"] == "octopus.group_fanout_run.v1"
+    assert team_items[0]["arguments"]["collaboration_run_id"].startswith("cowork-fanout:")
     assert team_items[0]["arguments"]["capacity"]["schema"] == ("octopus.group_fanout_capacity.v1")
     assert team_items[0]["arguments"]["pattern"]["id"] == "parallel_roundtable"
     assert team_items[0]["arguments"]["context_plan"]["schema"] == (
         "octopus.cowork_context_plan.v1"
     )
+    assert team_items[0]["arguments"]["context_plan"]["selection_engine"] == ("runtime-fixture")
     assert team_items[0]["arguments"]["routing"] == {
         "schema": "octopus.cowork_member_routing.v1",
         "reason": "group_request_or_mode",
@@ -2612,6 +2634,10 @@ def test_cowork_group_request_drives_pattern_fanout(
     assert "selected_estimated_tokens" in team_items[0]["arguments"]["context_plan"]
     assert "estimated_reduction_ratio" in team_items[0]["arguments"]["context_plan"]
     assert team_items[0]["result"]["schema"] == "octopus.group_fanout_result.v1"
+    assert (
+        team_items[0]["result"]["collaboration_run_id"]
+        == (team_items[0]["arguments"]["collaboration_run_id"])
+    )
     assert team_items[0]["result"]["pattern"]["id"] == "parallel_roundtable"
     assert team_items[0]["result"]["capacity"]["requested_members"] == 2
     assert team_items[0]["result"]["capacity"]["dispatched_members"] == 2
@@ -2658,6 +2684,19 @@ def test_cowork_group_request_drives_pattern_fanout(
         "db-agent",
         "ui-agent",
     ]
+    assert (
+        collaboration.collaboration_member_runtime("th-cowork", "db-agent")["subagent_session_id"]
+        == "private-db-agent"
+    )
+    assert (
+        collaboration.collaboration_member_runtime("th-cowork", "ui-agent")["subagent_session_id"]
+        == "private-ui-agent"
+    )
+    with collaboration._lock, collaboration._connect() as conn:
+        assert (
+            conn.execute("SELECT COUNT(*) FROM collaboration_member_runtime_leases").fetchone()[0]
+            == 0
+        )
 
 
 def test_cowork_presence_question_uses_roster_without_starting_agents(
@@ -2752,6 +2791,20 @@ def test_cowork_deliverable_request_uses_agent_loop_not_bubble_fanout(
                 "tool_name": "call_agent_parallel",
                 "tool_call_id": "research-team",
                 "iteration": 1,
+                "input_preview": {
+                    "specs": [
+                        {
+                            "task_id": "market",
+                            "agent_id": "general",
+                            "objective": "核验 Eight Sleep 市场信息",
+                            "inputs": ["用户请求"],
+                            "deliverable": "带来源的市场结论",
+                            "dependencies": [],
+                            "acceptance_criteria": ["包含可核验来源"],
+                            "prompt": "研究 Eight Sleep 市场",
+                        }
+                    ]
+                },
             },
             {
                 "type": "tool_end",
@@ -2759,7 +2812,18 @@ def test_cowork_deliverable_request_uses_agent_loop_not_bubble_fanout(
                 "tool_call_id": "research-team",
                 "iteration": 1,
                 "status": "success",
-                "output_preview": "2 members returned evidence",
+                "output_preview": json.dumps(
+                    {
+                        "successes": [
+                            {
+                                "spec_index": 0,
+                                "task_label": "market",
+                                "agent_id": "general",
+                            }
+                        ],
+                        "failures": [],
+                    }
+                ),
             },
             {
                 "type": "text_delta",
@@ -2833,6 +2897,20 @@ def test_cowork_deliverable_request_uses_agent_loop_not_bubble_fanout(
     assert runs[0]["result"]["coordination_evidence"] is True
     assert runs[0]["result"]["delivery_ready"] is True
     assert runs[0]["result"]["delegations"][0]["command"] == "call_agent_parallel"
+    assert runs[0]["result"]["task_graph_complete"] is True
+    assert runs[0]["result"]["task_graph"] == [
+        {
+            "id": "market",
+            "objective": "核验 Eight Sleep 市场信息",
+            "owner": "general",
+            "inputs": ["用户请求"],
+            "deliverable": "带来源的市场结论",
+            "dependencies": [],
+            "acceptance_criteria": ["包含可核验来源"],
+            "status": "completed",
+            "missing_fields": [],
+        }
+    ]
 
 
 def test_cowork_orchestration_retries_once_then_rejects_a_text_only_claim(
@@ -2864,10 +2942,12 @@ def test_cowork_orchestration_retries_once_then_rejects_a_text_only_claim(
         collaboration_store=collaboration,
     )
     contexts: list[dict[str, Any]] = []
+    repair_goals: list[str] = []
     original_drive_react = runtime._drive_react
 
     async def capture_repair(*args: Any, **kwargs: Any) -> Any:
         contexts.append(dict(args[3].user_context))
+        repair_goals.append(str(args[3].normalized_goal))
         return await original_drive_react(*args, **kwargs)
 
     monkeypatch.setattr(runtime, "_drive_react", capture_repair)
@@ -2892,6 +2972,14 @@ def test_cowork_orchestration_retries_once_then_rejects_a_text_only_claim(
         "max_attempts": 1,
         "reason": "missing_delegation_evidence",
     }
+    assert '"研究竞品并输出报告"' in repair_goals[1]
+    assert "不得恢复其他历史任务" in repair_goals[1]
+    assert any(
+        item["type"] == "agentMessage"
+        and item.get("messageKind") == "commentary"
+        and "正在自动重新分派并验收" in item.get("text", "")
+        for item in turn["items"]
+    )
     error = next(item for item in turn["items"] if item["type"] == "error")
     assert error["errorInfo"]["code"] == "coordination_delivery_incomplete"
     runs = collaboration.collaboration_runs_for_session("th-fake-delegation")
