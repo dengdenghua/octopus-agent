@@ -151,6 +151,30 @@ def test_archived_thread_is_hidden_from_state_reads(tmp_path) -> None:
     assert client.post("/api/threads/th-hidden/history", json={}).json() == []
 
 
+def test_thread_search_tolerates_transient_log_permission_error(
+    tmp_path, monkeypatch
+) -> None:
+    logs_root = tmp_path / "threads"
+    log = EventLog(logs_root / "th-busy.jsonl")
+    log.thread_started("th-busy")
+
+    store = ThreadStateStore()
+    store.ensure_thread("th-busy", values={"title": "Busy chat"})
+    app = FastAPI()
+    app.include_router(create_thread_state_router(store=store, logs_root=logs_root))
+    client = TestClient(app)
+
+    def raise_permission_error(self):
+        raise PermissionError("log is being written")
+
+    monkeypatch.setattr(EventLog, "summary", raise_permission_error)
+
+    response = client.post("/api/threads/search", json={"limit": 20})
+
+    assert response.status_code == 200
+    assert [item["thread_id"] for item in response.json()] == ["th-busy"]
+
+
 def test_thread_delete_accepts_log_only_thread(tmp_path) -> None:
     logs_root = tmp_path / "threads"
     log = EventLog(logs_root / "th-log-only.jsonl")
