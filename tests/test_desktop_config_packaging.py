@@ -214,6 +214,7 @@ def test_electron_materialized_desktop_config_loads_in_python(tmp_path: Path) ->
     assert config.oct.jwt_secret == first_secret
     assert config.local_auth.enabled is True
     assert config.local_auth.jwt_secret == first_secret
+    assert config.safety.allow_client_approval_bypass is True
     assert len(first_secret) >= 64
     assert "change-me" not in first_secret
     if os.name != "nt":

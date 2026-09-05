@@ -29,6 +29,12 @@ immunity:
     - "intel_collector/*"
   unknown_policy: quarantine
 
+# Single-user desktop profile: an explicit "full access" selection also
+# bypasses the interactive approval prompt.  Shared/production configs keep
+# this opt-in disabled.
+safety:
+  allow_client_approval_bypass: true
+
 journal_file: null
 enable_web_skills: true
 default_arm_id: code_arm
