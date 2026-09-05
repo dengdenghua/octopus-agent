@@ -2907,8 +2907,14 @@ export function MessageList({
                 const hideTeamExecutionProjection = Boolean(
                   showSenderName &&
                   subagentRenderInfo?.hasCluster &&
-                  group.type === "assistant:processing" &&
-                  !group.messages.some((message) => hasContent(message)),
+                  // A team room has exactly one owner for execution state:
+                  // the right-hand workbench.  `groupMessages` may create a
+                  // processing group and a terminal assistant group from the
+                  // same tool-call message (when it also contains the final
+                  // report).  Hiding only empty processing groups leaves a
+                  // second Agent Cluster card whenever the provider includes
+                  // any progress prose in that message.
+                  group.type === "assistant:processing",
                 );
                 if (hideTeamExecutionProjection) {
                   // Team rooms already project every member's live state and

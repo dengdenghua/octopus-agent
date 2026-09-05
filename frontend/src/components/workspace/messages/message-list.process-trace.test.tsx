@@ -1296,6 +1296,54 @@ describe("MessageList process trace lifecycle", () => {
     ).toBeNull();
   });
 
+  test("renders a tool-call message's final team report only once", () => {
+    const processingWithReport: AIMessage = {
+      id: "team-swarm-report",
+      type: "ai",
+      content: "最终报告：建议保留当前协作方案。",
+      additional_kwargs: { message_kind: "answer" },
+      tool_calls: [
+        {
+          id: "team-swarm-report-call",
+          name: "team_swarm",
+          args: { message: "整理最终报告" },
+        },
+        {
+          id: "subagent-report-eve",
+          name: "subagent",
+          args: {
+            subagent_id: "general",
+            name: "Eve",
+            role: "cowork",
+            task: "整理最终报告",
+            status: "completed",
+          },
+        },
+      ],
+    };
+    const thread = mockThread({
+      messages: [
+        message("user-team-report", "human", "整理最终报告"),
+        processingWithReport,
+      ],
+    });
+
+    renderMessageList({
+      thread,
+      mode: "chat",
+      locale: "zh-CN",
+      showSenderName: true,
+      agentRoster: [
+        { name: "general", display_name: "Eve", role: "tl" },
+      ],
+    });
+
+    expect(
+      screen.getAllByText("最终报告：建议保留当前协作方案。"),
+    ).toHaveLength(1);
+    expect(screen.queryByText("Agent 集群")).toBeNull();
+  });
+
   test("shows only compact member states while keeping paired tasks internal", () => {
     renderWithProviders(
       <InlineSubagentCards
