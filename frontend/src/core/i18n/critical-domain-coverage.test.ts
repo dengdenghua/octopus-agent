@@ -5,6 +5,8 @@ import {
   workspaceComputerJaJP,
   workspaceComputerKoKR,
 } from "./locales/workspace-computer";
+import { jaJP } from "./locales/ja-JP";
+import { koKR } from "./locales/ko-KR";
 
 const OPERATOR_CRITICAL_KEYS = [
   "Operator loop",
@@ -122,6 +124,29 @@ describe("critical locale coverage", () => {
           `${locale} explicitly repeats the source key “${source}”`,
         ).not.toBe(source);
       }
+    }
+  });
+
+  it("keeps browser settings and swarm status labels localized", () => {
+    for (const [locale, translations] of [
+      ["ja-JP", jaJP],
+      ["ko-KR", koKR],
+    ] as const) {
+      expect(translations.browserSettings.tabBrowsers, locale).not.toBe(
+        "Browsers",
+      );
+      expect(translations.browserSettings.refresh, locale).not.toBe("Rescan");
+      expect(translations.browserSettings.recommended, locale).not.toBe(
+        "Recommended",
+      );
+      expect(translations.swarmPanel.collapse, locale).not.toBe("Collapse");
+      expect(translations.swarmPanel.viewing, locale).not.toBe("Viewing");
+      expect(translations.swarmPanel.taskStatuses.running, locale).not.toBe(
+        "Running",
+      );
+      expect(translations.swarmPanel.phaseSynthesize, locale).not.toBe(
+        "Synthesize",
+      );
     }
   });
 });
