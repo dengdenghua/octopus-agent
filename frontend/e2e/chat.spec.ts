@@ -11,8 +11,8 @@ test.describe("Chat golden path", () => {
     await page.goto("/");
     await page.waitForLoadState("domcontentloaded");
 
-    await expect(page).toHaveTitle(/(?:^|\s-\s)Octopus$/);
-    await expect(page.getByRole("tab", { name: "EchoAI" })).toBeVisible({
+    await expect(page).toHaveTitle(/(?:^|\s-\s)Echo$/);
+    await expect(page.getByRole("tab", { name: "Echo" })).toBeVisible({
       timeout: 10_000,
     });
     await expect(

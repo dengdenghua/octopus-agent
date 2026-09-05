@@ -18,7 +18,11 @@ const e2eStateRoot = isAbsolute(rawE2eStateRoot)
   ? resolve(rawE2eStateRoot)
   : resolve(repoRoot, rawE2eStateRoot);
 const e2eDataDir = join(e2eStateRoot, "data");
-const pythonBin = process.env.PYTHON || "./.venv/bin/python";
+const pythonBin =
+  process.env.PYTHON ||
+  (process.platform === "win32"
+    ? ".venv/Scripts/python.exe"
+    : "./.venv/bin/python");
 const reuseServers = process.env.OCTOPUS_E2E_REUSE_SERVER === "1";
 const jsonReportPath = process.env.OCTOPUS_E2E_JSON_REPORT;
 const reporter: ReporterDescription | ReporterDescription[] = jsonReportPath
@@ -37,14 +41,17 @@ const testMatch =
   process.env.OCTOPUS_E2E_TEST_MATCH?.split(",")
     .map((entry) => entry.trim())
     .filter(Boolean) || defaultTestMatch;
-const backendEnv =
-  "OCTOPUS_FF_REGENERATION_ENABLED=0 " +
-  "OCTOPUS_FF_CAMOUFLAGE_ENABLED=0 " +
-  "OCTOPUS_FF_UI_AMBIENT_SUGGESTIONS=0 " +
-  `GATEWAY_PORT=${backendPort} ` +
-  `OCTOPUS_INTERNAL_GATEWAY_BASE_URL=${backendBase} ` +
-  `OCTOPUS_HOME=${e2eStateRoot} ` +
-  `OCTOPUS_DATA_DIR=${e2eDataDir}`;
+const backendEnv = [
+  "OCTOPUS_FF_REGENERATION_ENABLED=0",
+  "OCTOPUS_FF_CAMOUFLAGE_ENABLED=0",
+  "OCTOPUS_FF_UI_AMBIENT_SUGGESTIONS=0",
+  `GATEWAY_PORT=${backendPort}`,
+  `OCTOPUS_INTERNAL_GATEWAY_BASE_URL=${backendBase}`,
+  `OCTOPUS_HOME=\"${e2eStateRoot}\"`,
+  `OCTOPUS_DATA_DIR=\"${e2eDataDir}\"`,
+].join(" ");
+const withBackendEnv = (command: string) =>
+  `cross-env ${backendEnv} ${command}`;
 
 const resolvedTestResultsRoot = resolve(repoRoot, "test-results");
 const e2eStateRootRelative = relative(resolvedTestResultsRoot, e2eStateRoot);
@@ -69,7 +76,7 @@ if (!reuseServers && !e2eStateRootIsDisposable) {
 // module side effect can delete SQLite's parent directory after startup.
 const prepareStateCommand = reuseServers
   ? ""
-  : `${backendEnv} node frontend/e2e/prepare-full-stack-state.mjs && `;
+  : `${withBackendEnv("node frontend/e2e/prepare-full-stack-state.mjs")} && `;
 
 /**
  * Full-stack Playwright configuration.
@@ -109,7 +116,9 @@ export default defineConfig({
 
   webServer: [
     {
-      command: `${prepareStateCommand}${backendEnv} ${pythonBin} -m runtime serve --config config.e2e.yaml --host ${backendHost} --port ${backendPort}`,
+      command: `${prepareStateCommand}${withBackendEnv(
+        `${pythonBin} -m runtime serve --config config.e2e.yaml --host ${backendHost} --port ${backendPort}`,
+      )}`,
       url: `${backendBase}/api/status`,
       cwd: repoRoot,
       reuseExistingServer: reuseServers,

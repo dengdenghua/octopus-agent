@@ -92,7 +92,7 @@ test.describe("Visual regression · workspace surfaces", () => {
     await page.goto("/#/workspace/realtime/new");
     await page.waitForLoadState("domcontentloaded");
 
-    await expect(page.getByRole("tab", { name: "EchoAI" })).toBeVisible({
+    await expect(page.getByRole("tab", { name: "Echo" })).toBeVisible({
       timeout: 15_000,
     });
     await expect(page.locator("textarea").first()).toBeVisible();

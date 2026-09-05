@@ -23,6 +23,15 @@ function shouldIgnoreConsoleError(text: string): boolean {
   ) {
     return true;
   }
+  // The deterministic full-stack lane intentionally runs without a Codex
+  // account/plugin. The optional account probe returns 503 while the native
+  // Echo engine remains fully usable.
+  if (
+    /\/api\/coder\/codex\/account/i.test(text) &&
+    /status of 503/i.test(text)
+  ) {
+    return true;
+  }
   return /ResizeObserver loop completed with undelivered notifications/i.test(
     text,
   );
@@ -89,10 +98,14 @@ export const test = base.extend({
         return;
       }
       const text = message.text();
-      if (shouldIgnoreConsoleError(text)) {
+      const location = message.location();
+      if (
+        shouldIgnoreConsoleError(text) ||
+        (location.url.includes("/api/coder/codex/account") &&
+          /status of 503/i.test(text))
+      ) {
         return;
       }
-      const location = message.location();
       const where = location.url
         ? `${location.url}:${location.lineNumber}:${location.columnNumber}`
         : "unknown location";
@@ -118,6 +131,9 @@ export const test = base.extend({
       }
       const path = apiPath(response.url());
       if (!path) {
+        return;
+      }
+      if (status === 503 && path === "/api/coder/codex/account") {
         return;
       }
       issues.push(`API ${status} response ${path}`);

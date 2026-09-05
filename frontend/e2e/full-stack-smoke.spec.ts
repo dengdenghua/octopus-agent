@@ -62,8 +62,9 @@ async function waitForThreadState(
   page: Page,
   threadId: string,
   predicate: (state: Record<string, unknown>) => boolean,
-) {
-  return expect
+): Promise<Record<string, unknown>> {
+  let latest: Record<string, unknown> | null = null;
+  await expect
     .poll(
       async () => {
         const response = await page.request.get(
@@ -73,11 +74,19 @@ async function waitForThreadState(
           return null;
         }
         const state = (await response.json()) as Record<string, unknown>;
-        return predicate(state) ? state : null;
+        if (predicate(state)) {
+          latest = state;
+          return state;
+        }
+        return null;
       },
       { intervals: [500, 1000, 1500, 2000], timeout: 30_000 },
     )
     .not.toBeNull();
+  if (!latest) {
+    throw new Error(`thread ${threadId} reached an unknown state`);
+  }
+  return latest;
 }
 
 async function waitForRealtimeThreadId(
@@ -228,7 +237,8 @@ test.describe("Full-stack golden smoke", () => {
         .getByPlaceholder(
           /搜索角色、应用或 Skills|Search roles, apps or Skills/i,
         )
-        .or(page.getByRole("heading", { name: "HUB" }));
+        .or(page.getByRole("heading", { name: "HUB" }))
+        .first();
       await expect(agentSurface).toBeVisible({ timeout: 20_000 });
 
       await page.goto(`${origin}/#/workspace/intelligence?surface=chat`);
@@ -322,5 +332,63 @@ test.describe("Full-stack golden smoke", () => {
     await expect(page.getByText(prompt, { exact: true })).toBeVisible({
       timeout: 20_000,
     });
+  });
+
+  test("long realtime task completes and replays without duplicate messages", async ({
+    page,
+  }) => {
+    test.setTimeout(150_000);
+    const origin = frontendOrigins[0];
+    const marker = `long-task-regression-${Date.now()}`;
+    const steps = Array.from(
+      { length: 24 },
+      (_, index) =>
+        `${index + 1}. Review input ${index + 1}, record one deterministic finding, and preserve the task order.`,
+    ).join("\n");
+    const prompt = [
+      `Run a deterministic long-task regression and reply with a concise completion receipt. Marker: ${marker}`,
+      "Process every numbered step before replying. Do not skip, reorder, or duplicate steps.",
+      steps,
+    ].join("\n\n");
+
+    await page.goto(`${origin}/#/workspace/realtime/new`);
+    await page.waitForLoadState("domcontentloaded");
+    const chatModeToggle = page.getByTestId("chat-mode-toggle");
+    await expect(chatModeToggle).toBeVisible({ timeout: 20_000 });
+    if ((await chatModeToggle.getAttribute("aria-pressed")) !== "true") {
+      await chatModeToggle.click();
+    }
+
+    await reactFill(page, '[data-testid="chat-composer-input"]', prompt);
+    const threadId = await submitRealtimePrompt(page, prompt);
+    const completedState = await waitForThreadState(page, threadId, (state) => {
+      const messages = threadStateMessages(state);
+      return messages.length >= 2 && JSON.stringify(messages).includes(marker);
+    });
+    const completedMessages = threadStateMessages(
+      completedState as Record<string, unknown>,
+    );
+    expect(completedMessages.length).toBeGreaterThanOrEqual(2);
+    expect(JSON.stringify(completedMessages)).toContain(marker);
+
+    await page.reload();
+    await page.waitForLoadState("domcontentloaded");
+    await expect(page.getByTestId("chat-composer-input")).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByText(marker, { exact: false })).toBeVisible({
+      timeout: 20_000,
+    });
+
+    const replayedState = await waitForThreadState(page, threadId, (state) => {
+      const messages = threadStateMessages(state);
+      return messages.length >= 2 && JSON.stringify(messages).includes(marker);
+    });
+    const replayedMessages = threadStateMessages(
+      replayedState as Record<string, unknown>,
+    );
+    expect(replayedMessages.length).toBe(completedMessages.length);
+    const replayedText = JSON.stringify(replayedMessages);
+    expect((replayedText.match(new RegExp(marker, "g")) || []).length).toBe(1);
   });
 });
