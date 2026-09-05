@@ -15,7 +15,7 @@ export function CommunitySection() {
           Join the Community
         </AuroraText>
       }
-      subtitle="Contribute brilliant ideas to shape the future of EchoAI. Collaborate, innovate, and make an impact."
+      subtitle="Contribute brilliant ideas to shape the future of Echo. Collaborate, innovate, and make an impact."
     >
       <div className="flex justify-center">
         <Button className="text-xl" size="lg" asChild>

@@ -50,8 +50,8 @@ export function WhatsNewSection({ className }: { className?: string }) {
   return (
     <Section
       className={cn("", className)}
-      title="What's New in EchoAI"
-      subtitle="EchoAI is evolving into a social, full-stack intelligent character platform powered by EchoOS"
+      title="What's New in Echo"
+      subtitle="Echo is evolving into a social, full-stack intelligent character platform powered by EchoOS"
     >
       <div className="flex w-full items-center justify-center">
         <MagicBento data={features} />

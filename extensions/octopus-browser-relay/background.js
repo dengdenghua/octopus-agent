@@ -449,7 +449,7 @@ async function runDomActionInTab(tabId, action, params) {
     tabId,
     (nextAction, nextParams) => {
       if (!globalThis.__OCTOPUS_DOM_ACTIONS__?.run) {
-        throw new Error("EchoAI DOM action runtime failed to load");
+        throw new Error("Echo DOM action runtime failed to load");
       }
       return globalThis.__OCTOPUS_DOM_ACTIONS__.run(nextAction, nextParams);
     },
@@ -747,7 +747,7 @@ async function connectRelaySocket() {
     relaySocket = socket;
   } catch (error) {
     console.warn(
-      "EchoAI Browser Relay: failed to create push connection",
+      "Echo Browser Relay: failed to create push connection",
       error instanceof Error ? error.message : String(error),
     );
     scheduleRelaySocketReconnect();
@@ -840,7 +840,7 @@ async function configureSidePanelBehavior() {
     await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
   } catch (error) {
     console.warn(
-      "EchoAI Browser Relay: failed to enable side panel behavior",
+      "Echo Browser Relay: failed to enable side panel behavior",
       error instanceof Error ? error.message : error,
     );
   }
@@ -869,7 +869,7 @@ chrome.action.onClicked.addListener(async (tab) => {
     await postHeartbeat(true);
   } catch (error) {
     console.warn(
-      "EchoAI Browser Relay: failed to open side panel",
+      "Echo Browser Relay: failed to open side panel",
       error instanceof Error ? error.message : error,
     );
   }

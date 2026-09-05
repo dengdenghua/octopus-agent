@@ -85,7 +85,7 @@ describe("browser relay cursor overlay", () => {
     expect(cursor).toHaveAttribute("data-visible", "true");
     expect(cursor?.style.transform).toBe("translate3d(100px,50px,0)");
     expect(host?.shadowRoot?.getElementById("label")).toHaveTextContent(
-      "EchoAI · click",
+      "Echo · click",
     );
   });
 

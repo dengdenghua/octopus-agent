@@ -19,9 +19,9 @@ def test_chrome_extension_manifest_declares_side_panel() -> None:
     assert "connect-src" in csp
     assert "ws://127.0.0.1:8000" in csp
     assert "ws://localhost:8000" in csp
-    assert manifest["name"] == "EchoAI Browser Relay"
+    assert manifest["name"] == "Echo Browser Relay"
     assert manifest["description"] == ("Connect the active browser tab to EchoOS automation.")
-    assert manifest["action"]["default_title"] == "Open EchoAI Browser Relay"
+    assert manifest["action"]["default_title"] == "Open Echo Browser Relay"
 
 
 def test_extension_visible_copy_uses_echo_brand() -> None:
@@ -29,7 +29,7 @@ def test_extension_visible_copy_uses_echo_brand() -> None:
     bookmarklet = (EXTENSION / "bookmarklet.js").read_text(encoding="utf-8")
     background = (EXTENSION / "background.js").read_text(encoding="utf-8")
 
-    assert readme.startswith("# EchoAI Browser Relay")
+    assert readme.startswith("# Echo Browser Relay")
     assert "Octopus Agent" not in readme
     assert "Octopus Browser Relay" not in readme
     assert "WebSocket token query" not in readme
@@ -146,7 +146,7 @@ def test_sidepanel_is_extension_native_not_page_overlay() -> None:
     assert 'href="sidepanel.css"' in html
     assert 'src="sidepanel.js"' in html
     assert "<script>" not in html
-    assert "EchoAI" in html
+    assert "Echo" in html
     assert '<span class="mark" aria-hidden="true">E</span>' in html
     assert "Octopus" not in html
     assert "页面轻面板" in html

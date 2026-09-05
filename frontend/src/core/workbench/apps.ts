@@ -26,7 +26,7 @@ export interface WorkbenchBuiltinApp {
   runtimePlugin?: string;
 }
 
-/** Native EchoAI pages that can also live in the browser desktop and Dock. */
+/** Native Echo pages that can also live in the browser desktop and Dock. */
 export const WORKBENCH_BUILTIN_APPS: readonly WorkbenchBuiltinApp[] = [
   {
     id: "projects",

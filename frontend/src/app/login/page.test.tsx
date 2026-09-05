@@ -168,7 +168,7 @@ describe("LoginPage", () => {
     renderPage();
 
     expect(
-      await screen.findByText("暂时无法连接 EchoAI 服务"),
+      await screen.findByText("暂时无法连接 Echo 服务"),
     ).toBeInTheDocument();
     expect(screen.getByRole("alert")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "重试连接" }));

@@ -76,7 +76,7 @@ _REMOTE_SURFACE_PLUGINS: tuple[dict[str, Any], ...] = (
         "name_zh": "REC 录制器",
         "description": "把真人示范和 Agent 操作沉淀为可复用流程",
         "category": "Productivity",
-        "author": "EchoAI",
+        "author": "Echo",
         "version": "1.2.0",
         "release_summary": "1.2.0：统一聊天与浏览器 REC 入口，新增敏感输入自动脱敏、断线降级和可恢复录制。",
         "icon": "./assets/recorder.svg",

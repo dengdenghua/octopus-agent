@@ -929,7 +929,7 @@ function registerIpc() {
   });
   handle("desktop:getSystemInfo", () => sampleSystemInfo());
   handle("desktop:installContextMenu", () => {
-    // Windows-only shell integration: register "Open with EchoAI" in the
+    // Windows-only shell integration: register "Open with Echo" in the
     // Explorer right-click menu (files + folders) via the current-user registry.
     // Non-Windows platforms keep an honest degradation — there is no equivalent
     // OS-level shell menu to hook into from this process.
@@ -944,10 +944,10 @@ function registerIpc() {
       const { spawnSync } = require("child_process");
       const exe = process.execPath; // path to the packaged Octopus.exe
       const entries = [
-        ["HKCU\\Software\\Classes\\*\\shell\\Octopus", "Open with EchoAI"],
+        ["HKCU\\Software\\Classes\\*\\shell\\Octopus", "Open with Echo"],
         [
           "HKCU\\Software\\Classes\\Directory\\shell\\Octopus",
-          "Open with EchoAI",
+          "Open with Echo",
         ],
       ];
       for (const [key, label] of entries) {
@@ -1567,7 +1567,7 @@ if (!app.requestSingleInstanceLock()) {
     } catch (err) {
       const message = `无法安全初始化桌面应用：${err.message}`;
       console.error("[octopus] desktop initialization failed:", err);
-      dialog.showErrorBox("EchoAI 启动失败", message);
+      dialog.showErrorBox("Echo 启动失败", message);
       app.exit(1);
       return;
     }
@@ -1586,7 +1586,7 @@ if (!app.requestSingleInstanceLock()) {
       } catch (err) {
         const message = `无法启动随应用安装的后端：${err.message}`;
         console.error("[octopus] bundled backend start failed:", err);
-        dialog.showErrorBox("EchoAI 启动失败", message);
+        dialog.showErrorBox("Echo 启动失败", message);
         app.exit(1);
         return;
       }

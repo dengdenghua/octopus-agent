@@ -57,7 +57,7 @@ export interface ReplayReceipt {
 export interface ReplayData {
   title: string;
   steps: ReplayStep[];
-  /** Brand line. Defaults to "EchoAI". */
+  /** Brand line. Defaults to "Echo". */
   brand?: string;
   /** Footer note (e.g. a date). */
   footer?: string;
@@ -134,8 +134,8 @@ function cleanReceipt(
 }
 
 export function buildReplayHtml(replay: ReplayData): string {
-  const title = cleanText(replay.title || "EchoAI replay") || "EchoAI replay";
-  const brand = cleanText(replay.brand || "EchoAI") || "EchoAI";
+  const title = cleanText(replay.title || "Echo replay") || "Echo replay";
+  const brand = cleanText(replay.brand || "Echo") || "Echo";
   const footer = cleanText(replay.footer || "");
   const frameMs = Number.isFinite(replay.frameMs)
     ? Math.max(200, replay.frameMs as number)

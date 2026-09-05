@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "EchoAI Browser Relay",
+  "name": "Echo Browser Relay",
   "description": "Connect the active browser tab to EchoOS automation.",
   "version": "0.2.2",
   "permissions": ["tabs", "activeTab", "scripting", "sidePanel", "storage"],
@@ -16,7 +16,7 @@
     "default_path": "sidepanel.html"
   },
   "action": {
-    "default_title": "Open EchoAI Browser Relay"
+    "default_title": "Open Echo Browser Relay"
   },
   "content_scripts": [
     {

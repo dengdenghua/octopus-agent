@@ -1,7 +1,7 @@
 {
   "name": "octopus-frontend",
   "version": "0.2.0",
-  "description": "EchoAI — intelligent character platform powered by EchoOS",
+  "description": "Echo — intelligent character platform powered by EchoOS",
   "author": "EchoOS Authors",
   "license": "Apache-2.0",
   "repository": {

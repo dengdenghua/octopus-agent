@@ -87,7 +87,7 @@ def loaded_extension_id(context: Any) -> str:
               const manager = document.querySelector('extensions-manager');
               const list = manager?.shadowRoot?.querySelector('extensions-item-list');
               return [...(list?.shadowRoot?.querySelectorAll('extensions-item') || [])]
-                .filter(item => item.data?.name?.includes('EchoAI') || item.data?.name === 'Octopus Agent')
+                .filter(item => item.data?.name?.includes('Echo') || item.data?.name === 'Octopus Agent')
                 .map(item => item.id);
             }"""
         )
@@ -327,7 +327,7 @@ def test_real_chrome_extension_observes_and_operates_active_tab(
               const host = document.querySelector('#octopus-agent-cursor-overlay-host');
               const cursor = host?.shadowRoot?.querySelector('#cursor');
               return cursor?.dataset.visible === 'true' &&
-                cursor?.textContent.includes('EchoAI');
+                cursor?.textContent.includes('Echo');
             }"""
         ),
         timeout=5,

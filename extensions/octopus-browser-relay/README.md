@@ -1,4 +1,4 @@
-# EchoAI Browser Relay
+# Echo Browser Relay
 
 ## MCP OAuth custom-scheme compatibility
 
@@ -10,7 +10,7 @@ are never logged. The service worker repeats every validation before allowing
 the local navigation; pages outside `https://auth.tdx.com.cn/tdx-oauth/` cannot
 use this bridge.
 
-After updating the unpacked relay, reload **EchoAI Browser Relay** once from the
+After updating the unpacked relay, reload **Echo Browser Relay** once from the
 browser extension manager so the new document-start content script is active.
 
 Local unpacked extension for connecting a normal Chromium browser to EchoOS browser automation.
@@ -28,7 +28,7 @@ The extension keeps a local push connection to
 `ws://127.0.0.1:8000/api/browser/relay/ws`, so commands still arrive when
 Chrome suspends normal background timers. It falls back to HTTP heartbeats at
 `http://127.0.0.1:8000/api/browser/relay/heartbeat` for older runtimes.
-Click the `EchoAI Browser Relay` toolbar icon on any page to open the EchoAI side panel.
+Click the `Echo Browser Relay` toolbar icon on any page to open the Echo side panel.
 The side panel talks to the local realtime gateway at `/api/realtime`, prefixes
 turns with `@Chrome`, and keeps the active tab available through the relay.
 
@@ -66,6 +66,6 @@ The Chrome Side Panel is the recommended external-browser experience:
 
 ## Bookmarklet mode
 
-EchoOS can also expose a draggable `EchoAI Page Agent` bookmarklet in the browser page. Drag it to the Chrome/Edge bookmarks bar, then click it on any target page to connect that page to EchoAI without installing the unpacked extension.
+EchoOS can also expose a draggable `Echo Page Agent` bookmarklet in the browser page. Drag it to the Chrome/Edge bookmarks bar, then click it on any target page to connect that page to Echo without installing the unpacked extension.
 
 Bookmarklet mode supports page text extraction, click/type/scroll actions, and `window.__octopusPageAgent` semantic actions when the page provides them. Screenshots and cross-tab control still require the unpacked extension.

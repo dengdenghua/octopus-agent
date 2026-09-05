@@ -84,12 +84,12 @@ export const jaJP: Translations = {
   welcome: {
     greeting: "こんにちは、{name} です",
     description:
-      "🦌 EchoAIへようこそ。オープンソースのスーパーエージェントです。ビルトインスキルとカスタムスキルを使って、ウェブ検索、データ分析、スライドやウェブページなどのアーティファクト生成など、ほぼ何でもこなせます。",
+      "🦌 Echoへようこそ。オープンソースのスーパーエージェントです。ビルトインスキルとカスタムスキルを使って、ウェブ検索、データ分析、スライドやウェブページなどのアーティファクト生成など、ほぼ何でもこなせます。",
     octopusTagline: "マルチエージェント協働 · 一つの入力で直接解決",
 
     createYourOwnSkill: "スキルを自作する",
     createYourOwnSkillDescription:
-      "EchoAIの力を解放する独自のスキルを作成しましょう。カスタムスキルがあれば、\nEchoAIはウェブ検索、データ分析、スライドやウェブページなどの\nアーティファクト生成など、ほぼ何でもこなせます。",
+      "Echoの力を解放する独自のスキルを作成しましょう。カスタムスキルがあれば、\nEchoはウェブ検索、データ分析、スライドやウェブページなどの\nアーティファクト生成など、ほぼ何でもこなせます。",
 
     scenes: {
       daily: "日常業務",
@@ -774,7 +774,7 @@ export const jaJP: Translations = {
     updateFile: "ファイルを更新",
     runAction: "操作を実行",
     teammateTimeout:
-      "チームメンバーが時間内に返答しなかったため、EchoAI が引き継ぎました",
+      "チームメンバーが時間内に返答しなかったため、Echo が引き継ぎました",
     factSummaryPath: (value: string) => `確認済み: ${value}`,
     factSummaryCount: (value: string) => `確認済み: ${value} 件`,
     factSummaryStatus: (value: string) => `確認済み: ${value}`,
@@ -1118,7 +1118,7 @@ export const jaJP: Translations = {
       idle: "REC：この会話を録画し、再利用可能なリプレイスキルとして学習",
     },
     replay: {
-      titleDefault: "EchoAI 実行リプレイ",
+      titleDefault: "Echo 実行リプレイ",
       footer: "自己完結型オフラインリプレイ",
     },
     composer: {
@@ -2216,9 +2216,9 @@ export const jaJP: Translations = {
       "エージェントが保持できるタブ数を制限。retain=true で開いたタブはタスク終了後も自動的に閉じられません。",
     saveConfig: "設定を保存",
     configSaved: "設定を保存しました",
-    installExtensionTitle: "EchoAI Browser Relay をインストール",
+    installExtensionTitle: "Echo Browser Relay をインストール",
     installExtensionDesc:
-      "拡張機能をインストールしてブラウザーを EchoAI に接続。",
+      "拡張機能をインストールしてブラウザーを Echo に接続。",
     step1Title: "Chrome 拡張機能ページを開き、デベロッパーモードを有効化",
     step1Desc: "ブラウザーで拡張機能管理ページを開く",
     step1Action: "chrome://extensions を開く",
@@ -2235,7 +2235,7 @@ export const jaJP: Translations = {
     relayVersion: "Version",
     compareTitle: "接続方式を選択",
     compareDesc:
-      "どちらの方式もブラウザーを EchoAI に接続します。ニーズに合ったものを選択。",
+      "どちらの方式もブラウザーを Echo に接続します。ニーズに合ったものを選択。",
     compareFeature: "Feature",
     compareExtension: "Extension",
     compareCdp: "CDP 直接接続",
@@ -2268,7 +2268,7 @@ export const jaJP: Translations = {
     allVersions: "すべてのバージョン",
     // Page Agent integration
     pageAgentDesc:
-      "Page Agent は Alibaba がオープンソース化した GUI Agent フレームワークで、テキストベースの DOM 操作でウェブページを制御します。スクリーンショットやマルチモーダルモデル不要。MCP プロトコルで EchoAI に統合。",
+      "Page Agent は Alibaba がオープンソース化した GUI Agent フレームワークで、テキストベースの DOM 操作でウェブページを制御します。スクリーンショットやマルチモーダルモデル不要。MCP プロトコルで Echo に統合。",
     pageAgentDocs: "ドキュメントを表示",
     pageAgentFeature1: "ページ内 JS 統合",
     pageAgentFeature1Desc:
@@ -2313,7 +2313,7 @@ export const jaJP: Translations = {
     extConNeedExtension: "Chrome 拡張機能のインストールが必要です。",
     cdpProNoExtension: "拡張機能のインストールは不要です。",
     cdpProChrome144: "Chrome 144+ で動作。",
-    cdpConReAuth: "EchoAI 再起動のたびに再認証が必要です。",
+    cdpConReAuth: "Echo 再起動のたびに再認証が必要です。",
     cdpConChrome144Only: "Chrome 144+ のみサポート。",
   },
 
@@ -2592,7 +2592,7 @@ export const jaJP: Translations = {
     loadoutReady: "ロードアウト準備完了",
     saved: "Agent 設定を保存しました",
     saveFailed: (msg) => `保存失敗：${msg}`,
-    officialFaction: "EchoAI コマンド",
+    officialFaction: "Echo コマンド",
     authorFaction: (author) => `${author} Lab`,
     categoryRoles: {
       assistant: "サポート",
@@ -2948,13 +2948,13 @@ export const jaJP: Translations = {
     save: "エージェントを保存",
     saving: "エージェントを保存中...",
     saveRequested:
-      "保存をリクエストしました。EchoAI が初期バージョンを生成して保存しています。",
+      "保存をリクエストしました。Echo が初期バージョンを生成して保存しています。",
     saveHint:
       "これが初稿であっても、右上のメニューからいつでもこのエージェントを保存できます。",
     saveCommandMessage:
       "これまでの議論の内容に基づいて、このカスタムエージェントを今すぐ保存してください。これは保存に対する私の明示的な確認とみなしてください。まだ不足している詳細がある場合は、妥当な想定を行い、簡潔な初版の SOUL.md を英語で生成し、追加の確認を求めずにすぐ setup_agent を呼び出してください。",
     agentCreatedPendingRefresh:
-      "エージェントは作成されましたが、EchoAI がまだ読み込めていません。しばらくしてからこのページを更新してください。",
+      "エージェントは作成されましたが、Echo がまだ読み込めていません。しばらくしてからこのページを更新してください。",
     more: "その他の操作",
     agentCreated: "エージェントを作成しました！",
     startChatting: "チャットを開始",
@@ -3208,13 +3208,13 @@ export const jaJP: Translations = {
 
   // Workspace
   workspace: {
-    officialWebsite: "EchoAI 公式サイト",
-    githubTooltip: "GitHub で EchoAI を見る",
+    officialWebsite: "Echo 公式サイト",
+    githubTooltip: "GitHub で Echo を見る",
     settingsAndMore: "設定など",
-    visitGithub: "GitHub で EchoAI を見る",
+    visitGithub: "GitHub で Echo を見る",
     reportIssue: "問題を報告",
     contactUs: "お問い合わせ",
-    about: "EchoAI について",
+    about: "Echo について",
     modes: {
       chat: "チャット",
       team: "チーム",
@@ -3226,7 +3226,7 @@ export const jaJP: Translations = {
       badge: "Agent OS コントロールルーム",
       headline: "エージェントに目標を与え、作業を監督しましょう。",
       description:
-        "EchoAI は目標を計画に変換し、スコープ化されたランタイムでツールを実行し、トレースを記録して、次回の実行に役立つメモリを保持します。",
+        "Echo は目標を計画に変換し、スコープ化されたランタイムでツールを実行し、トレースを記録して、次回の実行に役立つメモリを保持します。",
       newTask: "新しいタスク",
       codeTask: "コードタスク",
       systemLoop: {
@@ -3355,7 +3355,7 @@ export const jaJP: Translations = {
 
   // Page titles (document title)
   pages: {
-    appName: "EchoAI",
+    appName: "Echo",
     chats: "Chats",
     newChat: "新規チャット",
     untitled: "Untitled",
@@ -3381,7 +3381,7 @@ export const jaJP: Translations = {
     writeFile: "ファイルに書く",
     clickToViewContent: "クリックしてファイル内容を表示",
     writeTodos: "Todo リストを更新",
-    skillInstallTooltip: "スキルをインストールして EchoAI で利用可能に",
+    skillInstallTooltip: "スキルをインストールして Echo で利用可能に",
     toastSkillInstallFailed: "スキルのインストールに失敗しました",
     toastExportConversationFailed: "会話のエクスポートに失敗しました",
   },
@@ -3422,7 +3422,7 @@ export const jaJP: Translations = {
     workspaceWriteRequired:
       "このタスクはプロジェクトファイルの変更が必要ですが、有効なファイル変更が記録されませんでした。",
     verificationRequired:
-      "コード変更は保持されましたが、検証結果を取得できませんでした。EchoAI は自動検証を試行済みです。推奨コマンドを確認して続行してください。",
+      "コード変更は保持されましたが、検証結果を取得できませんでした。Echo は自動検証を試行済みです。推奨コマンドを確認して続行してください。",
     verificationRunFailed:
       "自動検証を実行しましたが失敗しました。コード変更は保持されています。下記の失敗コマンドと出力を確認してください。",
     environmentBlocked:
@@ -3431,7 +3431,7 @@ export const jaJP: Translations = {
     environmentBlockedAuthorizeFull: "フルネットワークを許可して再試行",
     blockedOnUser: "タスクを続けるには、あなたの入力が必要です。",
     streamEndpointUnavailable:
-      "バックエンドのチャット/チームストリームエンドポイントが有効でないか利用不可。完全な EchoAI バックエンドを起動するかフロントエンドプロキシを確認。",
+      "バックエンドのチャット/チームストリームエンドポイントが有効でないか利用不可。完全な Echo バックエンドを起動するかフロントエンドプロキシを確認。",
     iteration: (count: number) => `第 ${count} ラウンド`,
     toolCalls: (count: number) => `${count} 回呼び出し`,
     generating: "生成中…",
@@ -3529,7 +3529,7 @@ export const jaJP: Translations = {
     actions: "Actions",
     keyboardShortcuts: "キーボードショートカット",
     keyboardShortcutsDescription:
-      "キーボードショートカットで EchoAI をより速く操作。",
+      "キーボードショートカットで Echo をより速く操作。",
     openCommandPalette: "コマンドパレットを開く",
     commandPaletteDescription: "実行するコマンドを検索...",
     toggleSidebar: "サイドバーを切り替え",
@@ -3615,7 +3615,7 @@ export const jaJP: Translations = {
   // Settings
   settings: {
     title: "設定",
-    description: "EchoAI の見た目と動作を好みに合わせて調整します。",
+    description: "Echo の見た目と動作を好みに合わせて調整します。",
     sections: {
       account: "アカウント",
       subscription: "プランと請求",
@@ -3774,7 +3774,7 @@ export const jaJP: Translations = {
     memory: {
       title: "メモリ",
       description:
-        "保存された事実と会話要約を管理し、EchoAI が記録・利用するタイミングを設定します。",
+        "保存された事実と会話要約を管理し、Echo が記録・利用するタイミングを設定します。",
       empty: "表示できるメモリはありません。",
       rawJson: "元の JSON",
       exportButton: "メモリを書き出す",
@@ -3785,7 +3785,7 @@ export const jaJP: Translations = {
         "選択した JSON バックアップで現在のメモリを上書きします。",
       importFileLabel: "選択したファイル",
       importInvalidFile:
-        "ファイルを読み込めません。EchoAI が書き出した有効な JSON ファイルを選択してください。",
+        "ファイルを読み込めません。Echo が書き出した有効な JSON ファイルを選択してください。",
       importFileTooLarge: "メモリファイルは 5 MB 以下にしてください。",
       importSuccess: "メモリを読み込みました",
       manualFactSource: "手動追加",
@@ -3950,7 +3950,7 @@ export const jaJP: Translations = {
       createSkill: "スキルを作成",
       emptyTitle: "エージェントスキルはまだありません",
       emptyDescription:
-        "エージェントスキルのフォルダーは、EchoAI のルートフォルダー配下の `/skills/custom` フォルダーに配置してください。",
+        "エージェントスキルのフォルダーは、Echo のルートフォルダー配下の `/skills/custom` フォルダーに配置してください。",
       emptyButton: "最初のスキルを作成",
       enabledDescription:
         "有効なスキルはエージェントのツールカタログに登録されます。無効なスキルはモデルから非表示になり、実行できません。",
@@ -3974,16 +3974,16 @@ export const jaJP: Translations = {
     notification: {
       title: "通知",
       description:
-        "ウィンドウが非アクティブなとき、EchoAI はタスク完了を通知します。長時間のタスク中に別の作業へ切り替える場合に便利です。",
+        "ウィンドウが非アクティブなとき、Echo はタスク完了を通知します。長時間のタスク中に別の作業へ切り替える場合に便利です。",
       enableNotification: "通知を有効にする",
       permissionGranted: "許可済み",
       permissionPrompt: "許可が必要です",
       permissionDenied: "拒否されました",
       requestPermission: "通知を許可する",
       deniedHint:
-        "通知が拒否されています。システムまたはブラウザの通知設定で EchoAI を有効にしてください。",
+        "通知が拒否されています。システムまたはブラウザの通知設定で Echo を有効にしてください。",
       testButton: "テスト通知を送信",
-      testTitle: "EchoAI",
+      testTitle: "Echo",
       testBody: "これはテスト通知です。",
       testSent: "テスト通知を送信しました",
       requestFailed: "通知の許可を要求できませんでした",
@@ -4240,16 +4240,16 @@ export const jaJP: Translations = {
       },
     },
     octopusMix: {
-      title: "EchoAI Mix · マルチモデル協調",
+      title: "Echo Mix · マルチモデル協調",
       description:
-        "2 つ以上のモデルを proposer(独立して下書き、ツールなし)として選び、aggregator を 1 つ選んで回答を統合します。チャットで「EchoAI Mix」を選択するとこの設定が使われ、proposer プールが空の場合はデフォルトモデル × 数量が使われます。",
+        "2 つ以上のモデルを proposer(独立して下書き、ツールなし)として選び、aggregator を 1 つ選んで回答を統合します。チャットで「Echo Mix」を選択するとこの設定が使われ、proposer プールが空の場合はデフォルトモデル × 数量が使われます。",
       proposersLabel: "Proposers(下書きに参加するモデル)",
       noCandidates: "選択可能なモデルがありません",
       aggregatorLabel: "アグリゲーター",
       aggregatorDefault: "デフォルト",
       nLabel: "プールなしの時の数",
       saveButton: "保存",
-      saveSuccess: "EchoAI Mix 設定を保存しました",
+      saveSuccess: "Echo Mix 設定を保存しました",
       saveFailed: (status: number) => `保存に失敗しました (${status})`,
       saveFailedFallback: "保存に失敗しました",
     },
@@ -4386,7 +4386,7 @@ export const jaJP: Translations = {
     reject: "Reject",
     approveExecute: "承認 & 実行",
     startQuest: "Quest を開始",
-    questDesc: "複雑なタスクを記述し、EchoAI が自律的に計画、実行、検証",
+    questDesc: "複雑なタスクを記述し、Echo が自律的に計画、実行、検証",
     requirementPlaceholder: "達成したいことを記述...",
     executionPlan: "実行計画",
     verificationPassed: "検証合格",
@@ -4538,7 +4538,7 @@ export const jaJP: Translations = {
       installFailed: "プラグインのインストールに失敗",
       statusFailed: "プラグインステータスの更新に失敗",
       removeConfirm:
-        "このプラグインを EchoAI から削除しますか？ローカルファイルは削除されません。",
+        "このプラグインを Echo から削除しますか？ローカルファイルは削除されません。",
       removeFailed: "プラグインの削除に失敗",
       enabled: "Enabled",
       disabled: "Disabled",
@@ -4550,7 +4550,7 @@ export const jaJP: Translations = {
         "localhost プレビューは Electron プラグイン API にアクセスできません。",
       placeholderTitle: "プラグインカタログプレースホルダー",
       placeholderDesc:
-        "デスクトップアプリでローカルプラグインをインストール・管理。プレビューでも EchoAI がサポートするプラグインカテゴリを表示。",
+        "デスクトップアプリでローカルプラグインをインストール・管理。プレビューでも Echo がサポートするプラグインカテゴリを表示。",
       placeholderBrowserTitle: "ブラウザープラグイン",
       placeholderBrowserDesc:
         "Agent がページの読み取り、コントロールのクリック、スクリーンショットの取得を可能にする Chrome / Edge 拡張機能。",
@@ -4868,7 +4868,7 @@ export const jaJP: Translations = {
     },
     extensionMarketplace: {
       title: "Extensions",
-      subtitle: "EchoAI ブラウザー拡張機能を管理",
+      subtitle: "Echo ブラウザー拡張機能を管理",
       installLocal: "ローカル拡張機能をインストール",
       refreshAriaLabel: "拡張機能を更新",
       closeAriaLabel: "拡張機能を閉じる",
@@ -4899,7 +4899,7 @@ export const jaJP: Translations = {
       errorStatusFailed: "拡張機能ステータスの更新に失敗",
       errorRemoveFailed: "拡張機能の削除に失敗",
       confirmRemove:
-        "この拡張機能を EchoAI から削除しますか？ローカルファイルは削除されません。",
+        "この拡張機能を Echo から削除しますか？ローカルファイルは削除されません。",
       categoryFeatured: "Featured",
       categoryEfficiency: "Efficiency",
       categoryResearch: "Research",
@@ -4927,17 +4927,17 @@ export const jaJP: Translations = {
       openDirectory: "ディレクトリを開く",
       extPluginTitle: "外部ブラウザープラグイン",
       extPluginDesc:
-        "Chrome / Edge 向け。プラグインはローカル EchoAI に接続し、外部ページを Agent が読み取り・操作可能に。",
+        "Chrome / Edge 向け。プラグインはローカル Echo に接続し、外部ページを Agent が読み取り・操作可能に。",
       dragToBookmarks: "ブックマークバーにドラッグ",
       dragToBookmarksDesc:
         "軽量 Page Agent モード、現在のページを一時的に接続するのに適しています。",
       dragToBookmarksTitle: "Chrome/Edge ブックマークバーにドラッグ",
       step1Temporary:
-        "1. 一時使用：上の EchoAI Agent をブックマークバーにドラッグし、対象ページでクリック。",
+        "1. 一時使用：上の Echo Agent をブックマークバーにドラッグし、対象ページでクリック。",
       step2LongTerm:
         "2. 長期使用：Chrome/Edge 拡張機能管理ページを開き、「デベロッパーモード」を有効化。",
       step3LoadExtension:
-        "3. 「パッケージ化されていない拡張機能を読み込む」をクリックし、EchoAI プラグインディレクトリを選択。",
+        "3. 「パッケージ化されていない拡張機能を読み込む」をクリックし、Echo プラグインディレクトリを選択。",
       pluginDirectory: "プラグインディレクトリ",
       pluginDirectoryOpened: (path: string) =>
         `プラグインディレクトリを開きました：${path}`,
@@ -5112,7 +5112,7 @@ export const jaJP: Translations = {
       searchOrUrl: "検索または URL を入力",
       siteInfo: "サイト情報",
       siteInfoDesc:
-        "ログイン状態、Cookie、ローカルデータは EchoAI ブラウザーに保持され、タブ間で共有されます。",
+        "ログイン状態、Cookie、ローカルデータは Echo ブラウザーに保持され、タブ間で共有されます。",
       clearData: "データをクリア",
       openExternally: "外部で開く",
       confirmClearSiteData:
@@ -6190,13 +6190,13 @@ export const jaJP: Translations = {
 
   intelligencePanel: {
     examplePrompts: [
-      "EchoAI Agent の GitHub リリース、Issue、競合動向を毎日追跡し、製品判断に関係する変更だけを残す",
+      "Echo Agent の GitHub リリース、Issue、競合動向を毎日追跡し、製品判断に関係する変更だけを残す",
       "AI Agent、ブラウザ自動化、マルチエージェントの新しい論文と OSS を毎週まとめ、重複ニュースを除外する",
       "競合3社の価格、プラグイン、企業向け機能の変更を監視し、重要な更新を通知する",
     ],
     goalLabel: "継続的に追跡したい内容",
     goalPlaceholder:
-      "例：EchoAI Agent、browser-use、OpenAI Agent SDK のリリースや重要な議論を毎日追跡し、製品ロードマップに影響する変更だけを残す。",
+      "例：Echo Agent、browser-use、OpenAI Agent SDK のリリースや重要な議論を毎日追跡し、製品ロードマップに影響する変更だけを残す。",
     subscriptionName: "購読名",
     keywords: "キーワード（カンマ区切り）",
     cadence: "実行頻度",
@@ -6500,10 +6500,10 @@ export const jaJP: Translations = {
   // Onboarding
   onboarding: {
     title: "オンボーディングガイド",
-    welcomeToOctopus: "EchoAI へようこそ",
+    welcomeToOctopus: "Echo へようこそ",
     yourAIPlatform: "あなたの AI Agent プラットフォーム",
     welcomeDesc:
-      "EchoAI はオープンソースのスーパー Agent フレームワークで、サブ Agent、メモリ、サンドボックスを編成してほぼ何でもこなします — 拡張可能なスキルで駆動されます。",
+      "Echo はオープンソースのスーパー Agent フレームワークで、サブ Agent、メモリ、サンドボックスを編成してほぼ何でもこなします — 拡張可能なスキルで駆動されます。",
     chatModes: "タスク能力",
     chatModesDesc: "一つのタスクから始めて、必要に応じて能力と協力者を追加",
     modeChat: "Chat",
@@ -6731,7 +6731,7 @@ export const jaJP: Translations = {
     },
     technicalDetails: "技術詳細",
     createPluginPrompt:
-      "$plugin-creator を使って新しい EchoAI プラグインを作成してください。\nまずプラグイン名、用途、skills/apps/MCP を含むかどうかを確認し、個人プラグインディレクトリにスキャフォールドして manifest を完成させ、プラグインがマーケットプレイスで認識できるか検証してください。",
+      "$plugin-creator を使って新しい Echo プラグインを作成してください。\nまずプラグイン名、用途、skills/apps/MCP を含むかどうかを確認し、個人プラグインディレクトリにスキャフォールドして manifest を完成させ、プラグインがマーケットプレイスで認識できるか検証してください。",
   },
 
   // Local skill directory panel
@@ -6898,7 +6898,7 @@ export const jaJP: Translations = {
 
   // Bundle Info
   bundleInfo: {
-    appVersion: "EchoAI バージョン",
+    appVersion: "Echo バージョン",
     license: "ライセンス",
     title: "ビルド情報",
     environment: "環境",
@@ -6969,7 +6969,7 @@ export const jaJP: Translations = {
     confirmDelete: "削除を確認",
     factoryResetTitle: "工場出荷状態に戻す",
     factoryResetDescription:
-      "ローカルの会話、ワークスペース、メモリ、インストール状態、ブラウザー側の EchoAI キャッシュを消去します。ソースコードと組み込みロールは保持されます。",
+      "ローカルの会話、ワークスペース、メモリ、インストール状態、ブラウザー側の Echo キャッシュを消去します。ソースコードと組み込みロールは保持されます。",
     factoryResetDialogDescription:
       "ローカルの実行データとキャッシュを削除します。完了後にアプリを再起動または再読み込みしてください。ソースコードと組み込みロールのフォルダーは削除されません。",
     factoryResetTypeToConfirm: "確認のため RESET OCTOPUS と入力",
@@ -7008,7 +7008,7 @@ export const jaJP: Translations = {
     totalCredits: (total) => `合計 ${total} クレジット`,
     billingUnavailableTitle: "プランを一時的に利用できません",
     billingUnavailableDescription:
-      "EchoAI アカウントにはログイン済みですが、請求サービスに接続されていません。再試行してアカウント連携とプランを更新してください。",
+      "Echo アカウントにはログイン済みですが、請求サービスに接続されていません。再試行してアカウント連携とプランを更新してください。",
     subscriptionUnavailable: "サブスクリプション情報を読み込めませんでした。",
     plansUnavailable: "プランを読み込めませんでした。",
     noPlans: "現在購入できるプランはありません。",
@@ -7260,7 +7260,7 @@ export const jaJP: Translations = {
   appAuth: {
     pageTitle: "アプリ認可",
     pageSubtitle:
-      "サードパーティプラットフォームを認可し、EchoAI があなたに代わってデータにアクセスできるようにします。",
+      "サードパーティプラットフォームを認可し、Echo があなたに代わってデータにアクセスできるようにします。",
     searchPlaceholder: "認可を検索...",
     connectedCount: (n: number) => `${n} 接続済み`,
     tabAll: "All",
@@ -7989,7 +7989,7 @@ export const jaJP: Translations = {
   evolutionPanel: {
     title: "自己進化ステータス",
     description:
-      "EchoAI は完了したタスクを振り返り、有用な教訓を次回の実行に持ち込みます。ここでは何を学んだか、次のタスクにどう影響するかを表示します。",
+      "Echo は完了したタスクを振り返り、有用な教訓を次回の実行に持ち込みます。ここでは何を学んだか、次のタスクにどう影響するかを表示します。",
     summaryEmpty: "経験を蓄積中",
     summaryReady: (learned: number, total: number) =>
       `${total} タスクから ${learned} 条の再利用可能な経験を蓄積`,
@@ -8015,11 +8015,11 @@ export const jaJP: Translations = {
     statAllTrajsTooltip: (total: number) =>
       `${total} 件の履歴タスクが振り返りプールに入っています。サンプルが多いほど、経験は単発の結果ではなく安定した法則に近づきます。`,
     statAllTrajsDesc:
-      "振り返りプールに入った履歴タスクです。EchoAI はこれらから安定做法とリスクパターンを見つけます。",
+      "振り返りプールに入った履歴タスクです。Echo はこれらから安定做法とリスクパターンを見つけます。",
     statAllTrajsPoints: (total: number, learned: number) => [
       `${total} samples are in the review pool.`,
       `${learned} lessons are ready to be applied automatically in similar tasks.`,
-      "As the sample grows, EchoAI weighs long-term patterns more than one-off outcomes.",
+      "As the sample grows, Echo weighs long-term patterns more than one-off outcomes.",
     ],
     statReactLabel: "深いタスク",
     statReactHint: (reviewCount: number) =>
@@ -8034,14 +8034,14 @@ export const jaJP: Translations = {
       `${failures} items are marked for review and prioritized for risk lessons.`,
       "Worth checking does not mean you must fix it manually; it means the system is learning from these records first.",
     ],
-    learnedMitigationsTitle: "EchoAI が回避を学んだ落とし穴",
+    learnedMitigationsTitle: "Echo が回避を学んだ落とし穴",
     learnedMitigationsDesc:
       "これらの教訓は繰り返し失敗から得られ、次回のガードレールとして使用されます。",
-    consolidatedMemoriesTitle: "EchoAI が記憶した有効な做法",
+    consolidatedMemoriesTitle: "Echo が記憶した有効な做法",
     consolidatedMemoriesDesc:
       "これらの做法は繰り返し成功し、類似タスクで再利用可能です。",
     noMitigationsHint:
-      "まだ繰り返し落とし穴が見つかっていません。問題が繰り返されると、EchoAI はここに回避すべき内容をリストします。",
+      "まだ繰り返し落とし穴が見つかっていません。問題が繰り返されると、Echo はここに回避すべき内容をリストします。",
     noMemoriesHint:
       "まだ安定した成功做法に十分な証拠がありません。類似タスクが増えると、再利用可能な做法がここに表示されます。",
     linesSuffix: (n: number) => `${n}`,
@@ -8059,7 +8059,7 @@ export const jaJP: Translations = {
     reflectingButton: "Reviewing...",
     reflectButton: "今すぐ振り返り",
     reflectHint:
-      "通常クリック不要です。EchoAI は自動的に振り返ります。重要タスク後に即座に教訓を整理したい場合に使用してください。",
+      "通常クリック不要です。Echo は自動的に振り返ります。重要タスク後に即座に教訓を整理したい場合に使用してください。",
     advancedTitle: "高度な詳細",
     reactVariantsTitle: "実行戦略実験",
     tableName: "Strategy",
@@ -8081,7 +8081,7 @@ export const jaJP: Translations = {
   privacySettings: {
     identityLockTitle: "アイデンティティロック",
     identityLockDesc:
-      "有効な場合、モデル応答内のベンダー名・モデル名（Claude / Kimi / Anthropic / Moonshot など）は EchoAI に書き換えられ、ユーザーには製品アイデンティティのみが表示されます。無効にすると開発者モードになり、LLM の本来のアイデンティティがそのまま表示されます。プロンプトの調整やルーティングの検証に便利です。",
+      "有効な場合、モデル応答内のベンダー名・モデル名（Claude / Kimi / Anthropic / Moonshot など）は Echo に書き換えられ、ユーザーには製品アイデンティティのみが表示されます。無効にすると開発者モードになり、LLM の本来のアイデンティティがそのまま表示されます。プロンプトの調整やルーティングの検証に便利です。",
     lockedTag: "LOCKED",
     unlockedTag: "UNLOCKED",
     sourceLabel: "source",
@@ -8313,13 +8313,13 @@ export const jaJP: Translations = {
   // Register page
   registerPage: {
     loadingText: "読み込み中...",
-    badgeText: "EchoAI アカウントを作成",
+    badgeText: "Echo アカウントを作成",
     heroTitleLine1: "参加してすぐに始められる",
     heroTitleLine2: "マルチエージェントワークフロー",
     heroDescription:
       "自分のワークスペースをセットアップし、スキル・ツール・モデルを接続して、調査、コラボレーション、自動化を一つのプラットフォームに統合しましょう。",
     cardTitle: "アカウントを作成",
-    cardDescription: "EchoAI に参加してエージェントの旅を始めましょう",
+    cardDescription: "Echo に参加してエージェントの旅を始めましょう",
     usernameLabel: "ユーザー名",
     usernamePlaceholder: "3 文字以上",
     emailLabel: "メールアドレス（任意）",
@@ -8401,7 +8401,7 @@ export const jaJP: Translations = {
       privacyPolicy: "プライバシーポリシー",
     },
     page: {
-      title: "EchoAI ワークスペースへの安全なアクセス",
+      title: "Echo ワークスペースへの安全なアクセス",
       subtitle: "ログインして続ける",
       description:
         "調査、コーディング、コラボレーション、自動化タスクを、コンテキスト・スキル・実行結果を一元管理するワークスペースで続けましょう。",
@@ -8502,8 +8502,8 @@ export const jaJP: Translations = {
   },
 
   hero: {
-    releaseBadge: "EchoAI 2.0 リリース",
-    withOctopus: "EchoAI と一緒に",
+    releaseBadge: "Echo 2.0 リリース",
+    withOctopus: "Echo と一緒に",
     heroDescription:
       "オープンソースの SuperAgent フレームワーク。研究、コーディング、創作ができます。サンドボックス、メモリ、ツール、スキル、サブ Agent の助けを借りて、数分から数時間の様々なレベルのタスクを処理します。",
   },
@@ -9263,13 +9263,13 @@ export const jaJP: Translations = {
   desktop: {
     disabledTitle: "デスクトップアシスタントはオフです",
     disabledDescription:
-      "EchoAI はデフォルトでウェルカム、ログイン、ワークスペース画面を開きます。システムのデスクトップファイルを管理する場合は、透明なデスクトップアシスタントを有効にしてください。",
+      "Echo はデフォルトでウェルカム、ログイン、ワークスペース画面を開きます。システムのデスクトップファイルを管理する場合は、透明なデスクトップアシスタントを有効にしてください。",
     enableButton: "デスクトップアシスタントを有効にする",
     pluginSettingsButton: "プラグイン設定を開く",
     backToWorkspaceButton: "ワークスペースに戻る",
     header: {
       workspaceTooltip: "ワークスペースを開く",
-      brand: "EchoAI",
+      brand: "Echo",
       accountModels: "公式モデル",
       desktopAssistant: "デスクトップアシスタント",
       desktopCount: (count) => `デスクトップ ${count || "--"}`,
@@ -9547,7 +9547,7 @@ export const jaJP: Translations = {
       "現在はウェブ環境のため、右クリックメニューのインストール/削除は無効のままです。デスクトップ版に切り替えると、これら2項目が有効になります。",
     contextMenuTitle: "システム右クリックメニュー",
     contextMenuDescription:
-      "Windows デスクトップの空き領域を右クリックすると「EchoAI 一括整理デスクトップ」が表示されます。",
+      "Windows デスクトップの空き領域を右クリックすると「Echo 一括整理デスクトップ」が表示されます。",
     installButton: "右クリックコマンドをインストール",
     installingButton: "インストール中",
     removeButton: "削除",
@@ -9560,7 +9560,7 @@ export const jaJP: Translations = {
     backToWorkspace: "ワークスペースに戻る",
     confirmRemoveTitle: "システム右クリックメニューを削除しますか？",
     confirmRemoveDescription:
-      "Windows デスクトップの右クリックメニューから EchoAI 一括整理コマンドを削除します。",
+      "Windows デスクトップの右クリックメニューから Echo 一括整理コマンドを削除します。",
   },
 
   // Knowledge page
@@ -9777,9 +9777,9 @@ export const jaJP: Translations = {
       colType: "種類",
       colItems: "項目",
       footerOnline:
-        "よく使う場所は EchoAI NAS に接続済みです。ローカルデータベースはパス、サムネイル、OCRテキスト、ベクトルインデックスのみを保存します。",
+        "よく使う場所は Echo NAS に接続済みです。ローカルデータベースはパス、サムネイル、OCRテキスト、ベクトルインデックスのみを保存します。",
       footerOffline:
-        "よく使う場所は直接閲覧できます。EchoAI NAS は接続待ちです。ローカルデータベースはパス、サムネイル、OCRテキスト、ベクトルインデックスのみを保存します。",
+        "よく使う場所は直接閲覧できます。Echo NAS は接続待ちです。ローカルデータベースはパス、サムネイル、OCRテキスト、ベクトルインデックスのみを保存します。",
       folderType: "フォルダ",
     },
     sources: {

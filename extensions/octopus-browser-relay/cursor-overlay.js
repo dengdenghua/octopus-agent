@@ -190,7 +190,7 @@
     cursor.dataset.visible = String(state.visible);
     cursor.dataset.phase = state.phase;
     cursor.style.transform = `translate3d(${Math.round(state.x)}px,${Math.round(state.y)}px,0)`;
-    label.textContent = state.action ? `EchoAI · ${state.action}` : "EchoAI";
+    label.textContent = state.action ? `Echo · ${state.action}` : "Echo";
   }
 
   function scheduleRender() {

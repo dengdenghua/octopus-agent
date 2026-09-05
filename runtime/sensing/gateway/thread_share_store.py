@@ -177,7 +177,7 @@ def build_public_thread_snapshot(
     )
     if not title:
         first_user = next((item["content"] for item in messages if item["role"] == "user"), "")
-        title = first_user[:80].strip() or "EchoAI 分享任务"
+        title = first_user[:80].strip() or "Echo 分享任务"
 
     raw_artifacts = state_values.get("artifacts")
     if not isinstance(raw_artifacts, list):

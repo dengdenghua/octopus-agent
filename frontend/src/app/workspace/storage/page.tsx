@@ -2126,7 +2126,7 @@ function QuickFileActions({
       if (!result.ok) throw new Error(result.error || "无法打开文件");
       return;
     }
-    throw new Error("请在 EchoAI 桌面端打开本机文件");
+    throw new Error("请在 Echo 桌面端打开本机文件");
   };
   const quoteInTask = () => {
     if (!item) return;
@@ -2253,7 +2253,7 @@ function PreviewPanel({
   };
   const openItem = async () => {
     if (!window.octopus?.desktop) {
-      toast.error("请在 EchoAI 桌面端打开本机文件");
+      toast.error("请在 Echo 桌面端打开本机文件");
       return;
     }
     const result = await window.octopus.desktop.openItem(item.path);

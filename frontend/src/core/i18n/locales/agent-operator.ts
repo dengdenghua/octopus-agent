@@ -62,7 +62,7 @@ export const agentOperatorZhCN: AgentOperatorCopy = {
   degraded: "降级",
   "Behavioral head-to-head is not certified": "同任务行为对比尚未认证",
   "EchoAI has no tracked effective scorecard gaps":
-    "EchoAI 当前没有已跟踪的有效评分差距",
+    "Echo 当前没有已跟踪的有效评分差距",
   "Architecture is estimated; static certification and same-task behavioral evidence are tracked separately.":
     "架构分为估算值；静态认证与同任务行为证据会单独跟踪。",
   Architecture: "架构",

@@ -137,7 +137,7 @@ export function OctopusMascot({
       <div className={cn("om-img-wrap", mood)}>
         <img
           src="/images/octopus-mascot-new.png"
-          alt="EchoAI assistant"
+          alt="Echo assistant"
           draggable={false}
           className="om-img"
         />

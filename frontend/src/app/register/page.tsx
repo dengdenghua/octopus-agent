@@ -176,7 +176,7 @@ export default function RegisterPage() {
         <div className="hidden flex-col justify-center space-y-10 lg:flex">
           <div className="inline-flex items-center gap-3">
             <OctopusBrandMark size="lg" />
-            <span className="text-xl font-semibold tracking-tight">EchoAI</span>
+            <span className="text-xl font-semibold tracking-tight">Echo</span>
           </div>
 
           <div className="space-y-5">
@@ -223,7 +223,7 @@ export default function RegisterPage() {
         <div className="mx-auto w-full max-w-md">
           <div className="mb-8 flex items-center justify-center gap-2.5 lg:hidden">
             <OctopusBrandMark size="md" />
-            <span className="text-lg font-semibold tracking-tight">EchoAI</span>
+            <span className="text-lg font-semibold tracking-tight">Echo</span>
           </div>
 
           <Card className="overflow-hidden rounded-2xl border-border/50 bg-card/80 shadow-2xl shadow-black/[0.03] backdrop-blur-xl">
@@ -333,7 +333,7 @@ export default function RegisterPage() {
           </Card>
 
           <p className="mt-6 text-center text-xs text-muted-foreground/50">
-            © {new Date().getFullYear()} EchoAI · Powered by EchoOS
+            © {new Date().getFullYear()} Echo · Powered by EchoOS
           </p>
         </div>
       </div>

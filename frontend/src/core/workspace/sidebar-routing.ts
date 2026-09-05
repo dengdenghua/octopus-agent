@@ -6,7 +6,7 @@ export const PRIMARY_WORKSPACE_ROUTE = "/workspace/realtime/new";
 export const BROWSER_WORKSPACE_ROUTE = "/browser";
 
 /**
- * Resolve where the EchoAI side of the workspace switch should return.
+ * Resolve where the Echo side of the workspace switch should return.
  *
  * The complete browser mode lives outside the workspace route tree. Keep the
  * last workspace location so switching back does not discard the active

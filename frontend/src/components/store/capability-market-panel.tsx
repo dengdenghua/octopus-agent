@@ -1950,7 +1950,7 @@ export function CapabilityMarketPanel({
       !window.octopus?.isElectron
     ) {
       setError(
-        "该服务商使用桌面客户端回跳，请在 EchoAI 桌面版中完成授权。浏览器版无法安全接收授权结果。",
+        "该服务商使用桌面客户端回跳，请在 Echo 桌面版中完成授权。浏览器版无法安全接收授权结果。",
       );
       return;
     }

@@ -1216,7 +1216,7 @@ export function BrowserHome({
       DesktopAppCategory,
       { title: string; subtitle: string }
     > = {
-      workspace: { title: "EchoAI 工作台", subtitle: "原生能力，一键直达" },
+      workspace: { title: "Echo 工作台", subtitle: "原生能力，一键直达" },
       ai: { title: bt.groupAiTools, subtitle: bt.groupAiToolsSubtitle },
       video: { title: bt.groupVideo, subtitle: bt.groupVideoSubtitle },
       dev: { title: bt.groupDev, subtitle: bt.groupDevSubtitle },

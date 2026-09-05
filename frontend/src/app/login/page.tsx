@@ -758,7 +758,7 @@ export default function LoginPage() {
               {backendUnavailable ? (
                 <ErrorState
                   className="min-h-40 rounded-xl border border-destructive/20 bg-destructive/5"
-                  title="暂时无法连接 EchoAI 服务"
+                  title="暂时无法连接 Echo 服务"
                   detail="本地服务可能仍在启动或已停止。请确认服务运行后重试。"
                   actionLabel="重试连接"
                   onAction={retryBackend}

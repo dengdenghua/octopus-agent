@@ -77,7 +77,7 @@ describe("PublicThreadSharePage", () => {
     expect(screen.getByText(/AI 生成内容可能存在错误/)).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(document.title).toBe("发布检查 · EchoAI 分享");
+      expect(document.title).toBe("发布检查 · Echo 分享");
       expect(
         document.head.querySelector('meta[name="robots"]'),
       ).toHaveAttribute("content", "noindex, nofollow, noarchive");

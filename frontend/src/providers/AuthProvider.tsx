@@ -68,7 +68,7 @@ function userFromJwt(token: string | null): Partial<User> | null {
     return {
       user_id: actorId || mobile,
       actor_id: actorId,
-      username: mobile || actorId || "EchoAI",
+      username: mobile || actorId || "Echo",
       mobile,
       provider: json.provider,
     };

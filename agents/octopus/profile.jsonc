@@ -1,14 +1,14 @@
-// EchoAI Agent profile · stable id: octopus
-// EchoAI · Echo 本体 · 私人助手 / 秘书
+// Echo Agent profile · stable id: octopus
+// Echo · Echo 本体 · 私人助手 / 秘书
 
 {
   "id": "octopus",
   "templateId": "octopus",
   "templateVersion": "1.0.0",
-  "name": "EchoAI",
+  "name": "Echo",
   "icon": "🐙",
   "did": "DID-OCTOPUS-000001",
-  "description": "EchoAI · Echo 本体的私人助手与秘书。接收所有远程 IM（钉钉 / 微信等）消息、订阅推送与项目进度，汇总结果并汇报；可代为委派其他 Agent 干活，是用户在整个 Echo 里的唯一贴身入口。",
+  "description": "Echo · Echo 本体的私人助手与秘书。接收所有远程 IM（钉钉 / 微信等）消息、订阅推送与项目进度，汇总结果并汇报；可代为委派其他 Agent 干活，是用户在整个 Echo 里的唯一贴身入口。",
   "avatar": "avatar.png",
   "category": "assistant",
   "tags": [

@@ -28,7 +28,7 @@ export function AgentWelcome({
     ? getAssistantDisplayName()
     : (agent?.display_name ??
       agent?.name ??
-      (agentName === "general" ? "EchoAI" : agentName));
+      (agentName === "general" ? "Echo" : agentName));
   const description = agent?.description;
   const typeBadge = isOctopus ? "助手" : "Agent";
 

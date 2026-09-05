@@ -3092,7 +3092,7 @@ function RealtimePageContent({
         replayBlocks,
         {
           title,
-          brand: "EchoAI · EchoOS",
+          brand: "Echo · EchoOS",
           footer: `${new Date().toLocaleDateString()} · ${t.realtime.replay.footer}`,
         },
         workBlockLabelsFromShape(
@@ -4630,7 +4630,7 @@ function RealtimePageContent({
                   thread?.values?.title ||
                   boundProjectState?.project.name ||
                   initialPrompt ||
-                  (isNewThread ? t.sidebar.actionNewTask : "EchoAI")
+                  (isNewThread ? t.sidebar.actionNewTask : "Echo")
                 }
                 header={
                   <>

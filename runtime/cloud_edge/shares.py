@@ -91,7 +91,7 @@ def normalise_public_snapshot(value: PublicShareSnapshot | dict[str, Any]) -> di
     if not title:
         title = next(
             (item["content"][:80].strip() for item in messages if item["role"] == "user"),
-            "Shared EchoAI task",
+            "Shared Echo task",
         )
 
     artifacts: list[str] = []

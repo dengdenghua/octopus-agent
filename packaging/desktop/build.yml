@@ -15,8 +15,8 @@
 #     官方 Codex Windows 原生运行时。
 
 appId: ai.octopus.desktop
-productName: EchoAI
-copyright: EchoAI · EchoOS
+productName: Echo
+copyright: Echo · EchoOS
 
 # 说明：main 入口由 frontend/package.json 的 "main" 字段决定
 # （值：electron/main.cjs）。此处仅注释备忘，避免重复声明产生歧义。

@@ -29,7 +29,7 @@ import "./styles/globals.css";
 
 // The fetch interceptor only expires the host session when the backend marks a
 // 401 with X-Octopus-Auth-Expired. A plugin, appliance capability, or downstream
-// account may return its own 401 without invalidating the EchoAI login, so query
+// account may return its own 401 without invalidating the Echo login, so query
 // errors must never clear the workspace session by message matching alone.
 function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err ?? "");

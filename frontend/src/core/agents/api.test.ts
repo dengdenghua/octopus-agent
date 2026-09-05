@@ -22,7 +22,7 @@ describe("listAgents", () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify([
-          { name: "general", display_name: "EchoAI" },
+          { name: "general", display_name: "Echo" },
           { name: "admin", display_name: "Admin" },
         ]),
         { status: 200, headers: { "Content-Type": "application/json" } },

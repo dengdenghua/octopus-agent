@@ -294,10 +294,10 @@ def test_desktop_main_fails_closed_before_spawning_backend() -> None:
 
     assert "ensureDesktopConfigFile" in source
     assert "ensurePackagedResources();" in lifecycle
-    # Brand name changed from "Octopus 启动失败" to "EchoAI 启动失败"
+    # Brand name changed from "Octopus 启动失败" to "Echo 启动失败"
     assert (
         'dialog.showErrorBox("Octopus 启动失败"' in source
-        or 'dialog.showErrorBox("EchoAI 启动失败"' in source
+        or 'dialog.showErrorBox("Echo 启动失败"' in source
     )
     assert "app.exit(1);" in source
     assert materialize < spawn

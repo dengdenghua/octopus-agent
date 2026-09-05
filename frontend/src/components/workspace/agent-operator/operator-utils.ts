@@ -88,7 +88,7 @@ export function taskRecoveryHint(action: string) {
 
 export function competitorLabel(id: string) {
   if (id === "claude_code") return "Claude";
-  if (id === "octopus") return "EchoAI";
+  if (id === "octopus") return "Echo";
   if (id === "codex") return "Codex";
   if (id === "openclaw") return "OpenClaw";
   if (id === "hermes") return "Hermes";

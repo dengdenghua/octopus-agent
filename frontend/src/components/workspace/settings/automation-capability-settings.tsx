@@ -243,8 +243,8 @@ export function BrowserAutomationSettingsPage() {
   const relayReconnectHelp =
     relayState === "offline"
       ? zh
-        ? "打开 Chrome 扩展页，确认 EchoAI Browser Relay 已启用；再打开扩展侧栏重连。"
-        : "Enable EchoAI Browser Relay in Chrome extensions, then open its side panel to reconnect."
+        ? "打开 Chrome 扩展页，确认 Echo Browser Relay 已启用；再打开扩展侧栏重连。"
+        : "Enable Echo Browser Relay in Chrome extensions, then open its side panel to reconnect."
       : "";
   const relayDetail = [relayVersion, relayReconnectHelp]
     .filter(Boolean)
