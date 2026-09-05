@@ -285,6 +285,7 @@ def _make_session(
     process_backend: BackendChoice | None = None,
     selected_app_ids: tuple[str, ...] = (),
     app_mentions: tuple[tuple[str, str], ...] = (),
+    approval_policy: Literal["on-request", "never"] = "on-request",
 ) -> tuple[CodexExecutionSession, _FakeSecurity, _FakeContext, _Factory, _FakeClient]:
     workspace = tmp_path / "workspace"
     workspace.mkdir(exist_ok=True)
@@ -322,6 +323,7 @@ def _make_session(
         source_codex_home=source_home,
         model="gpt-test",
         effort="high",
+        approval_policy=approval_policy,
         host_env={"PATH": "/host/bin", "SECRET": "must-not-pass"},
         selected_app_ids=selected_app_ids,
         app_mentions=app_mentions,
@@ -407,6 +409,24 @@ async def test_first_start_is_isolated_durable_and_binds_approval_scope(tmp_path
     await session.close()
     assert client.closed is True
     assert context.cleaned is True
+
+
+@pytest.mark.asyncio
+async def test_server_authorized_auto_approve_reaches_inner_thread_and_turn(
+    tmp_path: Path,
+) -> None:
+    session, _security, _context, _factory, client = _make_session(
+        tmp_path,
+        approval_policy="never",
+    )
+
+    await session.start()
+
+    thread_call = next(value for name, value in client.calls if name == "thread/start")
+    turn_call = next(value for name, value in client.calls if name == "turn/start")
+    assert thread_call["approval_policy"] == "never"
+    assert turn_call[2]["extra_params"]["approvalPolicy"] == "never"
+    await session.close()
 
 
 @pytest.mark.asyncio

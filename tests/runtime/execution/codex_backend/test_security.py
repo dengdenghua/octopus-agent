@@ -585,10 +585,20 @@ def test_explicit_hard_sandbox_requirement_applies_to_local_mode(tmp_path: Path)
         _prepare(manager, workspace)
 
 
-def test_danger_full_access_mode_is_never_accepted(tmp_path: Path) -> None:
-    manager, workspace, _state_root = _manager(tmp_path)
-    with pytest.raises(CodexSecurityError, match="only allow"):
-        _prepare(manager, workspace, sandbox_mode="danger-full-access")
+def test_danger_full_access_profile_keeps_sidecar_state_private(tmp_path: Path) -> None:
+    manager, workspace, state_root = _manager(tmp_path)
+    context = _prepare(manager, workspace, sandbox_mode="danger-full-access")
+    config = _config(context)
+    profile = config["permissions"][PERMISSION_PROFILE]  # type: ignore[index]
+
+    assert profile["filesystem"] == {
+        ":minimal": "read",
+        ":root": "write",
+        str(context.scratch_root): "write",
+        str(state_root): "deny",
+    }
+    assert profile["network"] == {"enabled": True}
+    context.validate_effective_config(config)
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX owner/mode assertion")

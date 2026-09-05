@@ -2,9 +2,10 @@
 
 The sidecar intentionally has two policy layers:
 
-* Octopus is the approval broker. It chooses ``read-only`` or
+* Octopus is the approval broker. It normally chooses ``read-only`` or
   ``workspace-write`` before a thread/turn starts and handles every Codex
-  approval request. Broker errors and timeouts fail closed as ``decline``.
+  approval request. A server-authorized local full-access turn may choose
+  ``danger-full-access`` while the isolated sidecar state remains denied.
 * Codex runs with ``approval_policy = "on-request"``, a user reviewer, and
   network disabled. It can request more authority, but cannot grant it. This
   validated inner profile is also the generated-tool sandbox on macOS local
@@ -59,7 +60,7 @@ from ._security_support import (
 )
 from .types import CodexProviderProfile
 
-CodexSandboxMode = Literal["read-only", "workspace-write"]
+CodexSandboxMode = Literal["read-only", "workspace-write", "danger-full-access"]
 ApprovalFailureDecision = Literal["decline"]
 
 APPROVAL_FAILURE_DECISION: ApprovalFailureDecision = "decline"
@@ -499,9 +500,10 @@ class CodexSidecarSecurity:
     ) -> CodexSidecarContext:
         """Provision one tenant/thread/task sidecar, failing closed on drift."""
 
-        if sandbox_mode not in {"read-only", "workspace-write"}:
+        if sandbox_mode not in {"read-only", "workspace-write", "danger-full-access"}:
             raise CodexSecurityError(
-                "Codex sidecars only allow 'read-only' or 'workspace-write' sandbox modes"
+                "Codex sidecars only allow 'read-only', 'workspace-write', or "
+                "'danger-full-access' sandbox modes"
             )
         if provider_profile is not None and not isinstance(provider_profile, CodexProviderProfile):
             raise CodexSecurityError("provider_profile must be server-resolved")
@@ -818,7 +820,8 @@ def _render_codex_config(context: CodexSidecarContext) -> str:
             "",
         ]
     )
-    workspace_access = "write" if context.sandbox_mode == "workspace-write" else "read"
+    full_access = context.sandbox_mode == "danger-full-access"
+    workspace_access = "read" if context.sandbox_mode == "read-only" else "write"
     for app_id in context.selected_app_ids:
         lines.extend(
             [
@@ -831,9 +834,15 @@ def _render_codex_config(context: CodexSidecarContext) -> str:
                 'default_tools_approval_mode = "prompt"',
             ]
         )
-    lines.extend(
+    filesystem_lines = (
         [
-            f"[permissions.{PERMISSION_PROFILE}.filesystem]",
+            '":minimal" = "read"',
+            '":root" = "write"',
+            f'{_toml_string(str(context.scratch_root))} = "write"',
+            f'{_toml_string(str(context.state_root))} = "deny"',
+        ]
+        if full_access
+        else [
             '":minimal" = "read"',
             f'{_toml_string(str(context.workspace))} = "{workspace_access}"',
             f'{_toml_string(str(context.scratch_root))} = "write"',
@@ -844,9 +853,15 @@ def _render_codex_config(context: CodexSidecarContext) -> str:
             '":tmpdir" = "deny"',
             '":slash_tmp" = "deny"',
             f'{_toml_string(str(context.state_root))} = "deny"',
+        ]
+    )
+    lines.extend(
+        [
+            f"[permissions.{PERMISSION_PROFILE}.filesystem]",
+            *filesystem_lines,
             "",
             f"[permissions.{PERMISSION_PROFILE}.network]",
-            "enabled = false",
+            f"enabled = {str(full_access).lower()}",
             "",
             f"[projects.{_toml_string(str(context.workspace))}]",
             'trust_level = "untrusted"',

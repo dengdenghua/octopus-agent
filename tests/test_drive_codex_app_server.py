@@ -187,6 +187,44 @@ def test_request_uses_only_authoritative_cwd_and_caps_full_access(
     assert request.sandbox_mode == "workspace-write"
 
 
+def test_request_relaxes_inner_approval_only_with_server_opt_in(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "trusted-workspace"
+    workspace.mkdir()
+    monkeypatch.setattr(mod, "blackboard_brief", lambda _turn_id: "")
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "local")
+    turn = SimpleNamespace(id="outer-turn", thread_id="outer-thread")
+    intent = SimpleNamespace(
+        user_context={
+            "cwd": str(workspace),
+            "approval_policy": "never",
+            "auto_approve": True,
+        }
+    )
+
+    denied = mod._request_for_turn(
+        SimpleNamespace(_allow_client_auto_approve=False),
+        turn,
+        intent,
+        _agent(command="/trusted/bin/codex"),
+        text="run tests",
+    )
+    allowed = mod._request_for_turn(
+        SimpleNamespace(_allow_client_auto_approve=True),
+        turn,
+        intent,
+        _agent(command="/trusted/bin/codex"),
+        text="run tests",
+    )
+
+    assert denied.approval_policy == "on-request"
+    assert allowed.approval_policy == "never"
+    assert denied.sandbox_mode == "workspace-write"
+    assert allowed.sandbox_mode == "danger-full-access"
+
+
 class _FakeBridgeState:
     def __init__(self) -> None:
         self.flush_calls: list[object] = []

@@ -197,6 +197,15 @@ def _request_for_turn(
 ) -> CodexExecutionRequest:
     context = getattr(intent, "user_context", None)
     context = dict(context) if isinstance(context, dict) else {}
+    # The browser's approvalPolicy is already sanitized by the realtime
+    # gateway and _build_intent.  Still require the server-side operator
+    # switch here before relaxing Codex App Server's own approval policy;
+    # client metadata alone can never enable this path.
+    server_auto_approve = bool(
+        getattr(runtime, "_allow_client_auto_approve", False)
+        and context.get("approval_policy") == "never"
+        and context.get("auto_approve") is True
+    )
     raw_cwd = context.get("cwd")
     if not isinstance(raw_cwd, str) or not raw_cwd.strip():
         raise CodexSecurityError("Codex execution requires a server-resolved workspace")
@@ -240,6 +249,16 @@ def _request_for_turn(
         if not command or "\x00" in command:
             raise CodexSecurityError("Codex executable is invalid")
         model = ""
+        resolved_sandbox_mode = _sandbox_mode(
+            context,
+            trusted_parent_metadata=(
+                trusted_parent.metadata
+                if trusted_parent is not None and isinstance(trusted_parent.metadata, dict)
+                else None
+            ),
+        )
+        if server_auto_approve and resolved_sandbox_mode == "workspace-write":
+            resolved_sandbox_mode = "danger-full-access"
         return CodexExecutionRequest(
             outer_thread_id=str(getattr(turn, "thread_id", "") or ""),
             outer_turn_id=str(getattr(turn, "id", "") or ""),
@@ -252,14 +271,8 @@ def _request_for_turn(
             source_codex_home=_source_codex_home(),
             model=model or None,
             effort=str(context.get("reasoning_effort") or "").strip() or None,
-            sandbox_mode=_sandbox_mode(
-                context,
-                trusted_parent_metadata=(
-                    trusted_parent.metadata
-                    if trusted_parent is not None and isinstance(trusted_parent.metadata, dict)
-                    else None
-                ),
-            ),
+            approval_policy="never" if server_auto_approve else "on-request",
+            sandbox_mode=resolved_sandbox_mode,
             execution=current_execution_request(),
         )
 
@@ -272,6 +285,7 @@ def _request_for_turn(
         outer_turn_id=str(getattr(turn, "id", "") or ""),
         approval_provider=approval_provider,
         is_interrupted=is_interrupted,
+        server_auto_approve=server_auto_approve,
     )
     return request
 

@@ -13,7 +13,7 @@ import logging
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol, Self, cast
+from typing import Any, Literal, Protocol, Self, cast
 
 from runtime.execution.request import ExecutionRequest
 from runtime.safety.approval.approval_gate import ApprovalProvider
@@ -83,6 +83,7 @@ class CodexExecutionRequest:
     model: str | None = None
     effort: str | None = None
     sandbox_mode: CodexSandboxMode = "workspace-write"
+    approval_policy: Literal["on-request", "never"] = "on-request"
     host_env: Mapping[str, str] | None = field(default=None, repr=False)
     provider_profile: CodexProviderProfile | None = None
     use_system_model_proxy: bool = False
@@ -146,8 +147,12 @@ class CodexExecutionRequest:
             raise ValueError("app_mentions must contain bounded (id, name) pairs")
         if any(app_id not in self.selected_app_ids for app_id, _name in self.app_mentions):
             raise ValueError("app_mentions must refer to selected apps")
-        if self.sandbox_mode not in {"read-only", "workspace-write"}:
-            raise ValueError("sandbox_mode must be 'read-only' or 'workspace-write'")
+        if self.sandbox_mode not in {"read-only", "workspace-write", "danger-full-access"}:
+            raise ValueError(
+                "sandbox_mode must be 'read-only', 'workspace-write', or 'danger-full-access'"
+            )
+        if self.approval_policy not in {"on-request", "never"}:
+            raise ValueError("approval_policy must be 'on-request' or 'never'")
         if self.provider_profile is not None and not isinstance(
             self.provider_profile, CodexProviderProfile
         ):
@@ -356,6 +361,7 @@ class CodexExecutionSession:
             self._inner_thread_id = inner_thread_id
 
             turn_params = _turn_extra_params(context.turn_start_security_overrides())
+            turn_params["approvalPolicy"] = self.request.approval_policy
             if self.request.model is not None:
                 turn_params["model"] = self.request.model
             if self.request.effort is not None:
@@ -516,7 +522,7 @@ class CodexExecutionSession:
             inner_thread_id,
             cwd=str(context.workspace),
             model=self.request.model,
-            approval_policy="on-request",
+            approval_policy=self.request.approval_policy,
             sandbox=None,
             permissions=permissions,
             exclude_turns=True,
@@ -539,7 +545,7 @@ class CodexExecutionSession:
             thread = await self._require_client().start_thread(
                 cwd=str(context.workspace),
                 model=self.request.model,
-                approval_policy="on-request",
+                approval_policy=self.request.approval_policy,
                 sandbox=None,
                 permissions=permissions,
                 ephemeral=False,

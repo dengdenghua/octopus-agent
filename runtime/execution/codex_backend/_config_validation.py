@@ -104,22 +104,39 @@ def validate_permission_profile(
             "and task scratch"
         )
 
-    expected_filesystem = {
-        ":minimal": "read",
-        str(context.workspace): ("write" if context.sandbox_mode == "workspace-write" else "read"),
-        str(context.scratch_root): "write",
-        **{str(context.workspace / subpath): "read" for subpath in protected_workspace_subpaths},
-        ":tmpdir": "deny",
-        ":slash_tmp": "deny",
-        str(context.state_root): "deny",
-    }
+    if context.sandbox_mode == "danger-full-access":
+        expected_filesystem = {
+            ":minimal": "read",
+            ":root": "write",
+            str(context.scratch_root): "write",
+            str(context.state_root): "deny",
+        }
+        expected_network = {"enabled": True}
+    else:
+        expected_filesystem = {
+            ":minimal": "read",
+            str(context.workspace): (
+                "write" if context.sandbox_mode == "workspace-write" else "read"
+            ),
+            str(context.scratch_root): "write",
+            **{
+                str(context.workspace / subpath): "read"
+                for subpath in protected_workspace_subpaths
+            },
+            ":tmpdir": "deny",
+            ":slash_tmp": "deny",
+            str(context.state_root): "deny",
+        }
+        expected_network = {"enabled": False}
     if _non_null_items(profile.get("filesystem")) != expected_filesystem:
         errors.append(
             f"permissions.{profile_name}.filesystem must allow only minimal runtime, "
             "workspace, and task scratch access"
         )
-    if _non_null_items(profile.get("network")) != {"enabled": False}:
-        errors.append(f"permissions.{profile_name}.network must be fully disabled")
+    if _non_null_items(profile.get("network")) != expected_network:
+        errors.append(
+            f"permissions.{profile_name}.network does not match the selected sandbox mode"
+        )
 
 
 def validate_apps_config(
