@@ -111,6 +111,7 @@ export type FailurePresentation = {
     | "verification-failed"
     | "guard"
     | "lifecycle"
+    | "backpressure"
     | "environment"
     | "blocked";
   code?: string;
@@ -569,6 +570,7 @@ export function MessageOutputSummary({
     failure?.kind === "auth" ||
     failure?.kind === "capability" ||
     failure?.kind === "network" ||
+    failure?.kind === "backpressure" ||
     failure?.kind === "rate-limit" ||
     failure?.kind === "verification" ||
     failure?.kind === "environment" ||

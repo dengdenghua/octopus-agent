@@ -883,6 +883,12 @@ export function failureKind(
     return "rate-limit";
   }
   if (
+    failureKindHint === "backpressure" ||
+    /codex_event_backpressure|notification queue is full/i.test(signal)
+  ) {
+    return "backpressure";
+  }
+  if (
     failureKindHint === "capability" ||
     failureKindHint === "missing_required_capability"
   ) {
@@ -1563,21 +1569,23 @@ export function MessageList({
                   ? t.streaming.subagentCapabilityMismatch
                   : kind === "rate-limit"
                     ? t.streaming.modelRateLimited
-                    : kind === "verification"
-                      ? t.streaming.verificationRequired
-                      : kind === "verification-failed"
-                        ? t.streaming.verificationRunFailed
-                        : kind === "guard"
-                          ? hasStructuredReadableDetail
-                            ? failure.detail
-                            : t.streaming.guardBlocked
-                          : kind === "lifecycle"
-                            ? t.streaming.lifecycleFailed
-                            : requiresWorkspaceWrite
-                              ? t.streaming.workspaceWriteRequired
-                              : hasStructuredReadableDetail
-                                ? failure.detail
-                                : t.streaming.turnFailed;
+                    : kind === "backpressure"
+                      ? t.streaming.eventStreamOverloaded
+                      : kind === "verification"
+                        ? t.streaming.verificationRequired
+                        : kind === "verification-failed"
+                          ? t.streaming.verificationRunFailed
+                          : kind === "guard"
+                            ? hasStructuredReadableDetail
+                              ? failure.detail
+                              : t.streaming.guardBlocked
+                            : kind === "lifecycle"
+                              ? t.streaming.lifecycleFailed
+                              : requiresWorkspaceWrite
+                                ? t.streaming.workspaceWriteRequired
+                                : hasStructuredReadableDetail
+                                  ? failure.detail
+                                  : t.streaming.turnFailed;
       return { ...failure, kind, message };
     },
     [
@@ -1587,6 +1595,7 @@ export function MessageList({
       t.streaming.modelAuthRequired,
       t.streaming.subagentCapabilityMismatch,
       t.streaming.modelRateLimited,
+      t.streaming.eventStreamOverloaded,
       t.streaming.guardBlocked,
       t.streaming.lifecycleFailed,
       t.streaming.turnFailed,
@@ -1622,6 +1631,7 @@ export function MessageList({
     threadErrorMessage,
   ]);
   const isNetworkError = failureReceipt?.kind === "network";
+  const isBackpressureError = failureReceipt?.kind === "backpressure";
   // Environment blocks and "needs your input" hand-offs are not agent
   // failures — render them amber, not destructive red.
   const isWarningFailure =
@@ -1629,6 +1639,7 @@ export function MessageList({
     failureReceipt?.kind === "auth" ||
     failureReceipt?.kind === "capability" ||
     failureReceipt?.kind === "rate-limit" ||
+    isBackpressureError ||
     failureReceipt?.kind === "environment" ||
     failureReceipt?.kind === "blocked";
   const failureHeaderText =
@@ -1642,9 +1653,11 @@ export function MessageList({
             ? t.streaming.subagentCapabilityMismatchTitle
             : failureReceipt?.kind === "rate-limit"
               ? t.streaming.modelRateLimitedTitle
-              : isNetworkError
-                ? t.streaming.networkLost
-                : t.message.taskFailed;
+              : isBackpressureError
+                ? t.streaming.eventStreamOverloaded
+                : isNetworkError
+                  ? t.streaming.networkLost
+                  : t.message.taskFailed;
   const isVerificationRequiredError = failureReceipt?.kind === "verification";
   const errorBannerText = failureReceipt?.message ?? null;
   const verificationAuditNotice =

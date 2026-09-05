@@ -10,6 +10,7 @@ import time
 from typing import TYPE_CHECKING, Any, cast
 
 from runtime.execution.agents.group_fanout import is_group_presence_query
+from runtime.execution.codex_backend import BackpressureError
 from runtime.execution.tool_engine.session_reference_uri import (
     SUPPORTED_SESSION_REFERENCE_SCHEMES,
 )
@@ -1215,12 +1216,26 @@ async def _start_turn(
                 selection_error = False
                 turn.execution_engine = "codex" if turn_driver == "codex_app_server" else "octopus"
             context = intent.user_context if isinstance(intent.user_context, dict) else {}
+            event_backpressure = isinstance(exc, BackpressureError)
+            public_error_message = (
+                "Codex event delivery was temporarily overloaded. Completed steps were "
+                "preserved; retry to continue."
+                if event_backpressure
+                else str(exc) or exc.__class__.__name__
+            )
             err = ErrorItem(
-                message=str(exc) or exc.__class__.__name__,
+                message=public_error_message,
                 error_info={
-                    "code": "execution_unavailable" if selection_error else "turn_driver_exception",
+                    "code": (
+                        "execution_unavailable"
+                        if selection_error
+                        else "codex_event_backpressure"
+                        if event_backpressure
+                        else "turn_driver_exception"
+                    ),
                     "driver": turn_driver,
                     "exception_type": exc.__class__.__name__,
+                    "failure_kind": "backpressure" if event_backpressure else "",
                     "cowork_mode": context.get("cowork_mode"),
                     "topology_id": topology_id or "",
                 },

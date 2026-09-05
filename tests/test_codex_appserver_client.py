@@ -691,6 +691,124 @@ async def test_pending_request_and_notification_queues_are_bounded() -> None:
 
 
 @pytest.mark.asyncio
+async def test_adjacent_stream_deltas_are_losslessly_coalesced_before_backpressure() -> None:
+    config = CodexAppServerConfig(notification_queue_size=1)
+    client, fake, _ = await _start_client(config=config)
+    try:
+        for delta in ("深", "度", "分", "析"):
+            fake.stdout.feed_message(
+                {
+                    "method": "item/agentMessage/delta",
+                    "params": {
+                        "threadId": "thread-1",
+                        "turnId": "turn-1",
+                        "itemId": "message-1",
+                        "delta": delta,
+                    },
+                }
+            )
+
+        # A response after the deltas proves the reader routed every preceding
+        # frame without overflowing the one-slot public notification queue.
+        healthy = asyncio.create_task(client.request("test/healthy", {}))
+        request = await fake.receive()
+        fake.stdout.feed_message({"id": request["id"], "result": {"ok": True}})
+        assert await healthy == {"ok": True}
+
+        notification = await client.next_notification(timeout_s=1)
+        assert notification.method == "item/agentMessage/delta"
+        assert notification.params["delta"] == "深度分析"
+        assert client.ready is True
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_adjacent_usage_snapshots_keep_only_the_latest_value() -> None:
+    config = CodexAppServerConfig(notification_queue_size=1)
+    client, fake, _ = await _start_client(config=config)
+    try:
+        for used in (10, 20, 30):
+            fake.stdout.feed_message(
+                {
+                    "method": "thread/tokenUsage/updated",
+                    "params": {
+                        "threadId": "thread-1",
+                        "turnId": "turn-1",
+                        "tokenUsage": {"totalTokens": used},
+                    },
+                }
+            )
+
+        healthy = asyncio.create_task(client.request("test/healthy", {}))
+        request = await fake.receive()
+        fake.stdout.feed_message({"id": request["id"], "result": {"ok": True}})
+        assert await healthy == {"ok": True}
+
+        notification = await client.next_notification(timeout_s=1)
+        assert notification.params["tokenUsage"] == {"totalTokens": 30}
+        assert client.ready is True
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_large_interleaved_output_burst_does_not_disconnect_the_client() -> None:
+    config = CodexAppServerConfig(notification_queue_size=4)
+    client, fake, _ = await _start_client(config=config)
+    try:
+        chunks = [f"line-{index}\n" for index in range(2_000)]
+        for index, delta in enumerate(chunks):
+            fake.stdout.feed_message(
+                {
+                    "method": "item/commandExecution/outputDelta",
+                    "params": {
+                        "threadId": "thread-1",
+                        "turnId": "turn-1",
+                        "itemId": "command-1",
+                        "delta": delta,
+                    },
+                }
+            )
+            fake.stdout.feed_message(
+                {
+                    "method": "thread/tokenUsage/updated",
+                    "params": {
+                        "threadId": "thread-1",
+                        "turnId": "turn-1",
+                        "tokenUsage": {"totalTokens": index},
+                    },
+                }
+            )
+
+        healthy = asyncio.create_task(client.request("test/healthy", {}))
+        request = await fake.receive()
+        fake.stdout.feed_message({"id": request["id"], "result": {"ok": True}})
+        assert await healthy == {"ok": True}
+
+        buffered = [
+            await client.next_notification(timeout_s=1)
+            for _ in range(client._notifications.qsize())
+        ]
+        output = "".join(
+            str(notification.params.get("delta") or "")
+            for notification in buffered
+            if notification.method == "item/commandExecution/outputDelta"
+        )
+        usage = [
+            notification
+            for notification in buffered
+            if notification.method == "thread/tokenUsage/updated"
+        ]
+        assert output == "".join(chunks)
+        assert len(usage) == 1
+        assert usage[0].params["tokenUsage"] == {"totalTokens": 1_999}
+        assert client.ready is True
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
 async def test_strict_json_duplicate_keys_and_size_limit_fail_connection() -> None:
     client, fake, _ = await _start_client()
     try:

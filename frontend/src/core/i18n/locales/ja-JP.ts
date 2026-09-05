@@ -3419,6 +3419,8 @@ export const jaJP: Translations = {
       "結果は保持されましたが、完了条件を満たしていません。以下の理由に沿って続行してください。",
     lifecycleFailed:
       "タスク結果を確実に保存できませんでした。再試行するかバックエンドを再起動してください。",
+    eventStreamOverloaded:
+      "イベント処理が一時的に混雑しました。完了済みの手順は保持されています。再試行して続行してください。",
     workspaceWriteRequired:
       "このタスクはプロジェクトファイルの変更が必要ですが、有効なファイル変更が記録されませんでした。",
     verificationRequired:

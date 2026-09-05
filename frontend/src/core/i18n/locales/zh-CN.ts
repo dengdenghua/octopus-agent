@@ -3180,6 +3180,8 @@ export const zhCN: Translations = {
     turnFailed: "本轮任务未完成。可继续发送消息或重试。",
     guardBlocked: "结果已保留，但完成条件未通过。请按下方原因继续收敛。",
     lifecycleFailed: "任务运行状态未能可靠落盘，请重试或重启后端。",
+    eventStreamOverloaded:
+      "事件处理出现短暂拥塞，已完成的步骤仍被保留。请重试以继续任务。",
     workspaceWriteRequired:
       "该任务要求修改项目文件，但本轮没有产生有效的文件变更。",
     verificationRequired:

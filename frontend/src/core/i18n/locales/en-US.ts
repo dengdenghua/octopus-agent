@@ -3438,6 +3438,8 @@ export const enUS: Translations = {
       "The result was preserved, but a completion guard did not pass. Continue using the reason below.",
     lifecycleFailed:
       "The task outcome could not be persisted reliably. Retry or restart the backend.",
+    eventStreamOverloaded:
+      "Event processing was temporarily overloaded. Completed steps were preserved; retry to continue.",
     workspaceWriteRequired:
       "This task requires a project file change, but no successful file change was recorded.",
     verificationRequired:

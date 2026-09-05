@@ -2778,6 +2778,7 @@ export interface Translations {
     turnFailed: string;
     guardBlocked: string;
     lifecycleFailed: string;
+    eventStreamOverloaded: string;
     workspaceWriteRequired: string;
     verificationRequired: string;
     verificationRunFailed: string;

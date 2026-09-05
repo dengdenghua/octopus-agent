@@ -695,6 +695,61 @@ def test_codex_partner_failure_reports_the_actual_driver(
     assert errors[-1]["errorInfo"]["driver"] == "codex_app_server"
 
 
+def test_codex_event_backpressure_is_reported_as_recoverable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    codex_ready: None,
+) -> None:
+    from types import SimpleNamespace
+
+    from runtime.execution.codex_backend import BackpressureError
+    from runtime.platform.runtime_policy import feature_flags
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "local")
+    monkeypatch.delenv("OCTOPUS_CODEX_APP_SERVER_ENABLED", raising=False)
+    feature_flags.reload()
+
+    async def fail_codex(*_args: Any, **_kwargs: Any) -> bool:
+        raise BackpressureError("notification queue is full")
+
+    monkeypatch.setattr(CerebrumRuntime, "_drive_codex_app_server", fail_codex)
+    agent = SimpleNamespace(
+        agent_id="coder",
+        display_name="Codex CLI 伙伴",
+        capabilities={
+            "execution_backend": "codex_app_server",
+            "codex_app_server_executable": "/opt/octopus/bin/codex",
+        },
+    )
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=agent,
+        logs_root=str(tmp_path / "threads"),
+    )
+    app = FastAPI()
+    app.include_router(RealtimeGateway(runtime=runtime).router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-codex-backpressure",
+                "input": [{"type": "text", "text": "深度分析"}],
+                "approvalPolicy": "on-request",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "failed"
+    errors = [item for item in turn["items"] if item["type"] == "error"]
+    assert errors[-1]["message"].startswith("Codex event delivery was temporarily overloaded")
+    assert errors[-1]["errorInfo"]["code"] == "codex_event_backpressure"
+    assert errors[-1]["errorInfo"]["failure_kind"] == "backpressure"
+    assert errors[-1]["errorInfo"]["driver"] == "codex_app_server"
+
+
 @pytest.mark.parametrize("continuation", ["verification", "steering", "error", "interrupt"])
 def test_codex_engine_binding_survives_gateway_lifecycle(
     tmp_path: Path,

@@ -324,6 +324,18 @@ describe("message-list: failureKind classification", () => {
     );
   });
 
+  test("Codex event pressure is presented as a recoverable stream failure", () => {
+    expect(
+      failureKind(
+        "Codex event delivery was temporarily overloaded.",
+        "codex_event_backpressure",
+        "failed",
+        "backpressure",
+      ),
+    ).toBe("backpressure");
+    expect(failureKind("notification queue is full")).toBe("backpressure");
+  });
+
   test("subagent capability mismatches explain why dispatch never ran", () => {
     expect(
       failureKind(
