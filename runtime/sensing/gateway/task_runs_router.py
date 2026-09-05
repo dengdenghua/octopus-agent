@@ -482,7 +482,7 @@ def create_task_runs_router(
             raise HTTPException(503, "Agent realtime recovery is unavailable")
 
         resume_state = str(task.metadata.get("resume_execution_state") or "")
-        active_threads = getattr(gateway, "_active_turn_threads", set())
+        active_threads: set[Any] = getattr(gateway, "_active_turn_threads", set())
         has_active_turn = thread_id in active_threads
         queued_recently = _is_recent_iso(
             task.metadata.get("resume_execution_requested_at"),
@@ -651,8 +651,9 @@ def create_task_runs_router(
         def _detach_trigger() -> None:
             connection._closed = True
             if thread_id in connection.watched_threads:
-                with suppress(Exception):
-                    gateway._unwatch_thread(thread_id)
+                if gateway is not None:
+                    with suppress(Exception):
+                        gateway._unwatch_thread(thread_id)
                 connection.watched_threads.discard(thread_id)
 
         job = asyncio.create_task(

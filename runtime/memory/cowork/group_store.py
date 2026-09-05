@@ -755,7 +755,7 @@ class GroupStore:
                 async_table is not None
                 and conn.execute(
                     "SELECT 1 FROM async_work_guard.async_tasks WHERE thread_id=? "
-                    "AND status IN ('pending', 'working') LIMIT 1",
+                    "AND status IN ('staged', 'pending', 'working') LIMIT 1",
                     (thread_id,),
                 ).fetchone()
             ):

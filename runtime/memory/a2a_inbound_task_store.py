@@ -108,9 +108,7 @@ class A2ASqliteTaskStore(TaskStore):
             values.append(int(params.status))
         if params.HasField("status_timestamp_after"):
             sql += " AND updated_at>=?"
-            values.append(
-                params.status_timestamp_after.ToDatetime(tzinfo=UTC).isoformat()
-            )
+            values.append(params.status_timestamp_after.ToDatetime(tzinfo=UTC).isoformat())
         sql += " ORDER BY updated_at DESC,task_id DESC"
         with self._lock, self._connect() as conn:
             rows = conn.execute(sql, tuple(values)).fetchall()
@@ -118,7 +116,9 @@ class A2ASqliteTaskStore(TaskStore):
         start = 0
         if params.page_token:
             cursor = decode_page_token(params.page_token)
-            matching = next((index for index, (task_id, _task) in enumerate(tasks) if task_id == cursor), None)
+            matching = next(
+                (index for index, (task_id, _task) in enumerate(tasks) if task_id == cursor), None
+            )
             if matching is None:
                 raise InvalidParamsError(f"Invalid page token: {params.page_token}")
             start = matching

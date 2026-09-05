@@ -88,7 +88,9 @@ class PresenceStore:
             # Create the legacy table first; the column migration below also
             # handles databases written before message-level cursors existed.
             conn.executescript(_SCHEMA)
-            columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(read_state)").fetchall()}
+            columns = {
+                str(row[1]) for row in conn.execute("PRAGMA table_info(read_state)").fetchall()
+            }
             if "last_read_message_seq" not in columns:
                 conn.execute(
                     "ALTER TABLE read_state ADD COLUMN last_read_message_seq INTEGER NOT NULL DEFAULT 0"

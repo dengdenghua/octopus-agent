@@ -242,6 +242,59 @@ def test_realtime_ws_404_for_unknown_backend(
         assert "not found" in msg["params"]["message"]
 
 
+def test_realtime_ws_uses_ssh_tunnel_and_closes_it(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    _reset_flags: None,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_FF_UI_REMOTE_TRANSPORT", "1")
+    ff.reload()
+    created = client.post(
+        "/api/remote-backends",
+        json={
+            "name": "private",
+            "url": "http://127.0.0.1:8000",
+            "ssh": {"host": "bastion.example.com"},
+        },
+    )
+    backend_id = created.json()["backend"]["id"]
+    events: list[str] = []
+
+    class _Forwarder:
+        def __init__(self, backend: RemoteBackend) -> None:
+            assert backend.ssh is not None
+
+        def start(self) -> RemoteBackend:
+            events.append("start")
+            return RemoteBackend(
+                id=backend_id,
+                name="private",
+                url="http://127.0.0.1:43123",
+                tunnel_active=True,
+            )
+
+        def close(self) -> None:
+            events.append("close")
+
+    async def _proxy(backend: RemoteBackend, ws: Any, **_kwargs: Any) -> None:
+        assert backend.tunnel_active is True
+        assert backend.url == "http://127.0.0.1:43123"
+        await ws.send_text(json.dumps({"ok": True}))
+        await ws.close()
+
+    monkeypatch.setattr(
+        "runtime.sensing.gateway.remote_backends_router.SshTunnelForwarder",
+        _Forwarder,
+    )
+    monkeypatch.setattr(
+        "runtime.sensing.gateway.remote_backends_router.proxy_websocket",
+        _proxy,
+    )
+    with client.websocket_connect(f"/api/remote-backends/{backend_id}/realtime") as websocket:
+        assert json.loads(websocket.receive_text()) == {"ok": True}
+    assert events == ["start", "close"]
+
+
 def test_realtime_ws_requires_auth_when_enabled(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

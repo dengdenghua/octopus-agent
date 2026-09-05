@@ -2461,6 +2461,7 @@ def test_cowork_group_request_drives_pattern_fanout(
                     "reply": str(result.get("output") or ""),
                     "round": 1,
                     "context_delivery": result.get("context_delivery"),
+                    "context_engine_lifecycle": result.get("context_engine_lifecycle"),
                 }
             )
         committer = _kwargs.get("result_committer")
@@ -2507,15 +2508,7 @@ def test_cowork_group_request_drives_pattern_fanout(
                 "ready": True,
             },
             "pattern": _kwargs.get("pattern"),
-            "replies": [
-                {
-                    "agent_id": member["name"],
-                    "display_name": member["display_name"],
-                    "ok": True,
-                    "reply": f"{member['name']} replied",
-                }
-                for member in members
-            ],
+            "replies": replies,
         }
 
     monkeypatch.setattr(
@@ -2525,9 +2518,41 @@ def test_cowork_group_request_drives_pattern_fanout(
 
     class RuntimeContextSelector:
         name = "runtime-fixture"
+        api_version = "1"
+        capabilities = {
+            "assemble",
+            "bootstrap",
+            "ingest",
+            "commit_turn",
+            "maintain",
+            "on_member_start",
+            "on_member_end",
+        }
 
-        def select_context(self, *, candidates, **_kwargs):
+        def _record(self, hook, kwargs):
+            seen.setdefault("context_engine_hooks", []).append((hook, kwargs))
+
+        def bootstrap(self, **kwargs):
+            self._record("bootstrap", kwargs)
+
+        def ingest(self, **kwargs):
+            self._record("ingest", kwargs)
+
+        def assemble(self, *, candidates, **kwargs):
+            self._record("assemble", kwargs)
             return [candidate.source_id for candidate in candidates]
+
+        def commit_turn(self, **kwargs):
+            self._record("commit_turn", kwargs)
+
+        def maintain(self, **kwargs):
+            self._record("maintain", kwargs)
+
+        def on_member_start(self, **kwargs):
+            self._record("on_member_start", kwargs)
+
+        def on_member_end(self, **kwargs):
+            self._record("on_member_end", kwargs)
 
     _set_script(
         [
@@ -2633,6 +2658,18 @@ def test_cowork_group_request_drives_pattern_fanout(
     assert "full_context_estimated_tokens" in team_items[0]["arguments"]["context_plan"]
     assert "selected_estimated_tokens" in team_items[0]["arguments"]["context_plan"]
     assert "estimated_reduction_ratio" in team_items[0]["arguments"]["context_plan"]
+    assert team_items[0]["arguments"]["context_lifecycle"]["status"] == "admitted"
+    assert team_items[0]["arguments"]["context_lifecycle"]["expected_members"] == 2
+    assert team_items[0]["arguments"]["context_engine"]["name"] == "runtime-fixture"
+    assert team_items[0]["arguments"]["context_engine"]["api_version"] == "1"
+    assert {event["hook"] for event in team_items[0]["arguments"]["context_engine_lifecycle"]} == {
+        "bootstrap",
+        "ingest",
+    }
+    assert all(
+        event["status"] == "completed"
+        for event in team_items[0]["arguments"]["context_engine_lifecycle"]
+    )
     assert team_items[0]["result"]["schema"] == "octopus.group_fanout_result.v1"
     assert (
         team_items[0]["result"]["collaboration_run_id"]
@@ -2644,6 +2681,29 @@ def test_cowork_group_request_drives_pattern_fanout(
     assert team_items[0]["result"]["context_plan"]["strategy"] == (
         "common-authorized-brief-plus-role-delta"
     )
+    assert team_items[0]["result"]["context_lifecycle"]["status"] == "committed"
+    assert team_items[0]["result"]["context_lifecycle"]["committed_members"] == 2
+    for reply in team_items[0]["result"]["replies"]:
+        projection = reply["context_delivery"]["context_projection"]
+        assert projection["schema"] == "octopus.cowork_context_projection.v1"
+        assert projection["mode"] == "thread_bootstrap"
+        assert len(projection["epoch"]) == 64
+        assert projection["bootstrap_required"] is True
+        assert projection["backend_thread_reused"] is False
+        assert reply["context_engine_lifecycle"]["start"]["hook"] == "on_member_start"
+        assert reply["context_engine_lifecycle"]["end"]["hook"] == "on_member_end"
+    result_hooks = {event["hook"] for event in team_items[0]["result"]["context_engine_lifecycle"]}
+    assert {"bootstrap", "ingest", "on_member_start", "on_member_end"}.issubset(result_hooks)
+    assert {"commit_turn", "maintain"}.issubset(result_hooks)
+    assert {hook for hook, _kwargs in seen["context_engine_hooks"]} >= {
+        "bootstrap",
+        "ingest",
+        "commit_turn",
+        "maintain",
+        "on_member_start",
+        "on_member_end",
+    }
+    assert "大家一起看下" not in str(team_items[0]["result"]["context_engine_lifecycle"])
     assert team_items[0]["result"]["routing"]["selected_agent_ids"] == [
         "db-agent",
         "ui-agent",
@@ -2692,6 +2752,14 @@ def test_cowork_group_request_drives_pattern_fanout(
         collaboration.collaboration_member_runtime("th-cowork", "ui-agent")["subagent_session_id"]
         == "private-ui-agent"
     )
+    context_turn = collaboration.context_turn("th-cowork", turn["id"])
+    assert context_turn is not None
+    assert context_turn["status"] == "committed"
+    assert context_turn["committed_members"] == 2
+    assert {member["agent_id"] for member in context_turn["members"]} == {
+        "db-agent",
+        "ui-agent",
+    }
     with collaboration._lock, collaboration._connect() as conn:
         assert (
             conn.execute("SELECT COUNT(*) FROM collaboration_member_runtime_leases").fetchone()[0]

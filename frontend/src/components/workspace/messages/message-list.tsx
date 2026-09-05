@@ -2873,6 +2873,39 @@ export function MessageList({
             ? resolveAgentIdentity()
             : null;
 
+          // Avatar continuity must follow what the user can actually see.
+          // Team execution groups are projected into the right workbench and
+          // omitted from chat; counting one of those hidden groups used to
+          // suppress the first visible member avatar after a reload. Empty
+          // groups have the same problem. Build the speaker sequence from
+          // visible conversation rows only, starting a new main-avatar frame
+          // whenever the speaking member changes.
+          const hiddenTeamExecutionIndexes = new Set<number>();
+          const hasVisibleAssistantPredecessor = new Set<number>();
+          let sawVisibleAssistantGroup = false;
+          for (const groupIndex of turn.groupIndexes) {
+            const group = groupedMessages[groupIndex]!;
+            const hideTeamExecutionProjection = Boolean(
+              showSenderName &&
+              subagentRenderInfo?.hasCluster &&
+              group.type === "assistant:processing",
+            );
+            if (hideTeamExecutionProjection) {
+              hiddenTeamExecutionIndexes.add(groupIndex);
+              continue;
+            }
+            if (
+              group.type !== "assistant" &&
+              group.type !== "assistant:processing"
+            ) {
+              continue;
+            }
+            if (sawVisibleAssistantGroup) {
+              hasVisibleAssistantPredecessor.add(groupIndex);
+            }
+            sawVisibleAssistantGroup = true;
+          }
+
           const virtualizeHistoricalTurn =
             !isLatestTurn &&
             messageTurns.length > HISTORY_TURN_KEEP_MOUNTED * 2 &&
@@ -2904,18 +2937,12 @@ export function MessageList({
               {turn.groupIndexes.map((index) => {
                 const group = groupedMessages[index]!;
                 const groupKey = `${group.type}:${group.id ?? `idx-${index}`}`;
-                const hideTeamExecutionProjection = Boolean(
-                  showSenderName &&
-                  subagentRenderInfo?.hasCluster &&
-                  // A team room has exactly one owner for execution state:
-                  // the right-hand workbench.  `groupMessages` may create a
-                  // processing group and a terminal assistant group from the
-                  // same tool-call message (when it also contains the final
-                  // report).  Hiding only empty processing groups leaves a
-                  // second Agent Cluster card whenever the provider includes
-                  // any progress prose in that message.
-                  group.type === "assistant:processing",
-                );
+                // A team room has exactly one owner for execution state: the
+                // right-hand workbench. `groupMessages` may create a process
+                // group and a terminal answer from the same tool-carrying
+                // message, so the whole process group stays out of chat.
+                const hideTeamExecutionProjection =
+                  hiddenTeamExecutionIndexes.has(index);
                 if (hideTeamExecutionProjection) {
                   // Team rooms already project every member's live state and
                   // output into the right-hand execution workbench. Keeping
@@ -3011,6 +3038,7 @@ export function MessageList({
                 const previousAssistantIdentity =
                   groupInfo.previousAssistantIdentity;
                 const showAssistantAvatar =
+                  !hasVisibleAssistantPredecessor.has(index) ||
                   groupInfo.previousAssistantGroupCount === 0 ||
                   (assistantIdentity !== null &&
                     previousAssistantIdentity !== undefined &&

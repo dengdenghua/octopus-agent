@@ -141,11 +141,7 @@ def _load_bundled_media_module(kind: str) -> Any:
     except KeyError as exc:
         raise ValueError(f"unsupported bundled media kind: {kind}") from exc
     script = (
-        Path(__file__).resolve().parent.parent
-        / "all_skills"
-        / skill_dir
-        / "scripts"
-        / script_name
+        Path(__file__).resolve().parent.parent / "all_skills" / skill_dir / "scripts" / script_name
     )
     module_name = f"_octopus_bundled_{kind}_media"
     spec = importlib.util.spec_from_file_location(module_name, script)
@@ -266,9 +262,7 @@ def _generate_image(
                         continue
                     compact = _compact_media_result(result, provider=selected)
                     if failures:
-                        compact["fallback_from"] = [
-                            item.split(":", 1)[0] for item in failures
-                        ]
+                        compact["fallback_from"] = [item.split(":", 1)[0] for item in failures]
                     return compact
                 except Exception as exc:  # noqa: BLE001
                     failures.append(f"{selected}: {type(exc).__name__}: {exc}")

@@ -87,15 +87,11 @@ def _positive_float_env(name: str, default: float, *, ceiling: float) -> float:
 
 
 def root_token_limit() -> int:
-    return _positive_env(
-        "OCTOPUS_MAX_SUBAGENT_TOKENS_PER_ROOT", 2_000_000, ceiling=100_000_000
-    )
+    return _positive_env("OCTOPUS_MAX_SUBAGENT_TOKENS_PER_ROOT", 2_000_000, ceiling=100_000_000)
 
 
 def root_cost_limit_usd() -> float:
-    return _positive_float_env(
-        "OCTOPUS_MAX_SUBAGENT_COST_USD_PER_ROOT", 25.0, ceiling=100_000.0
-    )
+    return _positive_float_env("OCTOPUS_MAX_SUBAGENT_COST_USD_PER_ROOT", 25.0, ceiling=100_000.0)
 
 
 def lease_seconds() -> int:

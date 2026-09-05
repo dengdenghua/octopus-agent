@@ -2210,6 +2210,90 @@
         "title": "CollectRequest",
         "type": "object"
       },
+      "CollectorBatchArchiveBody": {
+        "properties": {
+          "reason": {
+            "default": "collector archived by user",
+            "maxLength": 1000,
+            "title": "Reason",
+            "type": "string"
+          },
+          "run_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Run Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "run_ids"
+        ],
+        "title": "CollectorBatchArchiveBody",
+        "type": "object"
+      },
+      "CollectorBatchCancelBody": {
+        "properties": {
+          "reason": {
+            "default": "collaboration cancelled by user",
+            "maxLength": 1000,
+            "title": "Reason",
+            "type": "string"
+          },
+          "run_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Run Ids",
+            "type": "array"
+          }
+        },
+        "title": "CollectorBatchCancelBody",
+        "type": "object"
+      },
+      "CollectorBatchRetryBody": {
+        "properties": {
+          "run_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Run Ids",
+            "type": "array"
+          }
+        },
+        "title": "CollectorBatchRetryBody",
+        "type": "object"
+      },
+      "CollectorChildCancelBody": {
+        "properties": {
+          "reason": {
+            "default": "member cancelled by user",
+            "maxLength": 1000,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "title": "CollectorChildCancelBody",
+        "type": "object"
+      },
+      "CollectorRetryBody": {
+        "properties": {
+          "child_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 512,
+            "title": "Child Ids",
+            "type": "array"
+          }
+        },
+        "title": "CollectorRetryBody",
+        "type": "object"
+      },
       "ComfyCustomNodeAction": {
         "properties": {
           "node_id": {
@@ -7005,6 +7089,21 @@
           "name"
         ],
         "title": "StartRecordingRequest",
+        "type": "object"
+      },
+      "SteeringBody": {
+        "properties": {
+          "text": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "SteeringBody",
         "type": "object"
       },
       "StopRecordingRequest": {
@@ -21302,6 +21401,246 @@
         ]
       }
     },
+    "/api/collab/{thread_id}/collectors": {
+      "get": {
+        "description": "Cross-run collector operations view for long-lived projects.",
+        "operationId": "list_collaboration_collectors_api_collab__thread_id__collectors_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "retryable_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Retryable Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_archived",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Archived",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Collaboration Collectors Api Collab  Thread Id  Collectors Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Collaboration Collectors",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/collectors/archive": {
+      "post": {
+        "description": "Compact selected terminal collectors while retaining audit metadata.",
+        "operationId": "archive_collaboration_collectors_api_collab__thread_id__collectors_archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectorBatchArchiveBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Archive Collaboration Collectors Api Collab  Thread Id  Collectors Archive Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Collaboration Collectors",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/collectors/cancel": {
+      "post": {
+        "description": "Stop selected active collector generations across a long project.",
+        "operationId": "cancel_collaboration_collectors_api_collab__thread_id__collectors_cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectorBatchCancelBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cancel Collaboration Collectors Api Collab  Thread Id  Collectors Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Collaboration Collectors",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/collectors/retry": {
+      "post": {
+        "description": "Atomically reserve and retry failed lanes across collaboration runs.",
+        "operationId": "retry_collaboration_collectors_api_collab__thread_id__collectors_retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectorBatchRetryBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Retry Collaboration Collectors Api Collab  Thread Id  Collectors Retry Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Collaboration Collectors",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
     "/api/collab/{thread_id}/deliveries": {
       "get": {
         "description": "Reliable result-delivery state for recovery and operator visibility.",
@@ -22068,7 +22407,7 @@
     },
     "/api/collab/{thread_id}/runs/{run_id}/collector": {
       "get": {
-        "description": "Polling-safe durable child results for one multi-agent run.",
+        "description": "Revision-aware long poll for durable child results.",
         "operationId": "get_collaboration_collector_api_collab__thread_id__runs__run_id__collector_get",
         "parameters": [
           {
@@ -22087,6 +22426,26 @@
             "schema": {
               "title": "Run Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_revision",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "After Revision",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "wait_ms",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Wait Ms",
+              "type": "integer"
             }
           }
         ],
@@ -22115,6 +22474,424 @@
           }
         },
         "summary": "Get Collaboration Collector",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/runs/{run_id}/collector/attempts": {
+      "get": {
+        "description": "Append-only attempt history retained across member retries.",
+        "operationId": "get_collaboration_collector_attempts_api_collab__thread_id__runs__run_id__collector_attempts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Collaboration Collector Attempts Api Collab  Thread Id  Runs  Run Id  Collector Attempts Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Collaboration Collector Attempts",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/runs/{run_id}/collector/cancel": {
+      "post": {
+        "description": "Stop one collector generation; repeated calls are idempotent.",
+        "operationId": "cancel_collaboration_collector_api_collab__thread_id__runs__run_id__collector_cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectorBatchCancelBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cancel Collaboration Collector Api Collab  Thread Id  Runs  Run Id  Collector Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Collaboration Collector",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/runs/{run_id}/collector/retry": {
+      "post": {
+        "description": "Re-dispatch selected failed lanes through the durable cowork queue.",
+        "operationId": "retry_collaboration_collector_api_collab__thread_id__runs__run_id__collector_retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectorRetryBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Retry Collaboration Collector Api Collab  Thread Id  Runs  Run Id  Collector Retry Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Collaboration Collector",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/runs/{run_id}/collector/steering": {
+      "get": {
+        "description": "Ordered correction history for one collector generation.",
+        "operationId": "get_collaboration_collector_steering_api_collab__thread_id__runs__run_id__collector_steering_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "child_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Child Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "generation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Generation"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_seq",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "After Seq",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Collaboration Collector Steering Api Collab  Thread Id  Runs  Run Id  Collector Steering Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Collaboration Collector Steering",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/runs/{run_id}/collector/{child_id}/cancel": {
+      "post": {
+        "description": "Stop exactly one active member while the rest of the group continues.",
+        "operationId": "cancel_collaboration_collector_child_api_collab__thread_id__runs__run_id__collector__child_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "child_id",
+            "required": true,
+            "schema": {
+              "title": "Child Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectorChildCancelBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cancel Collaboration Collector Child Api Collab  Thread Id  Runs  Run Id  Collector  Child Id  Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Collaboration Collector Child",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/collab/{thread_id}/runs/{run_id}/collector/{child_id}/steer": {
+      "post": {
+        "description": "Persist a user correction for exactly one still-running member.",
+        "operationId": "steer_collaboration_collector_child_api_collab__thread_id__runs__run_id__collector__child_id__steer_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "child_id",
+            "required": true,
+            "schema": {
+              "title": "Child Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SteeringBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Steer Collaboration Collector Child Api Collab  Thread Id  Runs  Run Id  Collector  Child Id  Steer Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Steer Collaboration Collector Child",
         "tags": [
           "cowork"
         ]

@@ -539,6 +539,48 @@ export const koKR: Translations = {
     deliveryUnknownMember: "협업 멤버",
     deliveryMonitorUnavailable:
       "답변 전송 상태를 일시적으로 불러올 수 없습니다",
+    collectorTitle: "멤버 실행",
+    collectorProgress: (completed, total) => `${completed}/${total} 응답`,
+    collectorSuccess: "완료",
+    collectorFailed: "미완료",
+    collectorWaiting: "대기 중",
+    collectorRetrying: "재시도 중",
+    collectorCancelled: "취소됨",
+    collectorRetryFailedOnly: "실패한 멤버만 재시도",
+    collectorRetryFailedRuns: (n) => `실패한 실행 재시도 (${n})`,
+    collectorStop: "협업 중지",
+    collectorStopRuns: (n) => `진행 중인 협업 중지 (${n})`,
+    collectorStopFailed: "협업을 중지하지 못했습니다",
+    collectorSteer: "방향 수정",
+    collectorSteerMemberLabel: (name) => `${name} 방향 수정`,
+    collectorSteerPlaceholder: (name) => `${name}에게만 보낼 새 지시…`,
+    collectorSteerSubmit: "수정 전송",
+    collectorSteerCancel: "취소",
+    collectorSteerFailed:
+      "수정을 보내지 못했습니다. 멤버 상태가 변경되었을 수 있습니다",
+    collectorStopMember: "이 멤버 중지",
+    collectorStopMemberLabel: (name) => `${name} 중지`,
+    collectorStopMemberFailed:
+      "멤버를 중지하지 못했습니다. 상태가 변경되었을 수 있습니다",
+    collectorRetryFailed:
+      "재시도를 시작할 수 없습니다. 잠시 후 다시 시도하세요.",
+    collectorQueueFull:
+      "백그라운드 작업이 많습니다. 실패 상태는 유지되므로 잠시 후 다시 시도하세요.",
+    collectorAttempts: (n) => `${n}회 시도`,
+    collectorAttempt: (n) => `${n}번째 시도`,
+    collectorContextDelivery: (mode, sent, avoided) =>
+      mode === "cursor_only"
+        ? `구성원 메모리 재사용 · 중복 ${avoided} tokens 절감`
+        : mode === "incremental"
+          ? `증분 컨텍스트 ${sent} tokens · ${avoided} 절감`
+          : `전체 컨텍스트 ${sent} tokens`,
+    collectorContextPlan: (mode, selected, full, reductionPercent) =>
+      `컨텍스트 조정 · ${mode === "recall" ? "장기 기록 회상" : "필요한 내용만 선택"} · ${selected}/${full} tokens · ${reductionPercent}% 절약`,
+    collectorMemoryCheckpoint: (throughTurn, rawTurns) =>
+      `장기 기억 ${throughTurn}턴까지 정리 · 원본 ${rawTurns}턴 보존`,
+    collectorArchived: "보관됨",
+    collectorMonitorUnavailable:
+      "멤버 실행 상태를 일시적으로 불러올 수 없습니다",
   },
 
   // Collaboration Mode
@@ -1681,6 +1723,19 @@ export const koKR: Translations = {
     tokenPlaceholder: "액세스 토큰(선택 사항)",
     tokenAria: "백엔드 액세스 토큰",
     authConfigured: "인증됨",
+    useSsh: "SSH를 통해 연결",
+    sshHint:
+      "신뢰할 수 있는 SSH 호스트에서만 런타임 URL에 접근할 수 있을 때 사용합니다.",
+    sshHostPlaceholder: "SSH 호스트",
+    sshHostAria: "SSH 호스트",
+    sshUserPlaceholder: "SSH 사용자(선택 사항)",
+    sshUserAria: "SSH 사용자",
+    sshPortPlaceholder: "SSH 포트",
+    sshPortAria: "SSH 포트",
+    sshIdentityPlaceholder: "키 파일(선택 사항)",
+    sshIdentityAria: "SSH 키 파일",
+    directTransport: "직접 연결",
+    sshTransport: "SSH 터널",
     add: "Add",
     adding: "추가 중...",
     loading: "로드 중...",

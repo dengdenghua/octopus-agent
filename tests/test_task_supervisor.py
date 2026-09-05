@@ -60,6 +60,39 @@ def test_realtime_react_lifecycle_projects_to_task_supervisor(tmp_path):
     assert paused.metadata["turn_id"] == "turn-1"
 
 
+def test_new_react_attempt_closes_superseded_task_lease(tmp_path):
+    supervisor = TaskSupervisor.from_path(
+        tmp_path / "task_runs.json",
+        holder_id="realtime-worker",
+        lease_ttl_seconds=30,
+    )
+    runtime = SimpleNamespace(_task_supervisor=supervisor, _trace_store=None)
+    params = TurnParams(threadId="thread-repair", input=[], cwd=str(tmp_path))
+    turn = Turn(id="turn-repair", threadId="thread-repair", params=params)
+
+    _record_react_trace_event(
+        runtime,
+        turn,
+        {"type": "react_started", "task_id": "react-attempt-1"},
+    )
+    turn.task_id = "react-attempt-1"
+    _record_react_trace_event(
+        runtime,
+        turn,
+        {"type": "react_started", "task_id": "react-attempt-2"},
+    )
+
+    first = supervisor.store.get("react-attempt-1")
+    second = supervisor.store.get("react-attempt-2")
+    assert first is not None
+    assert second is not None
+    assert first.status == TaskRunStatus.DISCONNECTED
+    assert first.terminal_reason == "superseded_by_react_attempt"
+    assert first.metadata["superseded_by_task_id"] == "react-attempt-2"
+    assert first.lease is None
+    assert second.status == TaskRunStatus.RUNNING
+
+
 def test_non_react_turn_backfills_goal_workspace_and_terminal_reason(tmp_path):
     supervisor = TaskSupervisor.from_path(
         tmp_path / "task_runs.json",

@@ -1296,6 +1296,83 @@ describe("MessageList process trace lifecycle", () => {
     ).toBeNull();
   });
 
+  test("keeps every member's main avatar after replay hides the execution lane", () => {
+    const processing: AIMessage = {
+      id: "replayed-team-swarm-trace",
+      type: "ai",
+      content: "",
+      tool_calls: [
+        {
+          id: "replayed-team-swarm",
+          name: "team_swarm",
+          args: { message: "请五位成员分别介绍职责" },
+        },
+        ...[
+          ["general", "Eve"],
+          ["coder", "Kane"],
+          ["desktop_operator", "Raven"],
+          ["aoi", "Zero"],
+          ["vibe_selling", "Luna"],
+        ].map(([id, name]) => ({
+          id: `subagent-${id}`,
+          name: "subagent",
+          args: {
+            subagent_id: id,
+            name,
+            role: "cowork",
+            task: "请五位成员分别介绍职责",
+            status: "completed",
+          },
+        })),
+      ],
+    };
+    const members = [
+      ["general", "Eve"],
+      ["coder", "Kane"],
+      ["desktop_operator", "Raven"],
+      ["aoi", "Zero"],
+      ["vibe_selling", "Luna"],
+    ] as const;
+    const thread = mockThread({
+      messages: [
+        message("user-replayed-team", "human", "请五位成员分别介绍职责"),
+        processing,
+        ...members.map(
+          ([id, name]) =>
+            ({
+              id: `answer-${id}`,
+              type: "ai",
+              content: `${name} 的职责说明。`,
+              additional_kwargs: {
+                agent_id: id,
+                agent_display_name: name,
+                message_kind: "answer",
+              },
+            }) as AIMessage,
+        ),
+      ],
+    });
+
+    renderMessageList({
+      thread,
+      mode: "chat",
+      locale: "zh-CN",
+      showSenderName: true,
+      agentRoster: members.map(([id, name]) => ({
+        agent_id: id,
+        name: id,
+        display_name: name,
+        avatar_url: `/api/agents/${id}/avatar`,
+      })),
+    });
+
+    for (const [, name] of members) {
+      expect(screen.getByAltText(name)).toBeInTheDocument();
+      expect(screen.getByText(`${name} 的职责说明。`)).toBeInTheDocument();
+    }
+    expect(screen.queryByText("Agent 集群")).toBeNull();
+  });
+
   test("renders a tool-call message's final team report only once", () => {
     const processingWithReport: AIMessage = {
       id: "team-swarm-report",
@@ -1333,9 +1410,7 @@ describe("MessageList process trace lifecycle", () => {
       mode: "chat",
       locale: "zh-CN",
       showSenderName: true,
-      agentRoster: [
-        { name: "general", display_name: "Eve", role: "tl" },
-      ],
+      agentRoster: [{ name: "general", display_name: "Eve", role: "tl" }],
     });
 
     expect(

@@ -59,6 +59,32 @@ class CompleteBody(BaseModel):
     blackboard_key: str | None = None
 
 
+class SteeringBody(BaseModel):
+    text: str = Field(min_length=1, max_length=20_000)
+
+
+class CollectorChildCancelBody(BaseModel):
+    reason: str = Field(default="member cancelled by user", max_length=1000)
+
+
+class CollectorRetryBody(BaseModel):
+    child_ids: list[str] = Field(default_factory=list, max_length=512)
+
+
+class CollectorBatchRetryBody(BaseModel):
+    run_ids: list[str] = Field(default_factory=list, max_length=100)
+
+
+class CollectorBatchCancelBody(BaseModel):
+    run_ids: list[str] = Field(default_factory=list, max_length=100)
+    reason: str = Field(default="collaboration cancelled by user", max_length=1000)
+
+
+class CollectorBatchArchiveBody(BaseModel):
+    run_ids: list[str] = Field(min_length=1, max_length=100)
+    reason: str = Field(default="collector archived by user", max_length=1000)
+
+
 class BreakoutBody(BaseModel):
     child_thread: str = Field(min_length=1)
     members: list[dict] = Field(default_factory=list)
@@ -169,6 +195,11 @@ __all__ = [
     "BoardBody",
     "BreakoutBody",
     "CollabTaskBody",
+    "CollectorBatchArchiveBody",
+    "CollectorBatchCancelBody",
+    "CollectorBatchRetryBody",
+    "CollectorChildCancelBody",
+    "CollectorRetryBody",
     "CompleteBody",
     "EnsureRoomBody",
     "GrantBody",
@@ -183,5 +214,6 @@ __all__ = [
     "ReactionBody",
     "RosterBody",
     "RoomMessageBody",
+    "SteeringBody",
     "response_mode",
 ]

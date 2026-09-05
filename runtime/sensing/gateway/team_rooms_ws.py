@@ -763,7 +763,10 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                 clean_text = text[:4000]
                 via = _normalize_speak_mode(speaker.speak_mode) if spoken_by else None
                 reply_to = msg.get("reply_to")
-                message_metadata = {"spoken_by": spoken_by, "via": via}
+                message_metadata: dict[str, Any] = {
+                    "spoken_by": spoken_by,
+                    "via": via,
+                }
                 if isinstance(reply_to, dict) and reply_to:
                     message_metadata["reply_to"] = {
                         key: reply_to[key]
@@ -808,7 +811,11 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                     "display_name": speaker.display_name,
                     "spoken_by": spoken_by,
                     "via": via,
-                    **({"reply_to": message_metadata["reply_to"]} if "reply_to" in message_metadata else {}),
+                    **(
+                        {"reply_to": message_metadata["reply_to"]}
+                        if "reply_to" in message_metadata
+                        else {}
+                    ),
                     "text": clean_text,
                     "created_at": _now(),
                 }

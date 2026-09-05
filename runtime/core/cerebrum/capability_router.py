@@ -871,11 +871,7 @@ def order_skill_names(
         if "media-generation" in activation.labels
         else (*anchors, *activation.priority_skills)
     )
-    front = [
-        name
-        for name in (*pinned_plugin_actions, *candidates)
-        if name in available
-    ]
+    front = [name for name in (*pinned_plugin_actions, *candidates) if name in available]
     ordered_front = _dedupe(front)
     front_set = set(ordered_front)
     return [*ordered_front, *(name for name in original if name not in front_set)]

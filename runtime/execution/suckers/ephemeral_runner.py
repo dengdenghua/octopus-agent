@@ -648,6 +648,9 @@ def make_llm_ephemeral_runner(
                     ],
                     tool_allowlist=tuple(call.role.tool_allowlist or ()),
                     metadata=_ctx,
+                    steering_drain=(
+                        _ctx.get("steering_drain") if callable(_ctx.get("steering_drain")) else None
+                    ),
                 )
                 if _result is not None:
                     return getattr(_result, "final_answer", "") or ""
@@ -817,6 +820,11 @@ def make_llm_ephemeral_runner(
         # Write-out grace: rounds consumed past ``max_rounds`` purely to finish a
         # provider-truncated reply. See EPHEMERAL_WRITEOUT_GRACE_ROUNDS.
         writeout_grace_used = 0
+        steering_drain = (
+            call.context.get("steering_drain")
+            if call.context and callable(call.context.get("steering_drain"))
+            else None
+        )
         # Bound the loop by time (and the optional role round cap), not by a
         # round count alone. ``itertools.count`` keeps the body's existing
         # ``continue`` semantics intact while we break on the deadline/cap.
@@ -825,6 +833,29 @@ def make_llm_ephemeral_runner(
                 break
             if max_rounds is not None and round_i >= max_rounds + writeout_grace_used:
                 break
+            if steering_drain is not None:
+                try:
+                    corrections = [
+                        str(value).strip() for value in steering_drain() if str(value).strip()
+                    ]
+                except Exception:  # noqa: BLE001 - durable rows remain readable on retry
+                    corrections = []
+                    _log.warning(
+                        "ephemeral steering drain failed · role=%s",
+                        call.role.id,
+                        exc_info=True,
+                    )
+                if corrections:
+                    messages.append(
+                        Message(
+                            role="user",
+                            content=(
+                                "[User steering for this running task]\n"
+                                + "\n".join(f"- {text}" for text in corrections)
+                                + "\nApply these corrections now; do not merely acknowledge them."
+                            ),
+                        )
+                    )
             req = ModelRequest(
                 model=effective_model,
                 messages=messages,

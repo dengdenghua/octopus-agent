@@ -276,10 +276,7 @@ class RoomMessageStore:
                     effective_status = str(existing[0])
                 if existing[1] is not None:
                     effective_seq = max(int(existing[1]), normalized_seq or 0)
-                if (
-                    effective_status == str(existing[0])
-                    and effective_seq == existing[1]
-                ):
+                if effective_status == str(existing[0]) and effective_seq == existing[1]:
                     return {
                         "room_id": room_id,
                         "message_id": message_id,

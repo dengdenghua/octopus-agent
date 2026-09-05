@@ -54,6 +54,10 @@ from runtime.memory.cowork.collaboration_runs import (
     COLLABORATION_RUN_SCHEMA,
     CollaborationRunStoreMixin,
 )
+from runtime.memory.cowork.context_lifecycle import (
+    CONTEXT_LIFECYCLE_SCHEMA,
+    CollaborationContextLifecycleStoreMixin,
+)
 from runtime.memory.cowork.ids import (
     normalize_display_name,
     normalize_search_query,
@@ -266,6 +270,7 @@ ON collaboration_member_runtime_leases(expires_at);
     + COLLABORATION_RUN_SCHEMA
     + COLLABORATION_DELIVERY_SCHEMA
     + COLLABORATION_COLLECTOR_SCHEMA
+    + CONTEXT_LIFECYCLE_SCHEMA
 )
 
 
@@ -551,6 +556,7 @@ class CollaborationStore(
     CollaborationCollectorStoreMixin,
     CollaborationDeliveryStoreMixin,
     CollaborationRunStoreMixin,
+    CollaborationContextLifecycleStoreMixin,
     CollaborationProjectActionStoreMixin,
 ):
     """Canonical room/task storage keyed by collaboration session id."""

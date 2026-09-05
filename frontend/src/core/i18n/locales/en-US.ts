@@ -551,6 +551,47 @@ export const enUS: Translations = {
     deliveryUnknownMember: "Collaborator",
     deliveryMonitorUnavailable:
       "Reply delivery status is temporarily unavailable",
+    collectorTitle: "Member execution",
+    collectorProgress: (completed, total) => `${completed}/${total} returned`,
+    collectorSuccess: "Completed",
+    collectorFailed: "Incomplete",
+    collectorWaiting: "Waiting",
+    collectorRetrying: "Retrying",
+    collectorCancelled: "Cancelled",
+    collectorRetryFailedOnly: "Retry failed members only",
+    collectorRetryFailedRuns: (n) => `Retry failed runs (${n})`,
+    collectorStop: "Stop collaboration",
+    collectorStopRuns: (n) => `Stop active runs (${n})`,
+    collectorStopFailed: "Collaboration could not be stopped",
+    collectorSteer: "Redirect",
+    collectorSteerMemberLabel: (name) => `Redirect ${name}`,
+    collectorSteerPlaceholder: (name) => `New instructions for ${name} only…`,
+    collectorSteerSubmit: "Send correction",
+    collectorSteerCancel: "Cancel",
+    collectorSteerFailed:
+      "Correction could not be sent; the member status may have changed",
+    collectorStopMember: "Stop member",
+    collectorStopMemberLabel: (name) => `Stop ${name}`,
+    collectorStopMemberFailed:
+      "The member could not be stopped; their status may have changed",
+    collectorRetryFailed: "Retry could not start. Try again shortly.",
+    collectorQueueFull:
+      "The background queue is busy. Failed members remain available to retry.",
+    collectorAttempts: (n) => `${n} attempts`,
+    collectorAttempt: (n) => `Attempt ${n}`,
+    collectorContextDelivery: (mode, sent, avoided) =>
+      mode === "cursor_only"
+        ? `Reused member memory · avoided ${avoided} tokens`
+        : mode === "incremental"
+          ? `Context delta ${sent} tokens · avoided ${avoided}`
+          : `Full context ${sent} tokens`,
+    collectorContextPlan: (mode, selected, full, reductionPercent) =>
+      `Context routing · ${mode === "recall" ? "long-term recall" : "selected as needed"} · ${selected}/${full} tokens · saved ${reductionPercent}%`,
+    collectorMemoryCheckpoint: (throughTurn, rawTurns) =>
+      `Long memory through turn ${throughTurn} · ${rawTurns} raw turns retained`,
+    collectorArchived: "Archived",
+    collectorMonitorUnavailable:
+      "Member execution status is temporarily unavailable",
   },
 
   // Collaboration Mode
@@ -1720,6 +1761,19 @@ export const enUS: Translations = {
     tokenPlaceholder: "Access token (optional)",
     tokenAria: "Backend access token",
     authConfigured: "authenticated",
+    useSsh: "Connect through SSH",
+    sshHint:
+      "Use this when the runtime URL is only reachable from a trusted SSH host.",
+    sshHostPlaceholder: "SSH host",
+    sshHostAria: "SSH host",
+    sshUserPlaceholder: "SSH user (optional)",
+    sshUserAria: "SSH user",
+    sshPortPlaceholder: "SSH port",
+    sshPortAria: "SSH port",
+    sshIdentityPlaceholder: "Identity file (optional)",
+    sshIdentityAria: "SSH identity file",
+    directTransport: "direct",
+    sshTransport: "SSH tunnel",
     add: "Add",
     adding: "Adding...",
     loading: "Loading...",

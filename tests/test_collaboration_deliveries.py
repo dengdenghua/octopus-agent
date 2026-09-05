@@ -44,13 +44,16 @@ def test_delivery_lifecycle_is_idempotent_and_payload_is_immutable(tmp_path) -> 
         payload=payload,
     )
     assert created["status"] == "pending"
-    assert store.enqueue_collaboration_delivery(
-        delivery_id="delivery-1",
-        run_id="run-1",
-        session_id="thread-1",
-        turn_id="turn-1",
-        payload=payload,
-    ) == created
+    assert (
+        store.enqueue_collaboration_delivery(
+            delivery_id="delivery-1",
+            run_id="run-1",
+            session_id="thread-1",
+            turn_id="turn-1",
+            payload=payload,
+        )
+        == created
+    )
     with pytest.raises(ValueError, match="different payload"):
         store.enqueue_collaboration_delivery(
             delivery_id="delivery-1",
@@ -136,9 +139,10 @@ def test_expired_lease_is_recovered_and_at_least_once_replay_stays_one_item(tmp_
     replayed = log.replay()
     assert len(replayed) == 1
     assert [entry.id for entry in replayed[0].items] == ["stable-reply"]
-    assert delivery["payload_sha256"] == store.collaboration_delivery("delivery-crash")[
-        "payload_sha256"
-    ]
+    assert (
+        delivery["payload_sha256"]
+        == store.collaboration_delivery("delivery-crash")["payload_sha256"]
+    )
 
 
 def test_session_listing_never_crosses_thread_boundary(tmp_path) -> None:

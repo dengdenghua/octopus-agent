@@ -852,21 +852,21 @@ class JSONLJournal(_StructuredJournalRedaction, Journal):
             return replacement
         head, *tail = path
         if isinstance(head, int) and isinstance(value, list):
-            updated = list(value)
-            updated[head] = cls._replace_json_path(
-                updated[head],
+            updated_list = list(value)
+            updated_list[head] = cls._replace_json_path(
+                updated_list[head],
                 tuple(tail),
                 replacement,
             )
-            return updated
+            return updated_list
         if isinstance(head, str) and isinstance(value, dict):
-            updated = dict(value)
-            updated[head] = cls._replace_json_path(
-                updated[head],
+            updated_dict = dict(value)
+            updated_dict[head] = cls._replace_json_path(
+                updated_dict[head],
                 tuple(tail),
                 replacement,
             )
-            return updated
+            return updated_dict
         return value
 
     @staticmethod

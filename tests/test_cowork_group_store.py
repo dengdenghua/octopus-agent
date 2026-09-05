@@ -374,6 +374,22 @@ def test_group_thread_delete_refuses_pending_or_working_async_task(tmp_path, cla
     assert work.get(task.task_id).status == ("working" if claimed else "pending")
 
 
+def test_group_thread_delete_refuses_staged_async_batch(tmp_path) -> None:
+    groups = GroupStore(base_dir=tmp_path)
+    work = AsyncWorkStore(base_dir=tmp_path, group_store=groups)
+    task = work.stage_batch(
+        "thread-staged-work",
+        [("staged-task", "worker", "finish binding")],
+        actor="owner",
+    )[0]
+
+    with pytest.raises(GroupThreadActiveWorkError):
+        groups.begin_thread_delete(task.thread_id)
+
+    assert groups.thread_delete_lease(task.thread_id) is None
+    assert work.get(task.task_id).status == "staged"
+
+
 def test_group_thread_delete_clears_terminal_async_state_and_fences_late_writers(
     tmp_path,
 ) -> None:

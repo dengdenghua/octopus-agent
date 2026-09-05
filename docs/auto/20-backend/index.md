@@ -33,9 +33,9 @@ graph LR
   adapters[adapters]
   platform[platform]
   sensing -- 169 --> platform
-  sensing -- 130 --> safety
+  sensing -- 131 --> safety
   execution -- 120 --> platform
-  sensing -- 99 --> memory
+  sensing -- 100 --> memory
   safety -- 98 --> platform
   sensing -- 81 --> execution
   execution -- 76 --> safety
@@ -87,6 +87,7 @@ graph LR
   cli_core.py -- 3 --> core
   cli_reflect.py -- 3 --> platform
   cli_run.py -- 3 --> platform
+  evals -- 3 --> execution
   execution -- 3 --> sensing
   platform -- 3 --> cli
   projectos -- 3 --> execution

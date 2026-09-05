@@ -37,6 +37,11 @@ _LOW_INFORMATION_FOLLOWUP_RE = re.compile(
     r"怎么还没|上面(?:的)?任务|中断(?:的)?任务).{0,40})$",
     re.IGNORECASE,
 )
+_DEEP_RECALL_INTENT_RE = re.compile(
+    r"(?:之前|以前|上次|历史|当时|最初|原来|还记得|回顾|复盘|为何|为什么|"
+    r"怎么决定|prior|previous|earlier|history|remember|recall|original|why\s+did)",
+    re.IGNORECASE,
+)
 _STOP_TERMS = {
     "一个",
     "这个",
@@ -200,6 +205,17 @@ class MemberContextPlan:
                     line.encode("utf-8")
                 ).hexdigest()
         return hashes
+
+    def projection_epoch(self) -> str:
+        """Stable, body-free version for one member's persistent model thread.
+
+        The contract hash covers recipient identity, role, authorization and
+        effective context mode. Append-only facts therefore stay in the same
+        backend thread and travel as deltas, while a visibility or role change
+        creates a new epoch and forces a clean bootstrap.
+        """
+
+        return self.context_section_hashes()["contract"]
 
     def continuation_safety(
         self,
@@ -372,6 +388,13 @@ class MemberContextPlan:
                 "full_estimated_tokens": full_tokens,
                 "sent_estimated_tokens": sent_tokens,
                 "avoided_estimated_tokens": max(0, full_tokens - sent_tokens),
+                "context_projection": {
+                    "schema": "octopus.cowork_context_projection.v1",
+                    "mode": "thread_bootstrap",
+                    "epoch": self.projection_epoch(),
+                    "bootstrap_required": not bool(previous),
+                    "delta_required": bool(previous and prompt),
+                },
             },
         )
 
@@ -417,6 +440,7 @@ class GroupContextPlan:
     selection_engine_fallbacks: int
     selection_engine_rejected_ids: int
     selection_engine_fallback_reasons: tuple[str, ...]
+    deep_recall_escalated: bool
 
     def for_agent(self, agent_id: str) -> MemberContextPlan | None:
         wanted = str(agent_id or "").strip()
@@ -425,6 +449,44 @@ class GroupContextPlan:
     def prompt_for(self, agent_id: str) -> str:
         item = self.for_agent(agent_id)
         return item.render_prompt() if item is not None else ""
+
+    def lifecycle_receipt(
+        self,
+        member_ids: Sequence[str] | None = None,
+    ) -> dict[str, Any]:
+        """Return a body-free receipt for durable context advancement.
+
+        Source ids are already opaque, but the lifecycle ledger stores only a
+        digest of their ordered set.  This proves which admitted plan advanced
+        without turning operational metadata into another copy of private
+        context.
+        """
+
+        wanted = (
+            {str(agent_id or "").strip() for agent_id in member_ids}
+            if member_ids is not None
+            else None
+        )
+        members = [item for item in self.members if wanted is None or item.agent_id in wanted]
+        return {
+            "schema": "octopus.cowork_context_lifecycle_receipt.v1",
+            "selection_engine": self.selection_engine,
+            "selected_tokens": sum(item.estimated_tokens for item in members),
+            "full_tokens": sum(item.full_context_estimated_tokens for item in members),
+            "deep_recall": self.deep_recall_escalated,
+            "members": [
+                {
+                    "agent_id": item.agent_id,
+                    "authorization_fingerprint": item.authorization_fingerprint,
+                    "selected_sources_sha256": hashlib.sha256(
+                        "\n".join(item.selected_source_ids).encode("utf-8")
+                    ).hexdigest(),
+                    "selected_tokens": item.estimated_tokens,
+                    "full_tokens": item.full_context_estimated_tokens,
+                }
+                for item in members
+            ],
+        }
 
     def audit_dict(self) -> dict[str, Any]:
         avoided = max(0, self.full_context_estimated_tokens - self.selected_estimated_tokens)
@@ -436,6 +498,7 @@ class GroupContextPlan:
             "selection_engine_fallbacks": self.selection_engine_fallbacks,
             "selection_engine_rejected_ids": self.selection_engine_rejected_ids,
             "selection_engine_fallback_reasons": list(self.selection_engine_fallback_reasons),
+            "deep_recall_escalated": self.deep_recall_escalated,
             "budget_tier": self.budget_tier,
             "history_message_count": self.history_message_count,
             "durable_source_count": self.durable_source_count,
@@ -505,6 +568,7 @@ def _history_rows(messages: list[Any], current_message: str) -> list[_HistoryRow
                 text=preview,
                 order=order,
                 source_id=_source_id(role, preview),
+                kind=_durable_kind(preview),
             )
         )
     return rows
@@ -564,6 +628,8 @@ def _fit_rows(
     section: str = "",
     member: dict[str, Any] | None = None,
     message: str = "",
+    session_id: str = "",
+    turn_id: str = "",
 ) -> tuple[str, int, set[tuple[str, str]], tuple[str, ...]]:
     chosen: list[_HistoryRow] = []
     used = 0
@@ -590,12 +656,17 @@ def _fit_rows(
             for score, row in ordered_pairs
         )
         try:
+            engine_kwargs: dict[str, Any] = {
+                "section": section,
+                "member": dict(member) if isinstance(member, dict) else None,
+                "message": message,
+                "candidates": candidates,
+                "budget_tokens": token_budget,
+            }
+            if bool(getattr(selection_engine, "_octopus_lifecycle_host", False)):
+                engine_kwargs.update(session_id=session_id, turn_id=turn_id)
             selected = selection_engine.select_context(
-                section=section,
-                member=dict(member) if isinstance(member, dict) else None,
-                message=message,
-                candidates=candidates,
-                budget_tokens=token_budget,
+                **engine_kwargs,
             )
             if isinstance(selected, (str, bytes)) or not isinstance(selected, Sequence):
                 raise TypeError("context selection engine must return a sequence of source ids")
@@ -706,6 +777,8 @@ def plan_group_context(
     member_token_budget: int | None = None,
     project_token_budget: int | None = None,
     selection_engine: CoworkContextSelectionEngine | None = None,
+    session_id: str = "",
+    turn_id: str = "",
 ) -> GroupContextPlan:
     """Create one privacy-safe shared brief and one bounded delta per member.
 
@@ -778,6 +851,7 @@ def plan_group_context(
     low_information_followup = bool(
         _LOW_INFORMATION_FOLLOWUP_RE.fullmatch(str(message or "").strip())
     )
+    deep_recall_escalated = bool(_DEEP_RECALL_INTENT_RE.search(str(message or "")))
     project_candidates: list[tuple[float, _HistoryRow]] = []
     for row in durable_rows:
         overlap = len(query_terms & _terms(row.text))
@@ -800,6 +874,8 @@ def plan_group_context(
         selection_audit=selection_audit,
         section="durable_project_state",
         message=message,
+        session_id=session_id,
+        turn_id=turn_id,
     )
 
     # Keep shared material strict: relevant decisions/status plus direct topic
@@ -815,10 +891,17 @@ def plan_group_context(
         # last conversational exchange shared by all authorised members so a
         # question mark or "继续" cannot become a context-free new topic.
         recent_followup = low_information_followup and row.order >= max(0, len(first_rows) - 3)
-        if not overlap and not signal and not recent_followup:
+        if not overlap and not signal and not recent_followup and not deep_recall_escalated:
             continue
         shared_candidates.append(
-            (overlap * 5 + signal * 4 + (6 if recent_followup else 0) + row.order / 1000, row)
+            (
+                overlap * 5
+                + signal * 4
+                + (6 if recent_followup else 0)
+                + (_DURABLE_KIND_WEIGHT.get(row.kind, 1) if deep_recall_escalated else 0)
+                + row.order / 1000,
+                row,
+            )
         )
     shared_brief, shared_tokens, shared_fingerprints, shared_source_ids = _fit_rows(
         shared_candidates,
@@ -827,6 +910,8 @@ def plan_group_context(
         selection_audit=selection_audit,
         section="shared_brief",
         message=message,
+        session_id=session_id,
+        turn_id=turn_id,
     )
 
     plans: list[MemberContextPlan] = []
@@ -842,9 +927,15 @@ def plan_group_context(
             profile_overlap = len(profile_terms & row_terms)
             query_overlap = len(query_terms & row_terms)
             signal = 1 if _SHARED_SIGNAL_RE.search(row.text) else 0
-            if not profile_overlap and not query_overlap:
+            if not profile_overlap and not query_overlap and not deep_recall_escalated:
                 continue
-            score = profile_overlap * 7 + query_overlap * 3 + signal * 2 + row.order / 1000
+            score = (
+                profile_overlap * 7
+                + query_overlap * 3
+                + signal * 2
+                + (_DURABLE_KIND_WEIGHT.get(row.kind, 1) if deep_recall_escalated else 0)
+                + row.order / 1000
+            )
             candidates.append((score, row))
         # Non-shared blackboard state (usually task/status/facts) is retrieved
         # for a member only when it matches this turn or that member's role.
@@ -854,7 +945,7 @@ def plan_group_context(
             row_terms = _terms(row.text)
             profile_overlap = len(profile_terms & row_terms)
             query_overlap = len(query_terms & row_terms)
-            if not profile_overlap and not query_overlap:
+            if not profile_overlap and not query_overlap and not deep_recall_escalated:
                 continue
             score = (
                 profile_overlap * 7
@@ -871,6 +962,8 @@ def plan_group_context(
             section="role_relevant_context",
             member=member,
             message=message,
+            session_id=session_id,
+            turn_id=turn_id,
         )
         all_authorized_rows = histories.get(agent_id, [])
         full_context_tokens = sum(
@@ -976,6 +1069,7 @@ def plan_group_context(
         selection_engine_fallbacks=int(selection_audit["fallbacks"]),
         selection_engine_rejected_ids=int(selection_audit["rejected_ids"]),
         selection_engine_fallback_reasons=tuple(selection_audit.get("fallback_reasons") or ()),
+        deep_recall_escalated=deep_recall_escalated,
     )
 
 

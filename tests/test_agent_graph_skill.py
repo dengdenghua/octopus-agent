@@ -18,6 +18,7 @@ from runtime.execution.suckers import delegation_skills as ds
 from runtime.execution.suckers._delegation_skills_graph import (
     _MAX_GRAPH_NODES,
     _coerce_graph_nodes,
+    _evaluate_condition,
     _plan_layers,
     _resolve_node_prompt,
 )
@@ -115,6 +116,94 @@ def test_independent_nodes_share_one_layer(monkeypatch: Any) -> None:
     )
     assert len(seen["batches"]) == 1, "independent nodes were serialised"
     assert r["layers_run"] == 1
+
+
+def test_structured_condition_runs_only_the_selected_branch(monkeypatch: Any) -> None:
+    seen: dict[str, Any] = {"batches": []}
+
+    def fake(specs: Any = None, **_kw: Any) -> dict[str, Any]:
+        batch = list(specs or [])
+        seen["batches"].append(batch)
+        successes = []
+        for index, spec in enumerate(batch):
+            node_id = str(spec.get("bb_key") or "")
+            item: dict[str, Any] = {
+                "agent_id": spec.get("agent_id"),
+                "bb_key": node_id,
+                "output": f"out-{node_id}",
+                "spec_index": index,
+                "success": True,
+            }
+            if node_id == "judge":
+                item["parsed"] = {"approved": True, "score": 91}
+            successes.append(item)
+        return {"ok": True, "successes": successes, "failures": []}
+
+    monkeypatch.setattr(ds, "_call_agent_parallel", fake)
+    result = ds._run_agent_graph(
+        nodes=[
+            {
+                "id": "judge",
+                "prompt": "judge",
+                "output_schema": {"type": "object"},
+            },
+            {
+                "id": "ship",
+                "prompt": "ship approved work",
+                "depends_on": ["judge"],
+                "when": {
+                    "all": [
+                        {"ref": "judge.output.approved", "op": "eq", "value": True},
+                        {"ref": "judge.output.score", "op": "gte", "value": 80},
+                    ]
+                },
+            },
+            {
+                "id": "repair",
+                "prompt": "repair rejected work",
+                "depends_on": ["judge"],
+                "when": {"ref": "judge.output.approved", "op": "falsy"},
+            },
+        ]
+    )
+
+    assert [[item["bb_key"] for item in batch] for batch in seen["batches"]] == [
+        ["judge"],
+        ["ship"],
+    ]
+    assert result["decisions"] == {"ship": True, "repair": False}
+    assert result["nodes"]["repair"]["condition_not_met"] is True
+    assert result["success_count"] == 2
+    assert result["skipped_count"] == 1
+    assert result["failure_count"] == 0
+
+
+def test_condition_cannot_read_undeclared_dependency(monkeypatch: Any) -> None:
+    seen = _fake_parallel(monkeypatch)
+    result = ds._run_agent_graph(
+        nodes=[
+            {"id": "judge", "prompt": "judge"},
+            {
+                "id": "ship",
+                "prompt": "ship",
+                "when": {"ref": "judge.output.approved", "op": "truthy"},
+            },
+        ]
+    )
+
+    assert result["ok"] is False
+    assert "explicit dependency" in result["error"]
+    assert seen["batches"] == []
+
+
+def test_condition_type_error_fails_closed() -> None:
+    passed, error = _evaluate_condition(
+        {"ref": "judge.output.score", "op": "gte", "value": 80},
+        {"judge": {"score": "not-a-number"}},
+    )
+
+    assert passed is False
+    assert "incompatible" in error
 
 
 # ── fail closed before spending budget ────────────────────────────

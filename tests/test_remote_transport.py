@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -20,7 +21,10 @@ from runtime.sensing.gateway.remote_transport import (
     BackendRegistry,
     RemoteBackend,
     SshTunnel,
+    SshTunnelError,
+    SshTunnelForwarder,
     _validate_url,
+    connect_remote_backend,
     health_check,
     proxy_request,
 )
@@ -58,6 +62,13 @@ def test_url_rejects_empty() -> None:
         _validate_url("   ")
 
 
+def test_url_rejects_embedded_credentials_and_fragment() -> None:
+    with pytest.raises(ValueError, match="credentials"):
+        _validate_url("https://user:pass@example.com")
+    with pytest.raises(ValueError, match="fragment"):
+        _validate_url("https://example.com/#secret")
+
+
 # ─── Registry round-trip ────────────────────────────────────
 
 
@@ -73,6 +84,13 @@ def test_add_then_list(store_path: Path) -> None:
     assert b.name == "prod"
     assert b.url == "https://api.example.com:8000"
     assert reg.list() == [b]
+    public = b.to_dict()
+    assert public["transport"] == "direct"
+    assert public["capabilities"] == {
+        "http": True,
+        "realtime": True,
+        "ssh_tunnel": False,
+    }
 
 
 def test_add_persists_across_instances(store_path: Path) -> None:
@@ -150,6 +168,109 @@ def test_add_with_ssh_tunnel_persists(store_path: Path) -> None:
     assert backend.ssh is not None
     assert backend.ssh.host == "bastion.example.com"
     assert backend.ssh.user == "ops"
+    assert backend.to_dict()["transport"] == "ssh_tunnel"
+    assert backend.to_dict()["capabilities"]["ssh_tunnel"] is True
+
+
+def test_registry_rejects_invalid_or_https_ssh_configuration(store_path: Path) -> None:
+    reg = BackendRegistry(store_path)
+    with pytest.raises(ValueError, match="configuration is invalid"):
+        reg.add(
+            name="unsafe",
+            url="http://127.0.0.1:8000",
+            ssh=SshTunnel(host="-oProxyCommand=bad"),
+        )
+    with pytest.raises(ValueError, match="must use http"):
+        reg.add(
+            name="tls-over-tunnel",
+            url="https://127.0.0.1:8000",
+            ssh=SshTunnel(host="bastion.example.com"),
+        )
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        {"host": "-oProxyCommand=bad"},
+        {"host": "host name"},
+        {"host": "host", "user": "bad@user"},
+        {"host": "host", "port": 0},
+        {"host": "host", "connect_timeout": 121},
+        {"host": "host", "identity_file": "bad\npath"},
+    ],
+)
+def test_ssh_tunnel_rejects_unsafe_descriptor(raw: dict[str, Any]) -> None:
+    assert SshTunnel.from_dict(raw) is None
+
+
+def test_ssh_forwarder_builds_fail_closed_local_forward(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "runtime.sensing.gateway.remote_transport.shutil.which", lambda _: "/usr/bin/ssh"
+    )
+    backend = RemoteBackend(
+        id="x",
+        name="x",
+        url="http://127.0.0.1:8000/base",
+        ssh=SshTunnel(
+            host="bastion.example.com",
+            user="ops",
+            port=2202,
+            identity_file="/keys/id_ed25519",
+        ),
+    )
+
+    argv = SshTunnelForwarder(backend)._argv(43123)
+
+    assert argv[0] == "/usr/bin/ssh"
+    assert "ExitOnForwardFailure=yes" in argv
+    assert "BatchMode=yes" in argv
+    assert "127.0.0.1:43123:127.0.0.1:8000" in argv
+    assert argv[-1] == "ops@bastion.example.com"
+    assert "StrictHostKeyChecking=no" not in argv
+
+
+def test_ssh_forwarder_rejects_https_endpoint() -> None:
+    backend = RemoteBackend(
+        id="x",
+        name="x",
+        url="https://internal.example.com:8000",
+        ssh=SshTunnel(host="bastion.example.com"),
+    )
+    with pytest.raises(SshTunnelError, match="must use http"):
+        SshTunnelForwarder(backend)
+
+
+def test_connect_remote_backend_never_silently_falls_back() -> None:
+    events: list[str] = []
+    backend = RemoteBackend(
+        id="x",
+        name="x",
+        url="http://127.0.0.1:8000",
+        ssh=SshTunnel(host="bastion.example.com"),
+    )
+
+    class _Forwarder:
+        def __init__(self, configured: RemoteBackend) -> None:
+            assert configured is backend
+
+        def start(self) -> RemoteBackend:
+            events.append("start")
+            return RemoteBackend(
+                id="x",
+                name="x",
+                url="http://127.0.0.1:43123",
+                tunnel_active=True,
+            )
+
+        def close(self) -> None:
+            events.append("close")
+
+    with connect_remote_backend(backend, forwarder_factory=_Forwarder) as connected:
+        assert connected.tunnel_active is True
+        assert connected.url.endswith(":43123")
+    assert events == ["start", "close"]
 
 
 def test_remove(store_path: Path) -> None:
@@ -491,6 +612,84 @@ def test_post_with_invalid_ssh_returns_400(
         },
     )
     assert r.status_code == 400
+
+
+def test_post_allows_private_endpoint_only_through_ssh(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_FF_UI_REMOTE_TRANSPORT", "1")
+    ff.reload()
+    direct = client.post(
+        "/api/remote-backends",
+        json={"name": "direct", "url": "http://127.0.0.1:8000"},
+    )
+    assert direct.status_code == 400
+
+    tunneled = client.post(
+        "/api/remote-backends",
+        json={
+            "name": "tunneled",
+            "url": "http://127.0.0.1:8000",
+            "ssh": {"host": "bastion.example.com", "user": "ops"},
+        },
+    )
+    assert tunneled.status_code == 200
+    assert tunneled.json()["backend"]["transport"] == "ssh_tunnel"
+
+    tunneled_https = client.post(
+        "/api/remote-backends",
+        json={
+            "name": "bad-tunnel",
+            "url": "https://127.0.0.1:8000",
+            "ssh": {"host": "bastion.example.com"},
+        },
+    )
+    assert tunneled_https.status_code == 400
+    assert tunneled_https.json()["detail"]["reason"] == "ssh_tunnel_requires_http_endpoint"
+
+
+def test_health_endpoint_uses_configured_ssh_tunnel(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_FF_UI_REMOTE_TRANSPORT", "1")
+    ff.reload()
+    backend_id = client.post(
+        "/api/remote-backends",
+        json={
+            "name": "tunneled",
+            "url": "http://127.0.0.1:8000",
+            "ssh": {"host": "bastion.example.com"},
+        },
+    ).json()["backend"]["id"]
+
+    @contextmanager
+    def _connected(configured: RemoteBackend) -> Iterator[RemoteBackend]:
+        assert configured.ssh is not None
+        yield RemoteBackend(
+            id=configured.id,
+            name=configured.name,
+            url="http://127.0.0.1:43123",
+            tunnel_active=True,
+        )
+
+    with (
+        patch(
+            "runtime.sensing.gateway.remote_backends_router.connect_remote_backend",
+            _connected,
+        ),
+        patch(
+            "runtime.sensing.gateway.remote_backends_router.health_check",
+            return_value=("ok", None),
+        ) as mocked_health,
+    ):
+        response = client.post(f"/api/remote-backends/{backend_id}/health")
+
+    assert response.status_code == 200
+    connected = mocked_health.call_args.args[0]
+    assert connected.tunnel_active is True
+    assert connected.url == "http://127.0.0.1:43123"
 
 
 def test_delete_known_backend(

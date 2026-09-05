@@ -69,8 +69,8 @@ export function EvolutionGovernancePanel() {
               <div>
                 <h2 className="text-sm font-semibold">影子复核保护</h2>
                 <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
-                  仅在对话中手动点击 DNA
-                  复核按钮时运行另一引擎；工作区使用隔离副本和只读权限。
+                  默认单引擎执行；只有手动复核或命中风险门槛时才调用另一引擎，
+                  工作区始终使用隔离副本和只读权限。
                 </p>
               </div>
             </div>
@@ -112,7 +112,9 @@ export function EvolutionGovernancePanel() {
           ) : (
             <div className="mt-3 rounded-lg bg-muted/45 px-3 py-2 text-[11px] text-muted-foreground">
               {shadow.data?.enabled
-                ? "已授权手动影子复核；开启状态本身不会调用模型。"
+                ? shadow.data.automatic_enabled
+                  ? "已授权手动复核；风险采样已开启，但普通任务不会双跑。"
+                  : "已授权手动影子复核；自动风险采样关闭，开启状态本身不会调用模型。"
                 : shadow.isLoading
                   ? "正在读取保护状态…"
                   : "当前关闭，不会触发另一引擎，也不会产生额外费用。"}
@@ -133,7 +135,7 @@ export function EvolutionGovernancePanel() {
           <div className="mt-3 space-y-2 text-xs text-muted-foreground">
             <div className="flex justify-between">
               <span>影子执行</span>
-              <span>手动触发</span>
+              <span>{shadow.data?.automatic_enabled ? "风险触发 + 手动" : "手动触发"}</span>
             </div>
             <div className="flex justify-between">
               <span>工作区权限</span>

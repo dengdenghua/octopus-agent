@@ -389,11 +389,14 @@ def test_ws_receipt_is_projected_to_canonical_store(tmp_path) -> None:
     ).json()
     room_id = room["id"]
     canonical.upsert_room_by_id(room)
-    with client.websocket_connect(
-        f"/api/teams/{room_id}/ws?participant_id=owner&display_name=Owner"
-    ) as owner, client.websocket_connect(
-        f"/api/teams/{room_id}/ws?participant_id=reader&display_name=Reader"
-    ) as reader:
+    with (
+        client.websocket_connect(
+            f"/api/teams/{room_id}/ws?participant_id=owner&display_name=Owner"
+        ) as owner,
+        client.websocket_connect(
+            f"/api/teams/{room_id}/ws?participant_id=reader&display_name=Reader"
+        ) as reader,
+    ):
         owner.receive_json()
         owner.receive_json()
         reader.receive_json()
@@ -401,16 +404,22 @@ def test_ws_receipt_is_projected_to_canonical_store(tmp_path) -> None:
         owner.send_json({"type": "message", "text": "read me"})
         event = reader.receive_json()
         assert event["type"] == "message"
-        reader.send_json({"type": "message:read", "message_id": event["message_id"], "seq": event["seq"]})
+        reader.send_json(
+            {"type": "message:read", "message_id": event["message_id"], "seq": event["seq"]}
+        )
         receipt = owner.receive_json()
         while receipt.get("type") != "message:receipt":
             receipt = owner.receive_json()
         assert receipt["type"] == "message:receipt"
 
-    canonical_receipt = canonical._connect().execute(
-        "SELECT status FROM collaboration_message_receipts WHERE room_id=? AND message_id=?",
-        (room_id, event["message_id"]),
-    ).fetchone()
+    canonical_receipt = (
+        canonical._connect()
+        .execute(
+            "SELECT status FROM collaboration_message_receipts WHERE room_id=? AND message_id=?",
+            (room_id, event["message_id"]),
+        )
+        .fetchone()
+    )
     assert canonical_receipt[0] == "read"
 
 

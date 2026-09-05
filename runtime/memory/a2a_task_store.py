@@ -220,7 +220,14 @@ class A2ATaskStore:
                 "INSERT INTO a2a_tasks"
                 "(local_task_id,agent_id,context_id,status,request_json,created_at,updated_at) "
                 "VALUES (?,?,?,'submitted',?,?,?)",
-                (local_task_id, agent_id, str(context_id or ""), _dump(request_payload), timestamp, timestamp),
+                (
+                    local_task_id,
+                    agent_id,
+                    str(context_id or ""),
+                    _dump(request_payload),
+                    timestamp,
+                    timestamp,
+                ),
             )
             self._append_event(
                 conn,
@@ -269,7 +276,9 @@ class A2ATaskStore:
                     str(remote_task_id or current["remote_task_id"]),
                     str(context_id or current["context_id"]),
                     state,
-                    _dump(result_payload) if result_payload is not None else (
+                    _dump(result_payload)
+                    if result_payload is not None
+                    else (
                         _dump(current["result"]) if isinstance(current["result"], dict) else None
                     ),
                     str(error)[:4000] if error else None,
@@ -322,9 +331,7 @@ class A2ATaskStore:
             rows = conn.execute(sql, tuple(params)).fetchall()
         return [_from_row(row) for row in rows]
 
-    def events(
-        self, local_task_id: str, *, after_seq: int = 0
-    ) -> builtins.list[dict[str, Any]]:
+    def events(self, local_task_id: str, *, after_seq: int = 0) -> builtins.list[dict[str, Any]]:
         with self._lock, self._connect() as conn:
             rows = conn.execute(
                 "SELECT seq,event_type,status,payload_json,created_at FROM a2a_task_events "

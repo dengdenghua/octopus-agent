@@ -14,11 +14,11 @@ from __future__ import annotations
 import re
 from types import SimpleNamespace
 
+from runtime.core.cerebrum._react_prompt_assembly_guidance import _assemble_tool_sections
 from runtime.core.cerebrum._react_prompt_assembly_sections import (
     _TOOL_USE_CONTRACT,
     _assemble_early_sections,
 )
-from runtime.core.cerebrum._react_prompt_assembly_guidance import _assemble_tool_sections
 from runtime.core.cerebrum._react_prompt_assembly_state import _AssemblyState
 
 

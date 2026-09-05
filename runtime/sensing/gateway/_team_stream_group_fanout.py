@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 import os
@@ -302,6 +303,35 @@ async def _drive_group_fanout(
         member["context_mode"] = (
             "isolated" if role in {"explorer", "proposer", "alternative"} else "selective"
         )
+    context_engine_host = getattr(runtime, "_cowork_context_engine_host", None)
+    context_engine_events: list[dict[str, Any]] = []
+    context_engine_events_lock = threading.Lock()
+
+    def _record_context_engine_hook(hook: str, **kwargs: Any) -> dict[str, Any] | None:
+        if context_engine_host is None:
+            return None
+        report = (
+            context_engine_host.bootstrap_session(turn.thread_id)
+            if hook == "bootstrap"
+            else context_engine_host.invoke_hook(hook, **kwargs)
+        )
+        safe_report = {
+            key: value
+            for key, value in report.items()
+            if key in {"hook", "status", "duration_ms", "error_type"}
+        }
+        with context_engine_events_lock:
+            context_engine_events.append(safe_report)
+        return safe_report
+
+    _record_context_engine_hook("bootstrap")
+    _record_context_engine_hook(
+        "ingest",
+        session_id=turn.thread_id,
+        turn_id=turn.id,
+        message=text,
+        is_heartbeat=False,
+    )
     context_plan = None
     try:
         from runtime.memory.cowork.context_steward import plan_group_context
@@ -323,8 +353,24 @@ async def _drive_group_fanout(
                 else None
             ),
             durable_context=(dict(durable_context) if isinstance(durable_context, dict) else None),
-            selection_engine=getattr(runtime, "_cowork_context_engine", None),
+            selection_engine=(
+                context_engine_host or getattr(runtime, "_cowork_context_engine", None)
+            ),
+            session_id=turn.thread_id,
+            turn_id=turn.id,
         )
+        if context_plan.budget_tier == "long_project":
+            _record_context_engine_hook(
+                "compact",
+                session_id=turn.thread_id,
+                turn_id=turn.id,
+                reason="long_project_budget",
+                statistics={
+                    "history_messages": context_plan.history_message_count,
+                    "full_tokens": context_plan.full_context_estimated_tokens,
+                    "selected_tokens": context_plan.selected_estimated_tokens,
+                },
+            )
     except Exception as exc:  # noqa: BLE001 — current-message-only is the safe fallback
         _logger.warning("cowork context planning failed: %s", exc, exc_info=True)
 
@@ -333,6 +379,7 @@ async def _drive_group_fanout(
     team_trace_started = 0.0
     planned_group_capacity: dict[str, Any] = {}
     collaboration_run_id: str | None = None
+    context_lifecycle_admitted = False
     collaboration_run_worker = f"realtime:{os.getpid()}:{turn.id}"
 
     def _run_store() -> Any:
@@ -667,7 +714,8 @@ async def _drive_group_fanout(
         runtime now records a replayable parent ``team_swarm`` item plus one
         ``SubagentItem`` lane per member.
         """
-        nonlocal team_trace_item, team_trace_started, collaboration_run_id
+        nonlocal collaboration_run_id, context_lifecycle_admitted
+        nonlocal team_trace_item, team_trace_started
         if not group_members:
             return
         nonlocal planned_group_capacity
@@ -722,6 +770,10 @@ async def _drive_group_fanout(
                 "pattern": team_pattern or None,
                 "routing": fanout_routing,
                 "context_plan": context_plan.audit_dict() if context_plan is not None else None,
+                "context_engine": (
+                    context_engine_host.describe() if context_engine_host is not None else None
+                ),
+                "context_engine_lifecycle": list(context_engine_events),
             },
             status=ItemStatus.IN_PROGRESS,
         )
@@ -768,6 +820,33 @@ async def _drive_group_fanout(
             # durable collector. Keep it on the public team event rather than
             # asking the UI to guess which ledger row belongs to this turn.
             team_trace_item.arguments["collaboration_run_id"] = collaboration_run_id
+        admit_context = getattr(store, "admit_context_turn", None)
+        if context_plan is not None and callable(admit_context):
+            try:
+                lifecycle = admit_context(
+                    session_id=turn.thread_id,
+                    turn_id=turn.id,
+                    run_id=collaboration_run_id or "",
+                    message=text,
+                    receipt=context_plan.lifecycle_receipt(
+                        [str(member.get("name") or "") for member in dispatched_members]
+                    ),
+                )
+                context_lifecycle_admitted = True
+                team_trace_item.arguments["context_lifecycle"] = {
+                    "schema": lifecycle.get("schema"),
+                    "status": lifecycle.get("status"),
+                    "expected_members": lifecycle.get("expected_members"),
+                    "selected_tokens": lifecycle.get("selected_tokens"),
+                    "full_tokens": lifecycle.get("full_tokens"),
+                    "deep_recall": lifecycle.get("deep_recall"),
+                }
+            except Exception as exc:  # noqa: BLE001 — execution remains available
+                _logger.warning(
+                    "cowork context lifecycle admission failed: %s",
+                    type(exc).__name__,
+                    exc_info=True,
+                )
         await _notify_started(team_trace_item)
         for member in dispatched_members:
             agent_id = member["name"]
@@ -788,6 +867,66 @@ async def _drive_group_fanout(
         cancelled = bool(result.get("cancelled"))
         replies = [reply for reply in result.get("replies", []) if isinstance(reply, dict)]
         by_agent = {str(reply.get("agent_id") or ""): reply for reply in replies}
+        context_lifecycle: dict[str, Any] | None = None
+        if context_lifecycle_admitted:
+            settle_context = getattr(_run_store(), "settle_context_turn", None)
+            if callable(settle_context):
+                try:
+                    outcomes = []
+                    for agent_id in member_trace_items:
+                        reply = by_agent.get(agent_id, {})
+                        body = str(reply.get("reply") or "").strip()
+                        error_code = str(reply.get("error") or "empty-or-cancelled").strip()
+                        committed = bool(reply.get("ok")) and bool(body)
+                        outcomes.append(
+                            {
+                                "agent_id": agent_id,
+                                "status": "committed" if committed else "aborted",
+                                "result_sha256": hashlib.sha256(
+                                    (body if committed else error_code).encode("utf-8")
+                                ).hexdigest(),
+                            }
+                        )
+                    settled = settle_context(
+                        turn.thread_id,
+                        turn.id,
+                        outcomes,
+                    )
+                    context_lifecycle = {
+                        "schema": settled.get("schema"),
+                        "status": settled.get("status"),
+                        "expected_members": settled.get("expected_members"),
+                        "committed_members": settled.get("committed_members"),
+                        "aborted_members": settled.get("aborted_members"),
+                        "selected_tokens": settled.get("selected_tokens"),
+                        "full_tokens": settled.get("full_tokens"),
+                        "deep_recall": settled.get("deep_recall"),
+                    }
+                    if context_plan is not None:
+                        _record_context_engine_hook(
+                            "commit_turn",
+                            session_id=turn.thread_id,
+                            turn_id=turn.id,
+                            advancement_key=f"{turn.thread_id}:{turn.id}",
+                            receipt=context_plan.lifecycle_receipt(list(member_trace_items)),
+                            outcomes=outcomes,
+                        )
+                        _record_context_engine_hook(
+                            "maintain",
+                            session_id=turn.thread_id,
+                            turn_id=turn.id,
+                            outcome={
+                                "status": settled.get("status"),
+                                "committed_members": settled.get("committed_members"),
+                                "aborted_members": settled.get("aborted_members"),
+                            },
+                        )
+                except Exception as exc:  # noqa: BLE001 — trace delivery must continue
+                    _logger.warning(
+                        "cowork context lifecycle settlement failed: %s",
+                        type(exc).__name__,
+                        exc_info=True,
+                    )
         for agent_id, item in member_trace_items.items():
             reply = by_agent.get(agent_id, {})
             body = str(reply.get("reply") or "").strip()
@@ -835,6 +974,11 @@ async def _drive_group_fanout(
                 "pattern": result.get("pattern") or team_pattern or None,
                 "routing": result.get("routing") or fanout_routing,
                 "context_plan": result.get("context_plan"),
+                "context_lifecycle": context_lifecycle,
+                "context_engine": (
+                    context_engine_host.describe() if context_engine_host is not None else None
+                ),
+                "context_engine_lifecycle": list(context_engine_events),
                 "replies": replies,
             }
             team_trace_item.error = None if ok else str(result.get("error") or "no member replied")
@@ -862,6 +1006,11 @@ async def _drive_group_fanout(
             "pattern": result.get("pattern") or team_pattern or None,
             "routing": result.get("routing") or fanout_routing,
             "context_plan": result.get("context_plan"),
+            "context_lifecycle": context_lifecycle,
+            "context_engine": (
+                context_engine_host.describe() if context_engine_host is not None else None
+            ),
+            "context_engine_lifecycle": list(context_engine_events),
             # Preserve identity/status for replay and recovery without copying
             # every potentially large response body into the lifecycle row.
             "outcomes": [
@@ -874,6 +1023,7 @@ async def _drive_group_fanout(
                     "pattern_role": reply.get("pattern_role"),
                     "validation": reply.get("validation"),
                     "context_delivery": reply.get("context_delivery"),
+                    "context_engine_lifecycle": reply.get("context_engine_lifecycle"),
                     "session_compaction": reply.get("session_compaction"),
                     "error": reply.get("error"),
                 }
@@ -893,6 +1043,29 @@ async def _drive_group_fanout(
         )
 
     async def _fail_group_trace(exc: BaseException) -> None:
+        if context_lifecycle_admitted and member_trace_items:
+            settle_context = getattr(_run_store(), "settle_context_turn", None)
+            if callable(settle_context):
+                failure_digest = hashlib.sha256(type(exc).__name__.encode("utf-8")).hexdigest()
+                with contextlib.suppress(Exception):
+                    settle_context(
+                        turn.thread_id,
+                        turn.id,
+                        [
+                            {
+                                "agent_id": agent_id,
+                                "status": "aborted",
+                                "result_sha256": failure_digest,
+                            }
+                            for agent_id in member_trace_items
+                        ],
+                    )
+        _record_context_engine_hook(
+            "maintain",
+            session_id=turn.thread_id,
+            turn_id=turn.id,
+            outcome={"status": "aborted", "error_type": type(exc).__name__},
+        )
         for item in member_trace_items.values():
             if item.status == ItemStatus.IN_PROGRESS:
                 item.status = ItemStatus.FAILED
@@ -1170,8 +1343,27 @@ async def _drive_group_fanout(
                     "full_estimated_tokens": 0,
                     "sent_estimated_tokens": 0,
                     "avoided_estimated_tokens": 0,
+                    "context_projection": {
+                        "schema": "octopus.cowork_context_projection.v1",
+                        "mode": "unavailable",
+                        "epoch": "",
+                        "bootstrap_required": False,
+                        "delta_required": False,
+                    },
                 }
             context_delivery["continued_session"] = bool(continuation_id)
+            projection = context_delivery.get("context_projection")
+            if isinstance(projection, dict):
+                projection["backend_thread_reused"] = bool(continuation_id)
+            member_engine_start = _record_context_engine_hook(
+                "on_member_start",
+                session_id=turn.thread_id,
+                turn_id=turn.id,
+                agent_id=agent_id,
+                projection_epoch=(
+                    member_plan.projection_epoch() if member_plan is not None else ""
+                ),
+            )
             if runtime_checkpoint and not safe_continuation and continuation_reset_reason:
                 context_delivery["reset_reason"] = continuation_reset_reason
             base_prompt = planned_context + "\n\n" + prompt if planned_context else prompt
@@ -1217,6 +1409,9 @@ async def _drive_group_fanout(
                         )
                     context_delivery["continued_session"] = False
                     context_delivery["reset_reason"] = "subagent_session_missing"
+                    projection = context_delivery.get("context_projection")
+                    if isinstance(projection, dict):
+                        projection["backend_thread_reused"] = False
                     base_prompt = planned_context + "\n\n" + prompt if planned_context else prompt
                     final_prompt = base_prompt + _steering_addendum(corrections)
                     continue
@@ -1229,12 +1424,26 @@ async def _drive_group_fanout(
                 corrections.extend(arrived_during_call)
                 final_prompt = base_prompt + _steering_addendum(corrections)
                 if restart == 2:
-                    return {
+                    exhausted = {
                         **result,
                         "success": False,
                         "output": "",
                         "error": "member steering restart limit exceeded; retry the member",
                     }
+                    exhausted["context_engine_lifecycle"] = {
+                        "start": member_engine_start,
+                        "end": _record_context_engine_hook(
+                            "on_member_end",
+                            session_id=turn.thread_id,
+                            turn_id=turn.id,
+                            agent_id=agent_id,
+                            status="aborted",
+                            result_sha256=hashlib.sha256(
+                                b"member_steering_restart_limit"
+                            ).hexdigest(),
+                        ),
+                    }
+                    return exhausted
             if result.get("success") and continuation_id and member_plan is not None:
                 save_checkpoint = getattr(
                     _run_store(),
@@ -1258,7 +1467,32 @@ async def _drive_group_fanout(
             context_delivery["continued_session"] = bool(
                 context_delivery.get("continued_session") and continuation_id
             )
+            projection = context_delivery.get("context_projection")
+            if isinstance(projection, dict):
+                projection["backend_thread_reused"] = bool(
+                    context_delivery.get("continued_session")
+                )
             result["context_delivery"] = context_delivery
+            successful_body = str(result.get("output") or "").strip()
+            result_status = (
+                "committed" if bool(result.get("success")) and successful_body else "aborted"
+            )
+            result_fingerprint = (
+                successful_body
+                if result_status == "committed"
+                else str(result.get("error") or "empty-or-cancelled")
+            )
+            result["context_engine_lifecycle"] = {
+                "start": member_engine_start,
+                "end": _record_context_engine_hook(
+                    "on_member_end",
+                    session_id=turn.thread_id,
+                    turn_id=turn.id,
+                    agent_id=agent_id,
+                    status=result_status,
+                    result_sha256=hashlib.sha256(result_fingerprint.encode("utf-8")).hexdigest(),
+                ),
+            }
             steering_generation, steering_seq = _member_steering_position(agent_id)
             result["steering_generation"] = steering_generation
             result["steering_seq"] = steering_seq

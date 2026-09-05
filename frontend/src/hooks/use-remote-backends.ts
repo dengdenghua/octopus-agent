@@ -29,6 +29,12 @@ export interface RemoteBackend {
   last_health_at: string | null;
   health_detail: string | null;
   has_auth: boolean;
+  transport?: "direct" | "ssh_tunnel";
+  capabilities?: {
+    http: boolean;
+    realtime: boolean;
+    ssh_tunnel: boolean;
+  };
 }
 
 export interface RemoteBackendsState {

@@ -277,6 +277,7 @@ class ContextComposer:
         engine: ContextEngine | None = None,
         gill_cache: GillCache | None = None,
         gill_max_age_s: float = 2.0,
+        cowork_engine: Any = None,
     ) -> None:
         self.registry = registry
         self.journal = journal
@@ -285,6 +286,10 @@ class ContextComposer:
         # TruncationContextEngine when none is supplied so existing
         # callers are unaffected.
         self.engine: ContextEngine = engine or TruncationContextEngine()
+        # Optional group-context selector. It is consumed by the realtime
+        # cowork steward through CerebrumRuntime; keeping it beside the normal
+        # context engine gives hosts one composition point for both paths.
+        self.cowork_engine = cowork_engine
         self.gill_cache = gill_cache
         self.gill_max_age_s = max(0.1, float(gill_max_age_s))
 
@@ -473,7 +478,7 @@ class ContextComposer:
         if isinstance(task_info, ParsedIntent):
             return task_info.normalized_goal or ""
         if isinstance(task_info, TaskGraph):
-            refs = " ".join(n.skill_ref for n in task_info.nodes)
+            refs = " ".join(str(n.skill_ref or "") for n in task_info.nodes)
             return f"{task_info.task_type or ''} {refs}".strip()
         return ""
 

@@ -133,7 +133,7 @@ def manager_status() -> dict[str, Any]:
     with _LOCK:
         process = _PROCESS
         running = process is not None and process.poll() is None
-        pid = process.pid if running else None
+        pid = process.pid if process is not None and running else None
         return_code = None if process is None or running else process.returncode
     state = _read_state()
     if not running and state.get("state") == "running":

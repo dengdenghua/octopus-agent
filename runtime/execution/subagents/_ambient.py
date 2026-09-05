@@ -37,9 +37,7 @@ def current_subagent_session_id() -> str:
     return _current_subagent_session_id.get()
 
 
-_current_subagent_root_id: ContextVar[str] = ContextVar(
-    "_current_subagent_root_id", default=""
-)
+_current_subagent_root_id: ContextVar[str] = ContextVar("_current_subagent_root_id", default="")
 
 
 @contextmanager

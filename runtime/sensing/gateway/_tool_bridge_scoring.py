@@ -448,8 +448,7 @@ def _record_codex_turn_score_safe(*, turn: Any, agent: Any = None) -> None:
             in {"failed", "error"}
         )
         status = str(
-            getattr(getattr(turn, "status", None), "value", getattr(turn, "status", ""))
-            or ""
+            getattr(getattr(turn, "status", None), "value", getattr(turn, "status", "")) or ""
         ).lower()
         interrupted = status in {"cancelled", "canceled", "interrupted", "paused"}
         started_at = getattr(turn, "started_at", None)
@@ -476,9 +475,7 @@ def _record_codex_turn_score_safe(*, turn: Any, agent: Any = None) -> None:
         tool_rounds = sum(
             1
             for item in items
-            if str(
-                getattr(getattr(item, "type", None), "value", getattr(item, "type", ""))
-            )
+            if str(getattr(getattr(item, "type", None), "value", getattr(item, "type", "")))
             in tool_types
         )
         _record_engine_neutral_score_safe(

@@ -132,13 +132,187 @@ def test_collaboration_run_timeline_is_exposed_without_cross_thread_leakage(tmp_
     assert attempts.status_code == 200, attempts.text
     assert attempts.json()["count"] == 2
     assert client.get("/api/collab/other-thread/runs/run-visible").status_code == 404
+    assert client.get("/api/collab/other-thread/runs/run-visible/collector").status_code == 404
     assert (
-        client.get("/api/collab/other-thread/runs/run-visible/collector").status_code
+        client.get("/api/collab/thread-runs/runs", params={"status": "made-up"}).status_code == 400
+    )
+
+
+def test_collector_member_steering_api_is_scoped_and_rejects_late_updates(tmp_path) -> None:
+    group_store = GroupStore(base_dir=tmp_path / "groups")
+    collaboration = CollaborationStore(base_dir=tmp_path / "collaboration")
+    app = FastAPI()
+    app.include_router(
+        create_cowork_group_router(store=group_store, collaboration_store=collaboration)
+    )
+    client = TestClient(app)
+    collaboration.create_collaboration_run(
+        run_id="run-steer",
+        session_id="thread-steer",
+        kind="group_fanout",
+    )
+    collaboration.claim_collaboration_run("run-steer", worker_id="worker-a")
+    collaboration.create_collaboration_collector(
+        run_id="run-steer", child_ids=["coder", "reviewer"]
+    )
+
+    steered = client.post(
+        "/api/collab/thread-steer/runs/run-steer/collector/coder/steer",
+        json={"text": "先检查竞态，再提交结论"},
+    )
+    assert steered.status_code == 200, steered.text
+    assert steered.json()["steering"]["child_id"] == "coder"
+    assert steered.json()["collector"]["revision"] == 2
+    history = client.get(
+        "/api/collab/thread-steer/runs/run-steer/collector/steering",
+        params={"child_id": "coder"},
+    )
+    assert history.status_code == 200
+    assert [row["text"] for row in history.json()["steering"]] == ["先检查竞态，再提交结论"]
+    assert (
+        client.post(
+            "/api/collab/other-thread/runs/run-steer/collector/coder/steer",
+            json={"text": "cross-thread"},
+        ).status_code
         == 404
     )
-    assert client.get(
-        "/api/collab/thread-runs/runs", params={"status": "made-up"}
-    ).status_code == 400
+    assert (
+        client.post(
+            "/api/collab/thread-steer/runs/run-steer/collector/other/steer",
+            json={"text": "unknown"},
+        ).status_code
+        == 409
+    )
+
+    collaboration.record_collaboration_collector_result(
+        "run-steer", child_id="coder", status="success", result={"reply": "done"}
+    )
+    assert (
+        client.post(
+            "/api/collab/thread-steer/runs/run-steer/collector/coder/steer",
+            json={"text": "late"},
+        ).status_code
+        == 409
+    )
+
+
+def test_collector_can_cancel_one_member_without_stopping_the_group(tmp_path) -> None:
+    group_store = GroupStore(base_dir=tmp_path / "groups")
+    collaboration = CollaborationStore(base_dir=tmp_path / "collaboration")
+    app = FastAPI()
+    app.include_router(
+        create_cowork_group_router(store=group_store, collaboration_store=collaboration)
+    )
+    client = TestClient(app)
+    collaboration.create_collaboration_run(
+        run_id="run-member-stop",
+        session_id="thread-member-stop",
+        kind="group_fanout",
+    )
+    collaboration.claim_collaboration_run("run-member-stop", worker_id="worker-a")
+    collaboration.create_collaboration_collector(
+        run_id="run-member-stop",
+        child_ids=["coder", "reviewer"],
+    )
+
+    stopped = client.post(
+        "/api/collab/thread-member-stop/runs/run-member-stop/collector/coder/cancel",
+        json={"reason": "这一路不再需要"},
+    )
+
+    assert stopped.status_code == 200, stopped.text
+    collector = stopped.json()["collector"]
+    assert collector["status"] == "collecting"
+    assert collector["remaining_child_ids"] == ["reviewer"]
+    assert (
+        next(item for item in collector["results"] if item["child_id"] == "coder")["status"]
+        == "cancelled"
+    )
+    repeated = client.post(
+        "/api/collab/thread-member-stop/runs/run-member-stop/collector/coder/cancel",
+        json={"reason": "重复点击也应幂等"},
+    )
+    assert repeated.status_code == 200
+    assert (
+        client.post(
+            "/api/collab/other-thread/runs/run-member-stop/collector/reviewer/cancel",
+            json={},
+        ).status_code
+        == 404
+    )
+    collaboration.record_collaboration_collector_result(
+        "run-member-stop",
+        child_id="reviewer",
+        status="success",
+        result={"reply": "other member continued"},
+    )
+    assert (
+        client.post(
+            "/api/collab/thread-member-stop/runs/run-member-stop/collector/reviewer/cancel",
+            json={},
+        ).status_code
+        == 409
+    )
+
+
+def test_member_cancel_freezes_its_bound_background_retry_before_settlement(tmp_path) -> None:
+    group_store = GroupStore(base_dir=tmp_path / "groups")
+    queue = AsyncWorkStore(base_dir=tmp_path / "groups", group_store=group_store)
+    collaboration = CollaborationStore(base_dir=tmp_path / "collaboration")
+    app = FastAPI()
+    app.include_router(
+        create_cowork_group_router(
+            store=group_store,
+            async_store=queue,
+            collaboration_store=collaboration,
+        )
+    )
+    client = TestClient(app)
+    collaboration.create_collaboration_run(
+        run_id="run-retry-stop",
+        session_id="thread-retry-stop",
+        kind="group_fanout",
+    )
+    collaboration.claim_collaboration_run("run-retry-stop", worker_id="worker-a")
+    collaboration.create_collaboration_collector(
+        run_id="run-retry-stop",
+        child_ids=["coder"],
+    )
+    collaboration.record_collaboration_collector_result(
+        "run-retry-stop",
+        child_id="coder",
+        status="failed",
+        result={"error": "transient"},
+    )
+    task = queue.assign(
+        "thread-retry-stop",
+        "coder",
+        "retry work",
+        actor="user",
+    )
+    collaboration.bind_collaboration_collector_retry_task(
+        "run-retry-stop",
+        child_id="coder",
+        task_id=task.task_id,
+    )
+    collaboration.reopen_collaboration_collector(
+        "run-retry-stop",
+        child_ids=["coder"],
+    )
+
+    stopped = client.post(
+        "/api/collab/thread-retry-stop/runs/run-retry-stop/collector/coder/cancel",
+        json={},
+    )
+
+    assert stopped.status_code == 200, stopped.text
+    assert stopped.json()["cancelled_task_count"] == 1
+    assert queue.get(task.task_id).status == "cancelled"
+    collector = collaboration.collaboration_collector("run-retry-stop")
+    assert collector is not None
+    assert collector["status"] == "completed"
+    assert collector["results"][0]["status"] == "cancelled"
+    assert collector["results"][0]["attempt"] == 2
 
 
 def test_collaboration_delivery_recovery_api_is_scoped_and_actionable(tmp_path) -> None:
@@ -163,23 +337,658 @@ def test_collaboration_delivery_recovery_api_is_scoped_and_actionable(tmp_path) 
     detail = client.get("/api/collab/thread-deliveries/deliveries/delivery-visible")
     assert detail.status_code == 200
     assert detail.json()["events"][0]["event_type"] == "enqueued"
+    assert client.get("/api/collab/other-thread/deliveries/delivery-visible").status_code == 404
     assert (
-        client.get("/api/collab/other-thread/deliveries/delivery-visible").status_code == 404
+        client.get(
+            "/api/collab/thread-deliveries/deliveries", params={"status": "made-up"}
+        ).status_code
+        == 400
     )
-    assert client.get(
-        "/api/collab/thread-deliveries/deliveries", params={"status": "made-up"}
-    ).status_code == 400
 
-    dismissed = client.post(
-        "/api/collab/thread-deliveries/deliveries/delivery-visible/dismiss"
-    )
+    dismissed = client.post("/api/collab/thread-deliveries/deliveries/delivery-visible/dismiss")
     assert dismissed.status_code == 200
     assert dismissed.json()["delivery"]["status"] == "dismissed"
-    retried = client.post(
-        "/api/collab/thread-deliveries/deliveries/delivery-visible/retry"
-    )
+    retried = client.post("/api/collab/thread-deliveries/deliveries/delivery-visible/retry")
     assert retried.status_code == 200
     assert retried.json()["delivery"]["status"] == "pending"
+
+
+def test_collector_retry_endpoint_queues_and_completes_only_failed_members(tmp_path) -> None:
+    from runtime.memory.cowork.async_runner import AsyncWorkRunner
+    from runtime.memory.cowork.runtime import _collector_completion_observer
+
+    group_store = GroupStore(base_dir=tmp_path / "cowork")
+    async_store = AsyncWorkStore(base_dir=tmp_path / "cowork", group_store=group_store)
+    collaboration = CollaborationStore(base_dir=tmp_path / "cowork")
+
+    class RunnerSignal:
+        def __init__(self) -> None:
+            self.wake_count = 0
+
+        def wake(self) -> None:
+            self.wake_count += 1
+
+    signal = RunnerSignal()
+    app = FastAPI()
+    app.include_router(
+        create_cowork_group_router(
+            store=group_store,
+            async_store=async_store,
+            collaboration_store=collaboration,
+            runtime=SimpleNamespace(runner=signal),
+        )
+    )
+    client = TestClient(app)
+    collaboration.create_collaboration_run(
+        run_id="retry-visible",
+        session_id="thread-retry",
+        kind="group_fanout",
+        input={"message": "验证发布方案"},
+    )
+    collaboration.claim_collaboration_run("retry-visible", worker_id="worker-a")
+    collaboration.create_collaboration_collector(
+        run_id="retry-visible", child_ids=["coder", "reviewer"]
+    )
+    collaboration.record_collaboration_collector_result(
+        "retry-visible",
+        child_id="coder",
+        status="failed",
+        result={"error": "provider timeout"},
+    )
+    collaboration.record_collaboration_collector_result(
+        "retry-visible",
+        child_id="reviewer",
+        status="success",
+        result={"reply": "review kept"},
+    )
+
+    response = client.post(
+        "/api/collab/thread-retry/runs/retry-visible/collector/retry",
+        json={},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["count"] == 1
+    assert response.json()["tasks"][0]["assignee"] == "coder"
+    assert "原始请求：验证发布方案" in response.json()["tasks"][0]["prompt"]
+    assert signal.wake_count == 1
+
+    task_runner = AsyncWorkRunner(
+        async_store,
+        group_store,
+        lambda _task, _context: "retry passed",
+        completion_observer=_collector_completion_observer(collaboration),
+    )
+    assert task_runner.drain("thread-retry") == 1
+    collector = collaboration.collaboration_collector("retry-visible")
+    assert collector is not None
+    assert collector["status"] == "completed"
+    assert collector["success_count"] == 2
+    assert collector["attempt_count"] == 3
+
+
+def test_collector_retry_backpressure_is_atomic_and_keeps_collector_retryable(
+    tmp_path,
+) -> None:
+    group_store = GroupStore(base_dir=tmp_path / "cowork")
+    async_store = AsyncWorkStore(
+        base_dir=tmp_path / "cowork",
+        group_store=group_store,
+        max_active_per_thread=1,
+        max_active_total=1,
+    )
+    collaboration = CollaborationStore(base_dir=tmp_path / "cowork")
+    async_store.assign("thread-retry-full", "other", "already queued", actor="user")
+    signal = SimpleNamespace(wake=lambda: None)
+    app = FastAPI()
+    app.include_router(
+        create_cowork_group_router(
+            store=group_store,
+            async_store=async_store,
+            collaboration_store=collaboration,
+            runtime=SimpleNamespace(runner=signal),
+        )
+    )
+    client = TestClient(app)
+    collaboration.create_collaboration_run(
+        run_id="retry-full",
+        session_id="thread-retry-full",
+        kind="group_fanout",
+        input={"message": "验证发布方案"},
+    )
+    collaboration.claim_collaboration_run("retry-full", worker_id="worker-a")
+    collaboration.create_collaboration_collector(
+        run_id="retry-full",
+        child_ids=["coder"],
+    )
+    collaboration.record_collaboration_collector_result(
+        "retry-full",
+        child_id="coder",
+        status="failed",
+        result={"error": "provider timeout"},
+    )
+
+    response = client.post(
+        "/api/collab/thread-retry-full/runs/retry-full/collector/retry",
+        json={},
+    )
+
+    assert response.status_code == 429, response.text
+    assert response.json()["detail"]["code"] == "COWORK_QUEUE_FULL"
+    assert response.json()["detail"]["queue"]["pressure"] == "saturated"
+    collector = collaboration.collaboration_collector("retry-full")
+    assert collector is not None
+    assert collector["generation"] == 1
+    assert collector["status"] == "completed"
+    assert [task.prompt for task in async_store.list("thread-retry-full")] == ["already queued"]
+
+
+def test_collector_retry_dispatch_failure_releases_reserved_capacity(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    group_store = GroupStore(base_dir=tmp_path / "cowork")
+    async_store = AsyncWorkStore(
+        base_dir=tmp_path / "cowork",
+        group_store=group_store,
+        max_active_per_thread=1,
+        max_active_total=1,
+    )
+    collaboration = CollaborationStore(base_dir=tmp_path / "cowork")
+    app = FastAPI()
+    app.include_router(
+        create_cowork_group_router(
+            store=group_store,
+            async_store=async_store,
+            collaboration_store=collaboration,
+            runtime=SimpleNamespace(runner=SimpleNamespace(wake=lambda: None)),
+        )
+    )
+    client = TestClient(app)
+    collaboration.create_collaboration_run(
+        run_id="retry-bind-failure",
+        session_id="thread-retry-bind-failure",
+        kind="group_fanout",
+        input={"message": "验证发布方案"},
+    )
+    collaboration.claim_collaboration_run("retry-bind-failure", worker_id="worker-a")
+    collaboration.create_collaboration_collector(
+        run_id="retry-bind-failure",
+        child_ids=["coder"],
+    )
+    collaboration.record_collaboration_collector_result(
+        "retry-bind-failure",
+        child_id="coder",
+        status="failed",
+        result={"error": "provider timeout"},
+    )
+    monkeypatch.setattr(
+        collaboration,
+        "bind_collaboration_collector_retry_task",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("bind failed")),
+    )
+
+    response = client.post(
+        "/api/collab/thread-retry-bind-failure/runs/retry-bind-failure/collector/retry",
+        json={},
+    )
+
+    assert response.status_code == 500, response.text
+    assert async_store.list("thread-retry-bind-failure") == []
+    assert async_store.queue_health("thread-retry-bind-failure")["thread_active"] == 0
+    collector = collaboration.collaboration_collector("retry-bind-failure")
+    assert collector is not None
+    assert collector["generation"] == 1
+    assert collector["attempt_count"] == 1
+    assert collector["results"][0]["result"]["error"] == "provider timeout"
+
+
+def test_partial_prebinding_failure_releases_lanes_for_next_retry(tmp_path, monkeypatch) -> None:
+    base = tmp_path / "cowork"
+    group_store = GroupStore(base_dir=base)
+    async_store = AsyncWorkStore(base_dir=base, group_store=group_store)
+    collaboration = CollaborationStore(base_dir=base)
+    app = FastAPI()
+    app.include_router(
+        create_cowork_group_router(
+            store=group_store,
+            async_store=async_store,
+            collaboration_store=collaboration,
+            runtime=SimpleNamespace(runner=SimpleNamespace(wake=lambda: None)),
+        )
+    )
+    client = TestClient(app)
+    collaboration.create_collaboration_run(
+        run_id="retry-partial-bind",
+        session_id="thread-retry-partial-bind",
+        kind="group_fanout",
+        input={"message": "验证发布方案"},
+    )
+    collaboration.claim_collaboration_run("retry-partial-bind", worker_id="worker-a")
+    collaboration.create_collaboration_collector(
+        run_id="retry-partial-bind",
+        child_ids=["coder", "reviewer"],
+    )
+    for child_id in ("coder", "reviewer"):
+        collaboration.record_collaboration_collector_result(
+            "retry-partial-bind",
+            child_id=child_id,
+            status="failed",
+            result={"error": "provider timeout"},
+        )
+    original_bind = collaboration.bind_collaboration_collector_retry_task
+    calls = 0
+
+    def fail_second(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("second binding failed")
+        return original_bind(*args, **kwargs)
+
+    monkeypatch.setattr(
+        collaboration,
+        "bind_collaboration_collector_retry_task",
+        fail_second,
+    )
+    failed = client.post(
+        "/api/collab/thread-retry-partial-bind/runs/retry-partial-bind/collector/retry",
+        json={},
+    )
+    assert failed.status_code == 500, failed.text
+    assert async_store.list("thread-retry-partial-bind") == []
+
+    monkeypatch.setattr(
+        collaboration,
+        "bind_collaboration_collector_retry_task",
+        original_bind,
+    )
+    retried = client.post(
+        "/api/collab/thread-retry-partial-bind/runs/retry-partial-bind/collector/retry",
+        json={},
+    )
+
+    assert retried.status_code == 200, retried.text
+    assert retried.json()["count"] == 2
+    assert len(async_store.list("thread-retry-partial-bind")) == 2
+
+
+def test_concurrent_collector_retry_requests_dispatch_one_task(tmp_path, monkeypatch) -> None:
+    group_store = GroupStore(base_dir=tmp_path / "cowork")
+    async_store = AsyncWorkStore(base_dir=tmp_path / "cowork", group_store=group_store)
+    collaboration = CollaborationStore(base_dir=tmp_path / "cowork")
+    app = FastAPI()
+    app.include_router(
+        create_cowork_group_router(
+            store=group_store,
+            async_store=async_store,
+            collaboration_store=collaboration,
+            runtime=SimpleNamespace(runner=SimpleNamespace(wake=lambda: None)),
+        )
+    )
+    collaboration.create_collaboration_run(
+        run_id="retry-race",
+        session_id="thread-retry-race",
+        kind="group_fanout",
+        input={"message": "验证发布方案"},
+    )
+    collaboration.claim_collaboration_run("retry-race", worker_id="worker-a")
+    collaboration.create_collaboration_collector(
+        run_id="retry-race",
+        child_ids=["coder"],
+    )
+    collaboration.record_collaboration_collector_result(
+        "retry-race",
+        child_id="coder",
+        status="failed",
+        result={"error": "provider timeout"},
+    )
+    original_bind = collaboration.bind_collaboration_collector_retry_task
+    both_staged = Barrier(2)
+
+    def synchronized_bind(*args, **kwargs):
+        both_staged.wait(timeout=5)
+        return original_bind(*args, **kwargs)
+
+    monkeypatch.setattr(
+        collaboration,
+        "bind_collaboration_collector_retry_task",
+        synchronized_bind,
+    )
+
+    def retry() -> int:
+        with TestClient(app) as client:
+            return client.post(
+                "/api/collab/thread-retry-race/runs/retry-race/collector/retry",
+                json={},
+            ).status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        statuses = list(pool.map(lambda _index: retry(), range(2)))
+
+    assert sorted(statuses) == [200, 409]
+    tasks = async_store.list("thread-retry-race")
+    assert len(tasks) == 1
+    assert tasks[0].status == "pending"
+    collector = collaboration.collaboration_collector("retry-race")
+    assert collector is not None
+    assert collector["generation"] == 2
+    assert collector["status"] == "collecting"
+
+
+def test_collector_operations_list_and_batch_retry_across_runs(tmp_path) -> None:
+    base = tmp_path / "cowork"
+    group_store = GroupStore(base_dir=base)
+    async_store = AsyncWorkStore(base_dir=base, group_store=group_store)
+    collaboration = CollaborationStore(base_dir=base)
+    wake_calls = []
+    app = FastAPI()
+    app.include_router(
+        create_cowork_group_router(
+            store=group_store,
+            async_store=async_store,
+            collaboration_store=collaboration,
+            runtime=SimpleNamespace(runner=SimpleNamespace(wake=lambda: wake_calls.append(1))),
+        )
+    )
+    client = TestClient(app)
+    for run_id, child_id in (("batch-run-a", "coder"), ("batch-run-b", "reviewer")):
+        collaboration.create_collaboration_run(
+            run_id=run_id,
+            session_id="thread-batch-retry",
+            kind="group_fanout",
+            input={"message": f"完成 {child_id} 工作"},
+        )
+        collaboration.claim_collaboration_run(run_id, worker_id="worker-a")
+        collaboration.create_collaboration_collector(run_id=run_id, child_ids=[child_id])
+        collaboration.record_collaboration_collector_result(
+            run_id,
+            child_id=child_id,
+            status="failed",
+            result={"error": "provider timeout"},
+        )
+
+    listed = client.get(
+        "/api/collab/thread-batch-retry/collectors",
+        params={"retryable_only": "true"},
+    )
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["count"] == 2
+    assert listed.json()["retryable_run_count"] == 2
+
+    retried = client.post(
+        "/api/collab/thread-batch-retry/collectors/retry",
+        json={},
+    )
+
+    assert retried.status_code == 200, retried.text
+    assert retried.json()["run_count"] == 2
+    assert retried.json()["count"] == 2
+    assert len(wake_calls) == 1
+    assert [task.status for task in async_store.list("thread-batch-retry")] == [
+        "pending",
+        "pending",
+    ]
+    assert {
+        collaboration.collaboration_collector(run_id)["generation"]
+        for run_id in ("batch-run-a", "batch-run-b")
+    } == {2}
+    after = client.get(
+        "/api/collab/thread-batch-retry/collectors",
+        params={"retryable_only": "true"},
+    )
+    assert after.status_code == 200, after.text
+    assert after.json()["count"] == 0
+
+
+def test_batch_cancel_stops_active_runs_and_fences_retry_tasks(tmp_path) -> None:
+    base = tmp_path / "cowork"
+    group_store = GroupStore(base_dir=base)
+    async_store = AsyncWorkStore(base_dir=base, group_store=group_store)
+    collaboration = CollaborationStore(base_dir=base)
+    app = FastAPI()
+    app.include_router(
+        create_cowork_group_router(
+            store=group_store,
+            async_store=async_store,
+            collaboration_store=collaboration,
+            runtime=SimpleNamespace(runner=SimpleNamespace(wake=lambda: None)),
+        )
+    )
+    client = TestClient(app)
+
+    collaboration.create_collaboration_run(
+        run_id="cancel-live",
+        session_id="thread-cancel",
+        kind="group_fanout",
+        input={"message": "active work"},
+    )
+    collaboration.claim_collaboration_run("cancel-live", worker_id="worker-a")
+    collaboration.create_collaboration_collector(
+        run_id="cancel-live",
+        child_ids=["coder", "reviewer"],
+    )
+
+    collaboration.create_collaboration_run(
+        run_id="cancel-retry",
+        session_id="thread-cancel",
+        kind="group_fanout",
+        input={"message": "retry work"},
+    )
+    collaboration.claim_collaboration_run("cancel-retry", worker_id="worker-a")
+    collaboration.create_collaboration_collector(
+        run_id="cancel-retry",
+        child_ids=["coder"],
+    )
+    collaboration.record_collaboration_collector_result(
+        "cancel-retry",
+        child_id="coder",
+        status="failed",
+        result={"error": "timeout"},
+    )
+    collaboration.transition_collaboration_run(
+        "cancel-retry",
+        status="failed",
+        error="timeout",
+    )
+    retried = client.post(
+        "/api/collab/thread-cancel/runs/cancel-retry/collector/retry",
+        json={},
+    )
+    assert retried.status_code == 200, retried.text
+
+    before = client.get("/api/collab/thread-cancel/collectors")
+    assert before.status_code == 200, before.text
+    assert before.json()["cancellable_run_count"] == 2
+    stopped = client.post(
+        "/api/collab/thread-cancel/collectors/cancel",
+        json={"run_ids": ["cancel-live", "cancel-retry"], "reason": "user stopped"},
+    )
+
+    assert stopped.status_code == 200, stopped.text
+    assert stopped.json()["cancelled_run_count"] == 2
+    assert stopped.json()["cancelled_task_count"] == 1
+    assert async_store.list("thread-cancel")[0].status == "cancelled"
+    assert collaboration.collaboration_collector("cancel-live")["status"] == "cancelled"
+    assert collaboration.collaboration_collector("cancel-retry")["status"] == "cancelled"
+    assert collaboration.collaboration_run("cancel-live")["status"] == "cancelled"
+    # A retry attempt may belong to a previously terminal parent run. Stopping
+    # that generation must not rewrite the immutable parent-run history.
+    assert collaboration.collaboration_run("cancel-retry")["status"] == "failed"
+
+    repeated = client.post(
+        "/api/collab/thread-cancel/collectors/cancel",
+        json={"run_ids": ["cancel-live", "cancel-retry"]},
+    )
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["cancelled_run_count"] == 0
+    assert repeated.json()["cancelled_task_count"] == 0
+
+
+def test_collector_archive_endpoint_compacts_terminal_runs_and_hides_them_by_default(
+    tmp_path,
+) -> None:
+    base = tmp_path / "cowork"
+    group_store = GroupStore(base_dir=base)
+    async_store = AsyncWorkStore(base_dir=base, group_store=group_store)
+    collaboration = CollaborationStore(base_dir=base)
+    app = FastAPI()
+    app.include_router(
+        create_cowork_group_router(
+            store=group_store,
+            async_store=async_store,
+            collaboration_store=collaboration,
+        )
+    )
+    client = TestClient(app)
+    collaboration.create_collaboration_run(
+        run_id="archive-run",
+        session_id="thread-archive",
+        kind="group_fanout",
+    )
+    collaboration.claim_collaboration_run("archive-run", worker_id="worker-a")
+    collaboration.create_collaboration_collector(
+        run_id="archive-run",
+        child_ids=["coder"],
+    )
+    collaboration.record_collaboration_collector_result(
+        "archive-run",
+        child_id="coder",
+        status="success",
+        result={"reply": "sensitive long answer"},
+    )
+    collaboration.transition_collaboration_run("archive-run", status="completed")
+
+    response = client.post(
+        "/api/collab/thread-archive/collectors/archive",
+        json={"run_ids": ["archive-run"]},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["archived_run_count"] == 1
+    assert response.json()["collectors"][0]["archived"] is True
+    assert client.get("/api/collab/thread-archive/collectors").json()["count"] == 0
+    included = client.get(
+        "/api/collab/thread-archive/collectors",
+        params={"include_archived": "true"},
+    ).json()
+    assert included["count"] == 1
+    assert included["archived_run_count"] == 1
+    assert included["collectors"][0]["collector"]["results"][0]["result"] == {"archived": True}
+
+    repeated = client.post(
+        "/api/collab/thread-archive/collectors/archive",
+        json={"run_ids": ["archive-run"]},
+    )
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["archived_run_count"] == 0
+
+
+def test_batch_retry_capacity_failure_leaves_every_collector_unchanged(tmp_path) -> None:
+    base = tmp_path / "cowork"
+    group_store = GroupStore(base_dir=base)
+    async_store = AsyncWorkStore(
+        base_dir=base,
+        group_store=group_store,
+        max_active_per_thread=1,
+        max_active_total=1,
+    )
+    collaboration = CollaborationStore(base_dir=base)
+    app = FastAPI()
+    app.include_router(
+        create_cowork_group_router(
+            store=group_store,
+            async_store=async_store,
+            collaboration_store=collaboration,
+            runtime=SimpleNamespace(runner=SimpleNamespace(wake=lambda: None)),
+        )
+    )
+    client = TestClient(app)
+    for index in range(2):
+        run_id = f"batch-full-{index}"
+        collaboration.create_collaboration_run(
+            run_id=run_id,
+            session_id="thread-batch-full",
+            kind="group_fanout",
+            input={"message": f"任务 {index}"},
+        )
+        collaboration.claim_collaboration_run(run_id, worker_id="worker-a")
+        collaboration.create_collaboration_collector(run_id=run_id, child_ids=["coder"])
+        collaboration.record_collaboration_collector_result(
+            run_id,
+            child_id="coder",
+            status="failed",
+            result={"error": "timeout"},
+        )
+
+    response = client.post(
+        "/api/collab/thread-batch-full/collectors/retry",
+        json={"run_ids": ["batch-full-0", "batch-full-1"]},
+    )
+
+    assert response.status_code == 429, response.text
+    assert async_store.list("thread-batch-full") == []
+    for index in range(2):
+        collector = collaboration.collaboration_collector(f"batch-full-{index}")
+        assert collector is not None
+        assert collector["generation"] == 1
+        assert collector["status"] == "completed"
+
+
+def test_batch_retry_partial_reopen_failure_settles_opened_runs(tmp_path, monkeypatch) -> None:
+    base = tmp_path / "cowork"
+    group_store = GroupStore(base_dir=base)
+    async_store = AsyncWorkStore(base_dir=base, group_store=group_store)
+    collaboration = CollaborationStore(base_dir=base)
+    app = FastAPI()
+    app.include_router(
+        create_cowork_group_router(
+            store=group_store,
+            async_store=async_store,
+            collaboration_store=collaboration,
+            runtime=SimpleNamespace(runner=SimpleNamespace(wake=lambda: None)),
+        )
+    )
+    client = TestClient(app)
+    for run_id in ("batch-partial-a", "batch-partial-b"):
+        collaboration.create_collaboration_run(
+            run_id=run_id,
+            session_id="thread-batch-partial",
+            kind="group_fanout",
+            input={"message": "验证恢复"},
+        )
+        collaboration.claim_collaboration_run(run_id, worker_id="worker-a")
+        collaboration.create_collaboration_collector(run_id=run_id, child_ids=["coder"])
+        collaboration.record_collaboration_collector_result(
+            run_id,
+            child_id="coder",
+            status="failed",
+            result={"error": "timeout"},
+        )
+    original_reopen = collaboration.reopen_collaboration_collector
+
+    def fail_second(run_id, **kwargs):
+        if run_id == "batch-partial-b":
+            raise RuntimeError("simulated reopen failure")
+        return original_reopen(run_id, **kwargs)
+
+    monkeypatch.setattr(collaboration, "reopen_collaboration_collector", fail_second)
+
+    response = client.post(
+        "/api/collab/thread-batch-partial/collectors/retry",
+        json={"run_ids": ["batch-partial-a", "batch-partial-b"]},
+    )
+
+    assert response.status_code == 500, response.text
+    assert async_store.list("thread-batch-partial") == []
+    opened = collaboration.collaboration_collector("batch-partial-a")
+    untouched = collaboration.collaboration_collector("batch-partial-b")
+    assert opened is not None
+    assert opened["generation"] == 2
+    assert opened["status"] == "completed"
+    assert opened["results"][0]["result"]["error"] == "retry dispatch failed: RuntimeError"
+    assert untouched is not None
+    assert untouched["generation"] == 1
+    assert untouched["results"][0]["result"]["error"] == "timeout"
 
 
 def test_linked_room_annotations_are_durable_threads(tmp_path) -> None:
@@ -201,10 +1010,13 @@ def test_linked_room_annotations_are_durable_threads(tmp_path) -> None:
         "/api/teams",
         json={"name": "Annotations", "members": [{"name": "general"}]},
     ).json()["id"]
-    assert client.post(
-        f"/api/collab/{thread_id}/link-room",
-        json={"room_id": room_id},
-    ).status_code == 200
+    assert (
+        client.post(
+            f"/api/collab/{thread_id}/link-room",
+            json={"room_id": room_id},
+        ).status_code
+        == 200
+    )
 
     created = client.post(
         f"/api/collab/{thread_id}/annotations",
@@ -236,9 +1048,12 @@ def test_linked_room_annotations_are_durable_threads(tmp_path) -> None:
     assert len(saved) == 1
     assert saved[0]["resolved"] is True
     assert saved[0]["replies"][0]["body"] == "已补充"
-    assert client.delete(
-        f"/api/collab/{thread_id}/annotations/{annotation_id}",
-    ).status_code == 200
+    assert (
+        client.delete(
+            f"/api/collab/{thread_id}/annotations/{annotation_id}",
+        ).status_code
+        == 200
+    )
     assert client.get(f"/api/collab/{thread_id}/annotations").json()["annotations"] == []
 
 
@@ -261,10 +1076,13 @@ def test_linked_room_message_reactions_are_durable_and_toggle(tmp_path) -> None:
         "/api/teams",
         json={"name": "Reactions", "members": [{"name": "general"}]},
     ).json()["id"]
-    assert client.post(
-        f"/api/collab/{thread_id}/link-room",
-        json={"room_id": room_id},
-    ).status_code == 200
+    assert (
+        client.post(
+            f"/api/collab/{thread_id}/link-room",
+            json={"room_id": room_id},
+        ).status_code
+        == 200
+    )
 
     created = client.post(
         f"/api/collab/{thread_id}/reactions",
@@ -310,9 +1128,10 @@ def test_linked_room_pinned_messages_are_durable_and_toggle(tmp_path) -> None:
         "/api/teams",
         json={"name": "Pins", "members": [{"name": "general"}]},
     ).json()["id"]
-    assert client.post(
-        f"/api/collab/{thread_id}/link-room", json={"room_id": room_id}
-    ).status_code == 200
+    assert (
+        client.post(f"/api/collab/{thread_id}/link-room", json={"room_id": room_id}).status_code
+        == 200
+    )
 
     added = client.post(
         f"/api/collab/{thread_id}/pinned-messages",
@@ -320,9 +1139,7 @@ def test_linked_room_pinned_messages_are_durable_and_toggle(tmp_path) -> None:
     )
     assert added.status_code == 200, added.text
     assert added.json()["pin"]["pinned"] is True
-    pinned = client.get(f"/api/collab/{thread_id}/pinned-messages").json()[
-        "pinned_messages"
-    ]
+    pinned = client.get(f"/api/collab/{thread_id}/pinned-messages").json()["pinned_messages"]
     assert pinned[0]["message_id"] == "thread:decision-1"
 
     removed = client.post(
@@ -1424,6 +2241,8 @@ def test_app_cowork_router_uses_shared_runtime_store(tmp_path, monkeypatch) -> N
 
     summary = client.get("/api/cowork/thread-shared/tasks/summary").json()
     assert summary["task_counts"]["pending"] == 1
+    assert summary["queue_health"]["thread_active"] == 1
+    assert summary["queue_health"]["pressure"] == "normal"
     assert summary["runner_enabled"] is False
 
 
@@ -1450,6 +2269,7 @@ def test_health_endpoint_aggregates_runner_tasks_presence(tmp_path) -> None:
     assert h["runner"]["enabled"] is False  # no runtime attached in this client
     assert h["tasks"]["counts"]["failed"] == 1
     assert h["tasks"]["failures"][0]["error"] == "boom"
+    assert h["tasks"]["queue"]["thread_active"] == 0
     assert h["presence"]["members"] == 2
     assert len(h["recent_events"]) >= 2
 

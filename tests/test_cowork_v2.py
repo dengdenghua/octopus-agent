@@ -4,6 +4,8 @@ competence, async work, breakout, replay."""
 from __future__ import annotations
 
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 
 import pytest
 
@@ -94,6 +96,114 @@ def test_async_task_result_lands_on_shared_board(tmp_path) -> None:
     assert any(v == "it's the N+1 on orders" for v in board.values())
     audit = gs.blackboard("t").audit()["writers_by_key"]
     assert any("db-expert" in w for w in audit.values())
+
+
+def test_async_queue_backpressure_reserves_and_activates_batches_atomically(tmp_path) -> None:
+    gs = GroupStore(base_dir=tmp_path)
+    aw = async_work.AsyncWorkStore(
+        base_dir=tmp_path,
+        group_store=gs,
+        max_active_per_thread=2,
+        max_active_total=3,
+    )
+
+    staged = aw.stage_batch(
+        "t",
+        [("task-a", "a", "first"), ("task-b", "b", "second")],
+        actor="user",
+    )
+
+    assert aw.pending("t") == []
+    assert aw.queue_health("t") == {
+        "schema": "octopus.cowork_queue_health.v1",
+        "pressure": "saturated",
+        "staged": 2,
+        "thread_active": 2,
+        "thread_limit": 2,
+        "thread_available": 0,
+        "total_active": 2,
+        "total_limit": 3,
+        "total_available": 1,
+    }
+    with pytest.raises(async_work.AsyncWorkQueueFullError):
+        aw.assign("t", "c", "must not partially enqueue", actor="user")
+    assert [task.task_id for task in aw.list("t")] == ["task-a", "task-b"]
+
+    assert aw.activate_staged([task.task_id for task in staged]) == 2
+    assert [task.task_id for task in aw.pending("t")] == ["task-a", "task-b"]
+    assert aw.activate_staged([task.task_id for task in staged]) == 0
+
+
+def test_total_queue_limit_caps_per_thread_limit(tmp_path) -> None:
+    gs = GroupStore(base_dir=tmp_path)
+    store = async_work.AsyncWorkStore(
+        base_dir=tmp_path,
+        group_store=gs,
+        max_active_per_thread=8,
+        max_active_total=2,
+    )
+
+    health = store.queue_health("t")
+    assert health["thread_limit"] == 2
+    assert health["total_limit"] == 2
+
+
+def test_stale_staged_batch_releases_queue_capacity(tmp_path) -> None:
+    gs = GroupStore(base_dir=tmp_path)
+    aw = async_work.AsyncWorkStore(
+        base_dir=tmp_path,
+        group_store=gs,
+        max_active_per_thread=1,
+        max_active_total=1,
+    )
+    staged = aw.stage_batch("t", [("task-staged", "a", "first")], actor="user")[0]
+    with aw._lock, sqlite3.connect(str(aw._db)) as conn:  # noqa: SLF001
+        conn.execute(
+            "UPDATE async_tasks SET updated_at='2000-01-01T00:00:00+00:00' WHERE task_id=?",
+            (staged.task_id,),
+        )
+
+    assert aw.recover_stale_working(max_age_seconds=1) == {
+        "requeued": 0,
+        "failed": 1,
+    }
+    assert aw.get(staged.task_id).status == "failed"
+    assert aw.queue_health("t")["thread_available"] == 1
+
+
+def test_async_queue_capacity_converges_across_store_instances(tmp_path) -> None:
+    groups = GroupStore(base_dir=tmp_path)
+    stores = [
+        async_work.AsyncWorkStore(
+            base_dir=tmp_path,
+            group_store=groups,
+            max_active_per_thread=2,
+            max_active_total=2,
+        )
+        for _ in range(2)
+    ]
+    barrier = Barrier(2)
+
+    def stage(index: int) -> str:
+        barrier.wait(timeout=5)
+        try:
+            stores[index].stage_batch(
+                f"thread-{index}",
+                [
+                    (f"task-{index}-a", "a", "first"),
+                    (f"task-{index}-b", "b", "second"),
+                ],
+                actor="user",
+            )
+        except async_work.AsyncWorkQueueFullError:
+            return "full"
+        return "reserved"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(stage, range(2)))
+
+    assert sorted(outcomes) == ["full", "reserved"]
+    assert stores[0].queue_health("thread-0")["total_active"] == 2
 
 
 def test_async_work_validates_storage_boundaries(tmp_path) -> None:

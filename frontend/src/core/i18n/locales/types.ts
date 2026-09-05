@@ -459,6 +459,48 @@ export interface Translations {
     deliveryDismiss: string;
     deliveryUnknownMember: string;
     deliveryMonitorUnavailable: string;
+    collectorTitle: string;
+    collectorProgress: (completed: number, total: number) => string;
+    collectorSuccess: string;
+    collectorFailed: string;
+    collectorWaiting: string;
+    collectorRetrying: string;
+    collectorCancelled: string;
+    collectorRetryFailedOnly: string;
+    collectorRetryFailedRuns: (n: number) => string;
+    collectorStop: string;
+    collectorStopRuns: (n: number) => string;
+    collectorStopFailed: string;
+    collectorSteer: string;
+    collectorSteerMemberLabel: (name: string) => string;
+    collectorSteerPlaceholder: (name: string) => string;
+    collectorSteerSubmit: string;
+    collectorSteerCancel: string;
+    collectorSteerFailed: string;
+    collectorStopMember: string;
+    collectorStopMemberLabel: (name: string) => string;
+    collectorStopMemberFailed: string;
+    collectorRetryFailed: string;
+    collectorQueueFull: string;
+    collectorAttempts: (n: number) => string;
+    collectorAttempt: (n: number) => string;
+    collectorContextDelivery: (
+      mode: string,
+      sent: number,
+      avoided: number,
+    ) => string;
+    collectorContextPlan: (
+      mode: "recall" | "selective",
+      selected: number,
+      full: number,
+      reductionPercent: number,
+    ) => string;
+    collectorMemoryCheckpoint: (
+      throughTurn: number,
+      rawTurns: number,
+    ) => string;
+    collectorArchived: string;
+    collectorMonitorUnavailable: string;
   };
 
   // Collaboration capability
@@ -1477,6 +1519,18 @@ export interface Translations {
     tokenPlaceholder: string;
     tokenAria: string;
     authConfigured: string;
+    useSsh: string;
+    sshHint: string;
+    sshHostPlaceholder: string;
+    sshHostAria: string;
+    sshUserPlaceholder: string;
+    sshUserAria: string;
+    sshPortPlaceholder: string;
+    sshPortAria: string;
+    sshIdentityPlaceholder: string;
+    sshIdentityAria: string;
+    directTransport: string;
+    sshTransport: string;
     add: string;
     adding: string;
     loading: string;

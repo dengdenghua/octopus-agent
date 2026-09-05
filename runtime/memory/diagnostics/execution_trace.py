@@ -11,9 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 _START_EVENTS = frozenset({"TOOL_CALL_START", "TOOL_START", "SUB_TOOL_START"})
-_END_EVENTS = frozenset(
-    {"TOOL_CALL_END", "TOOL_CALL_FINISH", "TOOL_END", "SUB_TOOL_END"}
-)
+_END_EVENTS = frozenset({"TOOL_CALL_END", "TOOL_CALL_FINISH", "TOOL_END", "SUB_TOOL_END"})
 _TERMINAL_EVENTS = frozenset(
     {
         "TASK_RUN_FINISHED",
@@ -182,9 +180,7 @@ def build_execution_trace(
             "orphan_start_count": orphan_starts,
             "orphan_end_count": orphan_ends,
             "has_terminal": terminal["status"] != "running",
-            "complete": terminal["status"] != "running"
-            and orphan_starts == 0
-            and orphan_ends == 0,
+            "complete": terminal["status"] != "running" and orphan_starts == 0 and orphan_ends == 0,
         },
     }
 

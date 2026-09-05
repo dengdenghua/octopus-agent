@@ -410,6 +410,10 @@ def create_evolution_router(
                     source_message_id=body.source_message_id or None,
                     candidate_id=body.candidate_id or None,
                     experiment_id=body.experiment_id or None,
+                    automatic=body.automatic,
+                    risk_level=body.risk_level or None,
+                    failure_count=body.failure_count,
+                    confidence=body.confidence,
                 ),
             }
         except PermissionError as exc:

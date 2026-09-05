@@ -318,6 +318,15 @@ class TestContextEngine:
         composer = ContextComposer(reg, engine=engine)
         assert composer.engine is engine
 
+    def test_cowork_selection_engine_is_carried_by_composer(self):
+        from runtime.execution.suckers import SkillRegistry
+        from runtime.memory.hemolymph.composer import ContextComposer
+
+        selector = object()
+        composer = ContextComposer(SkillRegistry(), cowork_engine=selector)
+
+        assert composer.cowork_engine is selector
+
     def test_custom_engine_compress_is_called(self):
         from runtime.execution.suckers import SkillRegistry
         from runtime.memory.hemolymph.composer import ContextComposer, ContextEngine

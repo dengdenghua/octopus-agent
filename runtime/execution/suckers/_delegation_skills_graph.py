@@ -12,12 +12,10 @@ Here the fan-in happens on the server: a node's prompt may reference
 outputs before the spawn. The lead never sees the intermediate text.
 
 Topology is DECLARED, not scripted. Each node names its ``depends_on`` and the
-runtime derives execution layers, so there is no caller-supplied control flow
-to execute — the same reason the budget envelope and the progress stream can
-stay wrapped around a spec object. Conditionals and back-edges are deliberately
-out of scope: dependencies already express the only ordering the callers
-needed, and ``run_orchestration`` covers the one loop shape (rounds with
-dry-round early stop) that had real demand.
+runtime derives execution layers. A bounded data-only ``when`` expression can
+select branches from structured upstream output without evaluating arbitrary
+Python/JavaScript. Back-edges remain out of scope; ``run_orchestration`` owns
+the bounded discovery-loop shape.
 
 Layer execution reuses ``_call_agent_parallel``, so per-spawn budget charging,
 retry, route policy, blackboard keys and the envelope shape are inherited
@@ -41,6 +39,11 @@ from ._delegation_skills_common import _DEFAULT_SUBAGENT_TIMEOUT_S
 # may declare. Kept well under the parallel fan-out cap because a deep graph
 # serialises — 12 nodes of depth 12 is 12 sequential spawns.
 _MAX_GRAPH_NODES = 12
+_MAX_CONDITION_NODES = 32
+_MAX_CONDITION_DEPTH = 4
+_CONDITION_OPERATORS = frozenset(
+    {"eq", "ne", "truthy", "falsy", "in", "not_in", "contains", "gt", "gte", "lt", "lte"}
+)
 
 
 class _GraphNode:
@@ -60,6 +63,131 @@ class _GraphEdge:
     def __init__(self, from_node: str, to_node: str) -> None:
         self.from_node = from_node
         self.to_node = to_node
+
+
+def _coerce_condition(
+    raw: Any,
+    *,
+    node_id: str,
+    dependencies: list[str],
+) -> tuple[dict[str, Any] | None, str]:
+    """Validate the bounded, data-only decision language used by graph nodes."""
+
+    if raw is None:
+        return None, ""
+    seen = 0
+
+    def walk(value: Any, depth: int) -> tuple[dict[str, Any] | None, str]:
+        nonlocal seen
+        seen += 1
+        if seen > _MAX_CONDITION_NODES or depth > _MAX_CONDITION_DEPTH:
+            return None, f"node {node_id!r} condition is too complex"
+        if not isinstance(value, dict):
+            return None, f"node {node_id!r} condition must be an object"
+        composite = [key for key in ("all", "any", "not") if key in value]
+        if composite:
+            if len(composite) != 1 or len(value) != 1:
+                return None, f"node {node_id!r} condition must use exactly one boolean operator"
+            key = composite[0]
+            child = value[key]
+            if key == "not":
+                nested, error = walk(child, depth + 1)
+                return ({"not": nested}, "") if nested is not None else (None, error)
+            if not isinstance(child, list) or not child:
+                return None, f"node {node_id!r} condition {key!r} requires a non-empty list"
+            children: list[dict[str, Any]] = []
+            for item in child:
+                nested, error = walk(item, depth + 1)
+                if nested is None:
+                    return None, error
+                children.append(nested)
+            return {key: children}, ""
+
+        extra = set(value) - {"ref", "op", "value"}
+        if extra:
+            return None, f"node {node_id!r} condition has unknown field(s): {sorted(extra)}"
+        ref = str(value.get("ref") or "").strip()
+        op = str(value.get("op") or "truthy").strip().lower()
+        if not ref:
+            return None, f"node {node_id!r} condition requires ref"
+        if op not in _CONDITION_OPERATORS:
+            return None, f"node {node_id!r} condition has unknown operator {op!r}"
+        source = ref.split(".", 1)[0]
+        if source not in dependencies:
+            return None, (
+                f"node {node_id!r} condition ref {ref!r} must read an explicit dependency"
+            )
+        if ref == source:
+            ref = f"{source}.output"
+        return {"ref": ref, "op": op, "value": value.get("value")}, ""
+
+    return walk(raw, 1)
+
+
+def _evaluate_condition(
+    condition: dict[str, Any],
+    outputs: dict[str, Any],
+) -> tuple[bool, str]:
+    """Evaluate a validated condition without executing caller-supplied code."""
+
+    if "all" in condition:
+        for child in condition["all"]:
+            passed, error = _evaluate_condition(child, outputs)
+            if error or not passed:
+                return passed, error
+        return True, ""
+    if "any" in condition:
+        errors: list[str] = []
+        for child in condition["any"]:
+            passed, error = _evaluate_condition(child, outputs)
+            if passed:
+                return True, ""
+            if error:
+                errors.append(error)
+        return False, "; ".join(errors)
+    if "not" in condition:
+        passed, error = _evaluate_condition(condition["not"], outputs)
+        return (not passed, error)
+
+    ref = str(condition["ref"])
+    op = str(condition["op"])
+    expected = condition.get("value")
+    try:
+        actual = _lookup(ref, outputs)
+    except TemplateResolutionError:
+        return False, f"condition reference could not be resolved: {ref}"
+    try:
+        if op == "eq":
+            return actual == expected, ""
+        if op == "ne":
+            return actual != expected, ""
+        if op == "truthy":
+            return bool(actual), ""
+        if op == "falsy":
+            return not bool(actual), ""
+        if op == "in":
+            if not isinstance(expected, (list, tuple, str, dict)):
+                return False, f"condition operator {op!r} is incompatible with {ref!r}"
+            return actual in expected, ""
+        if op == "not_in":
+            if not isinstance(expected, (list, tuple, str, dict)):
+                return False, f"condition operator {op!r} is incompatible with {ref!r}"
+            return actual not in expected, ""
+        if op == "contains":
+            if not isinstance(actual, (list, tuple, str, dict)):
+                return False, f"condition operator {op!r} is incompatible with {ref!r}"
+            return expected in actual, ""
+        if op == "gt":
+            return actual > expected, ""
+        if op == "gte":
+            return actual >= expected, ""
+        if op == "lt":
+            return actual < expected, ""
+        if op == "lte":
+            return actual <= expected, ""
+    except (TypeError, ValueError):
+        return False, f"condition operator {op!r} is incompatible with {ref!r}"
+    return False, f"unsupported condition operator: {op}"
 
 
 def _coerce_graph_nodes(nodes: Any) -> tuple[list[dict[str, Any]], str]:
@@ -98,6 +226,13 @@ def _coerce_graph_nodes(nodes: Any) -> tuple[list[dict[str, Any]], str]:
         if isinstance(deps_raw, str):
             deps_raw = [deps_raw]
         deps = [str(d).strip() for d in deps_raw if str(d).strip()]
+        condition, condition_error = _coerce_condition(
+            raw.get("when"),
+            node_id=node_id,
+            dependencies=deps,
+        )
+        if condition_error:
+            return [], condition_error
         seen_ids.add(node_id)
         cleaned.append(
             {
@@ -107,6 +242,7 @@ def _coerce_graph_nodes(nodes: Any) -> tuple[list[dict[str, Any]], str]:
                 "agent_id": str(raw.get("agent_id") or raw.get("role") or "").strip(),
                 "output_schema": raw.get("output_schema"),
                 "isolate": bool(raw.get("isolate")),
+                "when": condition,
             }
         )
 
@@ -206,6 +342,7 @@ def _node_cache_key(
         context=context,
         extra={
             "output_schema": node.get("output_schema") or None,
+            "when": node.get("when") or None,
             # Isolated lanes are excluded from caching entirely, but keep the
             # flag in the key so the exclusion can never collide a cached
             # non-isolated result with an isolated spawn of the same prompt.
@@ -240,7 +377,8 @@ def _run_agent_graph(
     """Run a declared DAG of subagents, resolving fan-in server-side.
 
     Nodes with no unmet dependency run concurrently; a node whose prompt cites
-    ``{other.output}`` receives the substituted text at spawn time.
+    ``{other.output}`` receives the substituted text at spawn time. Optional
+    ``when`` expressions select branches from completed dependency outputs.
 
     ``resume_token`` replays completed nodes instead of respawning them: pass
     back the token a previous run returned and every node whose content (role,
@@ -286,6 +424,7 @@ def _run_agent_graph(
     by_id = {n["id"]: n for n in cleaned}
     outputs: dict[str, Any] = {}
     results: dict[str, dict[str, Any]] = {}
+    decisions: dict[str, bool] = {}
     layers_run = 0
     replayed_ids: list[str] = []
 
@@ -322,6 +461,23 @@ def _run_agent_graph(
                     f"upstream node(s) did not produce output: {sorted(failed_deps)}",
                 )
                 continue
+            condition = node.get("when")
+            if isinstance(condition, dict):
+                passed, condition_error = _evaluate_condition(condition, outputs)
+                decisions[node["id"]] = passed
+                if condition_error:
+                    results[node["id"]] = _skipped_node(node["id"], condition_error)
+                    continue
+                if not passed:
+                    results[node["id"]] = {
+                        "id": node["id"],
+                        "output": "",
+                        "ok": True,
+                        "skipped": True,
+                        "condition_not_met": True,
+                        "error": None,
+                    }
+                    continue
             prompt, perr = _resolve_node_prompt(node["prompt"], outputs)
             if perr:
                 results[node["id"]] = _skipped_node(node["id"], perr)
@@ -422,14 +578,18 @@ def _run_agent_graph(
                 "error": str(fail.get("error") or fail.get("error_type") or "unknown failure"),
             }
 
-    ok_count = sum(1 for r in results.values() if r.get("ok"))
+    ok_count = sum(1 for r in results.values() if r.get("ok") and not r.get("skipped"))
+    skipped_count = sum(1 for r in results.values() if r.get("condition_not_met"))
+    failure_count = sum(1 for r in results.values() if not r.get("ok"))
     return {
         "ok": True,
         "nodes": results,
         "order": [[cleaned[i]["id"] for i in layer] for layer in layers],
         "layers_run": layers_run,
         "success_count": ok_count,
-        "failure_count": len(cleaned) - ok_count,
+        "failure_count": failure_count,
+        "skipped_count": skipped_count,
+        "decisions": decisions,
         "total": len(cleaned),
         # Terminal nodes are what the caller usually wants: the leaves of the
         # graph hold the folded result, and re-reading every intermediate output

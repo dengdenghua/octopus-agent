@@ -542,6 +542,47 @@ export const jaJP: Translations = {
     deliveryDismiss: "この返信を無視",
     deliveryUnknownMember: "コラボレーター",
     deliveryMonitorUnavailable: "返信の配信状態を一時的に取得できません",
+    collectorTitle: "メンバー実行",
+    collectorProgress: (completed, total) => `${completed}/${total} 件返答`,
+    collectorSuccess: "完了",
+    collectorFailed: "未完了",
+    collectorWaiting: "待機中",
+    collectorRetrying: "再試行中",
+    collectorCancelled: "キャンセル済み",
+    collectorRetryFailedOnly: "失敗したメンバーのみ再試行",
+    collectorRetryFailedRuns: (n) => `失敗した実行を再試行（${n}）`,
+    collectorStop: "共同作業を停止",
+    collectorStopRuns: (n) => `進行中の共同作業を停止（${n}）`,
+    collectorStopFailed: "共同作業を停止できませんでした",
+    collectorSteer: "軌道修正",
+    collectorSteerMemberLabel: (name) => `${name} の軌道を修正`,
+    collectorSteerPlaceholder: (name) => `${name} だけへの新しい指示…`,
+    collectorSteerSubmit: "修正を送信",
+    collectorSteerCancel: "キャンセル",
+    collectorSteerFailed:
+      "修正を送信できませんでした。メンバーの状態が変わった可能性があります",
+    collectorStopMember: "このメンバーを停止",
+    collectorStopMemberLabel: (name) => `${name} を停止`,
+    collectorStopMemberFailed:
+      "メンバーを停止できませんでした。状態が変わった可能性があります",
+    collectorRetryFailed:
+      "再試行を開始できません。しばらくしてから再度お試しください。",
+    collectorQueueFull:
+      "バックグラウンド処理が混み合っています。失敗状態は保持されているため、後でもう一度お試しください。",
+    collectorAttempts: (n) => `${n} 回の試行`,
+    collectorAttempt: (n) => `${n} 回目`,
+    collectorContextDelivery: (mode, sent, avoided) =>
+      mode === "cursor_only"
+        ? `メンバー記憶を継続 · ${avoided} tokens の重複を回避`
+        : mode === "incremental"
+          ? `差分コンテキスト ${sent} tokens · ${avoided} を回避`
+          : `全コンテキスト ${sent} tokens`,
+    collectorContextPlan: (mode, selected, full, reductionPercent) =>
+      `コンテキスト調整 · ${mode === "recall" ? "長期記録を参照" : "必要分のみ選択"} · ${selected}/${full} tokens · ${reductionPercent}% 節約`,
+    collectorMemoryCheckpoint: (throughTurn, rawTurns) =>
+      `長期記憶は第 ${throughTurn} ターンまで整理済み · 元の ${rawTurns} ターンを保持`,
+    collectorArchived: "アーカイブ済み",
+    collectorMonitorUnavailable: "メンバーの実行状態を一時的に取得できません",
   },
 
   // Collaboration Mode
@@ -1697,6 +1738,19 @@ export const jaJP: Translations = {
     tokenPlaceholder: "アクセストークン（任意）",
     tokenAria: "バックエンドアクセストークン",
     authConfigured: "認証済み",
+    useSsh: "SSH 経由で接続",
+    sshHint:
+      "信頼済み SSH ホストからのみランタイム URL に到達できる場合に使用します。",
+    sshHostPlaceholder: "SSH ホスト",
+    sshHostAria: "SSH ホスト",
+    sshUserPlaceholder: "SSH ユーザー（任意）",
+    sshUserAria: "SSH ユーザー",
+    sshPortPlaceholder: "SSH ポート",
+    sshPortAria: "SSH ポート",
+    sshIdentityPlaceholder: "秘密鍵ファイル（任意）",
+    sshIdentityAria: "SSH 秘密鍵ファイル",
+    directTransport: "直接接続",
+    sshTransport: "SSH トンネル",
     add: "Add",
     adding: "Adding...",
     loading: "Loading...",

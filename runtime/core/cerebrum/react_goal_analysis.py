@@ -86,6 +86,60 @@ def _goal_explicitly_cancels_execution(goal: str) -> bool:
     )
 
 
+def _goal_is_continuation_steering(goal: str) -> bool:
+    """Whether ``goal`` depends on an unfinished preceding contract.
+
+    Carry-over is intentionally opt-in.  A previous implementation treated
+    every non-code follow-up as steering, so a complete new request could
+    resurrect an unrelated old task whenever the preceding assistant had left
+    execution open.  Only terse nudges, deictic corrections, status probes,
+    and explicitly additive wording are allowed to inherit now.
+    """
+
+    visible = re.sub(r"\s+", " ", str(goal or "")).strip()
+    if not visible:
+        return False
+    if re.fullmatch(r"[?？!！.。…\-—\s]{1,16}", visible):
+        return True
+    if len(visible) > 96:
+        return False
+    if re.fullmatch(
+        r"(?:继续|接着|恢复|往下|下一步|然后呢|再来|重试|再试(?:一下)?|"
+        r"动手(?:啊|吧)?|干活(?:啊|吧)?|开始(?:吧)?|直接做(?:吧)?|"
+        r"优化(?:一下)?|修复(?:一下)?|处理(?:一下)?|推进(?:一下)?|"
+        r"提交(?:吧)?|推送(?:吧)?)"
+        r"[?？!！.。…\s]*",
+        visible,
+        re.IGNORECASE,
+    ):
+        return True
+    if re.fullmatch(
+        r"(?:再(?:深(?:度)?|仔细|具体|详细|完善|优化|检查|看看|看下|做|改|修)"
+        r".{0,24}|"
+        r"(?:为什么|为何|怎么|咋)(?:还|又|不|没|没有|停|卡|中断|不动手|不执行)"
+        r".{0,48}|"
+        r"你到底(?:在)?(?:干嘛|做什么|有没有做|动没动手).{0,24}|"
+        r"(?:进度|状态|结果|到哪了|好了吗|完成了吗|怎么回事|什么情况|还没好)"
+        r".{0,32}|"
+        r"(?:上面|之前|刚才|前面|原来|原任务|这个任务|该任务|它|那个)"
+        r".{0,56}|"
+        r"(?:另外|顺便|还有|同时|并且|也要|再加上).{1,72})",
+        visible,
+        re.IGNORECASE,
+    ):
+        return True
+    return bool(
+        re.fullmatch(
+            r"(?:continue|go on|proceed|resume|retry|keep going|next|do it|"
+            r"start now|why (?:aren't|are not|haven't|have not) you .{0,48}|"
+            r"what are you doing|status|progress|any update|"
+            r"also .{1,72}|and .{1,72})[?!.\s]*",
+            visible,
+            re.IGNORECASE,
+        )
+    )
+
+
 def derive_effective_execution_goal(current_goal: str, conversation_messages: Any) -> str:
     """Carry an explicitly requested unfinished execution contract across turns.
 
@@ -104,8 +158,11 @@ def derive_effective_execution_goal(current_goal: str, conversation_messages: An
         # rather than replace it.
         _goal_requests_code_mutation(current, include_colloquial=False)
         or _goal_requests_project_inspection(current)
+        or _goal_requests_research_lookup(current)
         or _explicitly_requested_tool_names(current)
     ):
+        return current
+    if not _goal_is_continuation_steering(current):
         return current
     if not isinstance(conversation_messages, list):
         return current
@@ -133,6 +190,7 @@ def derive_effective_execution_goal(current_goal: str, conversation_messages: An
             and (
                 _goal_requests_code_mutation(text)
                 or _goal_requests_project_inspection(text)
+                or _goal_requests_research_lookup(text)
                 or _explicitly_requested_tool_names(text)
             )
         ),
@@ -205,7 +263,7 @@ def _goal_requests_research_lookup(goal: str) -> bool:
     return bool(
         re.search(
             r"(?:查一下|查查|查一查|查证|核查|核实|查询|查资料|上网查|联网查|"
-            r"搜索|搜一下|搜搜|检索|调研|找一下|找找|谷歌|百度|"
+            r"搜索|搜一下|搜搜|检索|研究|调研|找一下|找找|谷歌|百度|"
             r"\b(?:search|look\s*up|find\s*out|research|verify|"
             r"check\s+(?:whether|if|the\s+latest)|fetch|retrieve|scrape)\b)",
             lowered,

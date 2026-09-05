@@ -347,6 +347,12 @@ tier: "standard"
 | class | `class BoardBody(BaseModel)` |  |
 | class | `class AssignBody(BaseModel)` |  |
 | class | `class CompleteBody(BaseModel)` |  |
+| class | `class SteeringBody(BaseModel)` |  |
+| class | `class CollectorChildCancelBody(BaseModel)` |  |
+| class | `class CollectorRetryBody(BaseModel)` |  |
+| class | `class CollectorBatchRetryBody(BaseModel)` |  |
+| class | `class CollectorBatchCancelBody(BaseModel)` |  |
+| class | `class CollectorBatchArchiveBody(BaseModel)` |  |
 | class | `class BreakoutBody(BaseModel)` |  |
 | class | `class MergeBody(BaseModel)` |  |
 | class | `class ReadBody(BaseModel)` |  |
@@ -1204,6 +1210,9 @@ tier: "standard"
 | --- | --- | --- |
 | class | `class SshTunnel` | SSH transport descriptor. Mirrors ``SshBackend`` config so an existing SSH-trusted host can be reused without re-entering credentials. |
 | class | `class RemoteBackend` | One named remote octopus-agent runtime. |
+| class | `class SshTunnelError(RuntimeError)` | Raised when a configured SSH transport cannot be established. |
+| class | `class SshTunnelForwarder` | Own one fail-closed OpenSSH local forward for a remote backend. |
+| func | `def connect_remote_backend(backend, forwarder_factory)` | Yield a directly reachable backend, opening SSH when configured. |
 | class | `class BackendRegistry` | Process-wide cache of registered remote backends, persisted to ``<data>/remote_backends.json``. |
 | func | `def health_check(backend, timeout_seconds, http_client, auth_token)` | Hit ``<url>/api/health`` and return (status, detail). |
 | func | `def proxy_request(backend, method, path, json, timeout_seconds, http_client, auth_token)` | Forward a request to a remote backend. |

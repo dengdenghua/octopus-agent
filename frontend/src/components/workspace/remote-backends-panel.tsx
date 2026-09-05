@@ -45,6 +45,11 @@ export function RemoteBackendsPanel({ baseUrl }: RemoteBackendsPanelProps) {
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [authToken, setAuthToken] = useState("");
+  const [useSsh, setUseSsh] = useState(false);
+  const [sshHost, setSshHost] = useState("");
+  const [sshUser, setSshUser] = useState("");
+  const [sshPort, setSshPort] = useState("22");
+  const [sshIdentity, setSshIdentity] = useState("");
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
@@ -56,12 +61,26 @@ export function RemoteBackendsPanel({ baseUrl }: RemoteBackendsPanelProps) {
       name: name.trim(),
       url: url.trim(),
       authToken: authToken.trim() || undefined,
+      ssh: useSsh
+        ? {
+            host: sshHost.trim(),
+            user: sshUser.trim() || null,
+            port: Number(sshPort),
+            identity_file: sshIdentity.trim() || null,
+            connect_timeout: 10,
+          }
+        : null,
     });
     setAdding(false);
     if (result.ok) {
       setName("");
       setUrl("");
       setAuthToken("");
+      setUseSsh(false);
+      setSshHost("");
+      setSshUser("");
+      setSshPort("22");
+      setSshIdentity("");
     } else {
       setAddError(result.error || t.remoteBackendsPanel.addFailed);
     }
@@ -126,13 +145,71 @@ export function RemoteBackendsPanel({ baseUrl }: RemoteBackendsPanelProps) {
               <Button
                 type="submit"
                 size="sm"
-                disabled={adding || !name.trim() || !url.trim()}
+                disabled={
+                  adding ||
+                  !name.trim() ||
+                  !url.trim() ||
+                  (useSsh && !sshHost.trim())
+                }
               >
                 {adding
                   ? t.remoteBackendsPanel.adding
                   : t.remoteBackendsPanel.add}
               </Button>
             </div>
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={useSsh}
+                onChange={(event) => setUseSsh(event.target.checked)}
+                className="accent-primary size-4"
+                aria-label={t.remoteBackendsPanel.useSsh}
+              />
+              <span>{t.remoteBackendsPanel.useSsh}</span>
+              <span className="text-muted-foreground text-xs">
+                {t.remoteBackendsPanel.sshHint}
+              </span>
+            </label>
+            {useSsh && (
+              <div className="grid gap-2 md:grid-cols-4">
+                <input
+                  type="text"
+                  placeholder={t.remoteBackendsPanel.sshHostPlaceholder}
+                  value={sshHost}
+                  onChange={(event) => setSshHost(event.target.value)}
+                  required
+                  className="border-border bg-background rounded border px-2 py-1 text-sm"
+                  aria-label={t.remoteBackendsPanel.sshHostAria}
+                />
+                <input
+                  type="text"
+                  placeholder={t.remoteBackendsPanel.sshUserPlaceholder}
+                  value={sshUser}
+                  onChange={(event) => setSshUser(event.target.value)}
+                  className="border-border bg-background rounded border px-2 py-1 text-sm"
+                  aria-label={t.remoteBackendsPanel.sshUserAria}
+                />
+                <input
+                  type="number"
+                  min={1}
+                  max={65535}
+                  placeholder={t.remoteBackendsPanel.sshPortPlaceholder}
+                  value={sshPort}
+                  onChange={(event) => setSshPort(event.target.value)}
+                  required
+                  className="border-border bg-background rounded border px-2 py-1 text-sm"
+                  aria-label={t.remoteBackendsPanel.sshPortAria}
+                />
+                <input
+                  type="text"
+                  placeholder={t.remoteBackendsPanel.sshIdentityPlaceholder}
+                  value={sshIdentity}
+                  onChange={(event) => setSshIdentity(event.target.value)}
+                  className="border-border bg-background rounded border px-2 py-1 text-sm"
+                  aria-label={t.remoteBackendsPanel.sshIdentityAria}
+                />
+              </div>
+            )}
             {addError && (
               <div role="alert" className="text-destructive text-xs">
                 {addError}
@@ -222,9 +299,11 @@ function BackendRow({ backend, disabled, onPing, onRemove }: BackendRowProps) {
                 ? t.remoteBackendsPanel.reachable
                 : backend.health_detail || t.remoteBackendsPanel.error}
           </Badge>
-          {backend.ssh && (
-            <Badge variant="outline">ssh {backend.ssh.host}</Badge>
-          )}
+          <Badge variant="outline">
+            {backend.transport === "ssh_tunnel" || backend.ssh
+              ? `${t.remoteBackendsPanel.sshTransport} · ${backend.ssh?.host ?? ""}`
+              : t.remoteBackendsPanel.directTransport}
+          </Badge>
           {backend.has_auth && (
             <Badge variant="outline">{t.remoteBackendsPanel.authConfigured}</Badge>
           )}

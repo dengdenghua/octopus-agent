@@ -155,6 +155,7 @@ class _DetachedTurnEmitter:
         socket; durable event-log replay covers clients that reconnect after
         this live fan-out.
         """
+
         async def _notify_safely(target: Any) -> None:
             try:
                 await target.notify(method, params)

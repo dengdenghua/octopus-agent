@@ -920,9 +920,7 @@ def _compose_system_prompt(
     steward_managed = bool((context or {}).get("context_steward_managed"))
     thread_id = (context or {}).get("thread_id") or getattr(session, "thread_id", None)
     share_history = (
-        (context or {}).get("share_history", True)
-        and not starved
-        and not steward_managed
+        (context or {}).get("share_history", True) and not starved and not steward_managed
     )
     if thread_id and share_history:
         from runtime.execution.subagents.memory import recent_turns_prompt

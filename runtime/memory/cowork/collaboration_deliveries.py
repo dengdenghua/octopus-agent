@@ -55,9 +55,7 @@ ON collaboration_delivery_events(delivery_id, seq);
 
 _DELIVERY_SCHEMA = "octopus.collaboration_delivery.v1"
 _EVENT_SCHEMA = "octopus.collaboration_delivery_event.v1"
-_STATUSES = frozenset(
-    {"pending", "delivering", "retry_wait", "delivered", "failed", "dismissed"}
-)
+_STATUSES = frozenset({"pending", "delivering", "retry_wait", "delivered", "failed", "dismissed"})
 _TERMINAL = frozenset({"delivered", "failed", "dismissed"})
 _COLUMNS = (
     "delivery_id,run_id,session_id,turn_id,channel,status,attempt,max_attempts,"
@@ -331,7 +329,9 @@ class CollaborationDeliveryStoreMixin:
             if status in _TERMINAL:
                 raise ValueError(f"cannot claim terminal collaboration delivery: {status}")
             if str(current["deadline_at"]) <= timestamp:
-                self._mark_delivery_terminal_failure(conn, current, timestamp, "delivery deadline expired")
+                self._mark_delivery_terminal_failure(
+                    conn, current, timestamp, "delivery deadline expired"
+                )
             elif status == "delivering" and str(current.get("lease_expires_at") or "") > timestamp:
                 if current.get("lease_owner") != worker_id:
                     raise RuntimeError("collaboration delivery is leased by another worker")
@@ -498,9 +498,10 @@ class CollaborationDeliveryStoreMixin:
             current = _from_row(row)
             if current["status"] == "delivered":
                 return current
-            if current["status"] == "delivering" and str(
-                current.get("lease_expires_at") or ""
-            ) > timestamp:
+            if (
+                current["status"] == "delivering"
+                and str(current.get("lease_expires_at") or "") > timestamp
+            ):
                 raise RuntimeError("collaboration delivery is currently being delivered")
             conn.execute(
                 "UPDATE collaboration_deliveries SET status='pending',attempt=0,lease_owner=NULL,"

@@ -16,7 +16,7 @@ realtime server is wired to pass its live stack.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
 from runtime.core.cerebrum.react_loop import ReActResult, stream_react_loop
@@ -186,6 +186,7 @@ def run_subagent_react_loop(
     conversation_messages: Iterable[dict[str, Any]] | None = None,
     tool_allowlist: Iterable[str] | None = None,
     metadata: dict[str, Any] | None = None,
+    steering_drain: Callable[[], list[str]] | None = None,
 ) -> ReActResult | None:
     """Run ``stream_react_loop`` for a sub-agent, forwarding events to the bus.
 
@@ -221,6 +222,7 @@ def run_subagent_react_loop(
         max_iterations=max_iterations,
         approval_provider=provider,
         step_evaluator=build_runtime_step_evaluator(),
+        steering_drain=steering_drain,
     )
 
     result: ReActResult | None = None

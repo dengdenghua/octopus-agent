@@ -50,6 +50,7 @@ def _call_agent(
     timeout_s: int = _DEFAULT_SUBAGENT_TIMEOUT_S,
     session: Any = None,
     output_schema: Any = None,
+    continue_session_id: str | None = None,
     **_kw: Any,
 ) -> dict[str, Any]:
     """Spawn an isolated subagent turn — escalation when you need
@@ -200,6 +201,7 @@ def _call_agent(
         timeout_s=timeout_s,
         session=session,
         output_schema=schema_arg,
+        continue_session_id=continue_session_id,
     )
 
     # Retry once on transient failure. Critical: retry does NOT bump
@@ -221,6 +223,7 @@ def _call_agent(
                 timeout_s=timeout_s,
                 session=session,
                 output_schema=schema_arg,
+                continue_session_id=continue_session_id,
             )
             if retry_result.get("success"):
                 retry_result.setdefault("retried", True)

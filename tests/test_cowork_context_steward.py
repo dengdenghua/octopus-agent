@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 
+from runtime.memory.cowork.context_engines import AdaptiveRecallCoworkContextEngine
 from runtime.memory.cowork.context_steward import plan_group_context
 
 
@@ -106,9 +107,19 @@ def test_continued_member_receives_only_changed_context_sections() -> None:
 
     assert "安全验收" in full
     assert first_audit["mode"] == "full"
+    assert first_audit["context_projection"] == {
+        "schema": "octopus.cowork_context_projection.v1",
+        "mode": "thread_bootstrap",
+        "epoch": member.projection_epoch(),
+        "bootstrap_required": True,
+        "delta_required": False,
+    }
     assert repeated == ""
     assert repeated_hashes == hashes
     assert repeated_audit["mode"] == "cursor_only"
+    assert repeated_audit["context_projection"]["epoch"] == member.projection_epoch()
+    assert repeated_audit["context_projection"]["bootstrap_required"] is False
+    assert repeated_audit["context_projection"]["delta_required"] is False
     assert repeated_audit["avoided_estimated_tokens"] == repeated_audit["full_estimated_tokens"]
 
     changed = replace(
@@ -119,9 +130,33 @@ def test_continued_member_receives_only_changed_context_sections() -> None:
     assert "新增回归风险" in delta
     assert "安全验收" not in delta
     assert delta_audit["mode"] == "incremental"
+    assert delta_audit["context_projection"]["epoch"] == member.projection_epoch()
+    assert delta_audit["context_projection"]["bootstrap_required"] is False
+    assert delta_audit["context_projection"]["delta_required"] is True
     assert delta_audit["included_sections"] == ["role_relevant_context"]
     assert "role_relevant_context" not in hashes
     assert "role_relevant_context" in changed_hashes
+
+
+def test_projection_epoch_rotates_only_when_member_contract_changes() -> None:
+    member = plan_group_context(
+        "继续检查发布",
+        [
+            {
+                "name": "reviewer",
+                "description": "发布质量复核",
+                "authorization": {"scope": "all", "joined_at_message": 0},
+            }
+        ],
+        [{"role": "user", "content": "决定：周五发布。"}],
+    ).for_agent("reviewer")
+    assert member is not None
+
+    appended = replace(member, relevant_context=member.relevant_context + "\n成员: 新增证据。")
+    narrowed = replace(member, authorization_fingerprint="f" * 64)
+
+    assert appended.projection_epoch() == member.projection_epoch()
+    assert narrowed.projection_epoch() != member.projection_epoch()
 
 
 def test_long_project_uses_adaptive_budget_and_can_retrieve_old_history() -> None:
@@ -139,6 +174,35 @@ def test_long_project_uses_adaptive_budget_and_can_retrieve_old_history() -> Non
     assert plan.audit_dict()["history_message_count"] == 151
     assert member.token_budget > 700
     assert "序列号为准" in member.render_prompt()
+
+
+def test_recall_intent_opens_authorized_long_horizon_lane_without_leaking() -> None:
+    old_decision = {
+        "role": "assistant",
+        "content": "决定：最初选择蓝绿发布，因为必须支持一分钟内回滚。",
+    }
+    noise = [{"role": "assistant", "content": f"普通同步记录 {index}"} for index in range(140)]
+    plan = plan_group_context(
+        "为什么之前选择这个发布方案？",
+        [
+            {"name": "release", "description": "发布工程"},
+            {"name": "guest", "description": "发布工程"},
+        ],
+        member_histories={
+            "release": [old_decision, *noise],
+            "guest": noise,
+        },
+        selection_engine=AdaptiveRecallCoworkContextEngine(),
+        shared_token_budget=80,
+        member_token_budget=80,
+    )
+
+    release = plan.for_agent("release")
+    guest = plan.for_agent("guest")
+    assert release is not None and guest is not None
+    assert plan.audit_dict()["deep_recall_escalated"] is True
+    assert "一分钟内回滚" in release.relevant_context
+    assert "一分钟内回滚" not in guest.render_prompt()
 
 
 def test_durable_blackboard_is_injected_as_long_term_project_memory() -> None:

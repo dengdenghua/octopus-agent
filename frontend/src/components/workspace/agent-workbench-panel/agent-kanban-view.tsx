@@ -73,6 +73,8 @@ function AgentKanbanViewImpl({
   isCompressingContext,
   onCompressContext,
   visibilityEvents,
+  collaborationEvents,
+  threadId,
   setActivityView,
   onSelectTab,
   onOpenArtifact,
@@ -103,6 +105,8 @@ function AgentKanbanViewImpl({
   isCompressingContext?: boolean;
   onCompressContext?: () => void | Promise<void>;
   visibilityEvents: LiveToolEvent[];
+  collaborationEvents: LiveToolEvent[];
+  threadId?: string;
   setActivityView: (view: "summary" | "trace" | "screen") => void;
   onSelectTab: ((tab: AgentWorkbenchTabId) => void) | undefined;
   onOpenArtifact: ((path: string) => void) | undefined;
@@ -194,6 +198,8 @@ function AgentKanbanViewImpl({
           onSelectTab={onSelectTab}
           onOpenArtifact={onOpenArtifact}
           resultPreviewUrl={resultPreviewUrl}
+          threadId={threadId}
+          collaborationEvents={collaborationEvents}
         />
       ) : effectiveActivityView === "screen" && selectedAgent ? (
         <SubagentProcessView
@@ -226,6 +232,8 @@ function AgentKanbanViewImpl({
           onSelectTab={onSelectTab}
           onOpenArtifact={onOpenArtifact}
           resultPreviewUrl={resultPreviewUrl}
+          threadId={threadId}
+          collaborationEvents={collaborationEvents}
         />
       )}
 

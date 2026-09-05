@@ -220,6 +220,7 @@ class CerebrumRuntime:
         subagent_runner: Any = None,
         task_supervisor: Any = None,
         session_titles: Any = None,
+        cowork_context_engine: Any = None,
     ) -> None:
         """Wire a CerebrumRuntime onto an existing octopus stack.
 
@@ -278,6 +279,35 @@ class CerebrumRuntime:
         self._project_store = project_store
         self._project_os_hooks = dict(project_os_hooks or {})
         self._subagent_runner = subagent_runner
+        composer = getattr(getattr(stack, "planner", None), "composer", None)
+        self._cowork_context_engine = cowork_context_engine or getattr(
+            composer,
+            "cowork_engine",
+            None,
+        )
+        if self._cowork_context_engine is None:
+            try:
+                from runtime.memory.cowork.context_engines import (
+                    load_cowork_context_engine,
+                )
+
+                self._cowork_context_engine = load_cowork_context_engine()
+            except Exception as exc:  # noqa: BLE001 - default engine remains available
+                _logger.warning("cowork context engine unavailable: %s", type(exc).__name__)
+        self._cowork_context_engine_host = None
+        if self._cowork_context_engine is not None:
+            try:
+                from runtime.memory.cowork.context_engines import CoworkContextEngineHost
+
+                self._cowork_context_engine_host = CoworkContextEngineHost(
+                    self._cowork_context_engine
+                )
+            except Exception as exc:  # noqa: BLE001 - deterministic host fallback is safe
+                _logger.warning(
+                    "cowork context engine host unavailable: %s",
+                    type(exc).__name__,
+                )
+                self._cowork_context_engine = None
         # Server-side authority over auto-approval. When False (default),
         # a client setting ``approvalPolicy="never"`` is downgraded to
         # ``"on-request"`` server-side — the client never gets to silently

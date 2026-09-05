@@ -387,11 +387,13 @@ def _extract_tool_actions_from_loose_output(text: str) -> list[str]:
     bare = _BARE_INLINE_TOOL_CALL_RE.fullmatch(text or "")
     if bare:
         try:
-            args = json.loads(bare.group("args"))
+            bare_args = json.loads(bare.group("args"))
         except json.JSONDecodeError:
-            args = None
-        if isinstance(args, dict):
-            actions.append(_format_action(_normalize_action_name(bare.group("name").strip()), args))
+            bare_args = None
+        if isinstance(bare_args, dict):
+            actions.append(
+                _format_action(_normalize_action_name(bare.group("name").strip()), bare_args)
+            )
     return actions
 
 

@@ -840,12 +840,12 @@ def create_design_studio_router(
                     if not isinstance(entry, dict):
                         raise HTTPException(422, f"asset {index + 1} metadata is invalid")
                     source_path = str(entry.get("path") or "").replace("\\", "/").strip("/")
-                    info = safe_files.get(source_path)
+                    entry_info = safe_files.get(source_path)
                     category = str(entry.get("category") or "自定义")
                     name = str(entry.get("name") or "").strip()
-                    if info is None or source_path == "manifest.json":
+                    if entry_info is None or source_path == "manifest.json":
                         raise HTTPException(422, f"asset file is missing: {source_path}")
-                    if info.file_size > _MAX_PROJECT_ASSET_BYTES:
+                    if entry_info.file_size > _MAX_PROJECT_ASSET_BYTES:
                         raise HTTPException(413, f"asset is too large: {source_path}")
                     if category not in _ASSET_CATEGORIES or not 1 <= len(name) <= 120:
                         raise HTTPException(422, f"asset metadata is invalid: {source_path}")
@@ -854,7 +854,7 @@ def create_design_studio_router(
                     asset_id = f"asset-{uuid4().hex[:16]}"
                     directory = staging / asset_id
                     directory.mkdir()
-                    content = archive.read(info)
+                    content = archive.read(entry_info)
                     (directory / safe_name).write_bytes(content)
                     raw_tags = entry.get("tags") or []
                     tags = (
@@ -862,7 +862,7 @@ def create_design_studio_router(
                         if isinstance(raw_tags, list)
                         else []
                     )
-                    asset = {
+                    asset: dict[str, Any] = {
                         "id": asset_id,
                         "name": name,
                         "category": category,
@@ -883,8 +883,9 @@ def create_design_studio_router(
                 committed: list[Path] = []
                 try:
                     for asset in created:
-                        target = owner / asset["id"]
-                        (staging / asset["id"]).replace(target)
+                        committed_asset_id = str(asset["id"])
+                        target = owner / committed_asset_id
+                        (staging / committed_asset_id).replace(target)
                         committed.append(target)
                 except Exception:
                     for target in committed:
@@ -1067,7 +1068,7 @@ def create_design_studio_router(
             )
         items: list[dict[str, Any]] = []
         for response in responses:
-            if isinstance(response, Exception) or response.status_code != 200:
+            if isinstance(response, BaseException) or response.status_code != 200:
                 continue
             try:
                 raw = response.json()

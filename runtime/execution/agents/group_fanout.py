@@ -611,6 +611,7 @@ def run_group_fanout(
                         }
                         for audit_key in (
                             "context_delivery",
+                            "context_engine_lifecycle",
                             "session_compaction",
                             "steering_count",
                             "steering_generation",

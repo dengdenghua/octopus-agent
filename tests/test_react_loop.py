@@ -9386,6 +9386,35 @@ def test_effective_goal_does_not_resurrect_cancelled_execution() -> None:
     assert derive_effective_execution_goal("不用继续了", history) == "不用继续了"
 
 
+def test_effective_goal_does_not_resurrect_old_task_for_new_non_code_request() -> None:
+    from runtime.core.cerebrum.react_goal_analysis import derive_effective_execution_goal
+
+    history = [
+        {"role": "user", "content": "研究一下 Eight Sleep，给出带来源的报告"},
+        {"role": "assistant", "content": "我接下来会搜索资料并核验来源。"},
+        {
+            "role": "user",
+            "content": "请大家各用一句话说明自己的当前职责，用于多人协作界面验收。",
+        },
+    ]
+    current = "请大家各用一句话说明自己的当前职责，用于多人协作界面验收。"
+
+    assert derive_effective_execution_goal(current, history) == current
+
+
+def test_effective_goal_new_research_request_replaces_old_unfinished_research() -> None:
+    from runtime.core.cerebrum.react_goal_analysis import derive_effective_execution_goal
+
+    history = [
+        {"role": "user", "content": "研究一下 Eight Sleep"},
+        {"role": "assistant", "content": "我接下来会搜索资料并核验来源。"},
+        {"role": "user", "content": "研究 Hermes 最新的多人协作实现"},
+    ]
+    current = "研究 Hermes 最新的多人协作实现"
+
+    assert derive_effective_execution_goal(current, history) == current
+
+
 def test_effective_goal_carries_inspection_contract_across_announce_only_turns() -> None:
     # Regression (thread tPO8mDlhtQev_grzsY1etH): 第 1 轮用户问"如何评价这个项目前端
     # UI UX 设计",助手只回预告句("我先实际看一下前端代码再下结论…"),后续"再深度一点/

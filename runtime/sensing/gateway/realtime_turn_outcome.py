@@ -894,6 +894,31 @@ def _record_react_trace_event(runtime: CerebrumRuntime, turn: Turn, evt: dict[st
         supervisor_task_id = str(evt.get("task_id") or "").strip()
         if supervisor is not None and supervisor_task_id:
             try:
+                previous_task_id = str(turn.task_id or "").strip()
+                if previous_task_id and previous_task_id != supervisor_task_id:
+                    previous = supervisor.store.get(previous_task_id)
+                    if previous is not None and str(previous.status) in {
+                        "pending",
+                        "running",
+                        "waiting_approval",
+                        "paused",
+                        "verifying",
+                        "repairing",
+                    }:
+                        # One outer realtime turn may enter a second ReAct
+                        # strand for live steering or bounded orchestration
+                        # repair. The new react_started event replaces the
+                        # strand id on ``turn``; close the old lease first so
+                        # it cannot remain a phantom "running" task forever.
+                        supervisor.transition(
+                            previous_task_id,
+                            "disconnected",
+                            reason="superseded_by_react_attempt",
+                            metadata_patch={
+                                "superseded_by_task_id": supervisor_task_id,
+                                "turn_id": turn.id,
+                            },
+                        )
                 params = cast(TurnParams, turn.params)
                 goal = _turn_user_goal(turn)
                 supervisor.start_task(
@@ -938,9 +963,9 @@ def _record_react_trace_event(runtime: CerebrumRuntime, turn: Turn, evt: dict[st
     # Persist the execution strand on every event so consumers never infer it
     # from a surrounding task or from the frontend's current mode label.
     payload.setdefault("engine", _turn_execution_engine(turn))
-    params = getattr(turn, "params", None)
-    if params is not None:
-        model = getattr(params, "model", None)
+    turn_params = getattr(turn, "params", None)
+    if turn_params is not None:
+        model = getattr(turn_params, "model", None)
         if isinstance(model, str) and model.strip():
             payload.setdefault("model", model.strip())
     if kind in {"tool_start", "tool_end", "tool_background"}:

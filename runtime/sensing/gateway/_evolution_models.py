@@ -105,6 +105,10 @@ if FASTAPI_AVAILABLE:
         source_message_id: str = Field(default="", max_length=512)
         candidate_id: str = Field(default="", max_length=512)
         experiment_id: str = Field(default="", max_length=512)
+        automatic: bool = False
+        risk_level: str = Field(default="", max_length=32)
+        failure_count: int = Field(default=0, ge=0, le=100)
+        confidence: float | str | None = None
 
     class CandidateCanaryOutcomeBody(BaseModel):
         success: bool

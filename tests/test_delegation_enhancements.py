@@ -95,6 +95,26 @@ def test_call_agent_respects_explicit_timeout(mock_subagent, mock_builtins):
     assert call_kwargs["timeout_s"] == 1800
 
 
+def test_call_agent_passes_explicit_continuation_session(mock_subagent, mock_builtins):
+    from runtime.execution.suckers.delegation_skills import _call_agent
+
+    mock_subagent.return_value = {
+        "agent_id": "researcher",
+        "output": "continued",
+        "success": True,
+        "session_id": "private-session-7",
+    }
+
+    result = _call_agent(
+        agent_id="researcher",
+        prompt="continue",
+        continue_session_id="private-session-7",
+    )
+
+    assert result["success"] is True
+    assert mock_subagent.call_args.kwargs["continue_session_id"] == "private-session-7"
+
+
 # ── Custom agent_id fallback ──────────────────────────────
 
 

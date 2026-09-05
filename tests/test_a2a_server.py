@@ -82,9 +82,7 @@ def test_inbound_task_survives_app_restart_and_is_queryable(tmp_path, monkeypatc
         assert response.json()["result"]["status"]["state"] == "TASK_STATE_COMPLETED"
 
 
-def test_a2a_tenant_mount_does_not_shadow_later_application_routes(
-    tmp_path, monkeypatch
-) -> None:
+def test_a2a_tenant_mount_does_not_shadow_later_application_routes(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
         "runtime.execution.suckers.delegation_skills._call_agent",
         lambda **_kwargs: {"success": True, "output": "ok", "error": None},

@@ -109,6 +109,57 @@ describe("RemoteBackendsPanel", () => {
     });
   });
 
+  it("submits an explicit SSH tunnel without hiding a direct fallback", async () => {
+    mockOnce({ enabled: true, backends: [] });
+    renderWithProviders(<RemoteBackendsPanel />);
+    await waitFor(() => {
+      expect(screen.getByText("No remote backends registered.")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText("Backend name"), {
+      target: { value: "private" },
+    });
+    fireEvent.change(screen.getByLabelText("Backend URL"), {
+      target: { value: "http://127.0.0.1:8000" },
+    });
+    fireEvent.click(screen.getByLabelText("Connect through SSH"));
+    fireEvent.change(screen.getByLabelText("SSH host"), {
+      target: { value: "bastion.example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("SSH user"), {
+      target: { value: "ops" },
+    });
+    fireEvent.change(screen.getByLabelText("SSH port"), {
+      target: { value: "2202" },
+    });
+    fireEvent.change(screen.getByLabelText("SSH identity file"), {
+      target: { value: "/keys/id_ed25519" },
+    });
+
+    mockOnce({ backend: { id: "b2", name: "private" } });
+    mockOnce({ enabled: true, backends: [] });
+    fireEvent.submit(screen.getByLabelText("Add remote backend"));
+
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find(
+        (call) => (call[1] as RequestInit | undefined)?.method === "POST",
+      );
+      expect(
+        JSON.parse(String((post![1] as RequestInit).body)),
+      ).toMatchObject({
+        name: "private",
+        url: "http://127.0.0.1:8000",
+        ssh: {
+          host: "bastion.example.com",
+          user: "ops",
+          port: 2202,
+          identity_file: "/keys/id_ed25519",
+          connect_timeout: 10,
+        },
+      });
+    });
+  });
+
   it("Ping button posts to /health", async () => {
     mockOnce(ENABLED_LIST);
     renderWithProviders(<RemoteBackendsPanel />);

@@ -35,6 +35,15 @@ def test_built_in_flags_are_registered() -> None:
     assert "regeneration.enabled" in specs
     assert "safety.invariants_enabled" in specs
     assert "ui.ambient_suggestions" in specs
+    assert "evolution.dual_helix_shadow_auto" in specs
+
+
+def test_automatic_dual_helix_shadow_is_off_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OCTOPUS_FF_EVOLUTION_DUAL_HELIX_SHADOW_AUTO", raising=False)
+    ff.reload()
+    assert ff.is_on("evolution.dual_helix_shadow_auto") is False
 
 
 def test_default_wins_when_nothing_overrides(

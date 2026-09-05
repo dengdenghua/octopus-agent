@@ -544,6 +544,36 @@ def test_agentic_runner_uses_effective_context_allowlist():
     assert tool_names == ["web_search", "bb_write"]
 
 
+def test_agentic_runner_applies_member_steering_at_next_model_boundary():
+    from runtime.execution.suckers.ephemeral_runner import (
+        make_llm_ephemeral_runner,
+    )
+
+    router = _ScriptedAgenticRouter(
+        script=[
+            [{"name": "read_file", "input": {"path": "old.py"}}],
+            "corrected result",
+        ]
+    )
+    registry = _StubRegistry({"read_file": lambda **kw: {"ok": True}})
+    runner = make_llm_ephemeral_runner(router, registry=registry, default_model="m")
+    call = _make_call(role_id="reviewer")
+    polls = 0
+
+    def drain() -> list[str]:
+        nonlocal polls
+        polls += 1
+        return ["改查 new.py"] if polls == 2 else []
+
+    call.context["steering_drain"] = drain
+    assert runner(call) == "corrected result"
+    second_messages = router.call_log[1].messages
+    assert any(
+        message.role == "user" and "改查 new.py" in str(message.content)
+        for message in second_messages
+    )
+
+
 def test_agentic_loop_stalls_on_repeated_tool_calls():
     """Repeated identical tool calls should converge early, not burn the
     whole round cap and surface an "exceeded round cap" error."""

@@ -465,6 +465,7 @@ describe("liveToolEventsFromConversation", () => {
           tool: "team_swarm",
           arguments: {
             schema: "octopus.group_fanout_run.v1",
+            collaboration_run_id: "cowork-fanout:turn-1",
             specs: [{ agent_id: "db-agent", task: "check schema" }],
           },
           result: {
@@ -483,6 +484,9 @@ describe("liveToolEventsFromConversation", () => {
       input: {
         server: "team",
         tool: "team_swarm",
+        arguments: expect.objectContaining({
+          collaboration_run_id: "cowork-fanout:turn-1",
+        }),
       },
       output: {
         schema: "octopus.group_fanout_result.v1",

@@ -202,7 +202,9 @@ def generate_video(
             try:
                 seconds_value = int(seconds)
             except (TypeError, ValueError) as exc:
-                raise ValueError(f"seconds must be an integer string from 4 to 12; got {seconds}") from exc
+                raise ValueError(
+                    f"seconds must be an integer string from 4 to 12; got {seconds}"
+                ) from exc
             if not 4 <= seconds_value <= 12:
                 raise ValueError(f"seconds must be 4..12; got {seconds_value}")
             payload = {

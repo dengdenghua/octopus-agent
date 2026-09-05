@@ -39,9 +39,7 @@ def test_task_and_events_are_durable_and_filterable(tmp_path) -> None:
         "submitted",
         "remote_status",
     ]
-    assert reopened.list(agent_id="remote-agent", status="working")[0][
-        "local_task_id"
-    ] == "local-1"
+    assert reopened.list(agent_id="remote-agent", status="working")[0]["local_task_id"] == "local-1"
 
 
 def test_terminal_remote_state_cannot_be_reopened(tmp_path) -> None:
