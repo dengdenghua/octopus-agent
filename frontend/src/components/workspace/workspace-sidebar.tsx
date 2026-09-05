@@ -1214,28 +1214,25 @@ function NavSection({
   );
 }
 
-/** 侧栏底部的「编辑侧栏」入口 —— 对标钉钉侧栏那个 `+`。 */
+/** 侧栏模块编辑入口：弱化为横向省略号，避免抢占主导航的视觉层级。 */
 function EditModulesButton({ onOpen }: { onOpen: () => void }) {
   const { t } = useI18n();
   return (
     <SidebarGroup className="p-0 px-1 pb-0.5 group-data-[collapsible=icon]:px-0">
-      <SidebarMenu className="gap-0.5">
+      <SidebarMenu>
         <SidebarMenuItem className="justify-center">
           <SidebarMenuButton
             tooltip={t.sidebar.editModules}
             aria-label={t.sidebar.editModules}
             onClick={onOpen}
             className={cn(
-              "group/nav h-9 w-full text-sm opacity-55 transition-[opacity,background-color,border-color]",
-              "border border-transparent hover:border-border-subtle hover:bg-muted/32 hover:opacity-100",
-              "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0",
+              "h-7 w-full justify-start border border-transparent text-muted-foreground/55",
+              "transition-[color,background-color,border-color] hover:border-border-subtle hover:bg-muted/45 hover:text-foreground",
+              "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0",
             )}
           >
-            <span className="flex size-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors group-hover/nav:text-foreground">
-              <PlusIcon className="size-[16px]" />
-            </span>
-            <span className="min-w-0 flex-1 truncate text-left group-data-[collapsible=icon]:hidden">
-              {t.sidebar.editModules}
+            <span className="flex size-6 shrink-0 items-center justify-center">
+              <MoreHorizontalIcon className="size-[16px]" />
             </span>
           </SidebarMenuButton>
         </SidebarMenuItem>
