@@ -83,6 +83,16 @@
           "tokens_out": 100,
           "usd": 0.001
         },
+        "effect_receipt": {
+          "effect_class": "read_only",
+          "emitted_by": "tool_executor",
+          "handler_entered": true,
+          "retry_safe": false,
+          "schema": "octopus.tool.effect_receipt.v1",
+          "sealed": true,
+          "state": "committed",
+          "tool_name": "list_cwd"
+        },
         "error_type": null,
         "execution_source": "registered_noncanonical",
         "exit_code": null,
@@ -183,6 +193,16 @@
           "tokens_out": 100,
           "usd": 0.001
         },
+        "effect_receipt": {
+          "effect_class": "read_only",
+          "emitted_by": "tool_executor",
+          "handler_entered": true,
+          "retry_safe": false,
+          "schema": "octopus.tool.effect_receipt.v1",
+          "sealed": true,
+          "state": "committed",
+          "tool_name": "read_file"
+        },
         "error_type": null,
         "execution_source": "registered_noncanonical",
         "exit_code": null,
@@ -279,7 +299,17 @@
           "tokens_out": 100,
           "usd": 0.001
         },
-        "error_type": null,
+        "effect_receipt": {
+          "effect_class": "external_or_unknown",
+          "emitted_by": "tool_executor",
+          "handler_entered": true,
+          "retry_safe": false,
+          "schema": "octopus.tool.effect_receipt.v1",
+          "sealed": true,
+          "state": "indeterminate",
+          "tool_name": "exec_shell"
+        },
+        "error_type": "semantic_error",
         "execution_source": "canonical_builtin",
         "exit_code": null,
         "files_modified": [],
@@ -321,8 +351,10 @@
           "stdout": "",
           "stdout_truncated": false
         },
-        "status": "success",
-        "stderr_tags": [],
+        "status": "failed",
+        "stderr_tags": [
+          "semantic_error"
+        ],
         "trusted_execution": true
       },
       "step_id": 2
@@ -399,6 +431,16 @@
           "tokens_in": 100,
           "tokens_out": 100,
           "usd": 0.001
+        },
+        "effect_receipt": {
+          "effect_class": "read_only",
+          "emitted_by": "tool_executor",
+          "handler_entered": true,
+          "retry_safe": false,
+          "schema": "octopus.tool.effect_receipt.v1",
+          "sealed": true,
+          "state": "committed",
+          "tool_name": "read_file"
         },
         "error_type": null,
         "execution_source": "registered_noncanonical",
@@ -517,6 +559,16 @@
           "tokens_out": 100,
           "usd": 0.001
         },
+        "effect_receipt": {
+          "effect_class": "external_or_unknown",
+          "emitted_by": "tool_executor",
+          "handler_entered": true,
+          "retry_safe": false,
+          "schema": "octopus.tool.effect_receipt.v1",
+          "sealed": true,
+          "state": "indeterminate",
+          "tool_name": "edit_text_file"
+        },
         "error_type": null,
         "execution_source": "registered_noncanonical",
         "exit_code": null,
@@ -614,6 +666,16 @@
           "tokens_in": 100,
           "tokens_out": 100,
           "usd": 0.001
+        },
+        "effect_receipt": {
+          "effect_class": "external_or_unknown",
+          "emitted_by": "tool_executor",
+          "handler_entered": true,
+          "retry_safe": false,
+          "schema": "octopus.tool.effect_receipt.v1",
+          "sealed": true,
+          "state": "indeterminate",
+          "tool_name": "exec_shell"
         },
         "error_type": null,
         "execution_source": "canonical_builtin",
@@ -739,6 +801,16 @@
           "tokens_out": 100,
           "usd": 0.001
         },
+        "effect_receipt": {
+          "effect_class": "external_or_unknown",
+          "emitted_by": "tool_executor",
+          "handler_entered": true,
+          "retry_safe": false,
+          "schema": "octopus.tool.effect_receipt.v1",
+          "sealed": true,
+          "state": "indeterminate",
+          "tool_name": "git_add"
+        },
         "error_type": null,
         "execution_source": "registered_noncanonical",
         "exit_code": null,
@@ -830,6 +902,16 @@
           "tokens_out": 100,
           "usd": 0.001
         },
+        "effect_receipt": {
+          "effect_class": "external_or_unknown",
+          "emitted_by": "tool_executor",
+          "handler_entered": true,
+          "retry_safe": false,
+          "schema": "octopus.tool.effect_receipt.v1",
+          "sealed": true,
+          "state": "indeterminate",
+          "tool_name": "git_commit"
+        },
         "error_type": null,
         "execution_source": "registered_noncanonical",
         "exit_code": null,
@@ -892,6 +974,16 @@
               "tokens_out": 100,
               "usd": 0.001
             },
+            "effect_receipt": {
+              "effect_class": "read_only",
+              "emitted_by": "tool_executor",
+              "handler_entered": true,
+              "retry_safe": false,
+              "schema": "octopus.tool.effect_receipt.v1",
+              "sealed": true,
+              "state": "committed",
+              "tool_name": "list_cwd"
+            },
             "error_type": null,
             "execution_source": "registered_noncanonical",
             "exit_code": null,
@@ -939,6 +1031,16 @@
               "tokens_in": 100,
               "tokens_out": 100,
               "usd": 0.001
+            },
+            "effect_receipt": {
+              "effect_class": "read_only",
+              "emitted_by": "tool_executor",
+              "handler_entered": true,
+              "retry_safe": false,
+              "schema": "octopus.tool.effect_receipt.v1",
+              "sealed": true,
+              "state": "committed",
+              "tool_name": "read_file"
             },
             "error_type": null,
             "execution_source": "registered_noncanonical",
@@ -990,7 +1092,17 @@
               "tokens_out": 100,
               "usd": 0.001
             },
-            "error_type": null,
+            "effect_receipt": {
+              "effect_class": "external_or_unknown",
+              "emitted_by": "tool_executor",
+              "handler_entered": true,
+              "retry_safe": false,
+              "schema": "octopus.tool.effect_receipt.v1",
+              "sealed": true,
+              "state": "indeterminate",
+              "tool_name": "exec_shell"
+            },
+            "error_type": "semantic_error",
             "execution_source": "canonical_builtin",
             "exit_code": null,
             "files_modified": [],
@@ -1032,8 +1144,10 @@
               "stdout": "",
               "stdout_truncated": false
             },
-            "status": "success",
-            "stderr_tags": [],
+            "status": "failed",
+            "stderr_tags": [
+              "semantic_error"
+            ],
             "trusted_execution": true
           },
           "step_id": 2
@@ -1058,6 +1172,16 @@
               "tokens_in": 100,
               "tokens_out": 100,
               "usd": 0.001
+            },
+            "effect_receipt": {
+              "effect_class": "read_only",
+              "emitted_by": "tool_executor",
+              "handler_entered": true,
+              "retry_safe": false,
+              "schema": "octopus.tool.effect_receipt.v1",
+              "sealed": true,
+              "state": "committed",
+              "tool_name": "read_file"
             },
             "error_type": null,
             "execution_source": "registered_noncanonical",
@@ -1100,6 +1224,16 @@
               "tokens_in": 100,
               "tokens_out": 100,
               "usd": 0.001
+            },
+            "effect_receipt": {
+              "effect_class": "external_or_unknown",
+              "emitted_by": "tool_executor",
+              "handler_entered": true,
+              "retry_safe": false,
+              "schema": "octopus.tool.effect_receipt.v1",
+              "sealed": true,
+              "state": "indeterminate",
+              "tool_name": "edit_text_file"
             },
             "error_type": null,
             "execution_source": "registered_noncanonical",
@@ -1152,6 +1286,16 @@
               "tokens_in": 100,
               "tokens_out": 100,
               "usd": 0.001
+            },
+            "effect_receipt": {
+              "effect_class": "external_or_unknown",
+              "emitted_by": "tool_executor",
+              "handler_entered": true,
+              "retry_safe": false,
+              "schema": "octopus.tool.effect_receipt.v1",
+              "sealed": true,
+              "state": "indeterminate",
+              "tool_name": "exec_shell"
             },
             "error_type": null,
             "execution_source": "canonical_builtin",
@@ -1228,6 +1372,16 @@
               "tokens_out": 100,
               "usd": 0.001
             },
+            "effect_receipt": {
+              "effect_class": "external_or_unknown",
+              "emitted_by": "tool_executor",
+              "handler_entered": true,
+              "retry_safe": false,
+              "schema": "octopus.tool.effect_receipt.v1",
+              "sealed": true,
+              "state": "indeterminate",
+              "tool_name": "git_add"
+            },
             "error_type": null,
             "execution_source": "registered_noncanonical",
             "exit_code": null,
@@ -1267,6 +1421,16 @@
               "tokens_in": 100,
               "tokens_out": 100,
               "usd": 0.001
+            },
+            "effect_receipt": {
+              "effect_class": "external_or_unknown",
+              "emitted_by": "tool_executor",
+              "handler_entered": true,
+              "retry_safe": false,
+              "schema": "octopus.tool.effect_receipt.v1",
+              "sealed": true,
+              "state": "indeterminate",
+              "tool_name": "git_commit"
             },
             "error_type": null,
             "execution_source": "registered_noncanonical",

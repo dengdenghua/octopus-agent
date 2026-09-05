@@ -77,17 +77,10 @@ def test_tentacle_pc_screen_ws_rejects_wrong_token_when_required() -> None:
     client = _client(require_auth=True, store=_store())
     with (
         pytest.raises(WebSocketDisconnect) as exc_info,
-        client.websocket_connect("/api/tentacle/pc-screen/stream?token=nope") as ws,
-    ):
-        ws.receive_text()
-    assert exc_info.value.code == 4401
-
-
-def test_tentacle_ws_rejects_valid_token_in_query_string() -> None:
-    client = _client(require_auth=True, store=_store())
-    with (
-        pytest.raises(WebSocketDisconnect) as exc_info,
-        client.websocket_connect("/api/tentacle/pc-screen/stream?token=sk-alice") as ws,
+        client.websocket_connect(
+            "/api/tentacle/pc-screen/stream",
+            headers={"Authorization": "Bearer nope"},
+        ) as ws,
     ):
         ws.receive_text()
     assert exc_info.value.code == 4401
@@ -97,7 +90,10 @@ def test_tentacle_ws_require_auth_without_identity_store_rejects() -> None:
     client = _client(require_auth=True, store=None)
     with (
         pytest.raises(WebSocketDisconnect) as exc_info,
-        client.websocket_connect("/api/tentacle/screen/stream?token=anything") as ws,
+        client.websocket_connect(
+            "/api/tentacle/screen/stream",
+            headers={"Authorization": "Bearer anything"},
+        ) as ws,
     ):
         ws.receive_text()
     assert exc_info.value.code == 4401

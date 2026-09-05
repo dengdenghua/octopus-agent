@@ -31,6 +31,7 @@ def test_audit_workflow_is_resolved_from_flat_or_nested_context(
     context: dict[str, object],
 ) -> None:
     assert is_audit_read_only_context(context) is True
+    assert is_enforced_read_only_context(context) is False
 
 
 @pytest.mark.parametrize(
@@ -54,7 +55,7 @@ def test_diagnostic_read_only_policy_is_resolved_from_trusted_context(
     )
 
 
-def test_audit_catalog_keeps_read_search_verification_and_orchestration() -> None:
+def test_review_workflow_does_not_narrow_the_tool_catalog() -> None:
     specs = [
         SimpleNamespace(name=name)
         for name in (
@@ -82,10 +83,26 @@ def test_audit_catalog_keeps_read_search_verification_and_orchestration() -> Non
         "run_tests",
         "lint_check",
         "run_orchestration",
+        "edit_file",
+        "exec_shell",
+        "format_code",
     }
 
 
-def test_audit_verification_rejects_fix_and_arbitrary_commands() -> None:
+def test_review_respects_an_independent_explicit_read_only_policy() -> None:
+    context = {
+        "workflow_preset": "audit.review",
+        "_read_only_turn_enforced": True,
+    }
+
+    assert is_enforced_read_only_context(context) is True
+    assert audit_read_only_tool_denial("read_file", {}, context=context) is None
+    denial = audit_read_only_tool_denial("edit_file", {}, context=context)
+    assert "explicit read-only policy" in str(denial)
+    assert "switch" not in str(denial).lower()
+
+
+def test_review_workflow_allows_fix_and_commands_when_not_explicitly_read_only() -> None:
     context = {"workflow_preset": "audit.review"}
 
     assert audit_read_only_tool_denial("run_tests", {}, context=context) is None
@@ -105,23 +122,25 @@ def test_audit_verification_rejects_fix_and_arbitrary_commands() -> None:
         )
         is None
     )
-    assert "fix=true is blocked" in str(
+    assert (
         audit_read_only_tool_denial(
             "lint_check",
             {"fix": True},
             context=context,
         )
+        is None
     )
-    assert "arbitrary commands are blocked" in str(
+    assert (
         audit_read_only_tool_denial(
             "run_tests",
             {"command": 'python -c \'open("x", "w").write("bad")\''},
             context=context,
         )
+        is None
     )
 
 
-def test_executor_hard_blocks_audit_writer_but_develop_executes_it() -> None:
+def test_executor_allows_review_writer_and_develop_writer() -> None:
     calls: list[str] = []
     registry = SkillRegistry()
     registry.register(
@@ -145,10 +164,9 @@ def test_executor_hard_blocks_audit_writer_but_develop_executes_it() -> None:
     ):
         output, is_error = _execute_tool_call(stack, call)
 
-    assert is_error is True
-    assert "audit-read-only" in output
-    assert "Switch the task to develop" in output
-    assert calls == []
+    assert is_error is False
+    assert '"ok": true' in output.lower()
+    assert calls == ["write"]
 
     with session_scope(
         Session(
@@ -160,7 +178,7 @@ def test_executor_hard_blocks_audit_writer_but_develop_executes_it() -> None:
 
     assert is_error is False
     assert '"ok": true' in output.lower()
-    assert calls == ["write"]
+    assert calls == ["write", "write"]
 
 
 def test_executor_allows_focused_verification_during_audit() -> None:
@@ -212,7 +230,7 @@ def test_subagent_inherits_authoritative_parent_work_policy() -> None:
     assert inherited["workflow_preset"] == "audit.deep"
     assert inherited["personal_mode"] == "research"
     assert inherited["verification_policy"] == "strict"
-    assert inherited["tool_allowlist_read_only"] is True
+    assert "tool_allowlist_read_only" not in inherited
 
     attempted_widening = _inherit_parent_work_context(
         {"workflow_preset": "develop.iterate", "personal_mode": "build"},
@@ -220,7 +238,7 @@ def test_subagent_inherits_authoritative_parent_work_policy() -> None:
     )
     assert attempted_widening["workflow_preset"] == "audit.deep"
     assert attempted_widening["personal_mode"] == "research"
-    assert attempted_widening["tool_allowlist_read_only"] is True
+    assert "tool_allowlist_read_only" not in attempted_widening
 
     develop_parent = Session(
         thread_id="next-turn",

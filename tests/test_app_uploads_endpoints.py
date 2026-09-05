@@ -26,7 +26,9 @@ a minimal AgentConfig · identical to what other integration tests use.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from io import BytesIO
 from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 from fastapi.testclient import TestClient
@@ -252,6 +254,68 @@ class TestArtifactServe:
         )
         assert r.status_code == 200
         assert r.content == b"# x\n"
+
+    def test_office_preview_returns_safe_html(
+        self,
+        client: TestClient,
+    ) -> None:
+        buffer = BytesIO()
+        with ZipFile(buffer, "w", ZIP_DEFLATED) as archive:
+            archive.writestr(
+                "word/document.xml",
+                '<w:document xmlns:w="urn:w"><w:body><w:p><w:r>'
+                "<w:t>Quarterly report</w:t>"
+                "</w:r></w:p></w:body></w:document>",
+            )
+        client.post(
+            "/api/threads/office_t/uploads",
+            files={
+                "files": (
+                    "report.docx",
+                    buffer.getvalue(),
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                )
+            },
+        )
+
+        response = client.get("/api/threads/office_t/artifacts/report.docx?office_preview=true")
+
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/html")
+        assert response.headers["cache-control"] == "no-store"
+        csp = response.headers["content-security-policy"]
+        assert "default-src 'none'" in csp
+        assert "script-src 'nonce-" in csp
+        nonce = csp.split("script-src 'nonce-", 1)[1].split("'", 1)[0]
+        assert f'<script nonce="{nonce}">' in response.text
+        assert "octopus:office:ready" in response.text
+        assert "Quarterly report" in response.text
+
+    def test_office_preview_can_return_high_fidelity_pdf(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        client.post(
+            "/api/threads/office_pdf_t/uploads",
+            files={"files": ("report.docx", b"docx", "application/octet-stream")},
+        )
+        monkeypatch.setattr(
+            "runtime.sensing.gateway.uploads_router.render_office_fidelity_preview",
+            lambda _target: "<html><body>faithful pages</body></html>",
+        )
+
+        response = client.get(
+            "/api/threads/office_pdf_t/artifacts/report.docx"
+            "?office_preview=true&office_fidelity_preview=true"
+        )
+
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/html")
+        assert response.headers["cache-control"] == "no-store"
+        assert response.headers["x-octopus-office-preview"] == "fidelity"
+        assert "object-src 'none'" in response.headers["content-security-policy"]
+        assert "faithful pages" in response.text
 
 
 # ═══════════════════════════════════════════════════════════

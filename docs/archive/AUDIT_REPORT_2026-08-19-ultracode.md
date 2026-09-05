@@ -60,7 +60,7 @@
 
 ### H1. JWT 测试密钥硬编码 + 备份配置漂移(上次未修, 本次修正细节)
 - 证据: `config.local.yaml:77,85` 与 `config.local.original-20260816.yaml:76` / `config.local.rollback-20260816.yaml:77` 均硬编码 `test-secret-key-for-local-development-only-1234567890`。
-- 修正: 这些文件**均已被 `.gitignore` 忽略且不在 git 仓库**(`git ls-files` 核实), 故不存在"备份在仓库泄露"; 真实风险是**一旦用户启用 local_auth/molili 但忘记更换密钥, 任何知情者可用已知测试密钥伪造任意 JWT**。
+- 修正：这些文件**均已被 `.gitignore` 忽略且不在 git 仓库**（`git ls-files` 核实），故不存在“备份在仓库泄露”；真实风险是**一旦用户启用账号认证但忘记更换密钥，任何知情者可用已知测试密钥伪造任意 JWT**。
 - 修复: 启动时检测到测试密钥即告警/拒绝; 文档显式提示生产必须更换; 备份配置改为环境变量注入。
 
 ### H2. API Key 哈希无盐(上次未修)

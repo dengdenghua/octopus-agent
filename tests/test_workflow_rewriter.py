@@ -45,6 +45,7 @@ def _traj(
     steps: list[Step],
     *,
     success: bool | None = None,
+    degraded: bool = False,
     strategy: str = "default",
 ) -> Trajectory:
     if success is None:
@@ -54,7 +55,7 @@ def _traj(
         arm_id=ArmId("code_arm"),
         strategy_id=strategy,
         steps=steps,
-        outcome=TrajectoryOutcome(success=success),
+        outcome=TrajectoryOutcome(success=success, degraded=degraded),
     )
 
 
@@ -64,6 +65,20 @@ def _traj(
 
 
 class TestProposeNewRule:
+    def test_degraded_success_is_not_new_rule_evidence(self):
+        j = InMemoryJournal()
+        for _ in range(5):
+            j.write_trajectory(
+                _traj(
+                    [_step(0, "read_file"), _step(1, "count_words")],
+                    degraded=True,
+                )
+            )
+
+        report = WorkflowRewriter(j).analyze()
+
+        assert not [p for p in report.proposals if p.kind == "propose_new_rule"]
+
     def test_frequent_sequence_proposed(self):
         j = InMemoryJournal()
         # Implementation note.
@@ -170,6 +185,17 @@ class TestDegradedStep:
 
 
 class TestLowerRulePriority:
+    def test_degraded_success_is_not_counted_as_healthy_rule_run(self):
+        j = InMemoryJournal()
+        for _ in range(5):
+            j.write_trajectory(_traj([_step(0, "x")], strategy="degraded", degraded=True))
+
+        report = WorkflowRewriter(j).analyze(rules=[_FakeRule("degraded", ["x"])])
+
+        lowers = [p for p in report.proposals if p.kind == "lower_rule_priority"]
+        assert len(lowers) == 1
+        assert lowers[0].confidence == 1.0
+
     def test_low_success_rule_flagged(self):
         j = InMemoryJournal()
         # Implementation note.

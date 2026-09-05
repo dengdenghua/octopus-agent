@@ -40,12 +40,18 @@ def _enum_members(tree: ast.Module, class_name: str) -> list[str]:
             for stmt in node.body:
                 if isinstance(stmt, ast.Assign):
                     for target in stmt.targets:
-                        if isinstance(target, ast.Name) and isinstance(stmt.value, ast.Constant):
-                            if isinstance(stmt.value.value, str):
-                                out.append(stmt.value.value)
-                elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.value, ast.Constant):
-                    if isinstance(stmt.value.value, str):
-                        out.append(stmt.value.value)
+                        if (
+                            isinstance(target, ast.Name)
+                            and isinstance(stmt.value, ast.Constant)
+                            and isinstance(stmt.value.value, str)
+                        ):
+                            out.append(stmt.value.value)
+                elif (
+                    isinstance(stmt, ast.AnnAssign)
+                    and isinstance(stmt.value, ast.Constant)
+                    and isinstance(stmt.value.value, str)
+                ):
+                    out.append(stmt.value.value)
             return out
     raise SystemExit(f"enum class {class_name!r} not found in {SOURCE}")
 
@@ -76,8 +82,8 @@ def main() -> int:
     if args.check:
         if not OUTPUT.exists() or OUTPUT.read_text(encoding="utf-8") != rendered:
             print(
-                f"protocol-enums.generated.ts is stale · run "
-                f"python scripts/gen_realtime_protocol_enums.py",
+                "protocol-enums.generated.ts is stale · run "
+                "python scripts/gen_realtime_protocol_enums.py",
                 file=sys.stderr,
             )
             return 1

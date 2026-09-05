@@ -1,6 +1,6 @@
 """Tests for extended preset and persona system.
 
-DSH P2 feature parity: preset/persona tests.
+Octopus Native preset/persona tests.
 """
 
 from __future__ import annotations

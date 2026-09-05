@@ -114,7 +114,7 @@ class AutoRetireScheduler:
     ) -> EvolutionStep | None:
         with self._lock:
             if report is None:
-                report = self.evolver.optimizer.report()
+                report = self.evolver.optimizer.report(scope=self.evolver.scope)
             # Only let the fast-path fire when (a) at least one
             # variant truly accumulated ``losing`` verdicts AND
             # (b) it accumulated them over enough assignments to be
@@ -173,7 +173,7 @@ class AutoRetireScheduler:
         return len(self._recent_retires)
 
     def _do_step(self, trigger: str) -> EvolutionStep:
-        report_before = self.evolver.optimizer.report()
+        report_before = self.evolver.optimizer.report(scope=self.evolver.scope)
         step = self.evolver.step()
 
         # Gene-lock gate · check per retirement so PANIC freezes the

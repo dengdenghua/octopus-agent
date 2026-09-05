@@ -11,6 +11,7 @@
  * 推断优先级：显式工具名映射 > 工具名关键词启发式 > 拆词兜底。
  */
 import type { LucideIcon } from "lucide-react";
+import { builtinPersonaDisplayName } from "@/core/agents/persona-display";
 import {
   BookOpenTextIcon,
   CheckCircleIcon,
@@ -214,9 +215,7 @@ function extractUrl(input: Record<string, unknown>): string | null {
   return null;
 }
 
-function extractCapabilityName(
-  input: Record<string, unknown>,
-): string | null {
+function extractCapabilityName(input: Record<string, unknown>): string | null {
   for (const key of CAPABILITY_KEYS) {
     const value = input[key];
     if (typeof value !== "string" || !value.trim()) continue;
@@ -302,7 +301,10 @@ function extractTeammateName(args: Record<string, unknown>): string {
     "codename",
   ]) {
     const value = args[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "string" && value.trim()) {
+      const trimmed = value.trim();
+      return builtinPersonaDisplayName(trimmed) ?? trimmed;
+    }
   }
   for (const key of ["agent_id", "subagent_type", "name", "role"]) {
     const value = args[key];
@@ -335,6 +337,8 @@ function extractTeammateName(args: Record<string, unknown>): string {
 function friendlyRoleName(role: string | undefined | null): string {
   const value = role?.trim();
   if (!value) return "Task Agent";
+  const personaName = builtinPersonaDisplayName(value);
+  if (personaName) return personaName;
   const lower = value.toLowerCase();
   const map: Record<string, string> = {
     architect: "System Architect",

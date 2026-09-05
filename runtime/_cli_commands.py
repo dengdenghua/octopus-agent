@@ -203,7 +203,7 @@ def run_kg(
 def run_backup(
     *,
     output: Path | None = None,
-    base_dir: str = "~/.octopus",
+    base_dir: str | None = None,
     components: list[str] | None = None,
     color: bool = True,
 ) -> int:
@@ -230,7 +230,7 @@ def run_backup(
 def run_restore(
     *,
     input_path: Path,
-    base_dir: str = "~/.octopus",
+    base_dir: str | None = None,
     components: list[str] | None = None,
     overwrite: bool = False,
     color: bool = True,
@@ -256,7 +256,7 @@ def run_restore(
 def run_export(
     *,
     output: Path,
-    base_dir: str = "~/.octopus",
+    base_dir: str | None = None,
     components: list[str] | None = None,
     color: bool = True,
 ) -> int:
@@ -339,18 +339,6 @@ def run_ui(
         # Keep storage up for the whole session: detect late boot / crashes and
         # relaunch, instead of the old one-shot 10s readiness probe.
         start_storage_heartbeat()
-
-    # Opt-in one-click local SearXNG for the private web-search backend (Docker
-    # container; off by default via OCTOPUS_SEARXNG_AUTOSTART). Graceful: no
-    # Docker → web search just uses the default ddg backend.
-    with contextlib.suppress(Exception):
-        from runtime.sensing.gateway.searxng_supervisor import (
-            maybe_start_searxng,
-            start_searxng_heartbeat,
-        )
-
-        maybe_start_searxng()
-        start_searxng_heartbeat()
 
     if uds:
         import os

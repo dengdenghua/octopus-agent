@@ -16,11 +16,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import secrets
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 from .base import Tentacle, TentacleType
+from .contract import DeviceManifest, manifest_for
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +32,17 @@ DeviceLockOwner = str  # arm_id or task_id
 
 
 class DeviceLock:
-    """设备锁 —— 多 Arm 互斥访问同一台设备."""
+    """Renewable device lease — exclusive access with observable expiry."""
 
-    __slots__ = ("tentacle_id", "owner", "task_id", "acquired_at", "timeout_s")
+    __slots__ = (
+        "tentacle_id",
+        "owner",
+        "task_id",
+        "lease_id",
+        "acquired_at",
+        "renewed_at",
+        "timeout_s",
+    )
 
     def __init__(
         self,
@@ -44,12 +54,34 @@ class DeviceLock:
         self.tentacle_id = tentacle_id
         self.owner = owner
         self.task_id = task_id
+        self.lease_id = secrets.token_urlsafe(12)
         self.acquired_at = asyncio.get_event_loop().time()
+        self.renewed_at = self.acquired_at
         self.timeout_s = timeout_s
 
     @property
     def is_expired(self) -> bool:
-        return asyncio.get_event_loop().time() - self.acquired_at > self.timeout_s
+        return asyncio.get_event_loop().time() - self.renewed_at > self.timeout_s
+
+    @property
+    def expires_in_s(self) -> float:
+        return max(0.0, self.timeout_s - (asyncio.get_event_loop().time() - self.renewed_at))
+
+    def renew(self, timeout_s: int | None = None) -> None:
+        self.renewed_at = asyncio.get_event_loop().time()
+        if timeout_s is not None:
+            self.timeout_s = timeout_s
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "tentacle_id": self.tentacle_id,
+            "owner": self.owner,
+            "task_id": self.task_id,
+            "lease_id": self.lease_id,
+            "timeout_s": self.timeout_s,
+            "expires_in_s": self.expires_in_s,
+            "expired": self.is_expired,
+        }
 
 
 class TentaclePool:
@@ -135,6 +167,15 @@ class TentaclePool:
     def get(self, tentacle_id: str) -> Tentacle | None:
         return self._tentacles.get(tentacle_id)
 
+    def manifest(self, tentacle_id: str) -> DeviceManifest | None:
+        """Discover the structured contract for a registered device."""
+        tentacle = self._tentacles.get(tentacle_id)
+        return manifest_for(tentacle) if tentacle is not None else None
+
+    def manifests(self, *, online_only: bool = False) -> list[DeviceManifest]:
+        devices = self.all_online() if online_only else self.all()
+        return [manifest_for(device) for device in devices]
+
     def select_for_affinity(
         self,
         affinity: list[str],
@@ -183,7 +224,26 @@ class TentaclePool:
             existing = self._locks.get(tentacle_id)
             if existing is not None and not existing.is_expired and existing.owner != owner:
                 return False
+            if existing is not None and not existing.is_expired and existing.owner == owner:
+                existing.renew(timeout_s)
+                existing.task_id = task_id
+                return True
             self._locks[tentacle_id] = DeviceLock(tentacle_id, owner, task_id, timeout_s)
+            return True
+
+    async def renew_lock(
+        self,
+        tentacle_id: str,
+        owner: str,
+        *,
+        timeout_s: int | None = None,
+    ) -> bool:
+        """Renew a live lease. Only its owner may renew it."""
+        async with self._lock:
+            lease = self._locks.get(tentacle_id)
+            if lease is None or lease.is_expired or lease.owner != owner:
+                return False
+            lease.renew(timeout_s)
             return True
 
     async def release_lock(self, tentacle_id: str, owner: str) -> bool:

@@ -2,7 +2,11 @@ import { describe, expect, test } from "vitest";
 
 import type { MessageGroup } from "@/core/messages/utils";
 import type { LiveToolEvent } from "../live-tool-timeline";
-import { failureKind, isLatestMessageGroup } from "./message-list";
+import {
+  failureKind,
+  isLatestMessageGroup,
+  takeUnseenTaskIds,
+} from "./message-list";
 import {
   shouldOpenProcessTraceByDefault,
   shouldShowProcessTrace,
@@ -23,6 +27,21 @@ function toolEvent(
 }
 
 describe("message-list: assistant:subagent routing", () => {
+  test("does not mount a second card for a replayed task call", () => {
+    const seen = new Set<string>();
+    const firstFrame = [
+      { id: "task-1", name: "task", args: {} },
+      { id: "task-2", name: "task", args: {} },
+    ];
+    const replayedFrame = [
+      { id: "task-1", name: "task", args: {} },
+      { id: "task-3", name: "task", args: {} },
+    ];
+
+    expect(takeUnseenTaskIds(firstFrame, seen)).toEqual(["task-1", "task-2"]);
+    expect(takeUnseenTaskIds(replayedFrame, seen)).toEqual(["task-3"]);
+  });
+
   test("single task renders SubtaskCard (not grid)", () => {
     const toolCalls = [
       { id: "tc-1", name: "task", args: { description: "Analyze" } },

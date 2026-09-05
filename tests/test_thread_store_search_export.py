@@ -1,6 +1,6 @@
 """Integration tests for ThreadStateStore search and export.
 
-DSH P2 feature parity: session-query integration tests.
+Octopus Native session-query integration tests.
 """
 
 from __future__ import annotations

@@ -11,7 +11,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from runtime.safety.auth.scope import TenantScope
 from runtime.safety.evolution.proposal_ledger import ProposalLedger
+from runtime.safety.recovery.tenant_scope import (
+    is_legacy_unscoped_event,
+    read_learning_events,
+)
 
 _LOG = logging.getLogger("octopus.gepa.bridge")
 
@@ -21,6 +26,7 @@ def collect_failures_from_journal(
     *,
     recipe_id: str | None = None,
     limit: int = 10,
+    scope: TenantScope | None = None,
 ) -> list[dict[str, Any]]:
     """Pull failed trajectories · optionally filter by recipe.
 
@@ -37,7 +43,7 @@ def collect_failures_from_journal(
     optimizer's signal.
     """
     try:
-        evs = journal.read_by_type("trajectory")
+        evs = read_learning_events(journal, "trajectory", scope=scope)
     except (OSError, TypeError, ValueError, AttributeError):  # noqa: BLE001
         return []
     out: list[dict[str, Any]] = []
@@ -99,6 +105,7 @@ def collect_failures_from_ledger(
     ledger_path: Any = "data/proposal_ledger.jsonl",
     recipe_id: str | None = None,
     limit: int = 10,
+    scope: TenantScope | None = None,
 ) -> list[dict[str, Any]]:
     """Pull realtime failed-turn records from ProposalLedger."""
 
@@ -106,6 +113,7 @@ def collect_failures_from_ledger(
         records = ProposalLedger(ledger_path).query(
             kind="turn_failure",
             limit=max(limit * 4, limit),
+            scope=scope,
         )
     except (OSError, TypeError, ValueError, AttributeError):  # noqa: BLE001
         return []
@@ -113,6 +121,8 @@ def collect_failures_from_ledger(
     out: list[dict[str, Any]] = []
     skipped_empty = 0
     for record in reversed(records):
+        if scope is None and not is_legacy_unscoped_event(record):
+            continue
         metadata = record.metadata if isinstance(record.metadata, dict) else {}
         rid = metadata.get("recipe_id")
         if recipe_id and isinstance(rid, str) and rid.strip() and rid != recipe_id:

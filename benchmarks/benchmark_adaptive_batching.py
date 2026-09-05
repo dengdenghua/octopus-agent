@@ -7,7 +7,7 @@
 import asyncio
 import time
 
-from runtime.sensing.gateway.adaptive_delta_buffer import AdaptiveDeltaBuffer
+from runtime.sensing.gateway.adaptive_delta_buffer import AdaptiveFlushPolicy
 
 
 async def benchmark_fixed_batching(chunks: list[str], threshold: int = 64, interval_ms: int = 32):
@@ -37,22 +37,25 @@ async def benchmark_fixed_batching(chunks: list[str], threshold: int = 64, inter
 
 
 async def benchmark_adaptive_batching(chunks: list[str]):
-    """测试自适应批处理策略"""
-    buffer = AdaptiveDeltaBuffer()
+    """测试自适应批处理策略（策略只做决策，内容由调用方缓冲）"""
+    policy = AdaptiveFlushPolicy()
+    buffer: list[str] = []
     flush_count = 0
     start_time = time.time()
 
     for chunk in chunks:
         buffer.append(chunk)
+        policy.record(len(chunk))
 
-        if buffer.should_flush():
+        if policy.should_flush():
             # 刷新
             buffer.clear()
+            policy.mark_flushed()
             flush_count += 1
             await asyncio.sleep(0.001)  # 模拟网络延迟
 
     # 最后刷新
-    if buffer.get_content():
+    if buffer:
         flush_count += 1
 
     elapsed = time.time() - start_time

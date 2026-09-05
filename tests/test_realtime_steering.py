@@ -238,7 +238,7 @@ async def test_remote_steer_rejects_a_stale_owner_lease(tmp_path: Path) -> None:
             {"threadId": turn.thread_id},
             emitter,
         )
-        assert resumed["turns"][-1]["status"] == "failed"
+        assert resumed["turns"][-1]["status"] == "interrupted"
         assert resumed["turns"][-1]["error"]["code"] == "stale_in_progress_turn"
     finally:
         owner._active_turn_ids.discard(turn.id)

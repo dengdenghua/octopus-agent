@@ -69,6 +69,30 @@ def test_url_shortening_leaves_short_urls_alone() -> None:
     assert "url" not in stats.passes
 
 
+def test_url_shortening_preserves_generated_media_artifact_url() -> None:
+    url = (
+        "https://platform-outputs.agnes-ai.space/images/t2i/"
+        "task_7gR7XZXfTYMXgvxuSu95r6SCxwxQ5cbf/"
+        "output_347e8230aae943b69e86f19f45ccf574.png"
+    )
+    raw = (
+        "(real tool execution succeeded) generate_image\n"
+        f'{{"ok": true, "url": "{url}", "model": "agnes-image-2.5-flash"}}'
+    )
+
+    out, stats = juice(
+        raw,
+        enable_html=False,
+        enable_dedup=False,
+        enable_array=False,
+        enable_cap=False,
+    )
+
+    assert out == raw
+    assert url in out
+    assert "url" not in stats.passes
+
+
 def test_dedup_collapses_repeated_lines() -> None:
     raw = "starting\n" + "warning: x\n" * 8 + "done"
     out, stats = juice(

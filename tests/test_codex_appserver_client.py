@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Awaitable, Callable, Mapping
+from pathlib import Path
 from typing import Any, cast
 
 import pytest
@@ -23,6 +24,16 @@ from runtime.execution.codex_backend import (
     RequestTimeoutError,
 )
 from runtime.execution.codex_backend._transport import decode_message
+
+_CODEX_0_149_FIXTURES = Path(__file__).with_name("fixtures") / "codex_app_server_0_149"
+
+
+def _codex_0_149_fixture(name: str) -> dict[str, Any]:
+    # Fixed from OpenAI Codex rust-v0.149.0 (a4e15bf): protocol/common.rs's
+    # serialization test and app-server's strict codex_apps elicitation test.
+    value = json.loads((_CODEX_0_149_FIXTURES / name).read_text(encoding="utf-8"))
+    assert isinstance(value, dict)
+    return value
 
 
 class _FakeReader:
@@ -134,12 +145,14 @@ async def _start_client(
     config: CodexAppServerConfig | None = None,
     process: _FakeProcess | None = None,
     approval_handler: Callable[[ApprovalRequest], Any] | None = None,
+    dynamic_tool_handler: Callable[[ApprovalRequest], Any] | None = None,
 ) -> tuple[CodexAppServerClient, _FakeProcess, _Factory]:
     fake = process or _FakeProcess()
     factory = _Factory(fake)
     client = CodexAppServerClient(
         config,
         approval_handler=approval_handler,
+        dynamic_tool_handler=dynamic_tool_handler,
         process_factory=cast(ProcessFactory, factory),
     )
     start_task = asyncio.create_task(client.start())
@@ -264,6 +277,58 @@ async def test_handshake_safe_thread_turn_resume_interrupt_and_stream() -> None:
             "method": "turn/interrupt",
             "params": {"threadId": "thr-1", "turnId": "turn-1"},
         }
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_plugin_marketplace_list_install_and_uninstall_wire_contract() -> None:
+    client, fake, _ = await _start_client()
+    try:
+        list_request, listed = await _answer_request(
+            fake,
+            client.list_plugins(
+                cwds=["/workspace"],
+                force_refetch=True,
+                marketplace_kinds=["local", "workspace-directory"],
+            ),
+            {"marketplaces": [], "featuredPluginIds": []},
+        )
+        assert list_request == {
+            "id": list_request["id"],
+            "method": "plugin/list",
+            "params": {
+                "cwds": ["/workspace"],
+                "forceRefetch": True,
+                "marketplaceKinds": ["local", "workspace-directory"],
+            },
+        }
+        assert listed["marketplaces"] == []
+
+        install_request, installed = await _answer_request(
+            fake,
+            client.install_plugin(
+                "linear",
+                marketplace_path="/safe/marketplace.json",
+                install_attempt_id="attempt-1",
+            ),
+            {"authPolicy": "ON_USE", "appsNeedingAuth": []},
+        )
+        assert install_request["method"] == "plugin/install"
+        assert install_request["params"] == {
+            "pluginName": "linear",
+            "marketplacePath": "/safe/marketplace.json",
+            "installAttemptId": "attempt-1",
+        }
+        assert installed["authPolicy"] == "ON_USE"
+
+        uninstall_request, _ = await _answer_request(
+            fake,
+            client.uninstall_plugin("linear@openai-curated"),
+            {},
+        )
+        assert uninstall_request["method"] == "plugin/uninstall"
+        assert uninstall_request["params"] == {"pluginId": "linear@openai-curated"}
     finally:
         await client.close()
 
@@ -400,6 +465,141 @@ async def test_server_approval_callback_and_default_fail_closed_responses() -> N
             "id": 41,
             "result": {"permissions": {}, "scope": "turn"},
         }
+        fake.stdout.feed_message(
+            {
+                "id": 42,
+                "method": "item/tool/requestUserInput",
+                "params": {
+                    "threadId": "thr-1",
+                    "turnId": "turn-1",
+                    "itemId": "app-1",
+                    "isBlocking": True,
+                    "questions": [],
+                },
+            }
+        )
+        assert await fake.receive() == {"id": 42, "result": {"answers": {}}}
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_codex_0_149_apps_elicitation_approval_round_trip() -> None:
+    seen: list[ApprovalRequest] = []
+
+    async def approve(request: ApprovalRequest) -> Mapping[str, Any]:
+        seen.append(request)
+        return {"action": "accept", "content": {}}
+
+    client, fake, _ = await _start_client(approval_handler=approve)
+    try:
+        request = _codex_0_149_fixture("mcp_apps_approval_request.json")
+        fake.stdout.feed_message(request)
+
+        assert await fake.receive() == {
+            "id": "mcp-approval-149",
+            "result": {"action": "accept", "content": {}},
+        }
+        assert len(seen) == 1
+        assert seen[0].method == "mcpServer/elicitation/request"
+        assert seen[0].params["serverName"] == "codex_apps"
+        assert seen[0].params["requestedSchema"] == {
+            "type": "object",
+            "properties": {},
+        }
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_request_user_input_is_not_routed_to_approval_provider() -> None:
+    seen: list[ApprovalRequest] = []
+
+    async def unsafe_questionnaire_bridge(request: ApprovalRequest) -> Mapping[str, Any]:
+        seen.append(request)
+        return {"answers": {"approval": {"answers": ["Accept"]}}}
+
+    client, fake, _ = await _start_client(approval_handler=unsafe_questionnaire_bridge)
+    try:
+        fake.stdout.feed_message(
+            {
+                "id": "questionnaire-1",
+                "method": "item/tool/requestUserInput",
+                "params": {
+                    "threadId": "inner-thread",
+                    "turnId": "inner-turn",
+                    "itemId": "app-call-1",
+                    "isBlocking": True,
+                    "questions": [
+                        {
+                            "id": "approval",
+                            "header": "App",
+                            "question": "Allow this?",
+                            "options": [
+                                {"label": "Accept", "description": "Run it"},
+                                {"label": "Decline", "description": "Do not run it"},
+                            ],
+                        }
+                    ],
+                },
+            }
+        )
+
+        assert await fake.receive() == {
+            "id": "questionnaire-1",
+            "result": {"answers": {}},
+        }
+        assert seen == []
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_codex_0_149_arbitrary_mcp_form_declines_before_callback() -> None:
+    seen: list[ApprovalRequest] = []
+
+    async def must_not_run(request: ApprovalRequest) -> Mapping[str, Any]:
+        seen.append(request)
+        return {"action": "accept", "content": {}}
+
+    client, fake, _ = await _start_client(approval_handler=must_not_run)
+    try:
+        request = _codex_0_149_fixture("mcp_form_request.json")
+        fake.stdout.feed_message(request)
+
+        assert await fake.receive() == {
+            "id": 9,
+            "result": {"action": "decline", "content": None},
+        }
+        assert seen == []
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "unsafe_response",
+    [
+        {"action": "accept", "content": {"confirmed": True}},
+        {"action": "accept", "content": {}, "_meta": {}},
+        {"action": "acceptForSession", "content": {}},
+        {"action": "decline", "content": {}},
+    ],
+    ids=("form-content", "response-meta", "persistent", "decline-content"),
+)
+async def test_mcp_elicitation_invalid_handler_response_fails_closed(
+    unsafe_response: Mapping[str, Any],
+) -> None:
+    async def unsafe(_request: ApprovalRequest) -> Mapping[str, Any]:
+        return unsafe_response
+
+    client, fake, _ = await _start_client(approval_handler=unsafe)
+    try:
+        fake.stdout.feed_message(_codex_0_149_fixture("mcp_apps_approval_request.json"))
+        assert await fake.receive() == {
+            "id": "mcp-approval-149",
+            "result": {"action": "decline", "content": None},
+        }
     finally:
         await client.close()
 
@@ -526,6 +726,74 @@ async def test_unknown_server_request_gets_method_not_found_without_callback() -
             "id": "server-1",
             "error": {"code": -32601, "message": "unsupported server request: danger/newPrompt"},
         }
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_dynamic_tool_server_request_uses_bounded_fail_closed_handler() -> None:
+    seen: list[ApprovalRequest] = []
+
+    async def dynamic_tool(request: ApprovalRequest) -> Mapping[str, Any]:
+        seen.append(request)
+        return {
+            "contentItems": [{"type": "inputText", "text": "registry result"}],
+            "success": True,
+        }
+
+    client, fake, _ = await _start_client(dynamic_tool_handler=dynamic_tool)
+    try:
+        fake.stdout.feed_message(
+            {
+                "id": "tool-1",
+                "method": "item/tool/call",
+                "params": {
+                    "threadId": "thr-1",
+                    "turnId": "turn-1",
+                    "callId": "call-1",
+                    "tool": "read_file",
+                    "arguments": {"path": "README.md"},
+                },
+            }
+        )
+        assert await fake.receive() == {
+            "id": "tool-1",
+            "result": {
+                "contentItems": [{"type": "inputText", "text": "registry result"}],
+                "success": True,
+            },
+        }
+        assert seen[0].params["callId"] == "call-1"
+    finally:
+        await client.close()
+
+    client, fake, _ = await _start_client()
+    try:
+        fake.stdout.feed_message({"id": "tool-2", "method": "item/tool/call", "params": {}})
+        response = await fake.receive()
+        assert response["id"] == "tool-2"
+        assert response["result"]["success"] is False
+        assert len(response["result"]["contentItems"][0]["text"]) < 8_000
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_dynamic_tool_handler_exception_is_redacted_from_response_and_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def broken(_request: ApprovalRequest) -> Mapping[str, Any]:
+        raise RuntimeError("token=super-secret /private/host/path")
+
+    client, fake, _ = await _start_client(dynamic_tool_handler=broken)
+    try:
+        fake.stdout.feed_message({"id": "tool-secret", "method": "item/tool/call", "params": {}})
+        response = await fake.receive()
+        assert response["id"] == "tool-secret"
+        assert response["result"]["success"] is False
+        assert "super-secret" not in response["result"]["contentItems"][0]["text"]
+        assert "super-secret" not in caplog.text
+        assert "/private/host/path" not in caplog.text
     finally:
         await client.close()
 

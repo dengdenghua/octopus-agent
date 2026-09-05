@@ -215,11 +215,20 @@ export const zhCN: Translations = {
       ]
         .filter(Boolean)
         .join(" · "),
+    agentResponseSummary: (total, responded, errors) =>
+      [
+        `${total} 位成员`,
+        responded > 0 ? `${responded} 已回应` : "",
+        errors > 0 ? `${errors} 异常` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
     processDetails: "展开线索",
     completedSteps: (n: number) => `已完成 ${n} 个步骤`,
     completedThings: (n: number) => `完成了 ${n} 件事`,
     statusViewing: "运行中",
     statusCompleted: "已完成",
+    statusResponded: "已回应",
     statusError: "异常",
     statusWaiting: "等待中",
     assistant: "Assistant",
@@ -242,8 +251,10 @@ export const zhCN: Translations = {
     showMoreAgents: (n: number) => `展开其余 ${n} 个智能体`,
     collapseAgents: "收起智能体",
     viewReport: "查看报告",
+    viewReply: "查看回复",
     viewReportError: "查看失败原因",
     collapseReport: "收起报告",
+    collapseReply: "收起回复",
     latestTool: "最近动作",
     execution: "行动",
     verification: "验证",
@@ -268,6 +279,7 @@ export const zhCN: Translations = {
     makeSimilar: "做同款",
     makeSimilarHint: "用相同诉求开启新任务",
     retryTask: "重试",
+    retryingTask: "正在重试…",
     retryTaskHint: "用相同诉求重新发起任务",
     taskFailedReason: "失败原因",
     resultUrl: "结果链接",
@@ -434,7 +446,8 @@ export const zhCN: Translations = {
     permissionModeAcceptEdits: "接受编辑",
     permissionModeAcceptEditsDesc: "修改文件自动执行，执行命令前仍会问你。",
     permissionModeBypass: "完全访问",
-    permissionModeBypassDesc: "所有操作自动执行、不再询问，最高权限。",
+    permissionModeBypassDesc:
+      "包含本地运行和全部网络；所有操作自动执行、不再询问。",
     permissionModeBypassConfirmTitle: "切换到完全访问？",
     permissionModeBypassConfirmDesc:
       "此模式会跳过命令、文件修改和 Git 操作的常规确认。安全拦截仍有效，但误操作风险会明显提高。",
@@ -444,6 +457,10 @@ export const zhCN: Translations = {
     seedWorkflow: "创建或运行一个工作流：",
     send: "发送",
     stop: "停止",
+    stopping: "正在停止…",
+    restoringConnection: "正在恢复连接…草稿已保留。",
+    connectionRecoveryFailed: "连接恢复失败。",
+    retryConnection: "重试",
     projectModeLabel: "项目已绑定",
     projectModeHint:
       "已绑定本地目录，当前对话会读取项目上下文并按代码任务执行。",
@@ -499,6 +516,50 @@ export const zhCN: Translations = {
     kindRoomMessage: "房间消息",
     kindRoomTask: "房间任务",
     linkedRoom: "已关联房间",
+    deliveryPending: (n) => `${n} 条成员回复待送达`,
+    deliveryWaiting: "正在恢复",
+    deliveryFailed: "送达失败",
+    deliveryRetry: "重试",
+    deliveryDismiss: "忽略这条回复",
+    deliveryUnknownMember: "协作成员",
+    deliveryMonitorUnavailable: "暂时无法读取回复送达状态",
+    collectorTitle: "成员执行",
+    collectorProgress: (completed, total) => `${completed}/${total} 已返回`,
+    collectorSuccess: "已完成",
+    collectorFailed: "未完成",
+    collectorWaiting: "等待中",
+    collectorRetrying: "重试中",
+    collectorCancelled: "已取消",
+    collectorRetryFailedOnly: "仅重试失败成员",
+    collectorRetryFailedRuns: (n) => `重试失败轮次（${n}）`,
+    collectorStop: "停止协作",
+    collectorStopRuns: (n) => `停止进行中的协作（${n}）`,
+    collectorStopFailed: "未能停止协作，请重试",
+    collectorSteer: "纠偏",
+    collectorSteerMemberLabel: (name) => `纠偏 ${name}`,
+    collectorSteerPlaceholder: (name) => `只给 ${name} 的新要求…`,
+    collectorSteerSubmit: "发送纠偏",
+    collectorSteerCancel: "取消",
+    collectorSteerFailed: "未能发送纠偏；成员状态可能已经变化",
+    collectorStopMember: "停止此成员",
+    collectorStopMemberLabel: (name) => `停止 ${name}`,
+    collectorStopMemberFailed: "未能停止该成员；成员状态可能已经变化",
+    collectorRetryFailed: "重试未能启动，请稍后再试",
+    collectorQueueFull: "后台任务较多，失败状态已保留，请稍后重试",
+    collectorAttempts: (n) => `${n} 次尝试`,
+    collectorAttempt: (n) => `第 ${n} 次`,
+    collectorContextDelivery: (mode, sent, avoided) =>
+      mode === "cursor_only"
+        ? `沿用成员记忆 · 避免重复 ${avoided} tokens`
+        : mode === "incremental"
+          ? `增量上下文 ${sent} tokens · 避免重复 ${avoided}`
+          : `完整上下文 ${sent} tokens`,
+    collectorContextPlan: (mode, selected, full, reductionPercent) =>
+      `上下文调度 · ${mode === "recall" ? "已回溯长期记录" : "按需选取"} · ${selected}/${full} tokens · 节省 ${reductionPercent}%`,
+    collectorMemoryCheckpoint: (throughTurn, rawTurns) =>
+      `长记忆已整理至第 ${throughTurn} 轮 · 原始 ${rawTurns} 轮可追溯`,
+    collectorArchived: "已归档",
+    collectorMonitorUnavailable: "暂时无法读取成员执行状态",
   },
 
   // Collaboration Mode
@@ -1617,6 +1678,21 @@ export const zhCN: Translations = {
     nameAria: "后端名称",
     urlPlaceholder: "https://host:port",
     urlAria: "后端 URL",
+    tokenPlaceholder: "访问令牌（可选）",
+    tokenAria: "后端访问令牌",
+    authConfigured: "已认证",
+    useSsh: "通过 SSH 连接",
+    sshHint: "当运行时地址只能从可信 SSH 主机访问时启用。",
+    sshHostPlaceholder: "SSH 主机",
+    sshHostAria: "SSH 主机",
+    sshUserPlaceholder: "SSH 用户（可选）",
+    sshUserAria: "SSH 用户",
+    sshPortPlaceholder: "SSH 端口",
+    sshPortAria: "SSH 端口",
+    sshIdentityPlaceholder: "密钥文件路径（可选）",
+    sshIdentityAria: "SSH 密钥文件路径",
+    directTransport: "直连",
+    sshTransport: "SSH 隧道",
     add: "添加",
     adding: "添加中...",
     loading: "加载中...",
@@ -2200,8 +2276,8 @@ export const zhCN: Translations = {
     pairedGroups: "已配对群聊",
     pendingRequests: "待处理请求",
     noGroupPairing: "不支持群聊配对",
-    configureAgent: "请配置智能体",
-    configureAgentHint: "选择一个智能体处理此渠道的消息",
+    configureAgent: "配置响应对象",
+    configureAgentHint: "选择一个智能体或 AI 团队处理消息",
     agentConfigured: "已配置智能体",
     selectAgent: "选择智能体",
     selectAgentTitle: (channel: string) => `为 ${channel} 选择智能体`,
@@ -2282,19 +2358,35 @@ export const zhCN: Translations = {
     toastBindFailed: "绑定失败",
     toastAgentUnbound: "已解绑智能体",
     toastUnbindFailed: "解绑失败",
-    assignDialogTitle: (name: string) => `为「${name}」选择智能体`,
+    assignDialogTitle: (name: string) => `为「${name}」选择响应对象`,
     assignDialogDesc:
-      "该渠道收到的消息将由所选智能体处理。之后可以随时更换或解绑。",
-    noAgentsAvailable: "还没有可用的智能体，请先到「智能体」页创建一个。",
-    unassignCurrent: "解绑当前智能体",
-    unassignConfirmTitle: "解绑智能体",
+      "可交给一个智能体直接处理，也可由整个 AI 团队并行协作后汇总回复。",
+    noAgentsAvailable: "还没有可用的智能体或 AI 团队，请先创建一个。",
+    searchRespondersPlaceholder: "搜索智能体、团队或成员…",
+    aiTeams: "AI 团队",
+    singleAgents: "单个智能体",
+    teamMembers: (n: number) => `${n} 位成员并行协作`,
+    toastTeamBound: "已绑定 AI 团队",
+    unassignCurrent: "解绑当前响应对象",
+    unassignConfirmTitle: "解绑响应对象",
     unassignConfirmDescription:
-      "解绑后该渠道收到的消息将不再由智能体处理，可随时重新绑定。",
+      "解绑后该渠道将恢复默认消息处理方式，可随时重新绑定。",
     howToSetup: "如何接入?",
-    clickToChangeAgent: "点击更换智能体",
+    clickToChangeAgent: "点击更换响应对象",
     handlingMessages: "正在处理此渠道消息",
+    handlingMessagesAsTeam: "成员并行协作并汇总回复",
     rebindOrUnbind: "重新绑定 / 解绑",
     helpDocsComingSoon: "帮助文档即将上线",
+    healthHealthy: "运行正常",
+    healthDegraded: "运行异常",
+    healthUnknown: "尚未检测",
+    healthUnsupported: "该渠道暂不支持主动检测",
+    healthChecking: "检测中",
+    runHealthCheck: "检测",
+    healthCheckPassed: "渠道运行正常",
+    healthCheckFailed: "渠道健康检测失败",
+    activeThreads: (n: number) => `${n} 个活跃线程`,
+    duplicatesBlocked: (n: number) => `已拦截 ${n} 次重复投递`,
   },
 
   // Pairing Authorization
@@ -2635,6 +2727,7 @@ export const zhCN: Translations = {
 
   chatPage: {
     stopNote: "用户从聊天输入框点击停止",
+    stopFailed: "停止运行失败，请重试",
   },
 
   // Agents
@@ -2974,6 +3067,7 @@ export const zhCN: Translations = {
 
   // Conversation
   conversation: {
+    messageLog: "对话消息",
     noMessages: "还没有消息",
     startConversation: "开始一段新的对话吧",
     noArtifactSelected: "未选择产物",
@@ -4967,9 +5061,9 @@ export const zhCN: Translations = {
   modes: {
     builder: "构建者",
     coder: "编码者",
-    develop: "开发",
+    develop: "通用",
     audit: "审计",
-    uxui: "UX/UI",
+    uxui: "设计",
     architect: "架构师",
     ultra: "最高",
     standard: "标准",
@@ -4977,9 +5071,9 @@ export const zhCN: Translations = {
     admin: "管理员",
     builderTooltip: "新项目/空目录：优先搭建可运行最小闭环",
     coderTooltip: "已有代码库：优先读结构、小步修改、跑验证",
-    developTooltip: "开发实现：自动区分新项目/已有项目",
+    developTooltip: "通用：自动理解开发、修复、审查、分析和研究意图",
     auditTooltip: "质量审计：先查问题、列风险、给证据和优先级",
-    uxuiTooltip: "UX/UI：走查体验、视觉一致性、布局和回归",
+    uxuiTooltip: "设计：走查体验、视觉一致性、布局和交互回归",
     architectTooltip: "架构/迁移：先做影响评估和分阶段方案",
     ultraTooltip:
       "审计·最高编排：参考 UltraCode 的多阶段工作流调度、验证和复盘",
@@ -4987,16 +5081,17 @@ export const zhCN: Translations = {
     adminTooltip: "系统管理员 — 拥有最高权限，管理所有智能体和配置",
     builderDesc: "新项目/空目录",
     coderDesc: "已有代码库",
-    developDesc: "实现/修复/迭代",
+    developDesc: "开发/审查/分析/研究",
     auditDesc: "质量/安全/回归",
     uxuiDesc: "体验/界面/视觉",
     architectDesc: "架构/迁移",
     ultraDesc: "审计工作流",
     builderEffect: "先定入口与验收，优先生成最小可运行切片。",
     coderEffect: "先读现有结构再小步改动，改后跑相关验证。",
-    developEffect: "新旧项目由扫描结果决定；按代码任务小步实现并验证。",
+    developEffect:
+      "根据请求自动选择工作方式；需要修改时小步执行并验证，不盲目改动。",
     auditEffect: "默认先读不改，输出问题、证据、严重度和建议修复。",
-    uxuiEffect: "优先做浏览器走查，关注布局、交互、文案、质感和响应式。",
+    uxuiEffect: "优先做真实页面走查，关注布局、交互、文案、质感和响应式。",
     architectEffect: "先给方案、影响面和阶段步骤，避免一次性重写核心路径。",
     ultraEffect:
       "作为审计下的 UltraCode 式多阶段编排：拆任务、调度工具/子任务、持续验证与复盘；不等同于推理深度或 token 上限。",
@@ -5846,6 +5941,7 @@ export const zhCN: Translations = {
     firstResponseSlow: "首个响应较慢，任务仍在等待",
     modelWorking: "思考中...",
     thinkingCompleted: "思考已完成",
+    runEnded: "处理已结束",
     slowResponse: "还在继续，稍慢一些",
     reconnecting: "连接断开，正在回来",
     processing: "正在处理",
@@ -6126,6 +6222,10 @@ export const zhCN: Translations = {
     status: "状态",
     nonTextContent: "[非文本内容]",
     binaryContent: "[二进制内容]",
+    taskHistory: "远程任务",
+    noTasks: "暂无远程任务",
+    refreshTask: "刷新任务状态",
+    cancelTask: "取消任务",
   },
 
   // Live Tool Timeline
@@ -7649,7 +7749,7 @@ export const zhCN: Translations = {
   sandboxSettings: {
     title: "沙箱与执行权限",
     description:
-      "执行环境与权限粒度是两个独立维度，可自由组合：例如「沙箱 + 完全访问」在隔离环境内全自动，或「本地 + 接受编辑」在本机执行但命令仍需确认。",
+      "执行环境、权限与网络通常可独立设置；「完全访问」是包含档位，会自动启用本地运行和全部网络。",
     activeTag: "当前",
     scopeNote:
       "改动保存到本地设置，对之后发起的所有新任务生效；当前正在运行的任务不受影响。",
@@ -7693,7 +7793,7 @@ export const zhCN: Translations = {
       },
       bypassPermissions: {
         label: "完全访问",
-        description: "所有操作自动执行、不再询问，最高权限。",
+        description: "包含本地运行和全部网络；所有操作自动执行、不再询问。",
       },
     },
     networkTitle: "网络访问",

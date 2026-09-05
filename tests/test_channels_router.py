@@ -168,6 +168,8 @@ class TestListChannels:
         # Implementation note.
         platforms = {d["platform"] for d in data}
         assert {"wechat", "dingtalk", "feishu", "telegram", "discord"} <= platforms
+        assert {"irc", "twitch"} <= platforms
+        assert len(platforms) == 26
 
         # Implementation note.
         for d in data:
@@ -177,6 +179,28 @@ class TestListChannels:
                 "pending_count",
             }
             assert "assigned_agent_id" in d
+            assert d["operations"]["health_status"] == "unknown"
+
+    def test_probe_exposes_real_runtime_health(self, tmp_path: Path):
+        app, _, _ = _build_app(tmp_path)
+        client = TestClient(app)
+
+        response = client.post("/api/channels/slack/diagnostics/probe")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["health_status"] == "healthy"
+        assert data["check_latency_ms"] >= 0
+        assert set(data["capabilities"]) == {
+            "edit",
+            "typing",
+            "reactions",
+            "health_probe",
+        }
+
+        readback = client.get("/api/channels/slack/diagnostics")
+        assert readback.status_code == 200
+        assert readback.json()["health_status"] == "healthy"
 
 
 class TestChannelAssignment:
@@ -207,6 +231,48 @@ class TestChannelAssignment:
         r3 = c.get("/api/channels")
         slack = next(d for d in r3.json() if d["platform"] == "slack")
         assert slack["assigned_agent_id"] == "coder"
+
+    def test_assign_group_is_mutually_exclusive_with_agent(self, tmp_path: Path):
+        app, _, _ = _build_app(tmp_path)
+        client = TestClient(app)
+        assert (
+            client.post(
+                "/api/channels/slack/assistant",
+                json={"agent_id": "coder"},
+            ).status_code
+            == 200
+        )
+
+        assigned = client.post(
+            "/api/channels/slack/assistant",
+            json={"group_id": "research-team"},
+        )
+
+        assert assigned.status_code == 200
+        assert assigned.json()["agent_id"] is None
+        assert assigned.json()["group_id"] == "research-team"
+        readback = client.get("/api/channels/slack/assistant").json()
+        assert readback == {
+            "channel_id": "slack",
+            "agent_id": None,
+            "group_id": "research-team",
+        }
+        slack = next(
+            row for row in client.get("/api/channels").json() if row["platform"] == "slack"
+        )
+        assert slack["assigned_agent_id"] is None
+        assert slack["assigned_group_id"] == "research-team"
+
+    def test_assignment_requires_exactly_one_target(self, tmp_path: Path):
+        app, _, _ = _build_app(tmp_path)
+        client = TestClient(app)
+        assert (
+            client.post(
+                "/api/channels/slack/assistant",
+                json={"agent_id": "coder", "group_id": "team"},
+            ).status_code
+            == 400
+        )
 
     def test_assign_rejects_empty(self, tmp_path: Path):
         app, _, _ = _build_app(tmp_path)
@@ -308,6 +374,19 @@ class TestPairings:
         slack = next(d for d in r3.json() if d["platform"] == "slack")
         assert slack["metrics"]["pairings_count"] == 1
         assert slack["metrics"]["group_count"] == 0
+
+        duplicate = c.post(
+            "/api/channels/slack/inbound",
+            content=body,
+            headers={
+                "content-type": "application/json",
+                "x-slack-request-timestamp": ts,
+                "x-slack-signature": sig,
+            },
+        )
+        assert duplicate.status_code == 200
+        assert duplicate.json()["dispatched"] is False
+        assert duplicate.json()["duplicate"] is True
 
     def test_duplicate_sender_counts_once(self, tmp_path: Path):
         app, _, _ = _build_app(tmp_path, signing_secret="sec")
@@ -1109,7 +1188,7 @@ class TestCredentialEncryption:
         app, _, _ = _build_app(tmp_path, signing_secret="sec")
         c = TestClient(app)
         # Implementation note.
-        for user in ("U_ALICE", "U_BOB"):
+        for index, user in enumerate(("U_ALICE", "U_BOB")):
             body = json.dumps(
                 {
                     "type": "event_callback",
@@ -1118,7 +1197,7 @@ class TestCredentialEncryption:
                         "user": user,
                         "channel": "D_DM",
                         "text": "hi",
-                        "ts": "1234.5678",
+                        "ts": f"1234.{5678 + index}",
                     },
                 }
             ).encode()

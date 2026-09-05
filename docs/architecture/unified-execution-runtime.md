@@ -118,12 +118,15 @@ assigned to a newly created task. Roles retain their persona and allowed skills.
 Codex model selection uses its principal-scoped profile or a trusted server
 override, not a native persona's model hint.
 
-Automatic selection uses explicit work modes or a parsed debug/refactor intent.
-Code/build work prefers Codex. Personal general/research modes keep native tools
-even though the personal workspace also grants code capabilities. This is a
-conservative policy, not a new language-model classifier. A configured Codex role
-retains its existing default; explicit task selection overrides that preference.
+Automatic selection supports the upstream unified General/Design modes. Their
+labels and directory scope do not imply a coding task: parsed debug/refactor
+intent and deterministic coding-purpose signals prefer Codex, while ambiguous
+and office requests default to Native. Old build/general/research payloads remain
+compatible. This policy adds no model call. A configured Codex role retains its
+existing default; explicit task selection overrides that preference.
 Project/team coordination remains native, with Codex available to member tasks.
+The upstream focused/fanout/presence strategy stays authoritative; coordinated
+delivery repair also passes through the bound supervisor and its durable receipt.
 
 Before dispatch, Codex checks configuration enablement, executable availability,
 the trusted workspace/principal, model compatibility, shared tool readiness and
@@ -334,3 +337,37 @@ Ruff, mypy for the two worktree modules and invariant lint passed. The local
 backend was restarted with these changes; backend health and Vite returned 200,
 and all three authenticated WebSocket connection probes passed (direct header,
 direct browser subprotocol and Vite-proxied browser subprotocol).
+
+## Tournament integration checkpoint
+
+The host-facing tournament now uses the existing parallel subagent bridge for
+its producers. It requires an authenticated host task and journal; an optional
+`repo_root` must match the approved project. It forwards the file contract and
+isolates each producer's working files. Producer and reviewer spawns share one
+bounded budget, including an already active enclosing orchestration budget.
+The parallel bridge honors a bounded worker count and accounts for queued
+waves in its batch timeout; the original parent deadline is still authoritative.
+
+Voting narrows a host task's filesystem write ceiling to empty while retaining
+its identity, approved reads and resource policy. A legacy workspace coordinate
+cannot restore reviewer write permissions. Candidate selection checks the
+host-exported patch's size and SHA-256 before review and before returning the
+winner, and appends a durable `worktree_selected` receipt with `applied=false`.
+Cancellation, changed patch contents and failed selection journals preserve
+candidate coordinates without returning a winner. The reported judgment
+remains distinguishable from a single surviving candidate or an abstaining
+panel; selection alone is not verification or permission to apply a patch.
+
+An explicit `asyncio.CancelledError` from an isolated runner now exports its
+partial changes as an invalid candidate before removing the temporary checkout.
+This complements linked cancellation and timeout handling; interrupted work is
+never promoted into a successful artifact contract.
+
+Before the concurrent upstream merge began, the tournament, vote, isolated
+worker and child-context batch passed 51 tests in 56.43s. It exercised real Git,
+worker threads, the bridge, builtin reviewer dispatch and disk journals with
+controlled model responses. The tested changes are captured in local checkpoint
+`a4f1c931`. The subsequent upstream merge introduced conflicts in shared runtime
+files, so these results do not validate the merged checkout. Type checking,
+the wider regression batch and local runtime restart must be repeated after
+that merge settles. Phase 3 and phase 4 acceptance remain open.

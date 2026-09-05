@@ -134,4 +134,24 @@ describe("<WorkspaceLayout /> stub response banner", () => {
       "/workspace/realtime/new?agent=coder&workspace_path=%2FUsers%2Fexample%2FPublic%2Foctopus-agent",
     );
   });
+
+  test("starts a fresh Design task in place and preserves its project scope", () => {
+    renderWithProviders(<WorkspaceLayout />, {
+      initialRoute:
+        "/workspace/design?thread=old&project=project-1&name=Launch&design_stage=storyboard",
+      locale: "zh-CN",
+    });
+
+    act(() => {
+      eventBus.emit("task:new", undefined);
+    });
+
+    const location = screen.getByTestId("workspace-location").textContent || "";
+    expect(location).toContain("/workspace/design?");
+    expect(location).toContain("project=project-1");
+    expect(location).toContain("name=Launch");
+    expect(location).toContain("new_task=");
+    expect(location).not.toContain("thread=old");
+    expect(location).not.toContain("design_stage");
+  });
 });

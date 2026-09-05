@@ -468,7 +468,7 @@ def test_crashed_turn_is_closed_on_resume_and_thread_accepts_a_new_turn(
             _RecordingConnection(),
         )
     )
-    assert recovered["turns"][0]["status"] == "failed"
+    assert recovered["turns"][0]["status"] == "interrupted"
     assert recovered["turns"][0]["error"]["code"] == "stale_in_progress_turn"
 
     gateway = RealtimeGateway(
@@ -493,7 +493,7 @@ def test_crashed_turn_is_closed_on_resume_and_thread_accepts_a_new_turn(
 
     assert result["turn"]["status"] == "completed"
     turns = EventLog(thread_log_path(logs_root, thread_id)).replay()
-    assert [turn.status for turn in turns] == [TurnStatus.FAILED, TurnStatus.COMPLETED]
+    assert [turn.status for turn in turns] == [TurnStatus.INTERRUPTED, TurnStatus.COMPLETED]
 
 
 def test_auto_wake_releases_claim_before_blocked_live_fanout(

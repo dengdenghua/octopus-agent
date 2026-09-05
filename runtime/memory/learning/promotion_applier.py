@@ -10,7 +10,7 @@ from typing import Any
 from runtime.memory.learning.experience_ledger import ExperienceLedger
 from runtime.memory.learning.review_queue import ReviewQueue
 from runtime.platform.io import atomic_write_json, read_json_with_backup
-from runtime.safety.auth.scope import TenantScope, row_visible
+from runtime.safety.auth.scope import TenantScope, row_visible, tenant_scoped_path
 from runtime.safety.evolution.governance_audit import (
     promotion_audit_signals,
     verify_governance_audit_chain,
@@ -45,16 +45,20 @@ class PromotionApplier:
         audit_path: str | Path,
         journal: Any = None,
         registry: Any = None,
+        auto_persist_dir: str | Path | None = None,
         scope: TenantScope | None = None,
     ) -> None:
         self.review_queue = review_queue
         self.experience_ledger = experience_ledger
         self.proposal_ledger = proposal_ledger
-        self.audit_path = Path(audit_path)
+        self.scope = scope
+        self.audit_path = tenant_scoped_path(audit_path, scope)
         # Optional: required only for the "forged_skill" target (active forge).
         self.journal = journal
         self.registry = registry
-        self.scope = scope
+        # SkillForge owns the tenant partition for this directory; retain the
+        # base here so it is not hashed twice when passed downstream.
+        self.auto_persist_dir = Path(auto_persist_dir) if auto_persist_dir is not None else None
 
     def plan(
         self,
@@ -328,9 +332,19 @@ class PromotionApplier:
         reusable skill *now* (single demo, no ``min_hits`` wait). Reuses
         :class:`SkillForge` end-to-end, so shadow validation + the immune gate
         (dangerous-macro quarantine for human approval) still apply."""
-        if self.journal is None or self.registry is None:
+        missing = [
+            name
+            for name, value in (
+                ("journal", self.journal),
+                ("registry", self.registry),
+                ("auto_persist_dir", self.auto_persist_dir),
+            )
+            if value is None
+        ]
+        if missing:
             raise ValueError(
-                "forged_skill promotion requires journal+registry wiring on PromotionApplier"
+                "forged_skill promotion requires durable PromotionApplier wiring; "
+                f"missing: {', '.join(missing)}"
             )
         task_ids = {str(t) for t in (item.get("source_task_ids") or []) if t}
         if not task_ids:
@@ -339,22 +353,35 @@ class PromotionApplier:
             )
         from runtime.memory.journal.journal import TrajectoryEvent
         from runtime.safety.recovery.skill_forge import SkillForge
+        from runtime.safety.recovery.tenant_scope import read_learning_events
 
         trajs = [
             e.trajectory
-            for e in self.journal.read_by_type("trajectory")
+            for e in read_learning_events(
+                self.journal,
+                "trajectory",
+                scope=self.scope,
+            )
             if isinstance(e, TrajectoryEvent)
             and str(e.trajectory.task_id) in task_ids
             and e.trajectory.outcome.success
+            and not e.trajectory.outcome.degraded
         ]
         if not trajs:
             raise ValueError(
                 f"no successful trajectory found for source_task_ids={sorted(task_ids)}"
             )
-        result = SkillForge(journal=self.journal, registry=self.registry).forge_selected(trajs)
+        result = SkillForge(
+            journal=self.journal,
+            registry=self.registry,
+            auto_persist_dir=self.auto_persist_dir,
+            scope=self.scope,
+        ).forge_selected(trajs)
         return {
             "type": "skill_forge",
             "promoted": list(result.promoted),
+            "governed": list(result.governed),
+            "evolution_candidates": list(result.evolution_candidates),
             "quarantined": list(result.quarantined),
             "shadow_failed": list(result.shadow_failed),
             "retired": list(result.retired),

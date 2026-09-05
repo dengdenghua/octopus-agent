@@ -61,6 +61,8 @@ class ShadowRun:
     recommendations: list[str] | None = None
     candidate_transition_error: str | None = None
     error: str | None = None
+    trigger: str = "manual"
+    trigger_signals: list[str] | None = None
 
 
 ShadowRunner = Callable[[str, Path, str], Awaitable[str]]
@@ -90,10 +92,29 @@ class DualHelixShadowService:
         state = self._read()
         runs = list(state.get("runs") or [])[-20:]
         runs.reverse()
+        try:
+            from runtime.platform import feature_flags
+            from runtime.safety.evolution.dual_helix_policy import (
+                AUTO_SHADOW_FEATURE_FLAG,
+                LOW_CONFIDENCE_THRESHOLD,
+                REPEATED_FAILURE_THRESHOLD,
+            )
+
+            automatic_enabled = feature_flags.is_on(AUTO_SHADOW_FEATURE_FLAG)
+            policy = {
+                "risk_gated": True,
+                "repeated_failure_threshold": REPEATED_FAILURE_THRESHOLD,
+                "low_confidence_threshold": LOW_CONFIDENCE_THRESHOLD,
+            }
+        except Exception:  # noqa: BLE001 - status must remain available during boot
+            automatic_enabled = False
+            policy = {"risk_gated": True}
         return {
             "ok": True,
             "schema": "octopus.dual_helix_shadow.v1",
             "enabled": bool(state.get("enabled", False)),
+            "automatic_enabled": automatic_enabled,
+            "automatic_policy": policy,
             "isolation": "bounded_snapshot_read_only",
             "runs": runs,
         }
@@ -115,6 +136,10 @@ class DualHelixShadowService:
         source_message_id: str | None = None,
         candidate_id: str | None = None,
         experiment_id: str | None = None,
+        automatic: bool = False,
+        risk_level: str | None = None,
+        failure_count: int = 0,
+        confidence: Any = None,
     ) -> dict[str, Any]:
         state = self._read()
         if not state.get("enabled"):
@@ -123,12 +148,40 @@ class DualHelixShadowService:
             raise ValueError("primary engine must be octopus or codex")
         workspace = self._resolve_workspace(workspace_path)
         resolved_candidate_id = (candidate_id or "").strip() or None
+        candidate_status: str | None = None
+        candidate_risk_level: str | None = None
         if resolved_candidate_id and self._candidate_registry is not None:
             candidate = self._candidate_registry.get(resolved_candidate_id)
             if candidate is None:
                 raise ValueError(f"unknown evolution candidate: {resolved_candidate_id}")
             if candidate.status != CandidateStatus.VALIDATED:
                 raise ValueError("candidate must be validated before structured shadow review")
+            candidate_status = candidate.status.value
+            candidate_risk_level = candidate.risk_level
+
+        trigger = "manual"
+        trigger_signals: list[str] | None = None
+        if automatic:
+            # Automatic shadowing is a separate, staged feature.  The service
+            # toggle alone is not enough: callers must also opt into the
+            # risk-gated policy through the central feature-flag registry.
+            from runtime.platform import feature_flags
+            from runtime.safety.evolution.dual_helix_policy import (
+                AUTO_SHADOW_FEATURE_FLAG,
+                decide_shadow_trigger,
+            )
+
+            decision = decide_shadow_trigger(
+                auto_enabled=feature_flags.is_on(AUTO_SHADOW_FEATURE_FLAG),
+                candidate_status=candidate_status,
+                risk_level=risk_level or candidate_risk_level,
+                failure_count=failure_count,
+                confidence=confidence,
+            )
+            if not decision.should_trigger:
+                raise PermissionError(f"automatic shadow trigger denied: {decision.reason}")
+            trigger = decision.reason
+            trigger_signals = list(decision.signals)
         run = ShadowRun(
             run_id=f"shadow_{uuid4().hex[:16]}",
             goal=goal.strip(),
@@ -141,6 +194,8 @@ class DualHelixShadowService:
             source_message_id=(source_message_id or "").strip() or None,
             candidate_id=resolved_candidate_id,
             experiment_id=(experiment_id or "").strip() or None,
+            trigger=trigger,
+            trigger_signals=trigger_signals,
         )
         state.setdefault("runs", []).append(asdict(run))
         state["runs"] = state["runs"][-100:]

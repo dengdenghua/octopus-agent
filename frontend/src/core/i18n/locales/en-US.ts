@@ -223,12 +223,21 @@ export const enUS: Translations = {
       ]
         .filter(Boolean)
         .join(" · "),
+    agentResponseSummary: (total, responded, errors) =>
+      [
+        `${total} members`,
+        responded > 0 ? `${responded} responded` : "",
+        errors > 0 ? `${errors} errors` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
     processDetails: "Open details",
     completedSteps: (n: number) => `Completed ${n} step${n === 1 ? "" : "s"}`,
     completedThings: (n: number) =>
       `Completed ${n} ${n === 1 ? "thing" : "things"}`,
     statusViewing: "Running",
     statusCompleted: "Completed",
+    statusResponded: "Responded",
     statusError: "Error",
     statusWaiting: "Waiting",
     assistant: "Assistant",
@@ -251,8 +260,10 @@ export const enUS: Translations = {
     showMoreAgents: (n: number) => `Show ${n} more agents`,
     collapseAgents: "Collapse agents",
     viewReport: "View report",
+    viewReply: "View reply",
     viewReportError: "View failure reason",
     collapseReport: "Collapse report",
+    collapseReply: "Collapse reply",
     latestTool: "Latest action",
     execution: "Action",
     verification: "Verification",
@@ -278,6 +289,7 @@ export const enUS: Translations = {
     makeSimilar: "Make similar",
     makeSimilarHint: "Start a new task with the same prompt",
     retryTask: "Retry",
+    retryingTask: "Retrying…",
     retryTaskHint: "Start a new task with the same prompt",
     taskFailedReason: "Failure reason",
     resultUrl: "Result URL",
@@ -458,7 +470,7 @@ export const enUS: Translations = {
       "File changes run automatically; commands still ask for approval.",
     permissionModeBypass: "Full access",
     permissionModeBypassDesc:
-      "Every action runs automatically with no questions. Maximum permissions.",
+      "Includes local execution and full network; every action runs without confirmation.",
     permissionModeBypassConfirmTitle: "Switch to Full access?",
     permissionModeBypassConfirmDesc:
       "This mode skips routine confirmation for commands, file changes, and Git operations. Safety blocks remain active, but accidental changes are more likely.",
@@ -468,6 +480,10 @@ export const enUS: Translations = {
     seedWorkflow: "Create or run a workflow: ",
     send: "Send",
     stop: "Stop",
+    stopping: "Stopping…",
+    restoringConnection: "Restoring connection… Your draft is safe.",
+    connectionRecoveryFailed: "Couldn't restore the connection.",
+    retryConnection: "Retry",
     projectModeLabel: "Project attached",
     projectModeHint:
       "A local folder is bound; this thread will use project context for code tasks.",
@@ -526,6 +542,56 @@ export const enUS: Translations = {
     kindRoomMessage: "Room message",
     kindRoomTask: "Room task",
     linkedRoom: "Linked room",
+    deliveryPending: (n) =>
+      `${n} member repl${n === 1 ? "y" : "ies"} awaiting delivery`,
+    deliveryWaiting: "Recovering",
+    deliveryFailed: "Delivery failed",
+    deliveryRetry: "Retry",
+    deliveryDismiss: "Dismiss this reply",
+    deliveryUnknownMember: "Collaborator",
+    deliveryMonitorUnavailable:
+      "Reply delivery status is temporarily unavailable",
+    collectorTitle: "Member execution",
+    collectorProgress: (completed, total) => `${completed}/${total} returned`,
+    collectorSuccess: "Completed",
+    collectorFailed: "Incomplete",
+    collectorWaiting: "Waiting",
+    collectorRetrying: "Retrying",
+    collectorCancelled: "Cancelled",
+    collectorRetryFailedOnly: "Retry failed members only",
+    collectorRetryFailedRuns: (n) => `Retry failed runs (${n})`,
+    collectorStop: "Stop collaboration",
+    collectorStopRuns: (n) => `Stop active runs (${n})`,
+    collectorStopFailed: "Collaboration could not be stopped",
+    collectorSteer: "Redirect",
+    collectorSteerMemberLabel: (name) => `Redirect ${name}`,
+    collectorSteerPlaceholder: (name) => `New instructions for ${name} only…`,
+    collectorSteerSubmit: "Send correction",
+    collectorSteerCancel: "Cancel",
+    collectorSteerFailed:
+      "Correction could not be sent; the member status may have changed",
+    collectorStopMember: "Stop member",
+    collectorStopMemberLabel: (name) => `Stop ${name}`,
+    collectorStopMemberFailed:
+      "The member could not be stopped; their status may have changed",
+    collectorRetryFailed: "Retry could not start. Try again shortly.",
+    collectorQueueFull:
+      "The background queue is busy. Failed members remain available to retry.",
+    collectorAttempts: (n) => `${n} attempts`,
+    collectorAttempt: (n) => `Attempt ${n}`,
+    collectorContextDelivery: (mode, sent, avoided) =>
+      mode === "cursor_only"
+        ? `Reused member memory · avoided ${avoided} tokens`
+        : mode === "incremental"
+          ? `Context delta ${sent} tokens · avoided ${avoided}`
+          : `Full context ${sent} tokens`,
+    collectorContextPlan: (mode, selected, full, reductionPercent) =>
+      `Context routing · ${mode === "recall" ? "long-term recall" : "selected as needed"} · ${selected}/${full} tokens · saved ${reductionPercent}%`,
+    collectorMemoryCheckpoint: (throughTurn, rawTurns) =>
+      `Long memory through turn ${throughTurn} · ${rawTurns} raw turns retained`,
+    collectorArchived: "Archived",
+    collectorMonitorUnavailable:
+      "Member execution status is temporarily unavailable",
   },
 
   // Collaboration Mode
@@ -1697,6 +1763,22 @@ export const enUS: Translations = {
     nameAria: "Backend name",
     urlPlaceholder: "https://host:port",
     urlAria: "Backend URL",
+    tokenPlaceholder: "Access token (optional)",
+    tokenAria: "Backend access token",
+    authConfigured: "authenticated",
+    useSsh: "Connect through SSH",
+    sshHint:
+      "Use this when the runtime URL is only reachable from a trusted SSH host.",
+    sshHostPlaceholder: "SSH host",
+    sshHostAria: "SSH host",
+    sshUserPlaceholder: "SSH user (optional)",
+    sshUserAria: "SSH user",
+    sshPortPlaceholder: "SSH port",
+    sshPortAria: "SSH port",
+    sshIdentityPlaceholder: "Identity file (optional)",
+    sshIdentityAria: "SSH identity file",
+    directTransport: "direct",
+    sshTransport: "SSH tunnel",
     add: "Add",
     adding: "Adding...",
     loading: "Loading...",
@@ -2303,8 +2385,8 @@ export const enUS: Translations = {
     pairedGroups: "Paired groups",
     pendingRequests: "Pending requests",
     noGroupPairing: "No group pairing",
-    configureAgent: "Configure agent",
-    configureAgentHint: "Select an agent to handle messages from this channel",
+    configureAgent: "Configure responder",
+    configureAgentHint: "Choose an agent or AI team to handle messages",
     agentConfigured: "Agent configured",
     selectAgent: "Select agent",
     selectAgentTitle: (channel: string) => `Select agent for ${channel}`,
@@ -2394,20 +2476,37 @@ export const enUS: Translations = {
     toastBindFailed: "Bind failed",
     toastAgentUnbound: "Agent unbound",
     toastUnbindFailed: "Unbind failed",
-    assignDialogTitle: (name: string) => `Assign an agent to "${name}"`,
+    assignDialogTitle: (name: string) => `Choose who responds in "${name}"`,
     assignDialogDesc:
-      "Messages from this channel will be handled by the selected agent. You can swap or unbind later.",
+      "Choose one agent, or let an AI team collaborate in parallel and reply together.",
     noAgentsAvailable:
-      "No agents available yet — create one on the Agents page first.",
-    unassignCurrent: "Unbind current agent",
-    unassignConfirmTitle: "Unbind agent",
+      "No agents or AI teams are available yet — create one first.",
+    searchRespondersPlaceholder: "Search agents, teams, or members…",
+    aiTeams: "AI teams",
+    singleAgents: "Single agents",
+    teamMembers: (n: number) => `${n} members collaborating in parallel`,
+    toastTeamBound: "AI team bound",
+    unassignCurrent: "Unbind current responder",
+    unassignConfirmTitle: "Unbind responder",
     unassignConfirmDescription:
-      "Messages from this channel will no longer be handled by the agent. You can rebind anytime.",
+      "This channel will return to its default message routing. You can rebind anytime.",
     howToSetup: "How to connect?",
-    clickToChangeAgent: "Click to change agent",
+    clickToChangeAgent: "Click to change responder",
     handlingMessages: "Handling messages for this channel",
+    handlingMessagesAsTeam:
+      "Members collaborate in parallel and reply together",
     rebindOrUnbind: "Rebind / Unbind",
     helpDocsComingSoon: "Help docs coming soon",
+    healthHealthy: "Operational",
+    healthDegraded: "Degraded",
+    healthUnknown: "Not checked",
+    healthUnsupported: "Active checks unavailable",
+    healthChecking: "Checking",
+    runHealthCheck: "Check",
+    healthCheckPassed: "Channel is operational",
+    healthCheckFailed: "Channel health check failed",
+    activeThreads: (n: number) => `${n} active threads`,
+    duplicatesBlocked: (n: number) => `${n} duplicates blocked`,
   },
 
   // Pairing Authorization
@@ -2831,6 +2930,7 @@ export const enUS: Translations = {
 
   chatPage: {
     stopNote: "User clicked Stop in the chat input",
+    stopFailed: "Failed to stop the run. Please try again.",
   },
 
   // Agents
@@ -3213,6 +3313,7 @@ export const enUS: Translations = {
 
   // Conversation
   conversation: {
+    messageLog: "Conversation messages",
     noMessages: "No messages yet",
     startConversation: "Start a conversation to see messages here",
     noArtifactSelected: "No artifact selected",
@@ -5284,9 +5385,9 @@ Strategy:
   modes: {
     builder: "Builder",
     coder: "Coder",
-    develop: "Develop",
+    develop: "General",
     audit: "Audit",
-    uxui: "UX/UI",
+    uxui: "Design",
     architect: "Architect",
     ultra: "Ultra",
     standard: "Standard",
@@ -5296,9 +5397,10 @@ Strategy:
       "New project or empty folder: create a runnable slice first",
     coderTooltip: "Existing codebase: inspect, make small edits, verify",
     developTooltip:
-      "Implementation work with automatic new/existing project handling",
+      "General work that infers implementation, review, analysis, and research from the request",
     auditTooltip: "Quality audit with evidence, risk, and priorities",
-    uxuiTooltip: "UX/UI review for flows, layout, visuals, and regressions",
+    uxuiTooltip:
+      "Design work for flows, layout, visuals, and interaction regressions",
     architectTooltip:
       "Architecture or migration: assess impact and stage the work",
     ultraTooltip:
@@ -5309,7 +5411,7 @@ Strategy:
       "System Admin — highest privileges, manages all agents and settings",
     builderDesc: "New project",
     coderDesc: "Existing codebase",
-    developDesc: "Build, fix, iterate",
+    developDesc: "Build, review, analyze, research",
     auditDesc: "Quality and risk",
     uxuiDesc: "Experience and visuals",
     architectDesc: "Architecture",
@@ -5319,7 +5421,7 @@ Strategy:
     coderEffect:
       "Read the existing structure first, edit in small steps, and run relevant checks.",
     developEffect:
-      "Project scan handles new vs existing; implement in small verified steps.",
+      "Infer the workflow from the request; make deliberate changes in small verified steps when needed.",
     auditEffect:
       "Read first, then report issues with evidence, severity, and suggested fixes.",
     ultraEffect:
@@ -6196,6 +6298,7 @@ Strategy:
     firstResponseSlow: "First response is taking longer",
     modelWorking: "Thinking...",
     thinkingCompleted: "Thinking complete",
+    runEnded: "Run ended",
     slowResponse: "Still on it — slower than usual",
     reconnecting: "Connection dropped — reconnecting",
     processing: "Working",
@@ -6491,6 +6594,10 @@ Strategy:
     status: "Status",
     nonTextContent: "[non-text content]",
     binaryContent: "[binary content]",
+    taskHistory: "Remote tasks",
+    noTasks: "No remote tasks yet",
+    refreshTask: "Refresh task status",
+    cancelTask: "Cancel task",
   },
 
   // Live Tool Timeline
@@ -8083,7 +8190,7 @@ Strategy:
   sandboxSettings: {
     title: "Sandbox & Execution Permissions",
     description:
-      "Execution environment and permission level are two independent dimensions you can combine freely — e.g. “Sandbox + Full access” for full automation inside isolation, or “Local + Accept edits” to run on this machine while commands still ask for confirmation.",
+      "Execution, approvals, and network are normally configurable separately; Full access is an inclusive preset that enables Local and Allowed network.",
     activeTag: "Current",
     scopeNote:
       "Changes are saved to local settings and apply to all future tasks; tasks already running are unaffected.",
@@ -8136,7 +8243,7 @@ Strategy:
       bypassPermissions: {
         label: "Full access",
         description:
-          "Every action runs automatically with no questions. Maximum permissions.",
+          "Includes local execution and full network; every action runs without confirmation.",
       },
     },
     networkTitle: "Network access",

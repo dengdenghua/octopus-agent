@@ -135,7 +135,9 @@ def test_handler_runs_real_scoped_candidates_and_readonly_judges(host, monkeypat
         return "implemented"
 
     monkeypatch.setattr(bridge, "_RUNNER", runner)
-    monkeypatch.setattr(ephemeral_agents, "_EPHEMERAL_RUNNER", lambda call: runner(call.user_prompt))
+    monkeypatch.setattr(
+        ephemeral_agents, "_EPHEMERAL_RUNNER", lambda call: runner(call.user_prompt)
+    )
     result = ds._run_tournament(
         goal="implement X",
         n=3,

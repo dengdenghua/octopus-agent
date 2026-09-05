@@ -22,15 +22,15 @@ def offered_websocket_subprotocols(connection: Any) -> list[str]:
     if isinstance(scope, dict):
         offered = scope.get("subprotocols")
         if isinstance(offered, (list, tuple)):
-            # Uvicorn's SansIO transport may retain each protocol header as
-            # one comma-separated entry. Normalize both ASGI shapes before
-            # looking for the auth marker; a browser's valid token must not
-            # disappear just because the transport coalesced its header.
+            # Some WebSocket reverse proxies preserve the whole
+            # ``Sec-WebSocket-Protocol`` header as one scope entry instead of
+            # exposing one entry per protocol. Normalise both shapes here so
+            # callers see the same list for direct and proxied handshakes.
             return [
-                protocol.strip()
+                protocol
                 for item in offered
-                for protocol in str(item).split(",")
-                if protocol.strip()
+                for protocol in (part.strip() for part in str(item).split(","))
+                if protocol
             ]
 
     headers = getattr(connection, "headers", {}) or {}
@@ -68,28 +68,6 @@ def websocket_bearer_token(connection: Any) -> str | None:
     return None
 
 
-def websocket_auth_token(connection: Any) -> str | None:
-    """Return a bearer credential from production-safe WS transports.
-
-    Native clients may send the ordinary ``Authorization`` header. Browser
-    clients cannot set that header on ``WebSocket``, so they use the
-    ``Sec-WebSocket-Protocol`` encoding handled above. Query-string tokens are
-    deliberately not accepted: request URLs are routinely retained by access
-    logs, reverse proxies, browser history, crash reports, and observability
-    systems.
-    """
-
-    try:
-        authorization = str(connection.headers.get("authorization") or "")
-    except Exception:  # noqa: BLE001 - small ASGI/test doubles may omit headers
-        authorization = ""
-    if authorization.lower().startswith("bearer "):
-        token = authorization[7:].strip()
-        if token:
-            return token
-    return websocket_bearer_token(connection)
-
-
 def accepted_auth_subprotocol(connection: Any) -> str | None:
     """Select only the non-secret auth marker from the client's offer."""
 
@@ -108,6 +86,5 @@ __all__ = [
     "WEBSOCKET_BEARER_LEGACY_PROTOCOL",
     "accepted_auth_subprotocol",
     "offered_websocket_subprotocols",
-    "websocket_auth_token",
     "websocket_bearer_token",
 ]

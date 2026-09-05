@@ -20,17 +20,18 @@ describe("PersonalModeSelector", () => {
 
     // The trigger reflects the active mode (localized label).
     await user.click(screen.getByRole("button", { name: /通用/ }));
-    // Picking another option reports it up.
-    await user.click(await screen.findByText("构建"));
-    expect(onModeChange).toHaveBeenCalledWith("build");
+    // Picking the second user-facing mode reports the shared Design contract.
+    await user.click(await screen.findByText("设计"));
+    expect(onModeChange).toHaveBeenCalledWith("uxui");
   });
 
-  it("offers all three personal-space modes", async () => {
+  it("offers the same two modes as project workspaces", async () => {
     const user = userEvent.setup();
     render(<PersonalModeSelector mode="general" onModeChange={() => {}} />);
 
     await user.click(screen.getByRole("button", { name: /通用/ }));
-    expect(await screen.findByText("研究")).toBeInTheDocument();
-    expect(screen.getByText("构建")).toBeInTheDocument();
+    expect(await screen.findByText("设计")).toBeInTheDocument();
+    expect(screen.queryByText("研究")).not.toBeInTheDocument();
+    expect(screen.queryByText("构建")).not.toBeInTheDocument();
   });
 });

@@ -147,6 +147,16 @@ def _isolate_gene_locks(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_drift_monitor_state(tmp_path, monkeypatch):
+    """Keep durable drift baselines out of the operator's live data dir."""
+
+    monkeypatch.setenv(
+        "OCTOPUS_DRIFT_STATE_DIR",
+        str(tmp_path / "evolution_drift_state"),
+    )
+
+
+@pytest.fixture(autouse=True)
 def _disable_os_keychain(monkeypatch):
     """Keep the suite away from the developer's real OS keychain.
 
@@ -170,6 +180,39 @@ def _disable_os_keychain(monkeypatch):
     _ss.reset_key_cache_for_tests()
     yield
     _ss.reset_key_cache_for_tests()
+
+
+@pytest.fixture(autouse=True)
+def _deterministic_plugin_policy_coverage(monkeypatch):
+    """Keep readiness verdicts independent of locally installed Codex plugins.
+
+    ``permission_sandbox_quality._plugin_policy_coverage`` scans
+    ``.octopus/plugins/codex`` and only reports ``ready`` when it finds at
+    least one plugin yielding verified permission-rule drafts. That directory
+    holds whatever the developer installed, so the e2e-surpass verdict tracked
+    the machine rather than the code: this checkout has ~20 plugins and yields
+    ``needs_behavioral_evidence``, while a fresh clone sees the 2 tracked ones,
+    produces no drafts, and drops to ``needs_work`` — nine tests across
+    test_production_readiness_gate / test_evolution_modules /
+    test_evolution_router flipped red on clone alone.
+
+    Pinning a ready report keeps those tests asserting gate logic. Tests that
+    care about the not-ready branch stub the coverage themselves.
+    """
+    from runtime.safety.evolution import permission_sandbox_quality as _psq
+
+    monkeypatch.setattr(
+        _psq,
+        "_plugin_policy_coverage",
+        lambda _base: {
+            "schema": "octopus.plugin_permission_rule_coverage.v1",
+            "ready": True,
+            "plugin_count": 1,
+            "total": 1,
+            "verified": 1,
+            "next_actions": [],
+        },
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -456,9 +499,13 @@ def _isolate_subagent_sessions(tmp_path, monkeypatch):
     files into the live ``data/subagent_sessions/`` of this checkout.
     """
     from runtime.execution.subagents import sessions as _ss
+    from runtime.execution.subagents.governance import reset_governance_store_for_tests
 
+    monkeypatch.setenv("OCTOPUS_SUBAGENT_GOVERNANCE_DB", str(tmp_path / "subagent-governance.db"))
+    reset_governance_store_for_tests()
     store = _ss.SubagentSessionStore(base_dir=tmp_path / "subagent_sessions")
     monkeypatch.setattr(_ss, "_default_base_dir", lambda: tmp_path / "subagent_sessions")
     _ss.set_subagent_session_store(store)
     yield
     _ss.set_subagent_session_store(None)
+    reset_governance_store_for_tests()

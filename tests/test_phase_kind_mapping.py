@@ -1,6 +1,6 @@
 """Tests for AgentPhaseSnapshot.phase_kind business-phase mapping.
 
-Spec source: `.trae/specs/stream-ux-synergy-optimization/` Task 2.
+Spec source: stream UX synergy optimization, Task 2.
 
 The backend maps a free-form todo title to one of six coarse phase kinds
 (planning / exploring / implementing / testing / deploying / other) so

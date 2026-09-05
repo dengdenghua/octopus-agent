@@ -546,6 +546,365 @@ describe("useRealtimeThread reconnect reconciliation", () => {
     expect(item?.type === "agentMessage" && item.text).toBe("abc");
   });
 
+  it("folds one durable frame once while preserving ids and lifecycle order", async () => {
+    const handles: FakeClientHandles[] = [];
+    let emitBatch:
+      | ((
+          notes: Array<{ method: string; params: Record<string, unknown> }>,
+        ) => void)
+      | undefined;
+    let incrementalEventCalls = 0;
+    const startedItem = {
+      id: "i-batched",
+      type: "agentMessage",
+      status: "inProgress",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      text: "",
+    };
+    const completedItem = {
+      ...startedItem,
+      status: "completed",
+      text: "ab",
+    };
+    const durableEvents = [
+      {
+        sequence: 11,
+        event: "item_started",
+        eventId: "e-start",
+        threadId: "th",
+        turnId: "t-live",
+        ts: "2026-01-01T00:00:00.000Z",
+        payload: { item: startedItem },
+      },
+      {
+        sequence: 12,
+        event: "item_delta",
+        eventId: "e1",
+        threadId: "th",
+        turnId: "t-live",
+        ts: "2026-01-01T00:00:01.000Z",
+        payload: { itemId: "i-batched", kind: "agentMessage", delta: "a" },
+      },
+      {
+        sequence: 13,
+        event: "item_delta",
+        eventId: "e2",
+        threadId: "th",
+        turnId: "t-live",
+        ts: "2026-01-01T00:00:02.000Z",
+        payload: { itemId: "i-batched", kind: "agentMessage", delta: "b" },
+      },
+      {
+        sequence: 14,
+        event: "item_completed",
+        eventId: "e-complete",
+        threadId: "th",
+        turnId: "t-live",
+        ts: "2026-01-01T00:00:03.000Z",
+        payload: { item: completedItem },
+      },
+    ];
+    const factory = (deps: {
+      onIncomingRequest: IncomingRequestFn;
+      onNotificationBatch?: (
+        notes: Array<{ method: string; params: Record<string, unknown> }>,
+      ) => void;
+      onOpen?: () => void;
+      onClose?: (code: number, reason: string) => void;
+    }) => {
+      emitBatch = deps.onNotificationBatch;
+      handles.push({
+        emitRequest: (req) => deps.onIncomingRequest(req),
+        emitOpen: () => deps.onOpen?.(),
+        emitClose: (code, reason) => deps.onClose?.(code, reason),
+      });
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string, params?: Record<string, unknown>) => {
+          if (method === "thread/events") {
+            if (params?.afterSequence === 10 && params?.mode === undefined) {
+              incrementalEventCalls += 1;
+            }
+            return Promise.resolve({
+              thread: { id: "th" },
+              events: durableEvents,
+              cursor: 14,
+              streamId: "stream-a",
+              requiresReset: false,
+              hasMore: false,
+              turnCount: 1,
+              lastTurnId: "t-live",
+              lastTurnStatus: "inProgress",
+            });
+          }
+          if (method !== "thread/resume") return Promise.resolve({});
+          return Promise.resolve({
+            thread: { id: "th" },
+            turns: [turn("t-live", "inProgress")],
+            hasMore: false,
+            incremental: false,
+            nextEventSequence: 10,
+            eventStreamId: "stream-a",
+          });
+        },
+      };
+    };
+
+    let renderCount = 0;
+    const rendered = renderHook(() => {
+      renderCount += 1;
+      return useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+      });
+    });
+    await waitFor(() =>
+      expect(rendered.result.current.state.resumeState).toBe("resumed"),
+    );
+
+    const rendersBeforeFrame = renderCount;
+    act(() => {
+      emitBatch?.([
+        {
+          method: "item/started",
+          params: {
+            threadId: "th",
+            turnId: "t-live",
+            eventId: "e-start",
+            item: startedItem,
+          },
+        },
+        {
+          method: "item/agentMessage/delta",
+          params: {
+            threadId: "th",
+            turnId: "t-live",
+            itemId: "i-batched",
+            eventId: "e1",
+            delta: "a",
+          },
+        },
+        // Same-id duplicate in the same transport frame must be rejected
+        // before accepted deltas are merged for the reducer.
+        {
+          method: "item/agentMessage/delta",
+          params: {
+            threadId: "th",
+            turnId: "t-live",
+            itemId: "i-batched",
+            eventId: "e1",
+            delta: "a",
+          },
+        },
+        {
+          method: "item/agentMessage/delta",
+          params: {
+            threadId: "th",
+            turnId: "t-live",
+            itemId: "i-batched",
+            eventId: "e2",
+            delta: "b",
+          },
+        },
+        {
+          method: "item/completed",
+          params: {
+            threadId: "th",
+            turnId: "t-live",
+            eventId: "e-complete",
+            item: completedItem,
+          },
+        },
+      ]);
+    });
+
+    expect(renderCount - rendersBeforeFrame).toBe(1);
+    expect(rendered.result.current.state.turns[0]?.items[0]).toMatchObject({
+      id: "i-batched",
+      status: "completed",
+      text: "ab",
+    });
+
+    // A later authoritative slice overlaps every live event. Since all ids
+    // were recorded before the frame was folded, none is appended again.
+    act(() => {
+      handles[0]!.emitClose(1006, "network lost");
+      handles[0]!.emitOpen();
+    });
+    await waitFor(() => expect(incrementalEventCalls).toBe(1));
+    await waitFor(() =>
+      expect(rendered.result.current.state.resumeState).toBe("resumed"),
+    );
+    expect(rendered.result.current.state.turns[0]?.items[0]).toMatchObject({
+      id: "i-batched",
+      status: "completed",
+      text: "ab",
+    });
+  });
+
+  it("isolates a bad batched event and lets durable replay repair its id", async () => {
+    const handles: FakeClientHandles[] = [];
+    let emitBatch:
+      | ((
+          notes: Array<{ method: string; params: Record<string, unknown> }>,
+        ) => void)
+      | undefined;
+    let incrementalEventCalls = 0;
+    const validLiveItem = {
+      id: "i-live-good",
+      type: "agentMessage",
+      status: "inProgress",
+      createdAt: "2026-01-01T00:00:01.000Z",
+      text: "",
+    };
+    const repairedItem = {
+      id: "i-durable-repair",
+      type: "agentMessage",
+      status: "inProgress",
+      createdAt: "2026-01-01T00:00:02.000Z",
+      text: "",
+    };
+    const factory = (deps: {
+      onIncomingRequest: IncomingRequestFn;
+      onNotificationBatch?: (
+        notes: Array<{ method: string; params: Record<string, unknown> }>,
+      ) => void;
+      onOpen?: () => void;
+      onClose?: (code: number, reason: string) => void;
+    }) => {
+      emitBatch = deps.onNotificationBatch;
+      handles.push({
+        emitRequest: (req) => deps.onIncomingRequest(req),
+        emitOpen: () => deps.onOpen?.(),
+        emitClose: (code, reason) => deps.onClose?.(code, reason),
+      });
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string, params?: Record<string, unknown>) => {
+          if (method === "thread/events") {
+            if (params?.afterSequence === 10 && params?.mode === undefined) {
+              incrementalEventCalls += 1;
+              return Promise.resolve({
+                thread: { id: "th" },
+                events: [
+                  {
+                    sequence: 11,
+                    event: "item_started",
+                    eventId: "e-needs-repair-start",
+                    threadId: "th",
+                    turnId: "t-live",
+                    ts: "2026-01-01T00:00:02.000Z",
+                    payload: { item: repairedItem },
+                  },
+                  {
+                    sequence: 12,
+                    event: "item_delta",
+                    eventId: "e-needs-repair-delta",
+                    threadId: "th",
+                    turnId: "t-live",
+                    ts: "2026-01-01T00:00:03.000Z",
+                    payload: {
+                      itemId: repairedItem.id,
+                      kind: "agentMessage",
+                      delta: "repaired",
+                    },
+                  },
+                ],
+                cursor: 12,
+                streamId: "stream-a",
+                requiresReset: false,
+                hasMore: false,
+                turnCount: 1,
+                lastTurnId: "t-live",
+                lastTurnStatus: "inProgress",
+              });
+            }
+            // Initial cache backfill is unrelated to the reconnect repair.
+            return Promise.resolve({
+              thread: { id: "th" },
+              events: [],
+              cursor: 10,
+              streamId: "stream-a",
+              requiresReset: false,
+              hasMore: false,
+            });
+          }
+          if (method !== "thread/resume") return Promise.resolve({});
+          return Promise.resolve({
+            thread: { id: "th" },
+            turns: [turn("t-live", "inProgress")],
+            hasMore: false,
+            incremental: false,
+            nextEventSequence: 10,
+            eventStreamId: "stream-a",
+          });
+        },
+      };
+    };
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({ threadId: "th", clientFactory: factory as never }),
+    );
+    await waitFor(() =>
+      expect(rendered.result.current.state.resumeState).toBe("resumed"),
+    );
+
+    act(() => {
+      emitBatch?.([
+        {
+          method: "item/started",
+          params: {
+            threadId: "th",
+            turnId: "t-live",
+            eventId: "e-needs-repair-start",
+            // Valid JSON-RPC envelope, malformed reducer payload.
+            item: null,
+          },
+        },
+        {
+          method: "item/agentMessage/delta",
+          params: {
+            threadId: "th",
+            turnId: "t-live",
+            itemId: repairedItem.id,
+            eventId: "e-needs-repair-delta",
+            delta: "repaired",
+          },
+        },
+        {
+          method: "item/started",
+          params: {
+            threadId: "th",
+            turnId: "t-live",
+            eventId: "e-live-good",
+            item: validLiveItem,
+          },
+        },
+      ]);
+    });
+
+    // The bad first event must not abort the rest of its transport frame.
+    expect(rendered.result.current.state.turns[0]?.items).toEqual([
+      validLiveItem,
+    ]);
+
+    act(() => {
+      handles[0]!.emitClose(1006, "network lost");
+      handles[0]!.emitOpen();
+    });
+    await waitFor(() => expect(incrementalEventCalls).toBe(1));
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.items).toEqual([
+        validLiveItem,
+        { ...repairedItem, text: "repaired" },
+      ]),
+    );
+  });
+
   it("falls back to a snapshot resume when the event fold diverges", async () => {
     const handles: FakeClientHandles[] = [];
     let resumeCount = 0;
@@ -680,6 +1039,482 @@ describe("useRealtimeThread reconnect reconciliation", () => {
     );
     expect(rendered.result.current.state.resumeState).toBe("resumed");
     expect(resumeCount).toBe(2);
+  });
+});
+
+describe("useRealtimeThread resume retry barrier", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const replayCache = {
+    load: vi.fn(async () => null),
+    append: vi.fn(async () => {}),
+    clear: vi.fn(async () => {}),
+  };
+
+  async function flushPromises() {
+    await act(async () => {
+      for (let index = 0; index < 8; index += 1) {
+        await Promise.resolve();
+      }
+    });
+  }
+
+  it("retries a transient resume rejection while the socket stays open", async () => {
+    let resumeCalls = 0;
+    const requestOptions: Array<{ timeoutMs?: number } | undefined> = [];
+    const factory = (deps: { onOpen?: () => void }) => ({
+      connect: () => deps.onOpen?.(),
+      close: () => {},
+      notify: () => {},
+      request: (
+        method: string,
+        _params?: Record<string, unknown>,
+        options?: { timeoutMs?: number },
+      ) => {
+        if (method !== "thread/resume") return Promise.resolve({});
+        requestOptions.push(options);
+        resumeCalls += 1;
+        if (resumeCalls === 1) {
+          return Promise.reject(new Error("server busy"));
+        }
+        return Promise.resolve({
+          thread: { id: "th" },
+          turns: [],
+          incremental: true,
+        });
+      },
+    });
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: replayCache as never,
+      }),
+    );
+    await flushPromises();
+
+    expect(resumeCalls).toBe(1);
+    expect(rendered.result.current.connectionPhase).toBe("resuming");
+    expect(rendered.result.current.readyForMutations).toBe(false);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(499);
+    });
+    expect(resumeCalls).toBe(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    await flushPromises();
+
+    expect(resumeCalls).toBe(2);
+    expect(requestOptions).toEqual([
+      { timeoutMs: 15_000 },
+      { timeoutMs: 15_000 },
+    ]);
+    expect(rendered.result.current.connectionPhase).toBe("ready");
+    expect(rendered.result.current.readyForMutations).toBe(true);
+    rendered.unmount();
+  });
+
+  it("retries transient thread/events catch-up failures behind the same barrier", async () => {
+    let emitOpen!: () => void;
+    let emitClose!: () => void;
+    let resumeCalls = 0;
+    let eventCalls = 0;
+    const eventTimeouts: Array<number | undefined> = [];
+    const factory = (deps: {
+      onOpen?: () => void;
+      onClose?: (code: number, reason: string) => void;
+    }) => {
+      emitOpen = () => deps.onOpen?.();
+      emitClose = () => deps.onClose?.(1006, "offline");
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (
+          method: string,
+          _params?: Record<string, unknown>,
+          options?: { timeoutMs?: number },
+        ) => {
+          if (method === "thread/resume") {
+            resumeCalls += 1;
+            return Promise.resolve({
+              thread: { id: "th" },
+              turns: [],
+              incremental: true,
+              nextEventSequence: 1,
+              eventStreamId: "stream-a",
+            });
+          }
+          if (method !== "thread/events") return Promise.resolve({});
+          eventCalls += 1;
+          eventTimeouts.push(options?.timeoutMs);
+          if (eventCalls === 1) {
+            return Promise.reject(new Error("temporary events failure"));
+          }
+          return Promise.resolve({
+            events: [],
+            cursor: 1,
+            streamId: "stream-a",
+            requiresReset: false,
+            hasMore: false,
+            turnCount: 0,
+            lastTurnId: null,
+            lastTurnStatus: null,
+          });
+        },
+      };
+    };
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: replayCache as never,
+      }),
+    );
+    await flushPromises();
+    expect(rendered.result.current.readyForMutations).toBe(true);
+
+    act(() => {
+      emitClose();
+      emitOpen();
+    });
+    await flushPromises();
+    expect(resumeCalls).toBe(1);
+    expect(eventCalls).toBe(1);
+    expect(rendered.result.current.connectionPhase).toBe("resuming");
+    expect(rendered.result.current.readyForMutations).toBe(false);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    await flushPromises();
+
+    expect(eventCalls).toBe(2);
+    expect(eventTimeouts).toEqual([15_000, 15_000]);
+    expect(rendered.result.current.connectionPhase).toBe("ready");
+    expect(rendered.result.current.readyForMutations).toBe(true);
+    rendered.unmount();
+  });
+
+  it("times out a hung resume before retrying it", async () => {
+    let resumeCalls = 0;
+    const requestTimeouts: Array<number | undefined> = [];
+    const factory = (deps: { onOpen?: () => void }) => ({
+      connect: () => deps.onOpen?.(),
+      close: () => {},
+      notify: () => {},
+      request: (
+        method: string,
+        _params?: Record<string, unknown>,
+        options?: { timeoutMs?: number },
+      ) => {
+        if (method !== "thread/resume") return Promise.resolve({});
+        resumeCalls += 1;
+        requestTimeouts.push(options?.timeoutMs);
+        if (resumeCalls === 1) {
+          return new Promise((_resolve, reject) => {
+            setTimeout(
+              () => reject(new Error("simulated request timeout")),
+              options?.timeoutMs,
+            );
+          });
+        }
+        return Promise.resolve({
+          thread: { id: "th" },
+          turns: [],
+          incremental: true,
+        });
+      },
+    });
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: replayCache as never,
+      }),
+    );
+    await flushPromises();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(14_999);
+    });
+    expect(resumeCalls).toBe(1);
+    expect(rendered.result.current.readyForMutations).toBe(false);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(501);
+    });
+    await flushPromises();
+
+    expect(resumeCalls).toBe(2);
+    expect(requestTimeouts).toEqual([15_000, 15_000]);
+    expect(rendered.result.current.connectionPhase).toBe("ready");
+    expect(rendered.result.current.readyForMutations).toBe(true);
+    rendered.unmount();
+  });
+
+  it("cancels a pending retry on close and resumes once on the next open", async () => {
+    let emitOpen!: () => void;
+    let emitClose!: () => void;
+    let resumeCalls = 0;
+    const factory = (deps: {
+      onOpen?: () => void;
+      onClose?: (code: number, reason: string) => void;
+    }) => {
+      emitOpen = () => deps.onOpen?.();
+      emitClose = () => deps.onClose?.(1006, "offline");
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string) => {
+          if (method !== "thread/resume") return Promise.resolve({});
+          resumeCalls += 1;
+          return resumeCalls === 1
+            ? Promise.reject(new Error("server busy"))
+            : Promise.resolve({
+                thread: { id: "th" },
+                turns: [],
+                incremental: true,
+              });
+        },
+      };
+    };
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: replayCache as never,
+      }),
+    );
+    await flushPromises();
+    expect(resumeCalls).toBe(1);
+
+    act(() => emitClose());
+    expect(rendered.result.current.connectionPhase).toBe("reconnecting");
+    expect(rendered.result.current.readyForMutations).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(resumeCalls).toBe(1);
+
+    act(() => emitOpen());
+    await flushPromises();
+    expect(resumeCalls).toBe(2);
+    expect(rendered.result.current.connectionPhase).toBe("ready");
+    expect(rendered.result.current.readyForMutations).toBe(true);
+    rendered.unmount();
+  });
+
+  it("does not retry permanent JSON-RPC recovery errors", async () => {
+    let resumeCalls = 0;
+    const factory = (deps: { onOpen?: () => void }) => ({
+      connect: () => deps.onOpen?.(),
+      close: () => {},
+      notify: () => {},
+      request: (method: string) => {
+        if (method !== "thread/resume") return Promise.resolve({});
+        resumeCalls += 1;
+        return Promise.reject({ code: -32020, message: "unauthorized" });
+      },
+    });
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: replayCache as never,
+      }),
+    );
+    await flushPromises();
+
+    expect(rendered.result.current.connectionPhase).toBe("recovery_error");
+    expect(rendered.result.current.readyForMutations).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(resumeCalls).toBe(1);
+    rendered.unmount();
+  });
+
+  it("lets the user recover from a permanent error through public resume", async () => {
+    let emitOpen!: () => void;
+    let resolveManualResume!: (value: Record<string, unknown>) => void;
+    let resumeCalls = 0;
+    const factory = (deps: { onOpen?: () => void }) => {
+      emitOpen = () => deps.onOpen?.();
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string) => {
+          if (method !== "thread/resume") return Promise.resolve({});
+          resumeCalls += 1;
+          if (resumeCalls === 1) {
+            return Promise.reject({ code: -32020, message: "unauthorized" });
+          }
+          return new Promise<Record<string, unknown>>((resolve) => {
+            resolveManualResume = resolve;
+          });
+        },
+      };
+    };
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: replayCache as never,
+      }),
+    );
+    await flushPromises();
+    expect(rendered.result.current.connectionPhase).toBe("recovery_error");
+    expect(rendered.result.current.readyForMutations).toBe(false);
+
+    let manualResume!: Promise<void>;
+    act(() => {
+      manualResume = rendered.result.current.resume();
+    });
+    await flushPromises();
+    expect(resumeCalls).toBe(2);
+    expect(rendered.result.current.connectionPhase).toBe("resuming");
+    expect(rendered.result.current.readyForMutations).toBe(false);
+
+    // Even a duplicate open callback cannot overlap the user-owned recovery.
+    act(() => emitOpen());
+    await flushPromises();
+    expect(resumeCalls).toBe(2);
+
+    await act(async () => {
+      resolveManualResume({
+        thread: { id: "th" },
+        turns: [],
+        incremental: true,
+      });
+      await manualResume;
+    });
+
+    expect(rendered.result.current.state.resumeState).toBe("resumed");
+    expect(rendered.result.current.connectionPhase).toBe("ready");
+    expect(rendered.result.current.readyForMutations).toBe(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(resumeCalls).toBe(2);
+    rendered.unmount();
+  });
+
+  it("restarts durable tail polling after manual resume recovers active work", async () => {
+    let resumeCalls = 0;
+    let eventCalls = 0;
+    const factory = (deps: { onOpen?: () => void }) => ({
+      connect: () => deps.onOpen?.(),
+      close: () => {},
+      notify: () => {},
+      request: (method: string) => {
+        if (method === "thread/resume") {
+          resumeCalls += 1;
+          if (resumeCalls === 1) {
+            return Promise.reject({ code: -32020, message: "unauthorized" });
+          }
+          return Promise.resolve({
+            thread: { id: "th" },
+            turns: [
+              {
+                id: "turn-live",
+                threadId: "th",
+                status: "inProgress",
+                items: [],
+                startedAt: "2026-01-01T00:00:00.000Z",
+                completedAt: null,
+                error: null,
+              },
+            ],
+            hasMore: false,
+            incremental: false,
+            nextEventSequence: 10,
+            eventStreamId: "stream-a",
+          });
+        }
+        if (method !== "thread/events") return Promise.resolve({});
+        eventCalls += 1;
+        return Promise.resolve(
+          eventCalls === 1
+            ? {
+                events: [
+                  {
+                    sequence: 11,
+                    event: "turn_completed",
+                    eventId: "terminal-event",
+                    threadId: "th",
+                    turnId: "turn-live",
+                    ts: "2026-01-01T00:00:05.000Z",
+                    payload: { status: "completed", error: null },
+                  },
+                ],
+                cursor: 11,
+                streamId: "stream-a",
+                requiresReset: false,
+                hasMore: false,
+                turnCount: 1,
+                lastTurnId: "turn-live",
+                lastTurnStatus: "completed",
+              }
+            : {
+                events: [],
+                cursor: 11,
+                streamId: "stream-a",
+                requiresReset: false,
+                hasMore: false,
+                turnCount: 1,
+                lastTurnId: "turn-live",
+                lastTurnStatus: "completed",
+              },
+        );
+      },
+    });
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: replayCache as never,
+      }),
+    );
+    await flushPromises();
+    expect(rendered.result.current.connectionPhase).toBe("recovery_error");
+
+    await act(async () => {
+      await rendered.result.current.resume();
+    });
+    expect(rendered.result.current.state.turns[0]?.status).toBe("inProgress");
+    expect(rendered.result.current.readyForMutations).toBe(true);
+
+    act(() => vi.advanceTimersByTime(749));
+    expect(eventCalls).toBe(0);
+    act(() => vi.advanceTimersByTime(1));
+    await flushPromises();
+
+    expect(eventCalls).toBe(1);
+    expect(rendered.result.current.state.turns[0]?.status).toBe("completed");
+    // The existing tail state machine performs one terminal drain after the
+    // completion event so it cannot miss a same-tick durable suffix.
+    act(() => vi.advanceTimersByTime(0));
+    await flushPromises();
+    expect(eventCalls).toBe(2);
+    rendered.unmount();
   });
 });
 
@@ -934,6 +1769,128 @@ describe("useRealtimeThread cross-worker tail recovery", () => {
     });
     expect(eventCalls).toBe(3);
     expect(maxEventRequestsInFlight).toBe(1);
+    rendered.unmount();
+  });
+
+  it("lets an in-flight tail poll repair a bad start and its dependent live delta", async () => {
+    let emitBatch!: (
+      notes: Array<{ method: string; params: Record<string, unknown> }>,
+    ) => void;
+    let resolvePoll!: (value: Record<string, unknown>) => void;
+    let eventCalls = 0;
+    const repairedItem = {
+      id: "message-repaired",
+      type: "agentMessage",
+      status: "inProgress",
+      createdAt: TS,
+      text: "",
+    };
+    const factory = (deps: {
+      onNotificationBatch?: (
+        notes: Array<{ method: string; params: Record<string, unknown> }>,
+      ) => void;
+      onOpen?: () => void;
+    }) => {
+      emitBatch = (notes) => deps.onNotificationBatch?.(notes);
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string) => {
+          if (method === "thread/resume") {
+            return Promise.resolve({
+              thread: { id: "th" },
+              turns: [activeTurn()],
+              hasMore: false,
+              incremental: false,
+              nextEventSequence: 10,
+              eventStreamId: "stream-a",
+            });
+          }
+          if (method === "thread/events") {
+            eventCalls += 1;
+            return new Promise<Record<string, unknown>>((resolve) => {
+              resolvePoll = resolve;
+            });
+          }
+          return Promise.resolve({});
+        },
+      };
+    };
+    const replayCache = cacheThatSkipsBackgroundBackfill();
+    const rendered = renderHook(() =>
+      useRealtimeThread({
+        threadId: "th",
+        clientFactory: factory as never,
+        replayCache: replayCache as never,
+      }),
+    );
+    await flushPromises();
+    act(() => vi.advanceTimersByTime(750));
+    expect(eventCalls).toBe(1);
+
+    act(() => {
+      emitBatch([
+        {
+          method: "item/started",
+          params: {
+            threadId: "th",
+            turnId: "turn-live",
+            eventId: "repair-start",
+            item: null,
+          },
+        },
+        {
+          method: "item/agentMessage/delta",
+          params: {
+            threadId: "th",
+            turnId: "turn-live",
+            itemId: repairedItem.id,
+            eventId: "repair-delta",
+            delta: "repaired",
+          },
+        },
+      ]);
+    });
+    expect(rendered.result.current.state.turns[0]?.items).toEqual([]);
+
+    resolvePoll({
+      events: [
+        {
+          sequence: 11,
+          event: "item_started",
+          eventId: "repair-start",
+          threadId: "th",
+          turnId: "turn-live",
+          ts: TS,
+          payload: { item: repairedItem },
+        },
+        {
+          sequence: 12,
+          event: "item_delta",
+          eventId: "repair-delta",
+          threadId: "th",
+          turnId: "turn-live",
+          ts: TS,
+          payload: {
+            itemId: repairedItem.id,
+            kind: "agentMessage",
+            delta: "repaired",
+          },
+        },
+      ],
+      cursor: 12,
+      streamId: "stream-a",
+      requiresReset: false,
+      hasMore: false,
+      turnCount: 1,
+      lastTurnId: "turn-live",
+      lastTurnStatus: "inProgress",
+    });
+    await flushPromises();
+    expect(rendered.result.current.state.turns[0]?.items).toEqual([
+      { ...repairedItem, text: "repaired" },
+    ]);
     rendered.unmount();
   });
 
@@ -1766,6 +2723,182 @@ describe("useRealtimeThread backwards pagination", () => {
       await rendered.result.current.loadOlderTurns();
     });
     expect(requests.length).toBe(callCount);
+  });
+});
+
+describe("useRealtimeThread public request thread isolation", () => {
+  const TS = "2026-01-01T00:00:00.000Z";
+
+  function threadTurn(threadId: string, id: string) {
+    return {
+      id,
+      threadId,
+      status: "completed",
+      items: [],
+      startedAt: TS,
+      completedAt: TS,
+      error: null,
+    };
+  }
+
+  it("drops a retired public resume result without leaking its cursor across A -> B -> A", async () => {
+    let resolveLateA!: (value: Record<string, unknown>) => void;
+    const resumeRequests: Record<string, unknown>[] = [];
+    const calls = new Map<string, number>();
+    const factory = (deps: { onOpen?: () => void }) => ({
+      connect: () => deps.onOpen?.(),
+      close: () => {},
+      notify: () => {},
+      request: (method: string, params: Record<string, unknown>) => {
+        if (method !== "thread/resume") return Promise.resolve({});
+        resumeRequests.push(params);
+        const threadId = String(params.threadId);
+        const call = (calls.get(threadId) ?? 0) + 1;
+        calls.set(threadId, call);
+        if (threadId === "thread-a" && call === 2) {
+          return new Promise<Record<string, unknown>>((resolve) => {
+            resolveLateA = resolve;
+          });
+        }
+        const suffix = threadId === "thread-a" ? "a" : "b";
+        return Promise.resolve({
+          thread: { id: threadId },
+          turns: [threadTurn(threadId, `${suffix}-${call}`)],
+          hasMore: false,
+          incremental: call > 1,
+          nextEventSequence: threadId === "thread-a" ? 10 : 20,
+          eventStreamId: `stream-${suffix}`,
+        });
+      },
+    });
+    const rendered = renderHook(
+      ({ threadId }) =>
+        useRealtimeThread({ threadId, clientFactory: factory as never }),
+      { initialProps: { threadId: "thread-a" } },
+    );
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.id).toBe("a-1"),
+    );
+
+    let retiredResume!: Promise<void>;
+    act(() => {
+      retiredResume = rendered.result.current.resume();
+    });
+    await waitFor(() => expect(resolveLateA).toBeTypeOf("function"));
+
+    rendered.rerender({ threadId: "thread-b" });
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.id).toBe("b-1"),
+    );
+    await act(async () => {
+      resolveLateA({
+        thread: { id: "thread-a" },
+        turns: [threadTurn("thread-a", "a-late")],
+        hasMore: true,
+        incremental: false,
+        nextEventSequence: 999,
+        eventStreamId: "stream-a-late",
+      });
+      await retiredResume;
+    });
+    expect(rendered.result.current.state.turns.map((turn) => turn.id)).toEqual([
+      "b-1",
+    ]);
+
+    await act(async () => {
+      await rendered.result.current.resume();
+    });
+    const latestBRequest = [...resumeRequests]
+      .reverse()
+      .find((request) => request.threadId === "thread-b");
+    expect(latestBRequest).toMatchObject({
+      afterSequence: 20,
+      eventStreamId: "stream-b",
+    });
+
+    // Returning to the same string id creates a new generation; the first A
+    // result above must remain retired rather than becoming current again.
+    rendered.rerender({ threadId: "thread-a" });
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.id).toBe("a-3"),
+    );
+    expect(rendered.result.current.state.turns[0]?.id).not.toBe("a-late");
+  });
+
+  it("lets B page while A is pending and ignores A's late older turns", async () => {
+    let resolveOlderA!: (value: Record<string, unknown>) => void;
+    const pagingRequests: Record<string, unknown>[] = [];
+    const factory = (deps: { onOpen?: () => void }) => ({
+      connect: () => deps.onOpen?.(),
+      close: () => {},
+      notify: () => {},
+      request: (method: string, params: Record<string, unknown>) => {
+        if (method !== "thread/resume") return Promise.resolve({});
+        const threadId = String(params.threadId);
+        if (params.beforeTurnId) {
+          pagingRequests.push(params);
+          if (threadId === "thread-a") {
+            return new Promise<Record<string, unknown>>((resolve) => {
+              resolveOlderA = resolve;
+            });
+          }
+          return Promise.resolve({
+            thread: { id: threadId },
+            turns: [threadTurn(threadId, "b-older")],
+            hasMore: false,
+          });
+        }
+        const suffix = threadId === "thread-a" ? "a" : "b";
+        return Promise.resolve({
+          thread: { id: threadId },
+          turns: [threadTurn(threadId, `${suffix}-newest`)],
+          hasMore: true,
+        });
+      },
+    });
+    const rendered = renderHook(
+      ({ threadId }) =>
+        useRealtimeThread({ threadId, clientFactory: factory as never }),
+      { initialProps: { threadId: "thread-a" } },
+    );
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.id).toBe("a-newest"),
+    );
+
+    let olderA!: Promise<void>;
+    act(() => {
+      olderA = rendered.result.current.loadOlderTurns();
+    });
+    await waitFor(() => expect(resolveOlderA).toBeTypeOf("function"));
+
+    rendered.rerender({ threadId: "thread-b" });
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.id).toBe("b-newest"),
+    );
+    await act(async () => {
+      await rendered.result.current.loadOlderTurns();
+    });
+    expect(rendered.result.current.state.turns.map((turn) => turn.id)).toEqual([
+      "b-older",
+      "b-newest",
+    ]);
+
+    await act(async () => {
+      resolveOlderA({
+        thread: { id: "thread-a" },
+        turns: [threadTurn("thread-a", "a-older-late")],
+        hasMore: false,
+      });
+      await olderA;
+    });
+    expect(rendered.result.current.state.turns.map((turn) => turn.id)).toEqual([
+      "b-older",
+      "b-newest",
+    ]);
+    expect(pagingRequests.map((request) => request.threadId)).toEqual([
+      "thread-a",
+      "thread-b",
+    ]);
   });
 });
 

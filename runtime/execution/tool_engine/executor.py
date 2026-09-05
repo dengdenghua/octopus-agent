@@ -50,6 +50,7 @@ from runtime.execution.tool_engine._executor_helpers import (
 from runtime.execution.tool_engine.effect_receipts import (
     EffectResolution,
     ToolEffectReceiptIndex,
+    build_server_effect_receipt,
     indeterminate_step,
     is_side_effecting,
 )
@@ -59,6 +60,7 @@ from runtime.execution.tool_engine.skill_gate import (
     file_safety_target,
     use_trust_engine,
 )
+from runtime.execution.tool_engine.tool_protocol import output_signals_error
 from runtime.memory.journal import InMemoryJournal, Journal
 from runtime.platform.models import (
     ArmId,
@@ -88,6 +90,28 @@ from runtime.safety.validation.prompt_injection import (
     mark_injection_taint,
     scan_for_injection,
 )
+
+_AUTOMATION_SKILL_GROUPS = frozenset({"browser", "browser_act", "computer"})
+
+
+def _runtime_automation_gate(skill_id: str) -> tuple[bool, str | None]:
+    """Re-check mutable automation opt-outs at dispatch time.
+
+    Registration-time filtering keeps disabled tools out of new prompts. This
+    second gate closes the restart window for already-built registries and
+    already-running turns: switching automation off takes effect on the very
+    next tool call, even though switching it back on still requires rebuilding
+    the tool catalog.
+    """
+
+    from runtime.execution.all_skills import skill_group
+
+    group = skill_group(skill_id)
+    if group not in _AUTOMATION_SKILL_GROUPS:
+        return False, group
+    from runtime.platform.runtime_policy.capabilities import load as load_capabilities
+
+    return group in load_capabilities().disabled_skill_groups(), group
 
 
 def _canonical_execution_provenance(
@@ -294,6 +318,29 @@ class ToolExecutor:
                 span.set_attribute("octopus.skill.disabled", True)
                 return step
 
+            runtime_disabled, disabled_group = _runtime_automation_gate(str(sucker_id))
+            if runtime_disabled:
+                call = ToolCall(
+                    caller=caller,
+                    sucker_id=sucker_id,
+                    args=args,
+                    predicted_cost=predicted_cost,
+                )
+                step = _make_reject_step(
+                    step_id,
+                    node_id,
+                    call,
+                    "failed",
+                    f"automation capability disabled: {disabled_group}",
+                )
+                self.journal.write_step(task_id, arm_id, step, actor=actor)
+                span.set_attribute("octopus.skill.disabled", True)
+                span.set_attribute(
+                    "octopus.skill.disabled_group",
+                    disabled_group or "",
+                )
+                return step
+
             # Auto-fill predicted_cost from adaptive immunity baseline when
             # the caller doesn't supply one. This activates the pre-execute
             # anomaly detection path in TrustEngine.check() — without it,
@@ -394,7 +441,7 @@ class ToolExecutor:
                 ),
                 context=_current_execution_policy_context(),
                 task_capability=_check_task_capability_permission(sucker_id),
-                capability=_check_capability_permission(sucker_id),
+                capability=_check_capability_permission(skill),
             )
             governance_payload = governance.to_dict()
             span.set_attribute("octopus.governance.outcome", governance.outcome.value)
@@ -622,6 +669,7 @@ class ToolExecutor:
 
             _effect_resolution: EffectResolution | None = None
             _effect_receipt_index = self._current_effect_receipts()
+            _lease_target: Path | None = None
             if pre_result is not None:
                 output = pre_result.output
                 status = pre_result.status
@@ -753,14 +801,6 @@ class ToolExecutor:
                     status: ExecutionStatus = "success"
                     error_type: str | None = None
                     stderr_tags: list[str] = retry_tags
-                    if _lease_target is not None and not (
-                        isinstance(output, dict) and output.get("error")
-                    ):
-                        record_file_write_snapshot(
-                            _write_session,
-                            _lease_target,
-                        )
-                    _record_successful_read(str(sucker_id), args, output)
                     # Taint the turn (chokepoint) if this tool's output is
                     # external/untrusted and carries injection markers, so a
                     # LATER risky tool on ANY path is gated. Setting it here
@@ -825,6 +865,56 @@ class ToolExecutor:
                     status = "failed"
                     error_type = type(e).__name__
                     stderr_tags = [error_type]
+
+            # Cooperative handlers commonly observe the ambient cancellation
+            # token and return ``{"error": token.reason}`` instead of raising.
+            # Cancellation is a lifecycle terminal, not a semantic tool error;
+            # canonicalize it before the generic structured-error check so the
+            # persisted StepEvent, UI receipt, and trajectory agree.  Preserve
+            # already-specific policy/timeout failures by only rewriting a
+            # successful return or the explicit cancellation exception types.
+            from runtime.safety.approval.cancellation import (  # noqa: PLC0415
+                current_cancellation_token,
+            )
+
+            _ambient_execution_cancelled = current_cancellation_token().is_cancelled
+            if (status == "success" and _ambient_execution_cancelled) or error_type in {
+                "OperationCancelled",
+                "CancelledError",
+            }:
+                status = "failed"
+                error_type = "cancelled"
+                if "cancelled" not in stderr_tags:
+                    stderr_tags.append("cancelled")
+                span.set_attribute("octopus.execution.cancelled", True)
+
+            # Some handlers report a semantic failure as a normal return
+            # value (for example ``{"ok": False}``, a non-zero
+            # ``exit_code``, or ``{"status": "failed"}``). Canonicalize
+            # that signal at the executor chokepoint so every caller and the
+            # persisted StepEvent agree that the step failed. The explicit
+            # success guard is important: policy denials, cancellations,
+            # timeouts, hook failures, and raised handler errors already carry
+            # a more specific terminal status and must never be relabelled.
+            if status == "success" and output_signals_error(output):
+                status = "failed"
+                error_type = "semantic_error"
+                stderr_tags.append("semantic_error")
+                span.set_attribute("octopus.execution.semantic_error", True)
+
+            # Only a handler result that remains canonically successful may
+            # update read-before-write state or establish a write snapshot.
+            # A pre-hook replacement never executed the handler and therefore
+            # must not create either side effect.
+            if _handler_executed and status == "success":
+                if _lease_target is not None and not (
+                    isinstance(output, dict) and output.get("error")
+                ):
+                    record_file_write_snapshot(
+                        _write_session,
+                        _lease_target,
+                    )
+                _record_successful_read(str(sucker_id), args, output)
 
             latency_ms = (time.monotonic() - t0) * 1000
 
@@ -1029,6 +1119,14 @@ class ToolExecutor:
                 update={
                     "trusted_execution": _trusted_execution,
                     "execution_source": _execution_source,
+                    "effect_receipt": build_server_effect_receipt(
+                        skill=skill,
+                        call_id=call.call_id,
+                        handler_executed=_handler_executed,
+                        result_status=str(result.status),
+                        resolution=_effect_resolution,
+                        receipt_rewrite_source=_receipt_rewrite_source,
+                    ),
                 }
             )
             step = Step(

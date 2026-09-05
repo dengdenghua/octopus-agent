@@ -8,7 +8,7 @@
 #
 # As of 2026-05 the runtime schema ``runtime/platform/config/schema.py``
 # only understands ``planner / budget / immunity / learn /
-# credential_pool / hot_cache / molili / local_auth / intel_sources /
+# credential_pool / hot_cache / oct / local_auth / intel_sources /
 # mcp_servers / journal_file / enable_web_skills / default_arm_id /
 # name / version_compat``. All 17 top-level bio blocks below are
 # dropped silently because pydantic does not enforce ``extra="forbid"``.

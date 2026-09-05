@@ -98,6 +98,9 @@ def build_bugfix_graph(proj: Path) -> TaskGraph:
         TaskNode(
             node_id="n2",
             skill_ref=SkillId("exec_shell"),
+            # This is the red phase of the red/green repair loop.  A failing
+            # test is expected evidence and must not terminate the fix graph.
+            continue_on_failure=True,
             args_template={
                 # -B is load-bearing: the n4 fix edit is same-length and
                 # lands in the same wall-clock second as this run, so a
@@ -165,6 +168,44 @@ def build_bugfix_graph(proj: Path) -> TaskGraph:
         budget=BudgetSpec(tokens=10_000, usd=0.10),
         task_type="bugfix",
         strategy="bug_fix_demo",
+    )
+
+
+def build_safe_observation_graph(proj: Path) -> TaskGraph:
+    """Build a read-only trajectory suitable for autonomous skill forging.
+
+    The real bug-fix graph intentionally contains shell, file mutation, and
+    Git operations. Those primitives must remain behind the forge's dangerous
+    tool gate. The evolution demo uses this separate graph so it can exercise
+    automatic promotion without teaching the system to bypass that gate.
+    """
+    nodes = [
+        TaskNode(
+            node_id="n0",
+            skill_ref=SkillId("list_cwd"),
+            args_template={"path": str(proj)},
+        ),
+        TaskNode(
+            node_id="n1",
+            skill_ref=SkillId("read_file"),
+            args_template={"path": str(proj / "test_add.py")},
+        ),
+        TaskNode(
+            node_id="n2",
+            skill_ref=SkillId("read_file"),
+            args_template={"path": str(proj / "add.py")},
+        ),
+    ]
+    edges = [
+        WorkflowEdge(from_node="n0", to_node="n1", strict=True),
+        WorkflowEdge(from_node="n1", to_node="n2", strict=True),
+    ]
+    return TaskGraph(
+        nodes=nodes,
+        edges=edges,
+        budget=BudgetSpec(tokens=10_000, usd=0.10),
+        task_type="observation",
+        strategy="safe_evolution_demo",
     )
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+from functools import partial
 from typing import Any
 from uuid import uuid4
 
@@ -51,6 +52,10 @@ except ImportError:  # pragma: no cover
 
 from runtime.platform.models import ParsedIntent
 from runtime.platform.models.llm import default_reasoning_effort
+from runtime.safety.recovery.tenant_scope import (
+    AUTHORITATIVE_SCOPE_CONTEXT_KEY,
+    authoritative_scope_context,
+)
 from runtime.sensing._fastapi_guard import require_fastapi
 
 # Re-export formatting helpers from openai_formatting.py so call
@@ -405,6 +410,15 @@ def create_openai_router(
                 "conversation_messages": conversation_messages,
                 "profile_memories": profile_memories,
                 "memory_written_count": written_memory_count,
+                **(
+                    {
+                        AUTHORITATIVE_SCOPE_CONTEXT_KEY: authoritative_scope_context(
+                            memory_tenant_scope
+                        )
+                    }
+                    if memory_tenant_scope is not None
+                    else {}
+                ),
                 **({"reasoning_effort": reasoning_effort} if reasoning_effort else {}),
             },
         )
@@ -414,11 +428,11 @@ def create_openai_router(
         # the trivial-input fast path.
         if is_mix_model(requested_model):
             from runtime.sensing.model_router.actor_context import (
-                current_actor as _molili_actor_ctx,
+                current_actor as _model_actor_ctx,
             )
 
             _mix_agent_ctx = selected_agent.agent_id if selected_agent is not None else None
-            _mix_token = _molili_actor_ctx.set(actor)
+            _mix_token = _model_actor_ctx.set(actor)
             try:
                 with journal_context(
                     agent_id=_mix_agent_ctx,
@@ -433,11 +447,16 @@ def create_openai_router(
                         default_arm,
                         actor=actor,
                         agent=selected_agent,
-                        run_chat=_run_chat,
+                        run_chat=partial(
+                            _run_chat,
+                            conversation_id=conversation_id,
+                            tenant_id=tenant_id,
+                            owner_actor_id=owner_actor_id,
+                        ),
                         optimizer=prompt_optimizer,
                     )
             finally:
-                _molili_actor_ctx.reset(_mix_token)
+                _model_actor_ctx.reset(_mix_token)
             mix_meta = mix_result.setdefault("octopus", {})
             mix_meta["conversation_id"] = conversation_id
             if selected_agent is not None:
@@ -476,7 +495,7 @@ def create_openai_router(
 
         agent_id_for_ctx = selected_agent.agent_id if selected_agent is not None else None
 
-        from runtime.sensing.model_router.actor_context import current_actor as _molili_actor_ctx
+        from runtime.sensing.model_router.actor_context import current_actor as _model_actor_ctx
 
         if stream:
             return StreamingResponse(
@@ -495,7 +514,7 @@ def create_openai_router(
                 ),
                 media_type="text/event-stream",
             )
-        _molili_token = _molili_actor_ctx.set(actor)
+        _model_actor_token = _model_actor_ctx.set(actor)
         try:
             with journal_context(
                 agent_id=agent_id_for_ctx,
@@ -514,9 +533,10 @@ def create_openai_router(
                     force_deep=force_deep,
                     conversation_id=conversation_id,
                     tenant_id=tenant_id,
+                    owner_actor_id=owner_actor_id,
                 )
         finally:
-            _molili_actor_ctx.reset(_molili_token)
+            _model_actor_ctx.reset(_model_actor_token)
         response.setdefault("octopus", {})["conversation_id"] = conversation_id
         return response
 

@@ -7,6 +7,10 @@ export {
   type TeamTaskProgressEvent,
 } from "./collab-provider";
 export { PresenceAvatars } from "./presence-avatars";
+export {
+  CollaborationRealtimeBridge,
+  countOnlineRoomParticipants,
+} from "./collaboration-realtime-bridge";
 export { InviteDialog, type InviteDialogProps } from "./invite-dialog";
 export {
   GroupHumanInviteButton,

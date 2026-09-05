@@ -9,10 +9,13 @@ import pytest
 
 from demos.reflection_demo import run_demo
 
-pytestmark = pytest.mark.skipif(
-    shutil.which("git") is None,
-    reason="git not on PATH",
-)
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        shutil.which("git") is None,
+        reason="git not on PATH",
+    ),
+]
 
 
 # ═══════════════════════════════════════════════════════════

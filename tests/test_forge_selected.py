@@ -35,12 +35,17 @@ def _step(idx: int, sucker: str) -> Step:
     )
 
 
-def _traj(suckers: list[str], *, success: bool = True) -> Trajectory:
+def _traj(
+    suckers: list[str],
+    *,
+    success: bool = True,
+    degraded: bool = False,
+) -> Trajectory:
     return Trajectory(
         task_id=TaskId(uuid4()),
         arm_id=ArmId("code_arm"),
         steps=[_step(i, s) for i, s in enumerate(suckers)],
-        outcome=TrajectoryOutcome(success=success),
+        outcome=TrajectoryOutcome(success=success, degraded=degraded),
     )
 
 
@@ -83,6 +88,15 @@ def test_forge_selected_skips_trivial_single_step():
     """A <2-step "macro" is not a reusable skill — no candidate."""
     forge = SkillForge(InMemoryJournal(), _registry("list_cwd"))
     result = forge.forge_selected([_traj(["list_cwd"])])
+    assert result.candidates_total == 0
+    assert result.promoted == []
+
+
+def test_forge_selected_skips_degraded_success():
+    forge = SkillForge(InMemoryJournal(), _registry("list_cwd", "count_words"))
+
+    result = forge.forge_selected([_traj(["list_cwd", "count_words"], degraded=True)])
+
     assert result.candidates_total == 0
     assert result.promoted == []
 

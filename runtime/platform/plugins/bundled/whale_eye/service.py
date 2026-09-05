@@ -83,7 +83,7 @@ def _pick_vision_model(entry: dict[str, Any]) -> str | None:
     if isinstance(models, list):
         for m in models:
             name = str(m or "")
-            if name and name != "agnes-image-2.1-flash" and not name.endswith("-image"):
+            if name and not name.startswith("agnes-image-") and not name.endswith("-image"):
                 return name
     return None
 

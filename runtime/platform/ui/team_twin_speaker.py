@@ -35,7 +35,7 @@ def make_twin_responder(stack: Any) -> Any:
     model router is wired (so the gateway disables twin speaking).
 
     ``stack.planner.router`` is the shared :class:`ModelRouter` (same instance
-    the ReAct loop and molili fallback use); we capture it once. The returned
+    the ReAct loop and account fallback use); we capture it once. The returned
     coroutine resolves the bound twin agent in ``team.members`` and delegates
     to :func:`_generate_twin_line`."""
     planner = getattr(stack, "planner", None) if stack is not None else None

@@ -151,8 +151,8 @@ Self-evolution subsystem — biomimetic alias: *Regeneration*.
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def collect_failures_from_journal(journal, recipe_id, limit)` | Pull failed trajectories · optionally filter by recipe. |
-| func | `def collect_failures_from_ledger(ledger_path, recipe_id, limit)` | Pull realtime failed-turn records from ProposalLedger. |
+| func | `def collect_failures_from_journal(journal, recipe_id, limit, scope)` | Pull failed trajectories · optionally filter by recipe. |
+| func | `def collect_failures_from_ledger(ledger_path, recipe_id, limit, scope)` | Pull realtime failed-turn records from ProposalLedger. |
 
 ### `evolution_constraints.py`
 
@@ -197,7 +197,7 @@ Self-evolution subsystem — biomimetic alias: *Regeneration*.
 | class | `class TickResult` | One tick's outcome · per-recipe actions + timing. |
 | class | `class SchedulerState` | Singleton state for the scheduler · exposed to the admin endpoint so the panel can show when the next tick is. |
 | func | `def bind_stack(stack)` | Called once at backend startup · gives the scheduler access to the journal + planner router. Safe to call repeatedly · last binding wins. |
-| func | `def run_tick(min_uses, min_lead, apply, journal)` |  |
+| func | `def run_tick(min_uses, min_lead, apply, journal, scope)` |  |
 | func | `def enable(interval_hours, min_uses, min_lead)` | Start the scheduler thread · idempotent (repeat calls adjust config without spawning a new thread). |
 | func | `def disable()` | Signal the scheduler to stop · non-blocking (returns immediately · thread exits on next stop-event check, at most 5 seconds later). |
 | func | `def get_status()` |  |
@@ -229,10 +229,10 @@ Self-evolution subsystem — biomimetic alias: *Regeneration*.
 | func | `def resolve_applied_winner_sidecar(recipe_hash, metadata_root)` |  |
 | func | `def mark_winner_proposal_applied(recipe_id, candidate_id, variant_id, proposal_id, canary_key, ledger_path, metadata_root, fitness_after)` |  |
 | func | `def record_winner_canary_outcome(recipe_hash, success, metadata_root, canary_config)` |  |
-| func | `def record_winner_proposal_and_canary(result, recipe_id, trigger, ledger_path, canary_config, run_ts, require_improvement, min_score_delta, baseline_prompt, failures, positive_dataset, replay_report, sandbox_replay_report, turn_replay_report, llm_replay_report, min_replay_score, min_sandbox_replay_score, min_turn_replay_score, min_llm_replay_score)` | Materialize the optimizer winner as an auditable proposal. |
-| func | `def optimize_for_recipe(seed_prompt, journal, router, recipe_id, judge_model, mutator_model, n_iter, eval_tasks, ledger_path, trigger, record_winner)` | End-to-end · pulls failures, builds eval_fn, runs gepa. |
+| func | `def record_winner_proposal_and_canary(result, recipe_id, trigger, ledger_path, canary_config, run_ts, require_improvement, min_score_delta, baseline_prompt, failures, positive_dataset, replay_report, sandbox_replay_report, turn_replay_report, llm_replay_report, min_replay_score, min_sandbox_replay_score, min_turn_replay_score, min_llm_replay_score, tenant_scope)` | Materialize the optimizer winner as an auditable proposal. |
+| func | `def optimize_for_recipe(seed_prompt, journal, router, recipe_id, judge_model, mutator_model, n_iter, eval_tasks, ledger_path, trigger, record_winner, scope)` | End-to-end · pulls failures, builds eval_fn, runs gepa. |
 | func | `def persist_winner(result, section_path)` | Write the best candidate's prompt to ``section_path`` · LLMPlanner picks it up via ``load_section`` on next instance. |
-| func | `def propose_for_losing_recipes(journal, router, seed_prompt, judge_model, mutator_model, n_iter, eval_tasks, max_recipes, ledger_path)` |  |
+| func | `def propose_for_losing_recipes(journal, router, seed_prompt, judge_model, mutator_model, n_iter, eval_tasks, max_recipes, ledger_path, scope)` |  |
 
 ### `gepa_optimizer.py`
 
@@ -289,7 +289,7 @@ Self-evolution subsystem — biomimetic alias: *Regeneration*.
 | --- | --- | --- |
 | class | `class KGUpdateReport(BaseModel)` |  |
 | class | `class KGUpdater` |  |
-| func | `def persist_kg_from_journal(journal, kg_db_path, multi_valued_predicates)` | Distil triples from a journal and PERSIST them to a durable KG. |
+| func | `def persist_kg_from_journal(journal, kg_db_path, multi_valued_predicates, scope)` | Distil triples from a journal and PERSIST them to a durable KG. |
 
 ### `lightweight_shadow.py`
 
@@ -407,6 +407,7 @@ Self-evolution subsystem — biomimetic alias: *Regeneration*.
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
+| class | `class GovernedSkillForgeUnavailable(RuntimeError)` | The installed SkillForge cannot guarantee candidate-only rollout. |
 | class | `class SchedulerConfig` |  |
 | class | `class RegenerationScheduler` |  |
 | func | `def get_scheduler()` |  |
@@ -440,7 +441,7 @@ Self-evolution subsystem — biomimetic alias: *Regeneration*.
 | --- | --- | --- |
 | class | `class VariantStat` | Per-variant aggregate · one entry per (base_recipe, variant). |
 | class | `class VariantComparison` | All variants sharing one base recipe · the comparison the operator (or auto-promote) reasons over. |
-| func | `def collect_variant_stats(journal, base_recipe_id)` | Scan trajectory events · group by (base, variant) · return one comparison per base recipe. |
+| func | `def collect_variant_stats(journal, base_recipe_id, scope)` | Scan trajectory events · group by (base, variant) · return one comparison per base recipe. |
 | class | `class PromoteProposal` | Suggested weight reshuffle · returned to the operator who decides whether to call ``set_weights`` to commit. |
 | func | `def propose_weights(comparison, min_uses, min_lead)` | Look at the per-variant stats and decide whether the data supports promoting a winner. Returns None when the comparison isn't actionable (in |
 
@@ -465,7 +466,7 @@ Self-evolution subsystem — biomimetic alias: *Regeneration*.
 
 ## Who imports this
 
-**30** file(s) reference this package:
+**40** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
@@ -477,26 +478,33 @@ Self-evolution subsystem — biomimetic alias: *Regeneration*.
   - `runtime/core/cerebrum/llm_planner.py`
   - `runtime/core/cerebrum/planner.py`
   - `runtime/core/graph_runtime/runtime.py`
-- **`runtime/memory/`** · 2 file(s)
+- **`runtime/execution/`** · 3 file(s)
+  - `runtime/execution/cron_context.py`
+  - `runtime/execution/suckers/cron_skills.py`
+  - `runtime/execution/suckers/memory_skills.py`
+- **`runtime/memory/`** · 4 file(s)
   - `runtime/memory/diagnostics/wiki_compiler.py`
+  - `runtime/memory/hemolymph/composer.py`
+  - `runtime/memory/learning/deep_evolution.py`
   - `runtime/memory/learning/promotion_applier.py`
-- **`runtime/platform/`** · 7 file(s)
+- **`runtime/platform/`** · 8 file(s)
   - `runtime/platform/capabilities/tenant_context.py`
+  - `runtime/platform/ui/_app_agents.py`
   - `runtime/platform/ui/_app_stack.py`
   - `runtime/platform/ui/_reflex_admin_gepa_apply.py`
   - `runtime/platform/ui/_reflex_admin_gepa_autotick.py`
-  - `runtime/platform/ui/_reflex_admin_gepa_run.py`
-  - _… and 2 more_
-- **`runtime/safety/`** · 4 file(s)
+  - _… and 3 more_
+- **`runtime/safety/`** · 5 file(s)
   - `runtime/safety/evolution/auto_trigger.py`
   - `runtime/safety/evolution/drift_monitor.py`
   - `runtime/safety/evolution/replay_latency_budget.py`
+  - `runtime/safety/experiments/prompt_mutator.py`
   - `runtime/safety/experiments/prompt_optimizer.py`
-- **`runtime/sensing/`** · 11 file(s)
+- **`runtime/sensing/`** · 14 file(s)
   - `runtime/sensing/gateway/_agents_endpoints_system.py`
   - `runtime/sensing/gateway/_observability_helpers.py`
   - `runtime/sensing/gateway/_observability_journal.py`
   - `runtime/sensing/gateway/_observability_kg.py`
   - `runtime/sensing/gateway/_observability_rollback_panels.py`
-  - _… and 6 more_
+  - _… and 9 more_
 

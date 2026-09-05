@@ -29,12 +29,13 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import secrets
 from pathlib import Path
 from typing import Any
 
 try:
     from fastapi import APIRouter, File, HTTPException, Request, UploadFile
-    from fastapi.responses import FileResponse
+    from fastapi.responses import FileResponse, HTMLResponse
     from pydantic import BaseModel
 
     FASTAPI_AVAILABLE = True
@@ -46,9 +47,12 @@ except ImportError:  # pragma: no cover
     Request = None  # type: ignore[assignment, misc]
     UploadFile = None  # type: ignore[assignment, misc]
     FileResponse = None  # type: ignore[assignment, misc]
+    HTMLResponse = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
 
 from runtime.execution.misc.document_text_extractor import extract_text_from_upload
+from runtime.execution.misc.office_fidelity_preview import render_office_fidelity_preview
+from runtime.execution.misc.office_preview import render_office_preview
 from runtime.platform.process.paths import app_paths
 from runtime.platform.runtime_policy.workspaces import WorkspaceManager
 from runtime.sensing._fastapi_guard import require_fastapi
@@ -420,6 +424,8 @@ def create_uploads_router(
         thread_id: str,
         artifact_path: str,
         download: bool = False,
+        office_preview: bool = False,
+        office_fidelity_preview: bool = False,
     ) -> Any:
         _require_store()
         _require_thread_access(request, thread_id)
@@ -442,6 +448,39 @@ def create_uploads_router(
             raise HTTPException(
                 404,
                 f"artifact not found: {artifact_path}",
+            )
+        if office_fidelity_preview:
+            fidelity_html = render_office_fidelity_preview(target)
+            if fidelity_html is not None:
+                return HTMLResponse(
+                    fidelity_html,
+                    headers={
+                        "Cache-Control": "no-store",
+                        "Content-Security-Policy": (
+                            "default-src 'none'; style-src 'unsafe-inline'; "
+                            "img-src data:; object-src 'none'; base-uri 'none'; "
+                            "form-action 'none'"
+                        ),
+                        "X-Octopus-Office-Preview": "fidelity",
+                        "X-Content-Type-Options": "nosniff",
+                    },
+                )
+        preview_nonce = secrets.token_urlsafe(18) if office_preview else None
+        preview_html = (
+            render_office_preview(target, script_nonce=preview_nonce) if office_preview else None
+        )
+        if preview_html is not None and preview_nonce is not None:
+            return HTMLResponse(
+                preview_html,
+                headers={
+                    "Cache-Control": "no-store",
+                    "Content-Security-Policy": (
+                        "default-src 'none'; style-src 'unsafe-inline'; "
+                        f"script-src 'nonce-{preview_nonce}'; "
+                        "img-src data:; base-uri 'none'; form-action 'none'"
+                    ),
+                    "X-Content-Type-Options": "nosniff",
+                },
             )
         return FileResponse(
             str(target),

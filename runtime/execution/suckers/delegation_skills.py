@@ -59,7 +59,9 @@ from ._delegation_skills_common import (
 )
 from ._delegation_skills_graph import (
     _MAX_GRAPH_NODES,
+    _coerce_condition,
     _coerce_graph_nodes,
+    _evaluate_condition,
     _plan_layers,
     _resolve_node_prompt,
     _run_agent_graph,
@@ -256,13 +258,24 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         "delegations/turn. Wall-clock = max(per-agent time), not sum.\n"
         "\n"
         "Args: {specs: list[{agent_id: string, prompt: string, "
+        "task_id?: string, objective?: string, inputs?: list|string, "
+        "deliverable?: string, dependencies?: list[string], "
+        "acceptance_criteria?: list[string]|string, "
         "skills?/tools?: list of concrete skill names, "
         "skill_pack(s)?: research/web/browser/files/code/review/write/"
         "memory/shell, plugins?: plugin/package hints, "
         "input_files?: list[string], output_files?: list[string], isolate?: bool}], "
-        "timeout_s?: int (per-agent, default 900)}.\n"
+        "timeout_s?: int (per-agent, default 900), "
+        "completion_policy?: all|first_completed|first_success|quorum "
+        "(default all), quorum?: int (strict majority by default)}. "
+        "Use first_success for redundant racers and quorum when enough "
+        "independent evidence should settle the batch; unused lanes are "
+        "cooperatively cancelled to stop token spend.\n"
         "Use the canonical keys `agent_id` and `prompt`. Legacy `role` and "
         "`goal` are accepted for compatibility, but do not prefer them in new calls.\n"
+        "For coordinated deliverables, include task_id, objective, deliverable, "
+        "dependencies, and acceptance_criteria on every spec. These fields are "
+        "persisted as the recoverable task graph; do not hide them only inside prompt.\n"
         "\n"
         "`isolate: true` runs that ONE spec inside its own git worktree, so "
         "its writes cannot collide with a sibling's. Set it on every lane that "
@@ -278,7 +291,8 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         "Returns: {ok, successes:[{role, agent_id, output, files_touched, "
         "diff?, worktree?, isolated?, artifacts?, artifact_handoff?}], "
         "failures:[{role, agent_id, error, error_type}], partial, total, "
-        "success_count, notes:[...], plus legacy keys "
+        "success_count, completion_policy, completion_target, "
+        "policy_satisfied, cancelled_count, notes:[...], plus legacy keys "
         "(results, count, succeeded, failed, outputs)}. ``ok=False`` only "
         "when zero workers succeed — partial failures still return ok=True "
         "with the surviving outputs and a [partial-degradation] note in "
@@ -704,7 +718,7 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         "chain. Use this when the TOPOLOGY itself has a join.\n"
         "\n"
         f"Args: {{nodes: list[{{id: str, prompt: str, depends_on?: list[str], "
-        f"agent_id?: str, output_schema?: object, isolate?: bool}}] "
+        f"agent_id?: str, output_schema?: object, isolate?: bool, when?: object}}] "
         f"(up to {_MAX_GRAPH_NODES}), "
         "default_agent_id?: str (default researcher), "
         "timeout_s?: int (per-subagent, default 900), "
@@ -721,6 +735,13 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         "Cycles and unknown depends_on are rejected before any spawn. A node "
         "whose upstream failed is skipped and reported, not run with an "
         "unresolved placeholder.\n"
+        "\n"
+        "Conditional branches: `when` is a bounded data-only expression over "
+        "explicit dependency output, e.g. "
+        "`{ref:'judge.output.approved', op:'eq', value:true}`. Operators: "
+        "eq/ne/truthy/falsy/in/not_in/contains/gt/gte/lt/lte; combine with "
+        "`all`, `any`, or `not`. A false branch is skipped without spending a "
+        "spawn. Arbitrary code, back-edges and unbounded loops are rejected.\n"
         "\n"
         "Budget: one graph costs ONE against the 5/turn delegation cap; "
         "per-node spawns are charged against the internal spawn budget."
@@ -850,6 +871,8 @@ __all__ = [
     "_coerce_graph_nodes",
     "_plan_layers",
     "_resolve_node_prompt",
+    "_coerce_condition",
+    "_evaluate_condition",
     "_run_agent_graph",
     # delegation-budget aliases kept visible for monkeypatch / lazy import
     "register_call_agent_parallel",

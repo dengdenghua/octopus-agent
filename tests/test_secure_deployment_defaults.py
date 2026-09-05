@@ -136,6 +136,7 @@ def test_k8s_manifest_binds_auth_redis_and_real_probe_contract() -> None:
     values = secret["stringData"]
     assert values["OCTOPUS_LOCAL_AUTH_JWT_SECRET"] == "<CHANGE_ME>"
     assert values["OCTOPUS_ADMIN_PASSWORD_HASH"] == "<CHANGE_ME>"
+    assert values["OCTOPUS_CLOUD_EDGE_TOKEN_SECRET"] == "<CHANGE_ME>"
 
     container = deployment["spec"]["template"]["spec"]["containers"][0]
     pod_spec = deployment["spec"]["template"]["spec"]

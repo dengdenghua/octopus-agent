@@ -220,11 +220,20 @@ export const jaJP: Translations = {
       ]
         .filter(Boolean)
         .join(" · "),
+    agentResponseSummary: (total, responded, errors) =>
+      [
+        `${total} 人のメンバー`,
+        responded > 0 ? `${responded} 回答済み` : "",
+        errors > 0 ? `${errors} エラー` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
     processDetails: "詳細を開く",
     completedSteps: (n: number) => `${n} 件のステップを完了`,
     completedThings: (n: number) => `${n} 件完了`,
     statusViewing: "実行中",
     statusCompleted: "完了",
+    statusResponded: "回答済み",
     statusError: "エラー",
     statusWaiting: "待機中",
     assistant: "アシスタント",
@@ -247,8 +256,10 @@ export const jaJP: Translations = {
     showMoreAgents: (n: number) => `他 ${n} 件のエージェントを表示`,
     collapseAgents: "エージェントを折りたたむ",
     viewReport: "レポートを見る",
+    viewReply: "返信を見る",
     viewReportError: "失敗の理由を見る",
     collapseReport: "レポートを閉じる",
+    collapseReply: "返信を閉じる",
     latestTool: "最新のアクション",
     execution: "アクション",
     verification: "検証",
@@ -274,6 +285,7 @@ export const jaJP: Translations = {
     makeSimilar: "同じものを作る",
     makeSimilarHint: "同じプロンプトで新規タスクを開始",
     retryTask: "再試行",
+    retryingTask: "再試行中…",
     retryTaskHint: "同じプロンプトで新しいタスクを開始",
     taskFailedReason: "失敗理由",
     resultUrl: "結果リンク",
@@ -451,7 +463,7 @@ export const jaJP: Translations = {
       "ファイルの変更は自動的に実行されますが、コマンド実行前には確認します。",
     permissionModeBypass: "フルアクセス",
     permissionModeBypassDesc:
-      "すべての操作を確認なしで自動実行します。最大権限です。",
+      "ローカル実行と全ネットワークを含み、すべての操作を確認なしで実行します。",
     permissionModeBypassConfirmTitle: "フルアクセスに切り替えますか？",
     permissionModeBypassConfirmDesc:
       "コマンド、ファイル変更、Git 操作の通常確認を省略します。安全ブロックは有効ですが、誤操作のリスクが高まります。",
@@ -461,6 +473,10 @@ export const jaJP: Translations = {
     seedWorkflow: "ワークフローを作成または実行：",
     send: "送信",
     stop: "停止",
+    stopping: "停止中…",
+    restoringConnection: "接続を復旧中… 下書きは保存されています。",
+    connectionRecoveryFailed: "接続を復旧できませんでした。",
+    retryConnection: "再試行",
     projectModeLabel: "プロジェクトがバインド済み",
     projectModeHint:
       "ローカルフォルダーがバインドされています。このスレッドはコードタスクにプロジェクトコンテキストを使用します。",
@@ -519,6 +535,54 @@ export const jaJP: Translations = {
     kindRoomMessage: "ルームメッセージ",
     kindRoomTask: "ルームタスク",
     linkedRoom: "リンク済みルーム",
+    deliveryPending: (n) => `${n} 件のメンバー返信を配信待ち`,
+    deliveryWaiting: "復旧中",
+    deliveryFailed: "配信失敗",
+    deliveryRetry: "再試行",
+    deliveryDismiss: "この返信を無視",
+    deliveryUnknownMember: "コラボレーター",
+    deliveryMonitorUnavailable: "返信の配信状態を一時的に取得できません",
+    collectorTitle: "メンバー実行",
+    collectorProgress: (completed, total) => `${completed}/${total} 件返答`,
+    collectorSuccess: "完了",
+    collectorFailed: "未完了",
+    collectorWaiting: "待機中",
+    collectorRetrying: "再試行中",
+    collectorCancelled: "キャンセル済み",
+    collectorRetryFailedOnly: "失敗したメンバーのみ再試行",
+    collectorRetryFailedRuns: (n) => `失敗した実行を再試行（${n}）`,
+    collectorStop: "共同作業を停止",
+    collectorStopRuns: (n) => `進行中の共同作業を停止（${n}）`,
+    collectorStopFailed: "共同作業を停止できませんでした",
+    collectorSteer: "軌道修正",
+    collectorSteerMemberLabel: (name) => `${name} の軌道を修正`,
+    collectorSteerPlaceholder: (name) => `${name} だけへの新しい指示…`,
+    collectorSteerSubmit: "修正を送信",
+    collectorSteerCancel: "キャンセル",
+    collectorSteerFailed:
+      "修正を送信できませんでした。メンバーの状態が変わった可能性があります",
+    collectorStopMember: "このメンバーを停止",
+    collectorStopMemberLabel: (name) => `${name} を停止`,
+    collectorStopMemberFailed:
+      "メンバーを停止できませんでした。状態が変わった可能性があります",
+    collectorRetryFailed:
+      "再試行を開始できません。しばらくしてから再度お試しください。",
+    collectorQueueFull:
+      "バックグラウンド処理が混み合っています。失敗状態は保持されているため、後でもう一度お試しください。",
+    collectorAttempts: (n) => `${n} 回の試行`,
+    collectorAttempt: (n) => `${n} 回目`,
+    collectorContextDelivery: (mode, sent, avoided) =>
+      mode === "cursor_only"
+        ? `メンバー記憶を継続 · ${avoided} tokens の重複を回避`
+        : mode === "incremental"
+          ? `差分コンテキスト ${sent} tokens · ${avoided} を回避`
+          : `全コンテキスト ${sent} tokens`,
+    collectorContextPlan: (mode, selected, full, reductionPercent) =>
+      `コンテキスト調整 · ${mode === "recall" ? "長期記録を参照" : "必要分のみ選択"} · ${selected}/${full} tokens · ${reductionPercent}% 節約`,
+    collectorMemoryCheckpoint: (throughTurn, rawTurns) =>
+      `長期記憶は第 ${throughTurn} ターンまで整理済み · 元の ${rawTurns} ターンを保持`,
+    collectorArchived: "アーカイブ済み",
+    collectorMonitorUnavailable: "メンバーの実行状態を一時的に取得できません",
   },
 
   // Collaboration Mode
@@ -1676,6 +1740,22 @@ export const jaJP: Translations = {
     nameAria: "バックエンド名",
     urlPlaceholder: "https://host:port",
     urlAria: "バックエンド URL",
+    tokenPlaceholder: "アクセストークン（任意）",
+    tokenAria: "バックエンドアクセストークン",
+    authConfigured: "認証済み",
+    useSsh: "SSH 経由で接続",
+    sshHint:
+      "信頼済み SSH ホストからのみランタイム URL に到達できる場合に使用します。",
+    sshHostPlaceholder: "SSH ホスト",
+    sshHostAria: "SSH ホスト",
+    sshUserPlaceholder: "SSH ユーザー（任意）",
+    sshUserAria: "SSH ユーザー",
+    sshPortPlaceholder: "SSH ポート",
+    sshPortAria: "SSH ポート",
+    sshIdentityPlaceholder: "秘密鍵ファイル（任意）",
+    sshIdentityAria: "SSH 秘密鍵ファイル",
+    directTransport: "直接接続",
+    sshTransport: "SSH トンネル",
     add: "Add",
     adding: "Adding...",
     loading: "Loading...",
@@ -2285,9 +2365,9 @@ export const jaJP: Translations = {
     pairedGroups: "ペアリング済みグループ",
     pendingRequests: "保留中のリクエスト",
     noGroupPairing: "グループペアリングなし",
-    configureAgent: "エージェントを設定",
+    configureAgent: "応答先を設定",
     configureAgentHint:
-      "このチャンネルからのメッセージを処理するエージェントを選択",
+      "メッセージを処理するエージェントまたは AI チームを選択",
     agentConfigured: "エージェント設定済み",
     selectAgent: "エージェントを選択",
     selectAgentTitle: (channel: string) => `${channel} の Agent を選択`,
@@ -2377,20 +2457,36 @@ export const jaJP: Translations = {
     toastBindFailed: "バインドに失敗しました",
     toastAgentUnbound: "エージェントのバインドを解除しました",
     toastUnbindFailed: "バインド解除に失敗しました",
-    assignDialogTitle: (name: string) => `「${name}」の Agent を割り当て`,
+    assignDialogTitle: (name: string) => `「${name}」の応答先を選択`,
     assignDialogDesc:
-      "このチャンネルからのメッセージは選択されたエージェントが処理します。後で交換やバインド解除ができます。",
+      "単一のエージェント、または並列で協力してまとめて返信する AI チームを選べます。",
     noAgentsAvailable:
-      "利用可能なエージェントがまだありません —エージェントページで先に作成してください。",
-    unassignCurrent: "現在のエージェントのバインドを解除",
-    unassignConfirmTitle: "エージェントのバインドを解除",
+      "利用可能なエージェントまたは AI チームがありません。先に作成してください。",
+    searchRespondersPlaceholder: "エージェント、チーム、メンバーを検索…",
+    aiTeams: "AI チーム",
+    singleAgents: "単一エージェント",
+    teamMembers: (n: number) => `${n} 人が並列で協力`,
+    toastTeamBound: "AI チームをバインドしました",
+    unassignCurrent: "現在の応答先を解除",
+    unassignConfirmTitle: "応答先を解除",
     unassignConfirmDescription:
-      "バインド解除後、このチャンネルのメッセージはエージェントが処理しなくなります。いつでも再バインドできます。",
+      "解除後、このチャンネルは既定のメッセージ処理に戻ります。いつでも再設定できます。",
     howToSetup: "接続方法は？",
-    clickToChangeAgent: "クリックしてエージェントを変更",
+    clickToChangeAgent: "クリックして応答先を変更",
     handlingMessages: "このチャンネルのメッセージを処理中",
+    handlingMessagesAsTeam: "メンバーが並列で協力し、まとめて返信",
     rebindOrUnbind: "再バインド / バインド解除",
     helpDocsComingSoon: "ヘルプドキュメントが近日公開",
+    healthHealthy: "正常稼働",
+    healthDegraded: "異常あり",
+    healthUnknown: "未確認",
+    healthUnsupported: "アクティブ確認は未対応",
+    healthChecking: "確認中",
+    runHealthCheck: "確認",
+    healthCheckPassed: "チャンネルは正常です",
+    healthCheckFailed: "チャンネルのヘルスチェックに失敗しました",
+    activeThreads: (n: number) => `${n} 件のアクティブスレッド`,
+    duplicatesBlocked: (n: number) => `${n} 件の重複をブロック`,
   },
 
   // Pairing Authorization
@@ -2814,6 +2910,7 @@ export const jaJP: Translations = {
 
   chatPage: {
     stopNote: "ユーザーがチャット入力で停止をクリックしました",
+    stopFailed: "実行を停止できませんでした。もう一度お試しください。",
   },
 
   // Agents
@@ -3196,6 +3293,7 @@ export const jaJP: Translations = {
 
   // Conversation
   conversation: {
+    messageLog: "会話メッセージ",
     noMessages: "メッセージはまだありません",
     startConversation: "会話を開始すると、ここにメッセージが表示されます",
     noArtifactSelected: "アーティファクトが選択されていません",
@@ -5269,9 +5367,9 @@ export const jaJP: Translations = {
   modes: {
     builder: "Builder",
     coder: "Coder",
-    develop: "Develop",
+    develop: "汎用",
     audit: "Audit",
-    uxui: "UX/UI",
+    uxui: "デザイン",
     architect: "Architect",
     ultra: "Ultra",
     standard: "標準",
@@ -5280,9 +5378,9 @@ export const jaJP: Translations = {
     builderTooltip:
       "新規プロジェクト/空フォルダー：先に実行可能な最小スライスを構築",
     coderTooltip: "既存コードベース：構造を読み取り、小さな編集、検証",
-    developTooltip: "新規/既存プロジェクトを自動処理する実装作業",
+    developTooltip: "依頼から実装、レビュー、分析、調査を自動判定する汎用作業",
     auditTooltip: "証拠、リスク、優先度付きの品質監査",
-    uxuiTooltip: "フロー、レイアウト、ビジュアル、回帰の UX/UI レビュー",
+    uxuiTooltip: "フロー、レイアウト、ビジュアル、操作回帰のデザイン作業",
     architectTooltip: "アーキテクチャやマイグレーション：影響評価と段階的作業",
     ultraTooltip:
       "Audit Ultra ワークフロー：段階的計画、ツール/サブタスクスケジューリング、検証、レビュー",
@@ -5291,7 +5389,7 @@ export const jaJP: Translations = {
     adminTooltip: "システム管理者 —最高権限、すべてのエージェントと設定を管理",
     builderDesc: "新規プロジェクト",
     coderDesc: "既存コードベース",
-    developDesc: "ビルド、修正、反復",
+    developDesc: "実装、レビュー、分析、調査",
     auditDesc: "品質とリスク",
     uxuiDesc: "体験とビジュアル",
     architectDesc: "Architecture",
@@ -5300,8 +5398,7 @@ export const jaJP: Translations = {
       "エントリーポイントと受け入れチェックを定義し、最小の実行可能スライスを構築。",
     coderEffect:
       "既存の構造を先に読み、小ステップで編集し、関連チェックを実行。",
-    developEffect:
-      "プロジェクトスキャンが新規か既存かを処理。小さな検証ステップで実装。",
+    developEffect: "依頼から作業方法を判断し、必要な変更を小さく実行して検証。",
     auditEffect: "先に読んでから、証拠、重大度、修正提案とともに問題を報告。",
     uxuiEffect:
       "レイアウト、インタラクション、コピー、仕上げ、レスポンシブ状態のブラウザーウォークスルーを優先。",
@@ -6178,6 +6275,7 @@ export const jaJP: Translations = {
     firstResponseSlow: "最初の応答に時間がかかっています",
     modelWorking: "思考中...",
     thinkingCompleted: "思考完了",
+    runEnded: "処理が終了しました",
     slowResponse: "続けています。少し時間がかかっています",
     reconnecting: "接続が切れました。戻っています",
     processing: "処理中",
@@ -6465,6 +6563,10 @@ export const jaJP: Translations = {
     status: "ステータス",
     nonTextContent: "[非テキストコンテンツ]",
     binaryContent: "[バイナリコンテンツ]",
+    taskHistory: "リモートタスク",
+    noTasks: "リモートタスクはありません",
+    refreshTask: "タスク状態を更新",
+    cancelTask: "タスクをキャンセル",
   },
 
   // Live Tool Timeline
@@ -8062,7 +8164,7 @@ export const jaJP: Translations = {
   sandboxSettings: {
     title: "サンドボックスと実行権限",
     description:
-      "実行環境と権限レベルは独立した2つの軸で、自由に組み合わせられます。例：「サンドボックス + フルアクセス」は隔離内で全自動、「ローカル + 編集を受け入れる」は本機で実行しつつコマンドは確認を求めます。",
+      "実行環境、確認、ネットワークは通常個別に設定できますが、フルアクセスはローカル実行と全ネットワークを有効にする包括プリセットです。",
     activeTag: "現在",
     scopeNote:
       "変更はローカル設定に保存され、以降のすべての新しいタスクに適用されます。実行中のタスクには影響しません。",
@@ -8113,7 +8215,8 @@ export const jaJP: Translations = {
       },
       bypassPermissions: {
         label: "フルアクセス",
-        description: "すべての操作を確認なしで自動実行します。最大権限です。",
+        description:
+          "ローカル実行と全ネットワークを含み、すべての操作を確認なしで実行します。",
       },
     },
     networkTitle: "ネットワークアクセス",

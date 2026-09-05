@@ -12,6 +12,10 @@ export type WorkbenchRosterSeat = {
   icon?: string | null;
   role?: "tl" | "member" | string | null;
   kind?: "human" | "agent" | "role";
+  /** HUD-derived member profile data for the conversation name card. */
+  description?: string | null;
+  model?: string | null;
+  toolGroups?: string[] | null;
 };
 
 export function rosterSeatRoleLabel(

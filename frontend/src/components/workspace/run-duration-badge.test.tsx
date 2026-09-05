@@ -25,12 +25,12 @@ describe("RunDurationBadge", () => {
       locale: "zh-CN",
     });
 
-    expect(screen.getByTestId("run-duration-badge")).toHaveTextContent(
-      "正在处理",
-    );
-    expect(screen.getByTestId("run-duration-badge")).toHaveTextContent(
-      "2m 17s",
-    );
+    const badge = screen.getByTestId("run-duration-badge");
+    expect(badge).toHaveTextContent("正在处理");
+    expect(badge).toHaveTextContent("2m 17s");
+    expect(badge).not.toHaveAttribute("aria-live");
+    expect(badge).not.toHaveAttribute("role", "status");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   test("treats the optimistic pre-receipt window as waiting", () => {

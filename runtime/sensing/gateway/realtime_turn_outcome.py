@@ -411,6 +411,16 @@ def _turn_execution_engine(turn: Turn) -> str:
     return value if value in {"codex", "octopus"} else "octopus"
 
 
+def _turn_agent_id(turn: Turn) -> str | None:
+    """Return the server-resolved agent identity for this execution strand."""
+
+    execution_agent_id = str(getattr(turn, "execution_agent_id", None) or "").strip()
+    if execution_agent_id:
+        return execution_agent_id
+    params = getattr(turn, "params", None)
+    return _agent_id_from_params(cast(TurnParams, params)) if params is not None else None
+
+
 def _goal_fingerprint(goal: str) -> str:
     normalized = " ".join(goal.strip().lower().split())
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
@@ -769,6 +779,20 @@ def _record_task_run_started(
         _logger.warning("trace store start failed for %s: %s", turn.id, exc)
 
 
+def _turn_user_goal(turn: Turn) -> str:
+    """Return the user text that created a realtime task run."""
+
+    return next(
+        (
+            str(getattr(item, "text", "") or "").strip()
+            for item in turn.items
+            if str(getattr(item, "type", "")) in {"userMessage", "ItemType.USER_MESSAGE"}
+            and str(getattr(item, "text", "") or "").strip()
+        ),
+        "",
+    )
+
+
 def _record_task_run_finished(
     runtime: CerebrumRuntime,
     turn: Turn,
@@ -800,19 +824,24 @@ def _record_task_run_finished(
                 "turn_id": turn.id,
                 "error": turn.error,
             }
-            if supervisor.store.get(supervisor_task_id) is None:
+            created_missing_record = supervisor.store.get(supervisor_task_id) is None
+            if created_missing_record:
                 params = cast(TurnParams, turn.params)
+                goal = _turn_user_goal(turn)
                 supervisor.start_task(
                     task_id=supervisor_task_id,
                     kind="realtime_objective",
                     owner_id=getattr(params, "owner_actor_id", None),
                     thread_id=turn.thread_id,
+                    title=_preview_text(goal, limit=80),
+                    goal=goal,
                     mode=_turn_mode(params) or "direct",
+                    workspace_path=(turn.execution_workspace_path or getattr(params, "cwd", None)),
                     origin_task_id=turn.id,
                     metadata=metadata,
-                    status=TaskRunStatus(supervisor_status),
+                    status=TaskRunStatus.RUNNING,
                 )
-            elif recover_stale_lease:
+            if recover_stale_lease and not created_missing_record:
                 supervisor.recover_stale_turn(
                     supervisor_task_id,
                     supervisor_status,
@@ -844,13 +873,16 @@ def _record_task_run_finished(
             task_id=turn.id,
             thread_id=turn.thread_id,
             turn_id=turn.id,
-            agent_id=_agent_id_from_params(cast(TurnParams, turn.params)),
+            agent_id=_turn_agent_id(turn),
             status=status,
             reason=status_value,
             scope=_turn_scope(turn),
             metadata={
                 "item_count": len(getattr(turn, "items", []) or []),
                 "error": getattr(turn, "error", None),
+                "engine": _turn_execution_engine(turn),
+                "outcome_reason": getattr(turn, "outcome_reason", None),
+                "completion_decision": getattr(turn, "completion_decision", None),
             },
         )
     except Exception as exc:  # noqa: BLE001
@@ -864,17 +896,33 @@ def _record_react_trace_event(runtime: CerebrumRuntime, turn: Turn, evt: dict[st
         supervisor_task_id = str(evt.get("task_id") or "").strip()
         if supervisor is not None and supervisor_task_id:
             try:
+                previous_task_id = str(turn.task_id or "").strip()
+                if previous_task_id and previous_task_id != supervisor_task_id:
+                    previous = supervisor.store.get(previous_task_id)
+                    if previous is not None and str(previous.status) in {
+                        "pending",
+                        "running",
+                        "waiting_approval",
+                        "paused",
+                        "verifying",
+                        "repairing",
+                    }:
+                        # One outer realtime turn may enter a second ReAct
+                        # strand for live steering or bounded orchestration
+                        # repair. The new react_started event replaces the
+                        # strand id on ``turn``; close the old lease first so
+                        # it cannot remain a phantom "running" task forever.
+                        supervisor.transition(
+                            previous_task_id,
+                            "disconnected",
+                            reason="superseded_by_react_attempt",
+                            metadata_patch={
+                                "superseded_by_task_id": supervisor_task_id,
+                                "turn_id": turn.id,
+                            },
+                        )
                 params = cast(TurnParams, turn.params)
-                goal = next(
-                    (
-                        str(getattr(item, "text", "") or "").strip()
-                        for item in turn.items
-                        if str(getattr(item, "type", ""))
-                        in {"userMessage", "ItemType.USER_MESSAGE"}
-                        and str(getattr(item, "text", "") or "").strip()
-                    ),
-                    "",
-                )
+                goal = _turn_user_goal(turn)
                 supervisor.start_task(
                     task_id=supervisor_task_id,
                     kind="realtime_objective",
@@ -883,12 +931,12 @@ def _record_react_trace_event(runtime: CerebrumRuntime, turn: Turn, evt: dict[st
                     title=_preview_text(goal, limit=80),
                     goal=goal,
                     mode=_turn_mode(params) or "react",
-                    workspace_path=getattr(params, "cwd", None),
+                    workspace_path=(turn.execution_workspace_path or getattr(params, "cwd", None)),
                     origin_task_id=turn.id,
                     metadata={
                         "objective_id": supervisor_task_id,
                         "turn_id": turn.id,
-                        "agent_id": _agent_id_from_params(params),
+                        "agent_id": _turn_agent_id(turn),
                     },
                 )
             except Exception as exc:  # noqa: BLE001
@@ -913,6 +961,15 @@ def _record_react_trace_event(runtime: CerebrumRuntime, turn: Turn, evt: dict[st
     if event_type is None:
         return
     payload = dict(evt)
+    # The trace store is the engine-neutral source for evaluation and replay.
+    # Persist the execution strand on every event so consumers never infer it
+    # from a surrounding task or from the frontend's current mode label.
+    payload.setdefault("engine", _turn_execution_engine(turn))
+    turn_params = getattr(turn, "params", None)
+    if turn_params is not None:
+        model = getattr(turn_params, "model", None)
+        if isinstance(model, str) and model.strip():
+            payload.setdefault("model", model.strip())
     if kind in {"tool_start", "tool_end", "tool_background"}:
         lifecycle_kind: Literal["tool_start", "tool_end"] = (
             "tool_start" if kind == "tool_start" else "tool_end"
@@ -933,7 +990,7 @@ def _record_react_trace_event(runtime: CerebrumRuntime, turn: Turn, evt: dict[st
             thread_id=turn.thread_id,
             turn_id=turn.id,
             task_id=turn.id,
-            agent_id=_agent_id_from_params(cast(TurnParams, turn.params)),
+            agent_id=_turn_agent_id(turn),
             item_id=str(evt.get("tool_call_id") or evt.get("item_id") or "") or None,
             scope=_turn_scope(turn),
         )

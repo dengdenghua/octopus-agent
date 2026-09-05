@@ -27,21 +27,76 @@ except ImportError:  # pragma: no cover
     HTTPException = None  # type: ignore[assignment, misc]
     Request = object  # type: ignore[assignment, misc]
 
-from runtime.execution.cron_store import _read_cron_jobs, _write_cron_jobs
+from runtime.execution.cron_store import (
+    _mutate_cron_jobs,
+    _read_cron_jobs,
+    bind_cron_job_scope,
+    cron_job_visible_to_scope,
+)
+from runtime.execution.cron_store import (
+    _write_cron_jobs as _write_cron_jobs,  # compatibility re-export
+)
 from runtime.platform.process.paths import app_paths
+from runtime.safety.auth.principal import CurrentPrincipal
+from runtime.safety.auth.scope import TenantScope, scope_from_principal
+
+_PUBLIC_JOB_FIELDS = (
+    "name",
+    "command",
+    "cron_expression",
+    "last_run",
+    "last_status",
+    "last_output",
+    "creator_actor",
+)
 
 
-def _actor_is_admin(identity_store: Any, actor: str | None) -> bool:
-    if not actor or identity_store is None:
-        return False
-    try:
-        ident = identity_store.get(actor) if hasattr(identity_store, "get") else None
-        if ident is None:
-            return False
-        roles = getattr(ident, "roles", None) or []
-        return "admin" in roles or "root" in roles
-    except Exception:  # noqa: BLE001 — best-effort; fail-open
-        return False
+def _public_job(job: dict[str, Any]) -> dict[str, Any]:
+    """Settings projection; never expose delivery or internal scope fields."""
+
+    return {key: job.get(key) for key in _PUBLIC_JOB_FIELDS if key in job}
+
+
+def _principal_is_admin(principal: CurrentPrincipal | None) -> bool:
+    return bool(principal is not None and principal.roles.intersection({"admin", "root"}))
+
+
+def _request_scope(principal: CurrentPrincipal | None) -> TenantScope | None:
+    return scope_from_principal(
+        principal,
+        allow_cross_tenant=_principal_is_admin(principal),
+    )
+
+
+def _run_visible_to_scope(record: dict[str, Any], scope: TenantScope | None) -> bool:
+    """Apply the same exact ownership rule to execution history."""
+
+    if scope is None:
+        tenant = str(record.get("tenant_id") or "").strip()
+        owner = str(record.get("owner_actor_id") or "").strip()
+        creator = str(record.get("creator_actor") or "").strip()
+        return not tenant and not owner and creator in {"", "*", "agent_self"}
+    if scope.allow_cross_tenant:
+        return True
+    tenant = str(record.get("tenant_id") or "").strip()
+    owner = str(record.get("owner_actor_id") or "").strip()
+    if tenant and owner:
+        if tenant == scope.tenant_id and owner == scope.actor_id:
+            return True
+        # Old actor-only rows execute in a quarantined legacy namespace until
+        # adopted. The same actor may still read that migration history.
+        return tenant == f"legacy:{scope.actor_id}" and owner == scope.actor_id
+    return str(record.get("creator_actor") or "").strip() == scope.actor_id
+
+
+def _public_run(record: dict[str, Any]) -> dict[str, Any]:
+    """Hide IM destinations and raw ownership metadata from settings."""
+
+    return {
+        key: value
+        for key, value in record.items()
+        if key not in {"tenant_id", "owner_actor_id", "channel_id", "thread_id"}
+    }
 
 
 def create_cron_router(
@@ -60,7 +115,7 @@ def create_cron_router(
     path = Path(jobs_path) if jobs_path is not None else app_paths().cron_jobs_path
     router = APIRouter()
 
-    def _force_auth(request: Any) -> str | None:
+    def _force_auth(request: Any) -> CurrentPrincipal | None:
         """Resolve actor and require a token regardless of global
         ``require_auth``.
 
@@ -70,10 +125,10 @@ def create_cron_router(
         (old, single-user local dev), fall back to the global flag.
         """
         try:
-            from runtime.sensing.gateway.openai_gateway import _resolve_actor
+            from runtime.safety.auth.principal import resolve_principal
 
             force = True if identity_store is not None else require_auth
-            return _resolve_actor(
+            return resolve_principal(
                 request,
                 identity_store,
                 force,
@@ -86,12 +141,12 @@ def create_cron_router(
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(401, "auth required") from exc
 
-    def _operator_actor(request: Any) -> str | None:
+    def _operator_principal(request: Any) -> CurrentPrincipal | None:
         """Require control-plane authority for shell-job mutations."""
         from runtime.safety.auth.principal import require_operator
 
         force = True if identity_store is not None else require_auth
-        principal = require_operator(
+        return require_operator(
             request,
             identity_store,
             force,
@@ -99,26 +154,20 @@ def create_cron_router(
             jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
         )
-        return principal.actor_id if principal is not None else None
 
     @router.get("/api/cron")
     @router.get("/api/cron/")
     def api_cron_list(request: Request) -> list[dict[str, Any]]:
-        actor = _force_auth(request)
+        principal = _force_auth(request)
+        scope = _request_scope(principal)
         jobs = _read_cron_jobs(path)
-        if _actor_is_admin(identity_store, actor):
-            return jobs
-        return [
-            j
-            for j in jobs
-            if j.get("creator_actor") == actor
-            or j.get("creator_actor") in (None, "*")  # legacy / anon
-        ]
+        return [_public_job(job) for job in jobs if cron_job_visible_to_scope(job, scope)]
 
     @router.post("/api/cron")
     @router.post("/api/cron/")
     async def api_cron_create(request: Request) -> dict[str, Any]:
-        actor = _operator_actor(request)
+        principal = _operator_principal(request)
+        scope = scope_from_principal(principal)
         body = await request.json()
         if not isinstance(body, dict):
             raise HTTPException(400, "invalid cron job")
@@ -139,45 +188,56 @@ def create_cron_router(
         except Exception as exc:
             raise HTTPException(400, f"invalid cron expression: {exc}") from exc
 
-        # A non-admin cannot overwrite a job created by someone else.
-        existing = await asyncio.to_thread(_read_cron_jobs, path)
-        for j in existing:
-            if j.get("name") != name:
-                continue
-            owner = j.get("creator_actor")
-            if owner not in (None, "*", actor) and not _actor_is_admin(identity_store, actor):
-                raise HTTPException(
-                    409,
-                    "cron job name already used by another actor",
-                )
-            break
-
-        jobs = [j for j in existing if j.get("name") != name]
         job = {
             "name": name,
             "command": command,
             "cron_expression": cron_expression,
             "last_run": None,
             "last_status": "created",
-            "creator_actor": actor or "*",
+            "creator_actor": principal.actor_id if principal is not None else "*",
         }
-        jobs.append(job)
-        await asyncio.to_thread(_write_cron_jobs, path, jobs)
-        return job
+        bind_cron_job_scope(job, scope)
+
+        def _upsert(jobs: list[dict[str, Any]]) -> None:
+            # Job names are tenant-local. A colliding name in another tenant
+            # is preserved and its existence is not disclosed.
+            jobs[:] = [
+                existing
+                for existing in jobs
+                if not (existing.get("name") == name and cron_job_visible_to_scope(existing, scope))
+            ]
+            jobs.append(job)
+
+        await asyncio.to_thread(_mutate_cron_jobs, path, _upsert)
+        return _public_job(job)
 
     @router.delete("/api/cron/{name}")
     def api_cron_delete(name: str, request: Request) -> dict[str, Any]:
-        actor = _operator_actor(request)
-        is_admin = _actor_is_admin(identity_store, actor)
-        jobs = _read_cron_jobs(path)
-        target = next((j for j in jobs if j.get("name") == name), None)
-        if target is None:
+        principal = _operator_principal(request)
+        scope = _request_scope(principal)
+
+        def _remove(jobs: list[dict[str, Any]]) -> int:
+            matching = [
+                job
+                for job in jobs
+                if job.get("name") == name and cron_job_visible_to_scope(job, scope)
+            ]
+            # A global admin URL contains only the display name. If several
+            # tenants use that same name, refusing is safer than deleting all.
+            if scope is not None and scope.allow_cross_tenant and len(matching) > 1:
+                return -1
+            if not matching:
+                return 0
+            target_ids = {id(job) for job in matching}
+            jobs[:] = [job for job in jobs if id(job) not in target_ids]
+            return len(matching)
+
+        removed = _mutate_cron_jobs(path, _remove)
+        if removed < 0:
+            raise HTTPException(409, "cron job name is ambiguous across tenants")
+        if removed == 0:
+            # Do not reveal whether the name exists in another tenant.
             raise HTTPException(404, "cron job not found")
-        owner = target.get("creator_actor")
-        if not is_admin and owner not in (None, "*", actor):
-            raise HTTPException(403, "not owner of this cron job")
-        next_jobs = [j for j in jobs if j.get("name") != name]
-        _write_cron_jobs(path, next_jobs)
         return {"ok": True, "deleted": name}
 
     @router.get("/api/cron/runs")
@@ -188,18 +248,15 @@ def create_cron_router(
         Non-admin actors only see runs of jobs they created — the same
         scoping rule as ``GET /api/cron``.
         """
-        actor = _force_auth(request)
+        principal = _force_auth(request)
+        scope = _request_scope(principal)
         from runtime.execution.cron_executor import read_run_ledger
 
         limit = max(1, min(int(limit or 50), 200))
         ledger = path.parent / "cron_runs.jsonl"
         runs = read_run_ledger(ledger, limit=limit)
-        if not _actor_is_admin(identity_store, actor):
-            runs = [
-                r
-                for r in runs
-                if r.get("creator_actor") == actor or r.get("creator_actor") in (None, "*")
-            ]
-        return {"ok": True, "runs": runs, "count": len(runs)}
+        runs = [record for record in runs if _run_visible_to_scope(record, scope)]
+        public_runs = [_public_run(record) for record in runs]
+        return {"ok": True, "runs": public_runs, "count": len(public_runs)}
 
     return router

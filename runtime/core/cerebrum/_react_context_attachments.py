@@ -32,7 +32,7 @@ def _build_user_message_content(
           ...
         ]
 
-    Vision-capable routers (anthropic / openai / gemini / molili) all
+    Vision-capable routers (anthropic / openai / gemini / oct) all
     accept this shape. Non-vision routers fall back to plain text via
     their own input filtering, so we don't need to gate by model here.
 
@@ -214,6 +214,9 @@ def _serialize_messages_for_checkpoint(messages: list) -> list[dict[str, Any]]:
         name = getattr(m, "name", None)
         if name:
             entry["name"] = name
+        phase = getattr(m, "phase", None)
+        if phase in {"commentary", "final_answer"}:
+            entry["phase"] = phase
         result.append(entry)
     return result
 
@@ -228,7 +231,12 @@ def _restore_messages_from_checkpoint(snapshot: list[dict[str, Any]]) -> list:
         content = m.get("content", "")
         if not content:
             continue
-        msg = Message(role=m["role"], content=content)
+        phase = m.get("phase")
+        msg = Message(
+            role=m["role"],
+            content=content,
+            phase=phase if phase in {"commentary", "final_answer"} else None,
+        )
         tool_calls_data = m.get("tool_calls")
         if tool_calls_data and isinstance(tool_calls_data, list):
             try:

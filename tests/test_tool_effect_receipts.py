@@ -4,8 +4,12 @@ import threading
 import time
 from uuid import uuid4
 
-from runtime.core.cerebrum.react_execution import _tool_event_extras_from_beak_step
+from runtime.core.cerebrum.react_execution import (
+    _tool_event_extras_from_beak_step,
+    _verification_kind_from_command,
+)
 from runtime.execution.suckers import Skill, SkillRegistry
+from runtime.execution.suckers.builtins import register_builtins
 from runtime.execution.tool_engine import ToolExecutor
 from runtime.execution.tool_engine.effect_receipts import (
     args_fingerprint,
@@ -26,6 +30,13 @@ from runtime.platform.models import (
 )
 from runtime.platform.process.session import Session
 from runtime.safety.auth import TrustEngine
+
+
+def test_verification_command_classifier_rejects_probe_only_commands() -> None:
+    assert _verification_kind_from_command("ruff check runtime/foo.py") == "lint"
+    assert _verification_kind_from_command("python -m pytest tests -q") == "test"
+    assert _verification_kind_from_command("ruff --version") is None
+    assert _verification_kind_from_command("pytest --collect-only") is None
 
 
 def _executor(journal, handler, *, affinity: list[str]) -> ToolExecutor:
@@ -104,6 +115,69 @@ def test_committed_effect_replays_without_running_handler_again():
     assert "durable_effect_replay" in second.result.stderr_tags
     assert second.result.cost.tokens == 0
     assert second.result.cost.usd == 0
+    assert first.result.effect_receipt["sealed"] is True
+    assert first.result.effect_receipt["effect_class"] == "external_or_unknown"
+    assert first.result.effect_receipt["state"] == "committed"
+    assert second.result.effect_receipt["sealed"] is True
+    assert second.result.effect_receipt["state"] == "replayed"
+
+
+def test_exact_builtin_read_handler_gets_sealed_read_only_receipt(tmp_path):
+    registry = register_builtins(SkillRegistry())
+    executor = ToolExecutor(
+        registry=registry,
+        immunity=TrustEngine(trusted_sources=["skill://public/*"]),
+        journal=InMemoryJournal(),
+    )
+    task_id = TaskId(uuid4())
+    result = executor.execute_step(
+        step_id=1,
+        node_id="react_n1",
+        sucker_id=SkillId("list_cwd"),
+        args={"path": str(tmp_path)},
+        caller="react_loop",
+        task_id=task_id,
+        arm_id=ArmId("react_arm"),
+        budget=Budget(task_id=task_id, limits=BudgetLimits(tokens=10_000, usd=1.0)),
+    )
+
+    assert result.success is True
+    assert result.result.effect_receipt["sealed"] is True
+    assert result.result.effect_receipt["emitted_by"] == "tool_executor"
+    assert result.result.effect_receipt["effect_class"] == "read_only"
+    assert result.result.effect_receipt["state"] == "committed"
+
+
+def test_same_name_plugin_cannot_forge_builtin_read_only_receipt():
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="list_cwd",
+            affinity=["read"],
+            trusted_source="skill://public/list_cwd",
+            handler=lambda **_: {"items": []},
+        )
+    )
+    executor = ToolExecutor(
+        registry=registry,
+        immunity=TrustEngine(trusted_sources=["skill://public/*"]),
+        journal=InMemoryJournal(),
+    )
+    task_id = TaskId(uuid4())
+    result = executor.execute_step(
+        step_id=1,
+        node_id="react_n1",
+        sucker_id=SkillId("list_cwd"),
+        args={},
+        caller="react_loop",
+        task_id=task_id,
+        arm_id=ArmId("react_arm"),
+        budget=Budget(task_id=task_id, limits=BudgetLimits(tokens=10_000, usd=1.0)),
+    )
+
+    assert result.success is True
+    assert result.result.effect_receipt["sealed"] is True
+    assert result.result.effect_receipt["effect_class"] == "external_or_unknown"
 
 
 def test_dangling_side_effect_intent_fails_closed_after_restart():

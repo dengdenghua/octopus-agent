@@ -7,8 +7,8 @@ Status: Accepted | Date: 2026-04
 Before this decision, per-turn context was carried through the
 runtime as a **collection of independent ContextVars**:
 
-- `molili_router.current_actor` — who the user is (billing, audit)
-- `molili_router.current_agent_id` — which persona is answering
+- `model_router.actor_context.current_actor` — who the user is (billing, audit)
+- `process.session.current_agent_id` — which persona is answering
 - `journal_context.current_conversation_id` — thread tag on journal events
 - implicit globals: `TaskId` / `TurnId` generated per entry point
 - `raw_identity` override: a flag on request body read by filter
@@ -27,7 +27,7 @@ The failure modes were real, not theoretical:
    planner ran in the SSE generator's thread, `_set_actor_ctx` got
    called on the request handler thread (where the request came
    in) but not on the generator thread (where the planner actually
-   ran). Any skill that touched the Molili bridge crashed.
+   ran). Any skill that touched the account bridge crashed.
 
 2. **Memory skills couldn't tell which agent was active.** The
    `remember` / `recall` / `note_user` / `diary_write` skills need
@@ -73,7 +73,7 @@ Semantics:
   Session. `current_session()` returns it or None.
 - **Legacy ContextVars are mirrored, not replaced.** On
   `session_scope()` entry, we set the Session *and* the old
-  `molili_router.current_actor` / `current_agent_id` variables
+  provider-neutral `current_actor` / `current_agent_id` variables
   — pre-session code keeps working during migration.
 - **`metadata` is the extension point.** Per-turn overrides that
   don't fit the core fields (`raw_identity`, `mode`, `team_id`,
@@ -124,7 +124,7 @@ as "there should be fewer vars in the first place".
   contract.** New code reads `current_session()`. Old code
   reading `current_actor()` keeps working. Deleting the mirror
   someday requires migrating any remaining legacy reader — grep
-  for `molili_router.current_actor` / `current_agent_id` to find
+  for `current_actor` / `current_agent_id` to find
   the deletion cost.
 
 - **Test isolation got tighter.** The Session is set via

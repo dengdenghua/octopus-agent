@@ -643,8 +643,18 @@ class _ReactBridgeState:
         emitter: EventEmitter,
         evt: dict[str, Any],
     ) -> None:
+        # Any prose followed by a tool call is an in-progress update, even
+        # when the provider sent it on the generic text channel. Otherwise a
+        # long pre-tool draft renders as one report and the real final answer
+        # renders as a second, near-identical report after the tool finishes.
+        if self.agent_message is not None and str(self.agent_message.text or "").strip():
+            self.agent_message.message_kind = "commentary"
         has_open_public_prose = bool(
-            self.commentary_message is not None and str(self.commentary_message.text or "").strip()
+            (
+                self.commentary_message is not None
+                and str(self.commentary_message.text or "").strip()
+            )
+            or (self.agent_message is not None and str(self.agent_message.text or "").strip())
         )
         # Flush any open prose so the tool item appears after the
         # reasoning that produced it.

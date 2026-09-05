@@ -16,6 +16,9 @@ from fastapi import APIRouter
 from runtime.execution.suckers.registry import Skill
 from runtime.platform.plugins.plugin_base import ModulePlugin
 from runtime.platform.process.paths import app_paths
+from runtime.sensing.gateway.comfyui_manager import managed_home, manager_status
+
+from .workflow_diagnostics import diagnose_workflow
 
 _LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1"})
 _SAFE_WORKFLOW_ID = re.compile(r"^[a-zA-Z0-9._-]{1,80}$")
@@ -26,8 +29,10 @@ _MODEL_SUFFIXES = frozenset({".safetensors", ".ckpt", ".pt", ".pth", ".bin"})
 class ComfyUIBridgePlugin(ModulePlugin):
     name = "comfyui_bridge"
     display_name = "ComfyUI 工作流桥接"
-    version = "0.4.0"
-    description = "本机 ComfyUI 工作流编辑、依赖盘点、持久化、队列与状态接入"
+    version = "0.8.0"
+    description = (
+        "ComfyUI 托管安装、节点扩展回滚、逐项授权模型管理、本机工作流编辑、持久化与队列接入"
+    )
     author = "Octopus"
 
     def _local_base_url(self) -> str | None:
@@ -65,6 +70,18 @@ class ComfyUIBridgePlugin(ModulePlugin):
                 handler=self._dependencies_skill,
             ),
             Skill(
+                name="comfyui_bridge.manager_status",
+                description=(
+                    "只读查看 Octopus 托管 ComfyUI 的安装、版本与后台任务状态。"
+                    "安装和更新必须由用户在 Design 界面主动点击，Agent 不得自行触发。"
+                ),
+                summary="查看托管 ComfyUI 安装与版本状态",
+                affinity=["design", "comfyui", "dependencies", "read"],
+                cost_profile="low",
+                trusted_source="plugin://comfyui_bridge",
+                handler=lambda **_kwargs: {"ok": True, **manager_status()},
+            ),
+            Skill(
                 name="comfyui_bridge.workflows",
                 description="列出 Octopus 已内置和用户已导入的 ComfyUI 工作流；不执行工作流。",
                 summary="列出 ComfyUI 工作流",
@@ -84,6 +101,19 @@ class ComfyUIBridgePlugin(ModulePlugin):
                 cost_profile="low",
                 trusted_source="plugin://comfyui_bridge",
                 handler=self._workflow_get_skill,
+            ),
+            Skill(
+                name="comfyui_bridge.workflow_diagnostics",
+                description=(
+                    "核对一份已保存工作流与本机 ComfyUI 的真实兼容性。参数 workflow_id "
+                    "必填；检查缺失节点、缺失必填输入、无效枚举、未知输入与缺失模型文件，"
+                    "只读且不会安装依赖。"
+                ),
+                summary="诊断 ComfyUI 工作流依赖(workflow_id 必填)",
+                affinity=["design", "comfyui", "workflow", "diagnostics", "read"],
+                cost_profile="low",
+                trusted_source="plugin://comfyui_bridge",
+                handler=self._workflow_diagnostics_skill,
             ),
             Skill(
                 name="comfyui_bridge.workflow_save",
@@ -143,6 +173,7 @@ class ComfyUIBridgePlugin(ModulePlugin):
         configured = os.environ.get("OCTOPUS_COMFYUI_HOME", "").strip()
         candidates = [
             Path(configured).expanduser() if configured else None,
+            managed_home(),
             app_paths().data_dir / "comfyui",
             Path.home() / "ComfyUI",
         ]
@@ -177,7 +208,8 @@ class ComfyUIBridgePlugin(ModulePlugin):
             "totalModels": sum(model_counts.values()),
             "customNodes": custom_nodes,
             "totalCustomNodes": len(custom_nodes),
-            "managed": False,
+            "managed": home == managed_home() and manager_status().get("installed") is True,
+            "manager": manager_status(),
         }
 
     def _workflows_skill(self, **_kwargs: Any) -> dict[str, Any]:
@@ -276,6 +308,38 @@ class ComfyUIBridgePlugin(ModulePlugin):
         except OSError as exc:
             return {"ok": False, "error": str(exc)}
         return {"ok": True, "id": workflow_id, **payload}
+
+    def _workflow_diagnostics_skill(self, workflow_id: str = "", **_kwargs: Any) -> dict[str, Any]:
+        loaded = self._workflow_get_skill(workflow_id=workflow_id)
+        if not loaded.get("ok"):
+            return loaded
+        object_info: dict[str, Any] | None = None
+        catalog_error: str | None = None
+        base_url = self._local_base_url()
+        if base_url is not None:
+            try:
+                response = httpx.get(f"{base_url}/object_info", timeout=4)
+                response.raise_for_status()
+                candidate = response.json()
+                if isinstance(candidate, dict):
+                    object_info = candidate
+                else:
+                    catalog_error = "local ComfyUI returned an invalid node catalog"
+            except (httpx.HTTPError, ValueError) as exc:
+                catalog_error = str(exc)
+        dependencies = self._dependencies_skill()
+        home = Path(dependencies["path"]) if dependencies.get("path") else None
+        result = diagnose_workflow(
+            loaded["workflow"],
+            object_info=object_info,
+            comfy_home=home,
+        )
+        return {
+            "workflowId": workflow_id,
+            "source": loaded.get("source"),
+            "nodeCatalogError": catalog_error,
+            **result,
+        }
 
     def _queue_skill(
         self,
@@ -381,10 +445,26 @@ class ComfyUIBridgePlugin(ModulePlugin):
             return {
                 "status": "/api/design/comfyui/status",
                 "dependencies": "/api/design/comfyui/dependencies",
+                "start": "/api/design/comfyui/start",
+                "stop": "/api/design/comfyui/stop",
+                "manager": "/api/design/comfyui/manager",
+                "install": "/api/design/comfyui/install",
+                "update": "/api/design/comfyui/update",
+                "cancel_install": "/api/design/comfyui/manager/cancel",
+                "custom_node_registry": "/api/design/comfyui/custom-nodes/registry",
+                "custom_node_install": "/api/design/comfyui/custom-nodes/install",
+                "custom_node_update": "/api/design/comfyui/custom-nodes/update",
+                "custom_node_uninstall": "/api/design/comfyui/custom-nodes/{node_id}",
+                "custom_node_rollback": ("/api/design/comfyui/custom-nodes/{node_id}/rollback"),
+                "models": "/api/design/comfyui/models",
+                "model_download": "/api/design/comfyui/models/download",
+                "model_remove": "/api/design/comfyui/models/remove",
+                "model_restore": "/api/design/comfyui/models/restore",
                 "node_catalog": "/api/design/comfyui/object-info",
                 "workflows": "/api/design/comfyui/workflows",
                 "import_workflow": "/api/design/comfyui/workflows/import",
                 "save_workflow": "/api/design/comfyui/workflows/{workflow_id}",
+                "workflow_diagnostics": ("/api/design/comfyui/workflows/{workflow_id}/diagnostics"),
                 "queue": "/api/design/comfyui/queue",
                 "result": "/api/design/comfyui/history/{prompt_id}",
                 "embedded_surface": True,

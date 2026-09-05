@@ -27,10 +27,12 @@ from fastapi import APIRouter, HTTPException, Request, WebSocket
 
 from runtime.safety.auth.principal import require_operator, resolve_principal
 from runtime.safety.auth.url_guard import check_url
-from runtime.safety.auth.websocket import accepted_auth_subprotocol, websocket_auth_token
 from runtime.sensing.gateway.remote_transport import (
     BackendRegistry,
     SshTunnel,
+    SshTunnelError,
+    SshTunnelForwarder,
+    connect_remote_backend,
     health_check,
     proxy_request,
     proxy_websocket,
@@ -102,13 +104,25 @@ def create_remote_backends_router(
             jwt_audience=jwt_audience,
         )
 
-    def _assert_safe_backend_url(url: str) -> None:
+    def _assert_safe_backend_url(url: str, *, ssh: SshTunnel | None = None) -> None:
         # Registration is configuration-only. DNS is deliberately deferred to
         # the egress helper, which resolves and pins the destination at the
         # moment of health/proxy/WS use. This avoids rejecting a harmless
         # hostname because a local resolver temporarily returns a reserved
         # address, while never allowing that address to be contacted.
-        verdict = check_url(url, allow_private=False, resolve_dns=False)
+        if ssh is not None and not url.lower().startswith("http://"):
+            raise HTTPException(
+                400,
+                {
+                    "error": "remote_backend_url_rejected",
+                    "reason": "ssh_tunnel_requires_http_endpoint",
+                },
+            )
+        verdict = check_url(
+            url,
+            allow_private=ssh is not None,
+            resolve_dns=False,
+        )
         if not verdict.allow:
             raise HTTPException(
                 400,
@@ -124,7 +138,15 @@ def create_remote_backends_router(
                 raise _WsAuthError("identity store required for remote backend auth")
             return None
 
-        token = websocket_auth_token(ws)
+        token: str | None = None
+        auth_header = ws.headers.get("authorization") or ""
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header[7:].strip()
+        if token is None:
+            subproto = ws.headers.get("sec-websocket-protocol") or ""
+            parts = [p.strip() for p in subproto.split(",") if p.strip()]
+            if len(parts) >= 2 and parts[0].lower() == "bearer":
+                token = parts[1]
         if not token:
             if require_auth:
                 raise _WsAuthError("missing remote backend auth token")
@@ -175,6 +197,7 @@ def create_remote_backends_router(
         payload = body or {}
         name = str(payload.get("name") or "").strip()
         url = str(payload.get("url") or "").strip()
+        auth_token = str(payload.get("auth_token") or "").strip() or None
         if not name:
             raise HTTPException(400, "name is required")
         if not url:
@@ -188,11 +211,33 @@ def create_remote_backends_router(
                     400,
                     "ssh.host is required when ssh is provided",
                 )
-        _assert_safe_backend_url(url)
+        _assert_safe_backend_url(url, ssh=ssh)
         try:
-            backend = registry.add(name=name, url=url, ssh=ssh)
+            backend = registry.add(
+                name=name,
+                url=url,
+                ssh=ssh,
+                auth_token=auth_token,
+            )
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        return {"backend": _safe_dict(backend)}
+
+    @router.put("/api/remote-backends/{backend_id}/credentials")
+    def update_backend_credentials(
+        backend_id: str,
+        request: Request,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        _operator_http(request)
+        _require_flag()
+        token = str((body or {}).get("auth_token") or "").strip() or None
+        try:
+            backend = registry.set_auth_token(backend_id, token)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if backend is None:
+            raise HTTPException(404, f"backend {backend_id!r} not found")
         return {"backend": _safe_dict(backend)}
 
     @router.delete("/api/remote-backends/{backend_id}")
@@ -210,8 +255,15 @@ def create_remote_backends_router(
         backend = registry.get(backend_id)
         if backend is None:
             raise HTTPException(404, f"backend {backend_id!r} not found")
-        _assert_safe_backend_url(backend.url)
-        status, detail = health_check(backend)
+        _assert_safe_backend_url(backend.url, ssh=backend.ssh)
+        try:
+            with connect_remote_backend(backend) as connected:
+                status, detail = health_check(
+                    connected,
+                    auth_token=registry.auth_token(backend_id),
+                )
+        except SshTunnelError as exc:
+            status, detail = "error", f"ssh_tunnel_failed: {exc}"
         registry.update_health(backend_id, status=status, detail=detail)
         return {
             "status": status,
@@ -230,7 +282,7 @@ def create_remote_backends_router(
         backend = registry.get(backend_id)
         if backend is None:
             raise HTTPException(404, f"backend {backend_id!r} not found")
-        _assert_safe_backend_url(backend.url)
+        _assert_safe_backend_url(backend.url, ssh=backend.ssh)
         payload = body or {}
         method = str(payload.get("method") or "GET").upper()
         path = str(payload.get("path") or "").strip()
@@ -238,14 +290,29 @@ def create_remote_backends_router(
             raise HTTPException(400, "path is required")
         json_body = payload.get("json")
         try:
-            result = proxy_request(
-                backend,
-                method=method,
-                path=path,
-                json=json_body,
-                timeout_seconds=float(payload.get("timeout_seconds") or 30.0),
-            )
-        except ValueError as exc:
+            with connect_remote_backend(backend) as connected:
+                result = proxy_request(
+                    connected,
+                    method=method,
+                    path=path,
+                    json=json_body,
+                    timeout_seconds=float(payload.get("timeout_seconds") or 30.0),
+                    auth_token=registry.auth_token(backend_id),
+                )
+        except (ValueError, SshTunnelError) as exc:
+            if isinstance(exc, SshTunnelError):
+                registry.update_health(
+                    backend_id,
+                    status="error",
+                    detail=f"ssh_tunnel_failed: {exc}",
+                )
+                return {
+                    "status_code": 0,
+                    "body": {
+                        "error": "ssh_tunnel_failed",
+                        "detail": str(exc),
+                    },
+                }
             raise HTTPException(400, str(exc)) from exc
         return result
 
@@ -271,7 +338,7 @@ def create_remote_backends_router(
             await ws.close(code=4401)
             return
 
-        await ws.accept(subprotocol=accepted_auth_subprotocol(ws))
+        await ws.accept()
         from runtime.platform import feature_flags as _ff
 
         if not _ff.is_on("ui.remote_transport"):
@@ -297,7 +364,40 @@ def create_remote_backends_router(
             await ws.close(code=1008)
             return
 
-        await proxy_websocket(backend, ws)
+        forwarder: SshTunnelForwarder | None = None
+        connected = backend
+        if backend.ssh is not None:
+            import asyncio
+
+            forwarder = SshTunnelForwarder(backend)
+            try:
+                connected = await asyncio.to_thread(forwarder.start)
+            except SshTunnelError as exc:
+                from runtime.sensing.gateway.remote_transport import (
+                    _ws_error_envelope,
+                )
+
+                registry.update_health(
+                    backend_id,
+                    status="error",
+                    detail=f"ssh_tunnel_failed: {exc}",
+                )
+                await ws.send_text(
+                    _ws_error_envelope(f"ssh_tunnel_failed: {exc}"),
+                )
+                await ws.close(code=1011)
+                return
+        try:
+            await proxy_websocket(
+                connected,
+                ws,
+                auth_token=registry.auth_token(backend_id),
+            )
+        finally:
+            if forwarder is not None:
+                import asyncio
+
+                await asyncio.to_thread(forwarder.close)
 
     return router
 

@@ -208,6 +208,7 @@ def maybe_setup_prompt_evolution(
 
     evolve_count = 0
     if evolve_interval_s > 0:
+        mutator_router: Any
         if mutator_model.startswith("mock/"):
             mutator_router = MockModelRouter(
                 response="<suffix>prefer shorter plans · check inputs first</suffix>",
@@ -788,20 +789,35 @@ def run_serve(
         except Exception as exc:
             logging.getLogger(__name__).debug("admin agent registration failed: %s", exc)
 
-        group_registry = AgentGroupRegistry()
+        from runtime.platform.process.paths import app_paths
+
+        group_registry = AgentGroupRegistry(
+            state_path=app_paths().data_dir / "agent_groups.json",
+        )
     except Exception as exc:
         logging.getLogger(__name__).debug("agent/group registry init failed: %s", exc)
         agent_registry = None
         group_registry = None
 
     try:
-        from runtime.adapters.channels import ChannelManager
+        from runtime.adapters.channels import (
+            ChannelManager,
+            ChannelOperationsStore,
+            ThreadConversationStore,
+        )
 
         # 章鱼助手（octopus）是 Octopus 本体 · 用户的私人助手。远程 IM（钉钉 /
         # 微信等）、订阅推送与项目进度消息默认都汇聚到这里，由它接住、委派与汇报。
         channel_manager = ChannelManager(
             stack=stack,
             agent_registry=agent_registry,
+            group_registry=group_registry,
+            store=ThreadConversationStore(
+                path=app_paths().data_dir / "channel_conversations.jsonl",
+            ),
+            operations_store=ChannelOperationsStore(
+                path=app_paths().data_dir / "channel_operations.json",
+            ),
             default_agent_id="octopus",
         )
     except Exception as exc:
@@ -847,6 +863,12 @@ def run_serve(
         # invokes it again (idempotently) for startup failures/test runners that
         # return without entering ASGI lifespan.
         app.router.add_event_handler("shutdown", _shutdown_cron)
+    if channel_manager is not None:
+        # Credential-backed polling and socket channels must share the ASGI
+        # service lifecycle.  This also makes hot credential replacement safe:
+        # ChannelManager.register() starts newly-added transports once active.
+        app.router.add_event_handler("startup", channel_manager.start_all)
+        app.router.add_event_handler("shutdown", channel_manager.stop_all)
 
     # For a single-machine setup, let the regular ``octopus serve`` path own
     # the optional File Agent service too.  This deliberately lives next to

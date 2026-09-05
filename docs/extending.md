@@ -271,7 +271,7 @@ The judge catches semantic violations the regex can't reach
 (ransomware requests, phishing drafts, coerced role-play to
 exfil PII). The recommended wiring goes through the
 runtime's `ModelRouter` abstraction — any Anthropic / OpenAI /
-Molili / Mock subclass works, and you get a 60 s TTL cache
+Oct / Mock subclass works, and you get a 60 s TTL cache
 for free (chatty agents re-send near-duplicates during tool
 loops · the cache keeps your judge cost bounded):
 

@@ -103,6 +103,24 @@ def post_public(
     return _parse(r, url)
 
 
+def get_public(
+    url: str,
+    *,
+    timeout: float,
+    params: dict[str, Any] | None = None,
+    http_client: Any = None,
+) -> dict[str, Any]:
+    """Public GET that deliberately sends no Authorization header."""
+
+    client = _client(http_client)
+    try:
+        r = client.get(url, params=params or {}, timeout=timeout)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("oct public GET %s unreachable: %s", url, exc)
+        raise OctClientError(f"gateway unreachable: {exc}") from exc
+    return _parse(r, url)
+
+
 def get_auth(
     url: str,
     *,
@@ -112,8 +130,10 @@ def get_auth(
     http_client: Any = None,
 ) -> dict[str, Any]:
     """带 Bearer 的 GET(account/billing 查询)。"""
+    if not isinstance(token, str) or not token.strip():
+        raise OctClientError("gateway bearer token is missing", status_code=401)
     client = _client(http_client)
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {token.strip()}"}
     try:
         r = client.get(url, headers=headers, params=params or {}, timeout=timeout)
     except Exception as exc:  # noqa: BLE001

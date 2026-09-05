@@ -13,6 +13,7 @@ from runtime.core.cerebrum.react_guards import (
     _language_mismatched_verification_guard,
 )
 from runtime.core.cerebrum.react_parsing import (
+    _has_code_verification,
     _has_language_specific_verification,
     _path_language,
 )
@@ -93,6 +94,12 @@ class TestLanguageSpecificVerification:
     def test_unknown_language_returns_false(self) -> None:
         steps = [_step(1, action='exec_shell({"command": "pytest"})')]
         assert not _has_language_specific_verification(steps, language="haskell")
+
+    def test_version_and_collect_only_probes_do_not_count(self) -> None:
+        version = [_step(1, action='exec_shell({"command": "ruff --version"})')]
+        collect = [_step(1, action='exec_shell({"command": "pytest --collect-only"})')]
+        assert not _has_code_verification(version)
+        assert not _has_code_verification(collect)
 
 
 # ──────────────────────────────────────────────────────────────────

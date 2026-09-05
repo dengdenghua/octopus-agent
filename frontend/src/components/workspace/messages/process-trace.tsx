@@ -132,6 +132,9 @@ export function ProcessTrace({
   const failedAgentCount = parallelAgents.filter(
     (agent) => agent.status === "error",
   ).length;
+  const isCoworkResponseGroup =
+    parallelAgents.length > 0 &&
+    parallelAgents.every((agent) => agent.role === "cowork");
   const showProcessBody = open;
   const hasSectionCards = sections.length > 0;
 
@@ -167,11 +170,17 @@ export function ProcessTrace({
         </span>
         <span className="shrink-0 text-xs text-muted-foreground">
           {showAgents
-            ? t.message.agentProgressSummary(
-                parallelAgents.length,
-                completedAgentCount,
-                failedAgentCount,
-              )
+            ? isCoworkResponseGroup
+              ? t.message.agentResponseSummary(
+                  parallelAgents.length,
+                  completedAgentCount,
+                  failedAgentCount,
+                )
+              : t.message.agentProgressSummary(
+                  parallelAgents.length,
+                  completedAgentCount,
+                  failedAgentCount,
+                )
             : progress
               ? `${progress.current}/${progress.total}`
               : `${doneCount}/${totalCount}`}
@@ -195,6 +204,7 @@ export function ProcessTrace({
                 error: t.message.statusError,
                 pending: t.message.statusWaiting,
               }}
+              respondedLabel={t.message.statusResponded}
             />
           ) : hasSectionCards ? (
             sections.map((section) => (
@@ -268,9 +278,11 @@ export function ProcessTrace({
 function AgentClusterCard({
   agents,
   statusLabels,
+  respondedLabel,
 }: {
   agents: MessageAgentRow[];
   statusLabels: Record<MessageAgentRow["status"], string>;
+  respondedLabel: string;
 }) {
   return (
     <div className="px-1 py-1">
@@ -279,7 +291,11 @@ function AgentClusterCard({
           <AgentClusterRow
             key={agent.id}
             agent={agent}
-            statusLabel={statusLabels[agent.status]}
+            statusLabel={
+              agent.role === "cowork" && agent.status === "done"
+                ? respondedLabel
+                : statusLabels[agent.status]
+            }
           />
         ))}
       </div>
@@ -417,7 +433,7 @@ function TraceSectionCard({ section }: { section: TraceSection }) {
       ? "waiting"
       : section.events.some((event) => event.status === "running")
         ? "running"
-      : "done";
+        : "done";
   const displayItems = useMemo(
     () => compactTraceEvents(section.events),
     [section.events],
@@ -502,7 +518,11 @@ function compactTraceEvents(events: LiveToolEvent[]): TraceDisplayItem[] {
       continue;
     }
 
-    const summary = { kind: "delegation-summary" as const, events: [event], target };
+    const summary = {
+      kind: "delegation-summary" as const,
+      events: [event],
+      target,
+    };
     delegationBuckets.set(target, summary);
     items.push(summary);
   }

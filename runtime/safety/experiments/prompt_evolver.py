@@ -10,6 +10,7 @@ from typing import Any
 
 from runtime.adapters.instrumentation import trace_stage
 from runtime.platform.i18n import get_safety_relax_markers
+from runtime.safety.auth.scope import TenantScope
 
 from .pareto import pareto_frontier_by_name
 from .prompt_mutator import MutationProposal, PromptMutator
@@ -83,6 +84,7 @@ class PromptEvolver:
         *,
         guard_digest_provider: Callable[[], dict[str, Any] | None] | None = None,
         trust_score_provider: Callable[[], float | None] | None = None,
+        scope: TenantScope | None = None,
     ) -> None:
         self.optimizer = optimizer
         self.mutator = mutator
@@ -99,6 +101,11 @@ class PromptEvolver:
         # safety constraints when the agent is currently suspect.
         # Defaults to None (no gate).
         self._trust_score_provider = trust_score_provider
+        # Learning is ownership-scoped.  ``None`` is intentionally
+        # legacy-only in the downstream readers, preserving local/old journal
+        # compatibility without letting a process-global evolver train on
+        # authenticated tenants.
+        self.scope = scope
 
     def _fetch_guard_digest(self) -> dict[str, Any] | None:
         """Pull the latest GuardTelemetry digest, defensively.
@@ -199,7 +206,7 @@ class PromptEvolver:
 
     def step(self) -> EvolutionStep:
         with trace_stage("camouflage.prompt_evolver.step") as span:
-            report = self.optimizer.report()
+            report = self.optimizer.report(scope=self.scope)
             step = EvolutionStep(snapshot_before={n: r for n, r in report.items()})
 
             if self.policy.retire_on_losing:
@@ -323,6 +330,7 @@ class PromptEvolver:
             journal=self.optimizer.stack.journal,
             recipe_id=self.optimizer.planner_for(base_name).recipe_hash(),
             guard_digest=digest,
+            scope=self.scope,
         )
         if proposal is None:
             step.mutation_skipped_reason = "mutator_returned_none"

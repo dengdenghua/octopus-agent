@@ -82,6 +82,10 @@ _LANG_VERIFY_MARKERS: dict[str, tuple[str, ...]] = {
 _VERIFY_MARKERS_ALL: tuple[str, ...] = tuple(
     marker for markers in _LANG_VERIFY_MARKERS.values() for marker in markers
 )
+_VERIFICATION_PROBE_ONLY_RE = re.compile(
+    r"(?:^|\s)(?:--version|-V|--help|-h|--collect-only|--co)(?:\s|$)",
+    re.IGNORECASE,
+)
 
 
 # File-extension → language bucket. Kept conservative: only languages
@@ -163,11 +167,13 @@ def _step_is_verify(step: ReActStep, *, markers: tuple[str, ...]) -> bool:
         if parsed is None:
             continue
         name, args = parsed
+        command = str(args.get("command") or args.get("cmd") or "")
+        if _VERIFICATION_PROBE_ONLY_RE.search(command):
+            continue
         if name in _DEDICATED_VERIFY_TOOLS:
             return True
         if name not in _VERIFY_TOOLS:
             continue
-        command = str(args.get("command") or args.get("cmd") or "")
         if "tsc" in markers and _node_command_is_verification(command):
             return True
         haystack = f"{action} {command}".lower()

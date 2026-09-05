@@ -20,6 +20,15 @@ from runtime.platform.process.paths import app_paths
 from ._app_context import AppContext
 
 
+def _plugin_hub_roots() -> tuple[Path, Path]:
+    """Return the shared mutable package root and immutable bundled root."""
+
+    return (
+        app_paths().data_dir / "plugins",
+        Path(__file__).resolve().parents[1] / "plugins" / "bundled",
+    )
+
+
 def _register_plugin_hub_lifecycle(app: Any, hub: Any) -> None:
     """Start loaded plugins with the app and stop their background work cleanly."""
 
@@ -259,10 +268,21 @@ def mount_routers_b(
             create_agent_trace_router,
         )
 
+        _trace_registry = None
+        if stack is not None:
+            _trace_registry = getattr(
+                getattr(stack, "executor", None),
+                "registry",
+                None,
+            )
+        _trace_registry = _trace_registry or getattr(state, "registry", None)
         app.include_router(
             create_agent_trace_router(
                 store=getattr(state, "trace_store", None),
                 db_path=ctx.trace_store_path,
+                journal=getattr(state, "journal", None),
+                registry=_trace_registry,
+                auto_persist_dir=app_paths().data_dir / "forged_skills",
                 identity_store=ctx.identity_store,
                 require_auth=ctx.require_auth,
                 jwt_secret=ctx.jwt_secret,
@@ -591,8 +611,11 @@ def mount_routers_b(
     # Each plugin can register skills, channels, routes, and a
     # frontend config UI via plugin.yaml + ModulePlugin subclass.
     try:
+        from runtime.execution.arms.tool_registry import get_tool_registry
+        from runtime.execution.suckers.jobs_skills import get_jobs_registry
         from runtime.platform.plugins.plugin_hub import PluginHub
         from runtime.platform.process.composition import build_default_service_bus
+        from runtime.safety.hooks import get_global_registry
         from runtime.sensing.gateway.plugin_hub_router import (
             create_plugin_hub_router,
         )
@@ -606,17 +629,22 @@ def mount_routers_b(
         )
         app.state.service_bus = _service_bus
 
+        plugin_dir, bundled_plugin_dir = _plugin_hub_roots()
         _hub = PluginHub(
-            # Cloud workbench packages are installed below the runtime data
-            # root.  Appliance deployments set ``OCTOPUS_DATA_DIR`` to an
-            # isolated writable volume, so PluginHub must discover external
-            # packages there instead of falling back to the developer's
-            # ``~/.octopus/plugins`` directory.
-            plugin_dir=app_paths().data_dir / "plugins",
+            # CloudCatalog always installs workbenches below the active app
+            # data root. PluginHub must use that same root in source checkouts
+            # as well as packaged deployments or newly installed runtime
+            # plugins cannot be discovered and activated.
+            plugin_dir=plugin_dir,
+            bundled_plugin_dir=bundled_plugin_dir,
             skill_registry=state.registry,
             channel_manager=ctx.channel_manager,
             fastapi_app=app,
             service_bus=_service_bus,
+            tool_registry=get_tool_registry(),
+            prompt_registry=getattr(app.state, "prompt_registry", None),
+            hook_registry=get_global_registry(),
+            jobs_registry=get_jobs_registry(),
         )
         _loaded = _hub.load_all()
         if _loaded:
@@ -689,17 +717,6 @@ def mount_routers_b(
             _design_exc,
         )
 
-    from runtime.sensing.gateway.stub_router import create_stub_router
-
-    app.include_router(
-        create_stub_router(
-            require_auth=ctx.require_auth,
-            jwt_secret=ctx.jwt_secret,
-            jwt_issuer=ctx.jwt_issuer,
-            jwt_audience=ctx.jwt_audience,
-        )
-    )
-
     # ─── A2A remote agent registry (a2a-agents-panel) ─────────────
     # Frontend panel shipped earlier without backend routes; mount the
     # protocol relay so registered remote agents can be listed, probed,
@@ -716,6 +733,17 @@ def mount_routers_b(
                 jwt_audience=ctx.jwt_audience,
             )
         )
+        from runtime.sensing.gateway.a2a_server import mount_a2a_server
+
+        mount_a2a_server(
+            app,
+            identity_store=ctx.identity_store,
+            require_auth=ctx.require_auth,
+            jwt_secret=ctx.jwt_secret,
+            jwt_issuer=ctx.jwt_issuer,
+            jwt_audience=ctx.jwt_audience,
+            data_dir=app_paths().data_dir,
+        )
     except Exception as _a2a_exc:  # noqa: BLE001 — optional surface
         logging.getLogger(__name__).warning(
             "A2A router failed to initialize: %s",
@@ -730,10 +758,14 @@ def mount_routers_b(
     if stack is not None:
         _tr_registry = getattr(getattr(stack, "executor", None), "registry", None)
     _tr_registry = _tr_registry or getattr(state, "registry", None)
+    from runtime.platform.capabilities.capability_registry import CapabilityRegistry
+
     app.include_router(
         create_teach_repeat_router(
             journal=getattr(state, "journal", None),
             registry=_tr_registry,
+            auto_persist_dir=app_paths().data_dir / "forged_skills",
+            capability_registry=CapabilityRegistry(),
             identity_store=ctx.identity_store,
             require_auth=ctx.require_auth,
             jwt_secret=ctx.jwt_secret,
@@ -791,4 +823,19 @@ def mount_routers_b(
             stack=stack,
             agent_registry=ctx.agent_registry,
         ),
+    )
+
+    # Broad compatibility stubs must always be registered last. FastAPI uses
+    # first-match route ordering; placing these catch-alls earlier shadowed
+    # real A2A / Teach & Repeat / extension routes and bypassed their auth
+    # dependencies with a misleading 404.
+    from runtime.sensing.gateway.stub_router import create_stub_router
+
+    app.include_router(
+        create_stub_router(
+            require_auth=ctx.require_auth,
+            jwt_secret=ctx.jwt_secret,
+            jwt_issuer=ctx.jwt_issuer,
+            jwt_audience=ctx.jwt_audience,
+        )
     )

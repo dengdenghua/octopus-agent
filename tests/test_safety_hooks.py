@@ -77,6 +77,25 @@ class TestRegistryBasics:
         assert len(reg.handlers_for(PreToolUseEvent)) == 1
         assert len(reg.handlers_for(PostToolUseEvent)) == 0
 
+    def test_registration_disposer_removes_only_owned_handler(self):
+        from runtime.safety.hooks import HookRegistry, PreToolUseEvent
+
+        reg = HookRegistry()
+
+        def first(_event):
+            return None
+
+        def second(_event):
+            return None
+
+        dispose_first = reg.register(PreToolUseEvent, first)
+        reg.register(PreToolUseEvent, second)
+
+        dispose_first()
+        dispose_first()
+
+        assert reg.handlers_for(PreToolUseEvent) == [second]
+
 
 # ═══════════════════════════════════════════════════════════
 # Dispatch chain semantics

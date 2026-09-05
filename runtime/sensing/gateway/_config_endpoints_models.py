@@ -185,10 +185,12 @@ def _register_models(router: Any, ctx: _ConfigCtx) -> None:
                     "name": variant,
                     "model": variant,
                     "display_name": display,
+                    "source_display_name": entry_label,
                     "provider": provider,
                     "supports_thinking": supports_thinking,
                     "supports_vision": supports_vision,
                     "supports_tool_use": supports_tool_use,
+                    "is_free": bool(e.get("is_free", False)),
                     "context_window": context_window,
                     "context_profile": "default",
                     "omit_sampling_parameters": (

@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import re
+import threading
+import time
 from typing import Any
 
 import pytest
@@ -141,6 +143,205 @@ def test_all_three_succeed(monkeypatch):
     assert r["notes"] == []
     assert len(r["successes"]) == 3
     assert {s["output"] for s in r["successes"]} == {"o1", "o2", "o3"}
+
+
+def test_first_success_settles_early_and_cancels_remaining_lane(monkeypatch):
+    from runtime.execution.suckers.delegation_skills import _call_agent_parallel
+    from runtime.safety.approval.cancellation import current_cancellation_token
+
+    slow_started = threading.Event()
+    slow_cancelled = threading.Event()
+
+    def _fake_call_subagent(agent_id="", prompt="", **_kw):
+        if prompt == "fast":
+            assert slow_started.wait(timeout=1)
+            return {"agent_id": agent_id, "output": "winner", "success": True}
+        slow_started.set()
+        token = current_cancellation_token()
+        deadline = time.monotonic() + 2
+        while not token.is_cancelled and time.monotonic() < deadline:
+            time.sleep(0.005)
+        if token.is_cancelled:
+            slow_cancelled.set()
+        return {
+            "agent_id": agent_id,
+            "output": "",
+            "success": False,
+            "status": "cancelled",
+            "error": token.reason or "not cancelled",
+        }
+
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", _fake_call_subagent)
+
+    started_at = time.monotonic()
+    result = _call_agent_parallel(
+        specs=_specs("slow", "fast"),
+        completion_policy="first_success",
+    )
+
+    assert time.monotonic() - started_at < 1
+    assert result["ok"] is True
+    assert result["policy_satisfied"] is True
+    assert result["completion_policy"] == "first_success"
+    assert result["success_count"] == 1
+    assert result["cancelled_count"] == 1
+    assert result["successes"][0]["output"] == "winner"
+    assert slow_cancelled.wait(timeout=1)
+
+
+def test_quorum_settles_after_required_successes(monkeypatch):
+    from runtime.execution.suckers.delegation_skills import _call_agent_parallel
+    from runtime.safety.approval.cancellation import current_cancellation_token
+
+    slow_started = threading.Event()
+    slow_cancelled = threading.Event()
+
+    def _fake_call_subagent(agent_id="", prompt="", **_kw):
+        if prompt.startswith("fast"):
+            assert slow_started.wait(timeout=1)
+            return {"agent_id": agent_id, "output": prompt, "success": True}
+        slow_started.set()
+        token = current_cancellation_token()
+        deadline = time.monotonic() + 2
+        while not token.is_cancelled and time.monotonic() < deadline:
+            time.sleep(0.005)
+        if token.is_cancelled:
+            slow_cancelled.set()
+        return {
+            "agent_id": agent_id,
+            "output": "",
+            "success": False,
+            "status": "cancelled",
+            "error": token.reason or "not cancelled",
+        }
+
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", _fake_call_subagent)
+
+    result = _call_agent_parallel(
+        specs=_specs("slow", "fast-1", "fast-2"),
+        completion_policy="quorum",
+        quorum=2,
+    )
+
+    assert result["policy_satisfied"] is True
+    assert result["completion_target"] == 2
+    assert result["success_count"] == 2
+    assert result["cancelled_count"] == 1
+    assert slow_cancelled.wait(timeout=1)
+
+
+def test_first_completed_can_settle_on_failure_without_claiming_success(monkeypatch):
+    from runtime.execution.suckers.delegation_skills import _call_agent_parallel
+    from runtime.safety.approval.cancellation import current_cancellation_token
+
+    slow_started = threading.Event()
+    slow_cancelled = threading.Event()
+
+    def _fake_call_subagent(agent_id="", prompt="", **_kw):
+        if prompt == "fast-failure":
+            assert slow_started.wait(timeout=1)
+            return {
+                "agent_id": agent_id,
+                "output": "",
+                "success": False,
+                "error": "provider rejected request",
+            }
+        slow_started.set()
+        token = current_cancellation_token()
+        deadline = time.monotonic() + 2
+        while not token.is_cancelled and time.monotonic() < deadline:
+            time.sleep(0.005)
+        if token.is_cancelled:
+            slow_cancelled.set()
+        return {
+            "agent_id": agent_id,
+            "output": "",
+            "success": False,
+            "status": "cancelled",
+            "error": token.reason or "not cancelled",
+        }
+
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", _fake_call_subagent)
+
+    result = _call_agent_parallel(
+        specs=_specs("slow", "fast-failure"),
+        completion_policy="first_completed",
+    )
+
+    assert result["policy_satisfied"] is True
+    assert result["ok"] is False
+    assert result["success_count"] == 0
+    assert result["failed"] == 1
+    assert result["cancelled_count"] == 1
+    assert slow_cancelled.wait(timeout=1)
+
+
+def test_impossible_quorum_stops_remaining_work(monkeypatch):
+    from runtime.execution.suckers.delegation_skills import _call_agent_parallel
+    from runtime.safety.approval.cancellation import current_cancellation_token
+
+    slow_started = threading.Event()
+    slow_cancelled = threading.Event()
+
+    def _fake_call_subagent(agent_id="", prompt="", **_kw):
+        if prompt.startswith("fail"):
+            assert slow_started.wait(timeout=1)
+            return {
+                "agent_id": agent_id,
+                "output": "",
+                "success": False,
+                "error": f"{prompt} failed",
+            }
+        slow_started.set()
+        token = current_cancellation_token()
+        deadline = time.monotonic() + 2
+        while not token.is_cancelled and time.monotonic() < deadline:
+            time.sleep(0.005)
+        if token.is_cancelled:
+            slow_cancelled.set()
+        return {
+            "agent_id": agent_id,
+            "output": "",
+            "success": False,
+            "status": "cancelled",
+            "error": token.reason or "not cancelled",
+        }
+
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", _fake_call_subagent)
+
+    result = _call_agent_parallel(
+        specs=_specs("slow", "fail-1", "fail-2"),
+        completion_policy="quorum",
+        quorum=3,
+    )
+
+    assert result["policy_satisfied"] is False
+    assert result["ok"] is False
+    assert result["failed"] >= 1
+    assert result["cancelled_count"] >= 1
+    assert result["failed"] + result["cancelled_count"] == 3
+    assert slow_cancelled.wait(timeout=1)
+
+
+def test_invalid_completion_policy_fails_before_spawning(monkeypatch):
+    from runtime.execution.suckers.delegation_skills import _call_agent_parallel
+
+    called = False
+
+    def _fake_call_subagent(**_kw):
+        nonlocal called
+        called = True
+        return {"output": "unexpected", "success": True}
+
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", _fake_call_subagent)
+    result = _call_agent_parallel(
+        specs=_specs("a"),
+        completion_policy="eventually_maybe",
+    )
+
+    assert result["ok"] is False
+    assert "completion_policy" in result["error"]
+    assert called is False
 
 
 def test_specs_json_string_is_accepted(monkeypatch):

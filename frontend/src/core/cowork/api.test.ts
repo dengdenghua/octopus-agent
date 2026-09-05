@@ -2,6 +2,12 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
   applyCollabRoomMessageProjectAction,
+  createCollabAnnotation,
+  createCollabAnnotationReply,
+  deleteCollabAnnotation,
+  getCollabAnnotations,
+  getCollabMessageReactions,
+  getCollabPinnedMessages,
   getCollabSession,
   getCoworkGroup,
   inviteCoworkMember,
@@ -10,6 +16,9 @@ import {
   removeCoworkMember,
   replaceCoworkRoster,
   setCoworkMode,
+  setCollabAnnotationResolved,
+  toggleCollabMessageReaction,
+  toggleCollabPinnedMessage,
 } from "./api";
 
 const fetchMock = vi.fn();
@@ -186,6 +195,113 @@ describe("cowork api", () => {
           display_name: "Planner",
         }),
       },
+    ]);
+  });
+
+  test("persists annotation threads through the collaboration API", async () => {
+    const annotation = {
+      annotation_id: "annotation-1",
+      message_id: "thread:message-1",
+      author: { display_name: "Eve", avatar_color: "#2563eb" },
+      body: "请确认验收标准",
+      created_at: 1,
+      resolved: false,
+      replies: [],
+    };
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ annotations: [annotation] }))
+      .mockResolvedValueOnce(jsonResponse({ annotation }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          annotation: { ...annotation, resolved: true },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          reply: {
+            reply_id: "reply-1",
+            author: annotation.author,
+            body: "已确认",
+            created_at: 2,
+          },
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+    expect(await getCollabAnnotations("thread/1")).toEqual([annotation]);
+    await createCollabAnnotation("thread/1", {
+      message_id: "thread:message-1",
+      body: "请确认验收标准",
+      display_name: "Eve",
+    });
+    await setCollabAnnotationResolved("thread/1", "annotation-1", true);
+    await createCollabAnnotationReply("thread/1", "annotation-1", {
+      body: "已确认",
+    });
+    await deleteCollabAnnotation("thread/1", "annotation-1");
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "/api/collab/thread%2F1/annotations",
+      "/api/collab/thread%2F1/annotations",
+      "/api/collab/thread%2F1/annotations/annotation-1",
+      "/api/collab/thread%2F1/annotations/annotation-1/replies",
+      "/api/collab/thread%2F1/annotations/annotation-1",
+    ]);
+  });
+
+  test("loads and toggles durable message reactions", async () => {
+    const reaction = {
+      message_id: "thread:message-1",
+      emoji: "👍",
+      count: 1,
+      participant_ids: ["local"],
+      active: true,
+    };
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ reactions: [reaction] }))
+      .mockResolvedValueOnce(jsonResponse({ reaction }));
+
+    expect(await getCollabMessageReactions("thread/1")).toEqual([reaction]);
+    await toggleCollabMessageReaction("thread/1", {
+      message_id: "thread:message-1",
+      emoji: "👍",
+    });
+
+    expect(fetchMock.mock.calls).toEqual([
+      ["/api/collab/thread%2F1/reactions", { headers: {} }],
+      [
+        "/api/collab/thread%2F1/reactions",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message_id: "thread:message-1", emoji: "👍" }),
+        },
+      ],
+    ]);
+  });
+
+  test("loads and toggles durable pinned messages", async () => {
+    const pin = {
+      message_id: "thread:decision-1",
+      pinned_by: "user",
+      created_at: 1,
+    };
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ pinned_messages: [pin] }))
+      .mockResolvedValueOnce(
+        jsonResponse({ pin: { message_id: pin.message_id, pinned: true } }),
+      );
+
+    expect(await getCollabPinnedMessages("thread/1")).toEqual([pin]);
+    await expect(
+      toggleCollabPinnedMessage("thread/1", pin.message_id),
+    ).resolves.toEqual({
+      message_id: pin.message_id,
+      pinned: true,
+    });
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "/api/collab/thread%2F1/pinned-messages",
+      "/api/collab/thread%2F1/pinned-messages",
     ]);
   });
 

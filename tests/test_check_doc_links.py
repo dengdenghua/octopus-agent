@@ -5,7 +5,7 @@ from scripts.check_doc_links import find_md_links
 
 def test_find_md_links_ignores_protocol_syntax_inside_code() -> None:
     content = """Real [guide](guide.md).
-Inline ``@[label](dsh-session:<payload>)`` syntax.
+Inline ``@[label](octopus-session:<payload>)`` syntax.
 ```markdown
 [example](missing.md)
 ```

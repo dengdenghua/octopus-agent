@@ -88,3 +88,43 @@ def test_default_cap_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert bridge._default_max_active_subagents() == 64
     monkeypatch.delenv("OCTOPUS_MAX_ACTIVE_SUBAGENTS", raising=False)
     assert bridge._default_max_active_subagents() == 64
+
+
+def test_subtree_concurrency_isolated_by_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(bridge, "MAX_ACTIVE_SUBAGENTS", 10)
+    monkeypatch.setattr(bridge, "MAX_ACTIVE_SUBAGENTS_PER_ROOT", 2)
+    assert bridge._acquire_subagent_slot("root-a") is True
+    assert bridge._acquire_subagent_slot("root-a") is True
+    assert bridge._acquire_subagent_slot("root-a") is False
+    # One noisy tree cannot consume another tree's reserved concurrency.
+    assert bridge._acquire_subagent_slot("root-b") is True
+    bridge._release_subagent_slot("root-b")
+    bridge._release_subagent_slot("root-a")
+    bridge._release_subagent_slot("root-a")
+
+
+def test_explicit_nesting_depth_cap_fails_before_runner(monkeypatch: pytest.MonkeyPatch) -> None:
+    from runtime.platform.process.session import Session
+
+    monkeypatch.setattr(bridge, "MAX_SUBAGENT_DEPTH", 2)
+    called = False
+
+    def _runner(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        return "should not run"
+
+    result = bridge.call_subagent(
+        agent_id="researcher",
+        prompt="nested work",
+        session=Session(
+            turn_id="turn-root",
+            metadata={"_subagent_depth": 2, "_subagent_root_id": "turn-root"},
+        ),
+        runner=_runner,
+    )
+    assert result["success"] is False
+    assert result["governance_error"] == "depth_exhausted"
+    assert result["subagent_depth"] == 3
+    assert result["subagent_root_id"] == "turn-root"
+    assert called is False

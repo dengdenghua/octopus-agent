@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 from typing import Any
 
 from runtime.execution.loops._controller_attempt import LoopControllerAttemptMixin
 from runtime.execution.loops._controller_helpers import (
     _PRODUCT_LOOP_MODES,
     _VERIFIED_LOOP_MODES,
+    _attempt_exception_category,
+    _attempt_exception_error_text,
+    _attempt_exception_repairable,
     _now_iso,
     _resolve_workspace_path,
     _unsupported_mode_result,
@@ -50,6 +54,7 @@ class LoopController(
         workspace_manager: WorkspaceManager,
         verifier_registry: LoopVerifierRegistry | None = None,
         review_queue: ReviewQueue | None = None,
+        candidate_registry_path: str | Path | None = None,
         trace_store: AgentTraceStore | None = None,
         task_supervisor: TaskSupervisor | None = None,
         react_runner: Any = None,
@@ -59,6 +64,9 @@ class LoopController(
         self.workspace_manager = workspace_manager
         self.verifier_registry = verifier_registry or build_default_loop_verifier_registry()
         self.review_queue = review_queue
+        self.candidate_registry_path = (
+            Path(candidate_registry_path) if candidate_registry_path is not None else None
+        )
         self.trace_store = trace_store
         self.task_supervisor = task_supervisor
         self.react_runner = react_runner
@@ -226,6 +234,8 @@ class LoopController(
         )
         self._record_trace_run_started(run)
         run = self._recover_interrupted_attempts(run_id)
+        if run.status == LoopRunStatus.INTERRUPTED:
+            return self._finalize_learning(run)
         terminal = self._recover_verified_terminal_run(run_id)
         if terminal is not None:
             return terminal
@@ -309,14 +319,47 @@ class LoopController(
                     run,
                     prompt,
                     workspace_path,
+                    attempt_index=attempt_index,
                     cancellation_token=cancellation_token,
                 )
             except Exception as exc:
                 if not self._supervisor_heartbeat(run_id):
                     return self._latest_run(run_id)
-                error_text = str(exc)
-                run = self._record_attempt_exception(run_id, attempt_index, exc)
-                if attempt_index >= max_attempts:
+                failure_category = _attempt_exception_category(exc)
+                error_text = _attempt_exception_error_text(
+                    exc,
+                    category=failure_category,
+                )
+                run = self._record_attempt_exception(
+                    run_id,
+                    attempt_index,
+                    error_text,
+                    category=failure_category,
+                    effect_summary={
+                        "schema": "octopus.loop.attempt_effect_summary.v2",
+                        "emitted_by": (
+                            "react_runtime_exception_contract"
+                            if _attempt_exception_repairable(failure_category)
+                            else "unknown"
+                        ),
+                        "complete": _attempt_exception_repairable(failure_category),
+                        "sealed": _attempt_exception_repairable(failure_category),
+                        "total_tool_count": 0,
+                        "read_only_effect_count": 0,
+                        "workspace_write_effect_count": 0,
+                        "local_state_effect_count": 0,
+                        "external_effect_count": 0,
+                        "indeterminate_effect_count": 0,
+                        "unsealed_receipt_count": 0,
+                        "unknown_effect_count": (
+                            0 if _attempt_exception_repairable(failure_category) else 1
+                        ),
+                    },
+                )
+                if (
+                    not _attempt_exception_repairable(failure_category)
+                    or attempt_index >= max_attempts
+                ):
                     if not self._supervisor_heartbeat(run_id):
                         return self._latest_run(run_id)
                     run = self.store.mutate(

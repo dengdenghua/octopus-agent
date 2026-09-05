@@ -27,7 +27,7 @@ from runtime.core.cerebrum.react_types import REACT_SYSTEM_PROMPT_BASE
 # system_parts.append block in react_loop instead.
 #
 # Raised 2500 → 3100 (2026-06-25): commits 7eb0cf0f (verdict_repair +
-# tournament) and ba0ba111 (cli_team) surfaced the remaining
+# tournament) surfaced the remaining
 # delegation/orchestration skills in the base skill guidance, taking the
 # observed size to 3024 (committed at HEAD). Same sanctioned reason as
 # above — the model needs the full delegation catalog every turn, and
@@ -35,7 +35,7 @@ from runtime.core.cerebrum.react_types import REACT_SYSTEM_PROMPT_BASE
 # mode-specific. Headroom kept tight so further creep still re-fires.
 #
 # Raised 3100 → 3600 (2026-07-25): WIP commit 3859048f3 expanded the
-# cli_team partner list (Claude Code / Codex / Trae / Qoder) and earlier
+# earlier delegation descriptions and examples
 # prose polish around evidence-backed Update guidance pushed the observed
 # size to 3562. Same sanctioned reason — the partner list is factual
 # catalog info the model needs every turn, not mode-specific. Headroom

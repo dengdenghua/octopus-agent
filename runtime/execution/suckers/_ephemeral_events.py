@@ -526,25 +526,56 @@ def _emit_subagent_lifecycle_event(
     role_id = str(payload.get("role") or payload.get("agent_id") or "")
     parent_id = payload.get("parent_tool_use_id") or meta.get("_active_parent_tool_use_id") or None
     task_id_obj = meta.get("task_id")
-    try:
-        args_preview = _json.dumps(
-            {
-                "codename": payload.get("codename"),
-                "avatar": payload.get("avatar"),
-                "role": payload.get("role"),
-                "agent_id": payload.get("agent_id"),
-                "requested_agent_id": payload.get("requested_agent_id"),
-                "role_display_name": payload.get("role_display_name"),
-                "role_description": payload.get("role_description"),
-                "prompt_preview": payload.get("prompt_preview"),
-                "use_cheap_model": payload.get("use_cheap_model"),
-                "started_at": payload.get("started_at"),
-            },
-            ensure_ascii=False,
-            default=str,
-        )[:1000]
-    except (TypeError, ValueError):
-        args_preview = ""
+
+    def _bounded(value: Any, limit: int) -> Any:
+        return str(value)[:limit] if isinstance(value, str) else value
+
+    def _json_with_bounded_text_field(
+        data: dict[str, Any],
+        *,
+        text_field: str,
+        limit: int,
+    ) -> str:
+        """Serialize valid JSON while giving the large text field spare room."""
+        original = str(data.get(text_field) or "")
+        base = dict(data)
+        base[text_field] = ""
+        try:
+            encoded = _json.dumps(base, ensure_ascii=False, default=str)
+        except (TypeError, ValueError):
+            return "{}"
+        if len(encoded) > limit:
+            return "{}"
+        low, high = 0, len(original)
+        best = encoded
+        while low <= high:
+            middle = (low + high) // 2
+            candidate = dict(base)
+            candidate[text_field] = original[:middle]
+            rendered = _json.dumps(candidate, ensure_ascii=False, default=str)
+            if len(rendered) <= limit:
+                best = rendered
+                low = middle + 1
+            else:
+                high = middle - 1
+        return best
+
+    args_preview = _json_with_bounded_text_field(
+        {
+            "codename": _bounded(payload.get("codename"), 96),
+            "avatar": _bounded(payload.get("avatar"), 32),
+            "role": _bounded(payload.get("role"), 96),
+            "agent_id": _bounded(payload.get("agent_id"), 96),
+            "requested_agent_id": _bounded(payload.get("requested_agent_id"), 96),
+            "role_display_name": _bounded(payload.get("role_display_name"), 96),
+            "role_description": _bounded(payload.get("role_description"), 120),
+            "prompt_preview": payload.get("prompt_preview"),
+            "use_cheap_model": payload.get("use_cheap_model"),
+            "started_at": payload.get("started_at"),
+        },
+        text_field="prompt_preview",
+        limit=1000,
+    )
 
     try:
         from runtime.memory.journal import (
@@ -566,27 +597,24 @@ def _emit_subagent_lifecycle_event(
                 parent_tool_use_id=parent_id,
             )
         elif kind == "subagent_finished":
-            try:
-                output_preview = _json.dumps(
-                    {
-                        "codename": payload.get("codename"),
-                        "avatar": payload.get("avatar"),
-                        "role": payload.get("role"),
-                        "agent_id": payload.get("agent_id"),
-                        "requested_agent_id": payload.get("requested_agent_id"),
-                        "ok": payload.get("ok"),
-                        "duration_s": payload.get("duration_s"),
-                        "iteration_count": payload.get("iteration_count"),
-                        "files_touched": payload.get("files_touched"),
-                        "error": payload.get("error"),
-                        "status": payload.get("status"),
-                        "output": payload.get("output"),
-                    },
-                    ensure_ascii=False,
-                    default=str,
-                )[:MAX_SUBAGENT_ANSWER_CHARS]
-            except (TypeError, ValueError):
-                output_preview = ""
+            output_preview = _json_with_bounded_text_field(
+                {
+                    "codename": _bounded(payload.get("codename"), 96),
+                    "avatar": _bounded(payload.get("avatar"), 32),
+                    "role": _bounded(payload.get("role"), 96),
+                    "agent_id": _bounded(payload.get("agent_id"), 96),
+                    "requested_agent_id": _bounded(payload.get("requested_agent_id"), 96),
+                    "ok": payload.get("ok"),
+                    "duration_s": payload.get("duration_s"),
+                    "iteration_count": payload.get("iteration_count"),
+                    "files_touched": payload.get("files_touched"),
+                    "error": _bounded(payload.get("error"), 1000),
+                    "status": _bounded(payload.get("status"), 64),
+                    "output": payload.get("output"),
+                },
+                text_field="output",
+                limit=MAX_SUBAGENT_ANSWER_CHARS,
+            )
             ok = bool(payload.get("ok", True))
             duration_s = payload.get("duration_s") or 0
             try:

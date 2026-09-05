@@ -80,6 +80,7 @@ export interface CollabRoomMessageInput {
   message_type?: CoworkRoomMessageType;
   entity_refs?: CoworkRoomEntityRef[];
   system_card?: CoworkRoomSystemCard | null;
+  reply_to?: CoworkRoomReplyReference | null;
   metadata?: Record<string, unknown>;
 }
 
@@ -88,6 +89,60 @@ export interface CollabRoomMessageResponse {
   room_id: string;
   seq: number;
   message?: CoworkRoomMessage | null;
+}
+
+export interface CoworkAnnotationAuthor {
+  display_name: string;
+  avatar_color: string;
+}
+
+export interface CoworkAnnotationReply {
+  reply_id: string;
+  author: CoworkAnnotationAuthor | null;
+  body: string;
+  created_at: number;
+}
+
+export interface CoworkAnnotation {
+  annotation_id: string;
+  message_id: string;
+  author: CoworkAnnotationAuthor | null;
+  body: string;
+  created_at: number;
+  resolved: boolean;
+  replies: CoworkAnnotationReply[];
+}
+
+export interface CoworkAnnotationInput {
+  message_id: string;
+  body: string;
+  display_name?: string;
+  avatar_color?: string;
+}
+
+export interface CoworkAnnotationReplyInput {
+  body: string;
+  display_name?: string;
+  avatar_color?: string;
+}
+
+export interface CoworkMessageReaction {
+  message_id: string;
+  emoji: string;
+  count: number;
+  participant_ids: string[];
+  active?: boolean;
+}
+
+export interface CoworkMessageReactionInput {
+  message_id: string;
+  emoji: string;
+}
+
+export interface CoworkPinnedMessage {
+  message_id: string;
+  pinned_by: string;
+  created_at: number;
 }
 
 export type CoworkRoomMessageType = "message" | "system_card";
@@ -138,8 +193,26 @@ export interface CoworkRoomMessageMetadata {
   message_type?: CoworkRoomMessageType;
   entity_refs?: CoworkRoomEntityRef[];
   system_card?: CoworkRoomSystemCard | null;
+  /** Structured parent pointer for threaded replies (kept separate from text quoting). */
+  reply_to?: CoworkRoomReplyReference | null;
   project_actions?: CoworkRoomProjectActionReceipt[];
   [key: string]: unknown;
+}
+
+export interface CoworkRoomReplyReference {
+  message_id?: string;
+  seq?: number;
+  participant_id?: string;
+  display_name?: string;
+  text?: string;
+}
+
+export interface CoworkRoomMessageReceipt {
+  message_id: string;
+  participant_id: string;
+  status: "delivered" | "read";
+  seq?: number | null;
+  updated_at?: string;
 }
 
 /** Canonical message returned by GET /api/collab/{thread_id}. */
@@ -152,6 +225,7 @@ export interface CoworkRoomMessage {
   text: string;
   ts?: string;
   metadata?: CoworkRoomMessageMetadata;
+  receipts?: CoworkRoomMessageReceipt[];
 }
 
 export type CoworkProjectTaskType =
@@ -253,6 +327,7 @@ export interface CoworkSearchResponse {
 export interface CoworkMemberPresence {
   member_id: string;
   last_read: number;
+  last_read_message_seq?: number;
   last_seen_at: string | null;
   online: boolean;
   unread: number;

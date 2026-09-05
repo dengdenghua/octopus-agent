@@ -12,11 +12,10 @@ def maybe_expand_slash_command(goal: str) -> str:
     name = head.strip()
     if not name:
         return goal
-    # Project OS control surface: ``/project ...`` is interpreted by the
-    # project-mode driver (milestone DAG / PM console), not expanded as a
-    # generic slash template. A bundled ``project`` command exists purely so
-    # the composer typeahead can surface it — its body must never replace the
-    # user's raw control text.
+    # Project OS control surface: ``/project ...`` is an explicit intent handled
+    # by the Project OS command driver, independently of the group's response
+    # mode. A bundled ``project`` command exists so composer typeahead can
+    # surface it; its body must never replace the user's raw control text.
     if name == "project":
         return goal
     try:

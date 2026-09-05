@@ -51,6 +51,11 @@ class ThreadConversationStore:
         with self._lock:
             return len(self._memory)
 
+    def count_for_channel(self, channel_id: str) -> int:
+        """Return durable thread bindings owned by one channel."""
+        with self._lock:
+            return sum(1 for cid, _thread_id in self._memory if cid == channel_id)
+
     def _append(
         self,
         channel_id: str,

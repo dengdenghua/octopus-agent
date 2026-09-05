@@ -51,6 +51,7 @@ tier: "standard"
 | func | `def is_insufficient_credits(status_code)` | 网关 402 = 积分不足。 |
 | func | `def mask_email(email)` |  |
 | func | `def post_public(url, body, timeout, http_client)` | 无鉴权 POST(发码/登录)。日志脱敏 email。 |
+| func | `def get_public(url, timeout, params, http_client)` | Public GET that deliberately sends no Authorization header. |
 | func | `def get_auth(url, token, timeout, params, http_client)` | 带 Bearer 的 GET(account/billing 查询)。 |
 | func | `def post_auth(url, body, token, timeout, http_client)` | 带 Bearer 的 POST(daily-claim/orders/estimate)。 |
 

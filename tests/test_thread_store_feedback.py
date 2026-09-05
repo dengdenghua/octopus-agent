@@ -1,6 +1,6 @@
 """Integration tests for ThreadStateStore feedback system.
 
-DSH P2 feature parity: feedback integration tests.
+Octopus Native feedback integration tests.
 """
 
 from __future__ import annotations

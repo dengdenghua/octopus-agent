@@ -447,6 +447,9 @@ def _apply_operation(project: dict[str, Any], operation: dict[str, Any]) -> dict
         "add_effect",
         "remove_effect",
         "set_color_grading",
+        "set_clip_transform",
+        "set_keyframe",
+        "remove_keyframe",
     }:
         track, clip = _find_clip(project, operation["clipId"])
         if kind == "remove_clip":
@@ -540,6 +543,66 @@ def _apply_operation(project: dict[str, Any], operation: dict[str, Any]) -> dict
         elif kind == "set_color_grading":
             clip["colorGrading"] = copy.deepcopy(operation.get("settings") or {})
             return {"clipId": clip["id"], "colorGrading": clip["colorGrading"]}
+        elif kind == "set_clip_transform":
+            transform = clip.setdefault("transform", {})
+            limits = {
+                "x": (-4.0, 4.0),
+                "y": (-4.0, 4.0),
+                "scale": (0.01, 8.0),
+                "rotation": (-3600.0, 3600.0),
+                "opacity": (0.0, 1.0),
+            }
+            changed: dict[str, Any] = {}
+            for field, (minimum, maximum) in limits.items():
+                if field not in operation:
+                    continue
+                value = max(minimum, min(maximum, float(operation[field])))
+                transform[field] = value
+                changed[field] = value
+            if "blendMode" in operation:
+                blend_mode = str(operation["blendMode"])
+                if blend_mode not in {"normal", "screen", "multiply", "add"}:
+                    raise ValueError("unsupported blend mode")
+                transform["blendMode"] = blend_mode
+                changed["blendMode"] = blend_mode
+            if not changed:
+                raise ValueError("transform fields are required")
+            return {"clipId": clip["id"], "transform": copy.deepcopy(transform)}
+        elif kind == "set_keyframe":
+            property_name = str(operation.get("property") or "")
+            _validate_keyframe_property(clip, property_name)
+            at_sec = float(operation["atSec"])
+            if not float(clip["startSec"]) <= at_sec <= float(clip["endSec"]):
+                raise ValueError("keyframe is outside the clip")
+            value = float(operation["value"])
+            easing = str(operation.get("easing") or "linear")
+            if easing not in {"linear", "ease-in", "ease-out", "ease-in-out", "hold"}:
+                raise ValueError("unsupported keyframe easing")
+            keyframes = clip.setdefault("keyframes", {}).setdefault(property_name, [])
+            existing = next(
+                (item for item in keyframes if abs(float(item.get("atSec") or 0) - at_sec) < 1e-6),
+                None,
+            )
+            payload = {"atSec": at_sec, "value": value, "easing": easing}
+            if existing is None:
+                keyframes.append(payload)
+            else:
+                existing.update(payload)
+            keyframes.sort(key=lambda item: float(item.get("atSec") or 0))
+            return {"clipId": clip["id"], "property": property_name, "keyframe": payload}
+        elif kind == "remove_keyframe":
+            property_name = str(operation.get("property") or "")
+            at_sec = float(operation["atSec"])
+            keyframes = clip.setdefault("keyframes", {}).get(property_name, [])
+            before = len(keyframes)
+            keyframes[:] = [
+                item for item in keyframes if abs(float(item.get("atSec") or 0) - at_sec) >= 1e-6
+            ]
+            if len(keyframes) == before:
+                raise ValueError("keyframe not found")
+            if not keyframes:
+                clip["keyframes"].pop(property_name, None)
+            return {"clipId": clip["id"], "property": property_name, "atSec": at_sec}
         elif kind == "set_clip":
             clip["volume"] = max(0, min(2, float(operation.get("volume") or 0)))
         else:
@@ -562,6 +625,16 @@ def _apply_operation(project: dict[str, Any], operation: dict[str, Any]) -> dict
         project["markers"].remove(marker)
         return {"markerId": marker["id"]}
     raise ValueError(f"unsupported operation: {kind}")
+
+
+def _validate_keyframe_property(clip: dict[str, Any], property_name: str) -> None:
+    if property_name in {"x", "y", "scale", "rotation", "opacity"}:
+        return
+    match = re.fullmatch(r"effect:([a-zA-Z0-9._-]{1,160}):([a-zA-Z0-9._-]{1,80})", property_name)
+    if not match:
+        raise ValueError("unsupported keyframe property")
+    effect_id, _parameter = match.groups()
+    _find(clip.get("effects", []), effect_id, "effect")
 
 
 def _shift_clips(track: dict[str, Any], from_sec: float, delta: float) -> None:
@@ -661,7 +734,9 @@ def _add_media_clip(
 ) -> dict[str, Any]:
     track_type = "audio" if media.get("type") == "audio" else "video"
     track = _compatible_track(project["tracks"], track_type, operation.get("trackId"))
-    start = float(operation.get("atSec") or project_view(project)["durationSec"])
+    start = float(
+        operation["atSec"] if "atSec" in operation else project_view(project)["durationSec"]
+    )
     duration = max(0.01, float(media.get("durationSec") or 5))
     clip = {
         "id": f"clip-{uuid4().hex[:10]}",

@@ -216,12 +216,22 @@ def _ready(candidate: socket.socket, init: dict[str, Any]) -> None:
     )
 
 
+def _shutdown_write_if_connected(candidate: socket.socket) -> None:
+    """Close the test write side after the worker may have failed closed."""
+
+    try:
+        candidate.shutdown(socket.SHUT_WR)
+    except OSError as exc:
+        if exc.errno != errno.ENOTCONN:
+            raise
+
+
 def _complete(candidate: socket.socket, session: str) -> None:
     _send(
         candidate,
         {"kind": "api_complete", "session": session, "version": 1},
     )
-    candidate.shutdown(socket.SHUT_WR)
+    _shutdown_write_if_connected(candidate)
 
 
 def _return_result(call: dict[str, Any], value: str, *, kind: str) -> dict[str, Any]:
@@ -342,14 +352,7 @@ def test_candidate_api_cannot_forge_aggregate_or_outer_frames(forged_kind: str) 
     assert response["kind"] == "worker_error"
     assert "forbidden frame" in response["error"]["message"]
     assert "passed" not in response
-    try:
-        harness.candidate.shutdown(socket.SHUT_WR)
-    except OSError as exc:
-        # Receiving the trusted worker_error above proves the supervisor has
-        # already rejected this frame and may have closed its candidate peer.
-        # Only that synchronized ENOTCONN race is expected here.
-        if exc.errno != errno.ENOTCONN:
-            raise
+    _shutdown_write_if_connected(harness.candidate)
     assert harness.finish() == CANDIDATE_FAILURE_EXIT
 
 
@@ -481,7 +484,7 @@ def test_replayed_api_result_is_candidate_failure() -> None:
     _send(harness.candidate, result)
     assert _receive(harness.candidate)["kind"] == "api_path_call"
     _send(harness.candidate, result)
-    harness.candidate.shutdown(socket.SHUT_WR)
+    _shutdown_write_if_connected(harness.candidate)
     response = _receive(harness.controller)
     assert response["kind"] == "worker_error"
     assert "replayed" in response["error"]["message"]
@@ -518,7 +521,7 @@ def test_replayed_loader_capability_is_not_forwarded_twice() -> None:
     )
     assert _receive(harness.candidate)["kind"] == "api_loader_response"
     _send(harness.candidate, request)
-    harness.candidate.shutdown(socket.SHUT_WR)
+    _shutdown_write_if_connected(harness.candidate)
     response = _receive(harness.controller)
     assert response["kind"] == "worker_error"
     assert "replayed" in response["error"]["message"]
@@ -590,11 +593,14 @@ def test_candidate_process_frame_walk_cannot_find_outer_scope_or_outer_fd(
                             found.update(forbidden.intersection(value))
                 frame = frame.f_back
 
+            try:
+                descriptors = sorted(
+                    int(name) for name in os.listdir("/dev/fd") if name.isdigit()
+                )
+            except OSError:
+                descriptors = range(3, min(4096, int(os.sysconf("SC_OPEN_MAX"))))
             socket_fds = []
-            # Long-running suites can allocate the inherited protocol socket
-            # above 255. Scan a production-realistic descriptor range so the
-            # isolation assertion does not depend on test execution order.
-            for descriptor in range(3, 4096):
+            for descriptor in descriptors:
                 try:
                     observed = os.fstat(descriptor)
                 except OSError:
@@ -669,9 +675,13 @@ def test_candidate_process_direct_aggregate_write_is_scored_failure(
                 sort_keys=True,
                 separators=(",", ":"),
             ).encode()
-            # Do not assume the candidate protocol descriptor is below 256;
-            # prior process-heavy tests can legitimately raise its number.
-            for descriptor in range(3, 4096):
+            try:
+                descriptors = sorted(
+                    int(name) for name in os.listdir("/dev/fd") if name.isdigit()
+                )
+            except OSError:
+                descriptors = range(3, min(4096, int(os.sysconf("SC_OPEN_MAX"))))
+            for descriptor in descriptors:
                 try:
                     observed = os.fstat(descriptor)
                 except OSError:
@@ -875,7 +885,7 @@ def test_noncanonical_candidate_frame_fails_closed() -> None:
     assert _receive(harness.candidate)["kind"] == "api_path_call"
     payload = b'{"kind":"api_path_result","kind":"raw_outcome"}'
     harness.candidate.sendall(struct.pack("!I", len(payload)) + payload)
-    harness.candidate.shutdown(socket.SHUT_WR)
+    _shutdown_write_if_connected(harness.candidate)
     response = _receive(harness.controller)
     assert response["kind"] == "worker_error"
     assert "canonical JSON" in response["error"]["message"]
@@ -889,7 +899,7 @@ def test_oversized_candidate_frame_fails_before_allocation() -> None:
     _ready(harness.candidate, init)
     assert _receive(harness.candidate)["kind"] == "api_path_call"
     harness.candidate.sendall(struct.pack("!I", MAX_FRAME_BYTES + 1))
-    harness.candidate.shutdown(socket.SHUT_WR)
+    _shutdown_write_if_connected(harness.candidate)
     response = _receive(harness.controller)
     assert response["kind"] == "worker_error"
     assert "invalid length" in response["error"]["message"]

@@ -629,6 +629,11 @@ class Turn(BaseModel):
     # Public evidence of the actual selected engine; unlike input metadata,
     # this is stamped by the execution supervisor and survives log replay.
     execution: ExecutionSnapshot | None = None
+    # The selected roster member is resolved after TurnParams validation and
+    # therefore cannot be recovered from the client payload reliably. Keep the
+    # execution identity on the server-owned turn so Codex and Native produce
+    # the same scoped trace/score records.
+    execution_agent_id: str | None = Field(default=None, exclude=True)
     # Resolved cwd after authentication, local-workspace validation, and
     # managed-workspace allocation. Task supervision consumes this trusted
     # value instead of guessing from the client's raw TurnParams shape.

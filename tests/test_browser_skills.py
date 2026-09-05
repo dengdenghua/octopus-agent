@@ -157,9 +157,21 @@ class TestBrowserGet:
             "_check_url_safe",
             lambda url, allow_private: None,
         )
+        from runtime.execution.suckers import web_skills
+
+        monkeypatch.setattr(
+            web_skills,
+            "_fetch_url",
+            lambda *args, **kwargs: {
+                "url": "https://a",
+                "status_code": 200,
+                "content": "fallback body",
+            },
+        )
         r = browser_skills._browser_get(url="https://a")
-        assert "error" in r
-        assert "playwright" in r["error"].lower()
+        assert r["content"] == "fallback body"
+        assert r["browser_fallback"] == "http_extract"
+        assert r["fallback_reason"] == "playwright_executable_missing"
 
 
 # ═══════════════════════════════════════════════════════════

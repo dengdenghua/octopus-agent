@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
@@ -132,20 +133,35 @@ def research_answer(
     queries = rr.queries or [question]
     stats["queries"] = len(queries)
 
-    # ② Multi-query search, dedupe by URL across queries.
+    # ② Multi-query search in parallel, then dedupe by URL in query order.
+    # executor.map preserves input order, so ranking stays deterministic while
+    # independent network requests no longer block one another.
     hits_by_url: dict[str, dict[str, Any]] = {}
-    for q in queries:
+
+    def _search_one(q: str) -> tuple[str, dict[str, Any]]:
         try:
-            resp = search_fn(query=q, max_results=hits_per_query)
+            return q, search_fn(query=q, max_results=hits_per_query)
         except Exception as e:  # noqa: BLE001
             _logger.warning("web_search failed for %r: %s", q, e)
-            continue
+            return q, {"error": str(e), "results": []}
+
+    with ThreadPoolExecutor(
+        max_workers=min(4, max(1, len(queries))),
+        thread_name_prefix="research-search",
+    ) as pool:
+        search_responses = list(pool.map(_search_one, queries))
+
+    search_failures = 0
+    for _q, resp in search_responses:
+        if resp.get("error"):
+            search_failures += 1
         for h in resp.get("results", []) or []:
             url = (h.get("url") or "").strip()
             if not url or url in hits_by_url:
                 continue
             hits_by_url[url] = h
     stats["search_hits"] = len(hits_by_url)
+    stats["search_failures"] = search_failures
 
     if not hits_by_url:
         return ResearchAnswer(
@@ -161,22 +177,29 @@ def research_answer(
 
     # ③ Fetch main content per URL. Dead/extract-fail URLs just keep
     # their search snippet so the source isn't lost from the pool.
-    enriched: list[dict[str, Any]] = []
-    for url, hit in hits_by_url.items():
+    def _fetch_one(item: tuple[str, dict[str, Any]]) -> dict[str, Any]:
+        url, hit = item
         fetched: dict[str, Any] = {}
         try:
             fetched = fetch_fn(url=url, extract=True)
         except Exception as e:  # noqa: BLE001
             _logger.info("fetch_url failed for %s: %s", url, e)
-        entry = {
+        return {
             "url": url,
             "title": hit.get("title") or "",
             "snippet": hit.get("snippet") or "",
             "content": fetched.get("content") or "" if fetched.get("extracted") else "",
             "metadata": fetched.get("metadata") or {},
         }
-        enriched.append(entry)
+
+    hit_items = list(hits_by_url.items())
+    with ThreadPoolExecutor(
+        max_workers=min(6, max(1, len(hit_items))),
+        thread_name_prefix="research-fetch",
+    ) as pool:
+        enriched = list(pool.map(_fetch_one, hit_items))
     stats["fetched"] = sum(1 for e in enriched if e["content"])
+    stats["fetch_failures"] = len(enriched) - stats["fetched"]
 
     # ④ Rerank against the ORIGINAL question (not rewrites — the user's
     # phrasing is the authoritative target for relevance).

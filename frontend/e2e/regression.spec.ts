@@ -23,9 +23,6 @@ import { expect, test } from "./fixtures";
 const backendHost = process.env.GATEWAY_HOST || "127.0.0.1";
 const backendPort = process.env.GATEWAY_PORT || "18000";
 const BACKEND = `http://${backendHost}:${backendPort}`;
-const RUN_REAL_LLM_REGRESSIONS =
-  process.env.OCTOPUS_E2E_REAL_LLM_REGRESSIONS === "1";
-
 // ═══════════════════════════════════════════════════════════
 // Helpers
 // ═══════════════════════════════════════════════════════════
@@ -80,27 +77,6 @@ async function deleteSubscriptionsByTopic(
   );
 }
 
-async function sendChatMessage(page: Page, text: string): Promise<void> {
-  await page.goto("/#/workspace/realtime/new");
-  await page.waitForLoadState("domcontentloaded");
-
-  await reactFill(page, "textarea", text);
-
-  // Wait a beat so React re-render + button enable transition
-  // settles before clicking Send.
-  await page.waitForTimeout(200);
-  const sendBtn = page.getByRole("button", { name: "Send" });
-  await sendBtn.click();
-
-  // Wait for URL to change to a real thread id · the router navigates
-  // to /workspace/realtime/<generated-id> as soon as the first user
-  // message gets posted · robust signal that the send went through.
-  await page.waitForURL(/#\/workspace\/realtime\/[^/]+$/, { timeout: 20_000 });
-  // Then give the SSE reply ~20s to commit into journal · this is
-  // the actual signal the Bug#2 assertion is watching for.
-  await page.waitForTimeout(20_000);
-}
-
 // ═══════════════════════════════════════════════════════════
 // Bug #2 · Cost tab was always 0 tokens
 // ═══════════════════════════════════════════════════════════
@@ -136,29 +112,46 @@ test.describe("Bug#2 regression · Cost tab reflects real chat cost", () => {
     ).toBeTruthy();
   });
 
-  test("chat then observability/cost shows non-zero tokens", async ({
+  test("observability cost surface renders non-zero budget data", async ({
     page,
   }) => {
-    test.skip(
-      !RUN_REAL_LLM_REGRESSIONS,
-      "requires a real model/provider and writes non-zero budget commits",
-    );
-    test.setTimeout(60_000); // real LLM call · give it room
-    await sendChatMessage(page, "Answer with one short sentence: 2+2=?");
+    const run = await page.request.post(`${BACKEND}/api/run`, {
+      data: { goal: `cost surface probe ${Date.now()}` },
+    });
+    expect(run.ok()).toBeTruthy();
 
-    // Ask backend directly rather than scroll through observability
-    // tabs · keeps the assertion robust to tab ordering / label
-    // changes while still proving the journal really got populated.
-    const resp = await page.request.get(
-      `${BACKEND}/api/budget/summary?limit=5`,
-    );
-    expect(resp.ok()).toBeTruthy();
-    const body = await resp.json();
-    expect(
-      body.total_tokens,
-      "budget_commit should be written by direct_llm path · see _commit_direct_llm_cost",
-    ).toBeGreaterThan(0);
-    expect(body.commit_count).toBeGreaterThan(0);
+    await page.goto("/#/workspace/observability");
+    await page.waitForLoadState("domcontentloaded");
+    await page.getByRole("tab", { name: "Resources and cost" }).click();
+
+    const tokenValue = page
+      .getByTestId("cost-total-tokens")
+      .locator("div")
+      .last();
+    const commitValue = page
+      .getByTestId("cost-commit-count")
+      .locator("div")
+      .last();
+    await expect
+      .poll(async () =>
+        Number((await tokenValue.textContent())?.replaceAll(",", "")),
+      )
+      .toBeGreaterThan(0);
+    await expect
+      .poll(async () =>
+        Number((await commitValue.textContent())?.replaceAll(",", "")),
+      )
+      .toBeGreaterThan(0);
+
+    const shellText = await page.locator("main section").first().innerText();
+    expect(shellText).not.toMatch(/[\u4e00-\u9fff]/);
+    await page.getByRole("tab", { name: "System" }).click();
+    const receipts = page
+      .getByText("External action receipts", { exact: true })
+      .first()
+      .locator("xpath=ancestor::*[@data-slot='card'][1]");
+    await expect(receipts).toBeVisible();
+    expect(await receipts.innerText()).not.toMatch(/[\u4e00-\u9fff]/);
   });
 });
 
@@ -226,19 +219,64 @@ test.describe("Bug#1 regression · Intelligence subscriptions", () => {
     }
   });
 
-  test("clean install exposes a recoverable Intelligence app install path", async ({
+  test("UI exposes the subscription draft or an explicit app-install gate", async ({
     page,
   }) => {
+    const topic = `e2e-ui-${Date.now()}`;
     await page.goto("/#/workspace/intelligence");
     await page.waitForLoadState("domcontentloaded");
 
-    await expect(
-      page.getByRole("heading", { name: "订阅暂时不可用" }),
-    ).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole("button", { name: "重新检查" })).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "前往应用中心" }),
-    ).toBeVisible();
+    try {
+      const unavailable = page.getByText(
+        /订阅暂时不可用|Subscriptions? (?:is|are) temporarily unavailable/i,
+      );
+      const draftInput = page
+        .locator("textarea")
+        .filter({ visible: true })
+        .first();
+      await expect(unavailable.or(draftInput)).toBeVisible({ timeout: 10_000 });
+      if (await unavailable.isVisible()) {
+        await expect(
+          page.getByRole("button", { name: /前往应用中心|Go to App Center/i }),
+        ).toBeVisible();
+        await expect(
+          page.getByRole("button", { name: /重新检查|Check again/i }),
+        ).toBeVisible();
+        return;
+      }
+      await reactFill(
+        page,
+        "textarea",
+        `Create a temporary subscription named ${topic} for E2E cleanup verification.`,
+      );
+      await page
+        .getByRole("button", { name: /生成订阅草案|Generate Draft/ })
+        .click();
+
+      const createButton = page.getByRole("button", {
+        name: /创建这个订阅|Create Subscription/,
+      });
+      await expect(createButton).toBeVisible({ timeout: 10_000 });
+      await reactFill(page, "input", topic);
+      await createButton.click();
+
+      await expect(
+        page.getByText(/订阅添加成功|Subscription added/i),
+      ).toBeVisible({ timeout: 5000 });
+
+      const listed = await page.request.get(
+        `${BACKEND}/api/intelligence/subscriptions`,
+      );
+      expect(listed.ok()).toBeTruthy();
+      const listedBody = await listed.json();
+      expect(
+        (listedBody.subscriptions ?? []).some(
+          (item: { topic?: string }) => item.topic === topic,
+        ),
+      ).toBe(true);
+    } finally {
+      await deleteSubscriptionsByTopic(page.request, topic);
+    }
   });
 });
 

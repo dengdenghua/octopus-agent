@@ -28,6 +28,34 @@ export type NativeNodeTemplate = {
 
 export const NATIVE_NODE_TEMPLATES: NativeNodeTemplate[] = [
   {
+    kind: "frame",
+    title: "界面画板",
+    description: "页面、弹窗或关键屏幕的设计范围",
+    icon: PanelsTopLeftIcon,
+    badge: "UI",
+  },
+  {
+    kind: "component",
+    title: "组件",
+    description: "按钮、卡片、导航等可复用界面组件",
+    icon: BoxIcon,
+    badge: "UI",
+  },
+  {
+    kind: "token",
+    title: "设计规范",
+    description: "颜色、字体、间距、圆角与状态规则",
+    icon: SparklesIcon,
+    badge: "UI",
+  },
+  {
+    kind: "preview",
+    title: "交互预览",
+    description: "网页、原型或视觉回归结果",
+    icon: PanelsTopLeftIcon,
+    badge: "UI",
+  },
+  {
     kind: "text",
     title: "文本",
     description: "剧本、广告词、品牌文案",

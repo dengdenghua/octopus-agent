@@ -47,6 +47,11 @@ _WEB_READ = [
     SkillId("web_search"),
     SkillId("web_fetch"),
     SkillId("crawl_site"),
+    SkillId("platform_search"),
+    SkillId("platform_read"),
+    SkillId("platform_collect"),
+    SkillId("platform_monitor"),
+    SkillId("reach_doctor"),
 ]
 
 _BROWSER_READ = [
@@ -340,9 +345,7 @@ def make_general_arm(runtime: GraphRuntime) -> Worker:
         allowed_skills=[*_WEB_READ],
         runtime=runtime,
         display_name="Eve",
-        description=(
-            "白幽灵小队的联络与协调中枢（代号 Siren），负责把计划、情报和临场变化编成可执行行动线。"
-        ),
+        description=("AI 办公首席助理，负责会议、邮件、文档、日程、汇报和复杂任务推进。"),
         soul=_OCTOPUS_SOUL,
         icon="🐙",
     )
@@ -360,9 +363,7 @@ def make_coder_arm_v2(runtime: GraphRuntime) -> Worker:
         ],
         runtime=runtime,
         display_name="Kane",
-        description=(
-            "白幽灵小队的副队长与渗透工程师（代号 Paladin），负责逆向、入侵、补丁和现场系统接管。"
-        ),
+        description=("AI 应用架构师与全栈工程师，负责模型、Agent、工具、数据与生产交付。"),
         soul=_CODER_SOUL,
         icon="💻",
     )
@@ -389,9 +390,7 @@ def make_vibe_selling_arm(runtime: GraphRuntime) -> Worker:
         ],
         runtime=runtime,
         display_name="Luna",
-        description=(
-            "白幽灵小队的叙事渗透手（代号 Dream Walker），负责内容诱导、传播伪装和行动叙事包装。"
-        ),
+        description=("AI 漫剧制片人与内容增长导演，负责剧本、分镜、生成制作和平台增长。"),
         soul=_VIBE_SELLING_SOUL,
         icon="✨",
     )
@@ -418,9 +417,7 @@ def make_ecommerce_mind_arm(runtime: GraphRuntime) -> Worker:
         ],
         runtime=runtime,
         display_name="Shion",
-        description=(
-            "白幽灵小队的后勤与分发官（代号 Virus Queen），负责伪装物流、战术采购和补给路径计算。"
-        ),
+        description=("跨境电商增长负责人，负责选品、内容、投放、定价、库存、履约与利润。"),
         soul=_ECOMMERCE_MIND_SOUL,
         icon="📊",
     )

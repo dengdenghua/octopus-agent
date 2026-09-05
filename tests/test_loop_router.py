@@ -310,6 +310,7 @@ def test_loop_router_create_list_get_and_execute_with_owner_isolation(tmp_path) 
     assert created.status_code == 200
     run = created.json()
     run_id = run["run_id"]
+    assert run["tenant_id"] == "legacy:alice"
     assert run["thread_id"] is None
     assert run["status"] == "pending"
 

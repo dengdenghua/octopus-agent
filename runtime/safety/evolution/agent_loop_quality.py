@@ -23,7 +23,7 @@ CHECKS: tuple[AgentLoopCheck, ...] = (
         paths=(
             "runtime/sensing/gateway/realtime_turn_lifecycle.py",
             "runtime/sensing/gateway/realtime_cerebrum.py",
-            "tests/test_realtime_cerebrum.py",
+            "tests/realtime_cerebrum/test_tool_lifecycle.py",
         ),
         required_terms=(
             "estimate_turn_complexity",
@@ -39,7 +39,7 @@ CHECKS: tuple[AgentLoopCheck, ...] = (
         paths=(
             "runtime/sensing/gateway/realtime_turn_lifecycle.py",
             "runtime/sensing/gateway/realtime_turn_outcome.py",
-            "tests/test_realtime_cerebrum.py",
+            "tests/realtime_cerebrum/test_file_verification.py",
         ),
         required_terms=(
             "_turn_has_observable_output",
@@ -72,7 +72,8 @@ CHECKS: tuple[AgentLoopCheck, ...] = (
         paths=(
             "runtime/sensing/gateway/realtime_turn_lifecycle.py",
             "runtime/sensing/gateway/realtime_cerebrum.py",
-            "tests/test_realtime_cerebrum.py",
+            "tests/realtime_cerebrum/test_interrupt.py",
+            "tests/realtime_cerebrum/test_item_mapping.py",
         ),
         required_terms=(
             "turn/interrupt",
@@ -87,7 +88,8 @@ CHECKS: tuple[AgentLoopCheck, ...] = (
         title="Operator workbench trace state",
         paths=(
             "runtime/sensing/gateway/realtime_turn_lifecycle.py",
-            "tests/test_realtime_cerebrum.py",
+            "tests/realtime_cerebrum/test_interrupt.py",
+            "tests/realtime_cerebrum/test_item_mapping.py",
             "frontend/src/components/workspace/agent-operator-panel.tsx",
             "frontend/src/components/workspace/agent-operator/index.tsx",
             "frontend/src/components/workspace/agent-workbench-panel.tsx",

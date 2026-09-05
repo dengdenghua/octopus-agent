@@ -1,6 +1,7 @@
-"""Cross-session reference resolver — dsh ``@dsh-session-reference`` service.
+"""Octopus Native cross-session reference resolver.
 
-Ported from DeepSeek Harness' ``@deepseek-ai/dsh-session-reference``
+Its projection algorithm was ported from DeepSeek Harness'
+``@deepseek-ai/dsh-session-reference``
 (``index.ts`` + ``config.ts`` + ``types.ts``): the service layer that sits
 on top of the projection in ``session_projection.py`` and owns the *reference
 surface* — listing candidate sessions, normalizing a mention into source
@@ -14,7 +15,7 @@ The resolver is deliberately store-agnostic, mirroring dsh's seam to
 so any durable session surface can back it without coupling the resolver to a
 specific store. The subagent session store is the first adapter.
 
-Design mirrors dsh:
+Historical implementation lineage mirrors DSH in these internals:
 
 - ``list_candidates`` ranks candidates by working-directory affinity
   (dsh ``candidateRank``), then original order, and filters by a
@@ -322,7 +323,7 @@ class SessionReferenceResolver:
             for record in ranked[:limit]
         ]
 
-    # ── Host mention wiring (dsh host mention-parse → prepare) ─────────────
+    # ── Host mention wiring (Octopus Native protocol) ─────────────────────
 
     def resolve_mentions(
         self,
@@ -333,12 +334,12 @@ class SessionReferenceResolver:
         sessions: list[SessionReferenceRecord] | None = None,
         strip_mentions: bool = True,
     ) -> PreparedReferencedMessage:
-        """Host-side mention wiring (dsh host mention-parse → ``prepare``).
+        """Resolve current and legacy session mentions before ``prepare``.
 
-        Scans canonical ``dsh-session:`` URIs (dsh ``uri.ts`` mentions,
-        rendered as ``@[label](dsh-session:...)`` or bare URIs) AND the
-        legacy ``@session:<id>`` / ``@subagent:<id>`` tokens in a host
-        prompt, resolves the referenced sessions (capped at
+        Scans canonical ``octopus-session:`` URIs, decode-compatible
+        historical ``dsh-session:`` URIs, and the ``@session:<id>`` /
+        ``@subagent:<id>`` aliases in a host prompt. It resolves the referenced
+        sessions (capped at
         ``max_references`` in first-mention order), reads each surface, and
         projects them into one aggregated context frame. Stale mentions
         (ids not in ``sessions``) and self-references are skipped rather

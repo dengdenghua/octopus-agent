@@ -201,17 +201,6 @@ class TestAgentRegistryPublishes:
 class TestForgeTriggersEvent:
     """Implementation note."""
 
-    @pytest.mark.xfail(
-        reason=(
-            "bugfix demo trail includes exec_shell; SkillForge danger "
-            "gate (runtime.safety.approval.approval_gate.is_dangerous_tool) "
-            "refuses promotion of forged composites that wrap dangerous "
-            "skills. Expected after the danger-gate hardening; pair this "
-            "test with test_evolution_demo's xfailed promotion checks."
-        ),
-        strict=False,
-        raises=AssertionError,
-    )
     def test_forge_promote_publishes(self, tmp_path: Path):
         """Implementation note."""
         import shutil
@@ -219,9 +208,8 @@ class TestForgeTriggersEvent:
         if shutil.which("git") is None:
             pytest.skip("git not on PATH")
 
-        from demos.bugfix_demo import build_bugfix_graph, setup_buggy_project
+        from demos.bugfix_demo import build_safe_observation_graph, setup_buggy_project
         from runtime.execution.suckers.builtins import register_all
-        from runtime.execution.suckers.write_skills import register_exec_skill
         from runtime.execution.tool_engine import ToolExecutor
         from runtime.memory.journal import JSONLJournal
         from runtime.platform.models import Budget, BudgetLimits
@@ -235,7 +223,6 @@ class TestForgeTriggersEvent:
         # Implementation note.
         reg = SkillRegistry(event_bus=bus)
         register_all(reg)
-        register_exec_skill(reg)
 
         initial_count = len(events)  # Implementation note.
 
@@ -250,7 +237,7 @@ class TestForgeTriggersEvent:
         runtime = GraphRuntime(executor=executor, journal=journal)
         for i in range(3):
             proj = setup_buggy_project(tmp_path / f"proj_{i}")
-            g = build_bugfix_graph(proj)
+            g = build_safe_observation_graph(proj)
             b = Budget(
                 task_id=g.task_id,
                 limits=BudgetLimits(tokens=10_000, usd=0.10),

@@ -59,6 +59,32 @@ class CompleteBody(BaseModel):
     blackboard_key: str | None = None
 
 
+class SteeringBody(BaseModel):
+    text: str = Field(min_length=1, max_length=20_000)
+
+
+class CollectorChildCancelBody(BaseModel):
+    reason: str = Field(default="member cancelled by user", max_length=1000)
+
+
+class CollectorRetryBody(BaseModel):
+    child_ids: list[str] = Field(default_factory=list, max_length=512)
+
+
+class CollectorBatchRetryBody(BaseModel):
+    run_ids: list[str] = Field(default_factory=list, max_length=100)
+
+
+class CollectorBatchCancelBody(BaseModel):
+    run_ids: list[str] = Field(default_factory=list, max_length=100)
+    reason: str = Field(default="collaboration cancelled by user", max_length=1000)
+
+
+class CollectorBatchArchiveBody(BaseModel):
+    run_ids: list[str] = Field(min_length=1, max_length=100)
+    reason: str = Field(default="collector archived by user", max_length=1000)
+
+
 class BreakoutBody(BaseModel):
     child_thread: str = Field(min_length=1)
     members: list[dict] = Field(default_factory=list)
@@ -73,6 +99,7 @@ class MergeBody(BaseModel):
 class ReadBody(BaseModel):
     member_id: str = Field(min_length=1)
     seq: int | None = None  # default: mark read up to the current event head
+    message_seq: int | None = None  # message timeline cursor for linked rooms
 
 
 class HeartbeatBody(BaseModel):
@@ -92,6 +119,33 @@ class RoomMessageBody(BaseModel):
     entity_refs: list[dict[str, Any]] = Field(default_factory=list)
     system_card: dict[str, Any] | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    reply_to: dict[str, Any] | None = None
+
+
+class AnnotationBody(BaseModel):
+    message_id: str = Field(min_length=1, max_length=240)
+    body: str = Field(min_length=1, max_length=20_000)
+    display_name: str = Field(default="", max_length=160)
+    avatar_color: str = Field(default="", max_length=32)
+
+
+class AnnotationReplyBody(BaseModel):
+    body: str = Field(min_length=1, max_length=20_000)
+    display_name: str = Field(default="", max_length=160)
+    avatar_color: str = Field(default="", max_length=32)
+
+
+class AnnotationResolvedBody(BaseModel):
+    resolved: bool
+
+
+class ReactionBody(BaseModel):
+    message_id: str = Field(min_length=1, max_length=240)
+    emoji: str = Field(min_length=1, max_length=16)
+
+
+class PinMessageBody(BaseModel):
+    message_id: str = Field(min_length=1, max_length=240)
 
 
 class MessageProjectActionBody(BaseModel):
@@ -134,10 +188,18 @@ class CollabTaskBody(BaseModel):
 
 
 __all__ = [
+    "AnnotationBody",
+    "AnnotationReplyBody",
+    "AnnotationResolvedBody",
     "AssignBody",
     "BoardBody",
     "BreakoutBody",
     "CollabTaskBody",
+    "CollectorBatchArchiveBody",
+    "CollectorBatchCancelBody",
+    "CollectorBatchRetryBody",
+    "CollectorChildCancelBody",
+    "CollectorRetryBody",
     "CompleteBody",
     "EnsureRoomBody",
     "GrantBody",
@@ -147,8 +209,11 @@ __all__ = [
     "MergeBody",
     "MessageProjectActionBody",
     "ModeBody",
+    "PinMessageBody",
     "ReadBody",
+    "ReactionBody",
     "RosterBody",
     "RoomMessageBody",
+    "SteeringBody",
     "response_mode",
 ]

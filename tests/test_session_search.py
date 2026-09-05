@@ -1,6 +1,6 @@
 """Tests for session search index.
 
-DSH P2 feature parity: session-query tests.
+Octopus Native session-query tests.
 """
 
 from __future__ import annotations

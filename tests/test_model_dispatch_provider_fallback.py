@@ -71,6 +71,48 @@ def test_named_provider_balance_error_falls_back_for_stream() -> None:
     assert healthy.models == ["healthy"]
 
 
+def test_explicit_picker_selection_does_not_silently_change_provider_for_call() -> None:
+    unavailable = _Unavailable()
+    healthy = _Healthy()
+    selection_id = "octopus-custom-model:v1:explicit-selection"
+    router = ModelDispatchRouter(fallback=healthy)
+    router.register(selection_id, unavailable)
+    router.register("healthy", healthy)
+
+    request = ModelRequest(
+        model=selection_id,
+        messages=[Message(role="user", content="fix code")],
+    )
+    try:
+        router.call(request)
+    except RuntimeError as exc:
+        assert "http_402" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("explicit picker selection must surface its provider error")
+    assert healthy.models == []
+
+
+def test_explicit_picker_selection_does_not_silently_change_provider_for_stream() -> None:
+    unavailable = _Unavailable()
+    healthy = _Healthy()
+    selection_id = "octopus-custom-model:v1:explicit-selection"
+    router = ModelDispatchRouter(fallback=healthy)
+    router.register(selection_id, unavailable)
+    router.register("healthy", healthy)
+
+    request = ModelRequest(
+        model=selection_id,
+        messages=[Message(role="user", content="fix code")],
+    )
+    try:
+        list(router.call_stream(request))
+    except RuntimeError as exc:
+        assert "http_402" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("explicit picker selection must surface its provider error")
+    assert healthy.models == []
+
+
 def test_partial_stream_never_replays_on_another_provider() -> None:
     class _Partial(ModelRouter):
         def call(self, request: ModelRequest) -> ModelResponse:

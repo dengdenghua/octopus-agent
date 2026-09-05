@@ -15,7 +15,7 @@ from runtime.platform.process.task_supervisor import (
     TaskSupervisorStore,
     task_lease_health,
 )
-from runtime.protocol import Turn, TurnParams, TurnStatus
+from runtime.protocol import Turn, TurnParams, TurnStatus, UserMessageItem
 from runtime.sensing.gateway.realtime_turn_outcome import (
     _record_react_trace_event,
     _record_task_run_finished,
@@ -31,6 +31,7 @@ def test_realtime_react_lifecycle_projects_to_task_supervisor(tmp_path):
     runtime = SimpleNamespace(_task_supervisor=supervisor, _trace_store=None)
     params = TurnParams(threadId="thread-1", input=[], cwd=str(tmp_path))
     turn = Turn(id="turn-1", threadId="thread-1", params=params)
+    turn.execution_workspace_path = str(tmp_path / "resolved-workspace")
 
     _record_react_trace_event(
         runtime,
@@ -41,6 +42,8 @@ def test_realtime_react_lifecycle_projects_to_task_supervisor(tmp_path):
     assert started is not None
     assert started.status == TaskRunStatus.RUNNING
     assert started.origin_task_id == "turn-1"
+    assert started.workspace_path == str(tmp_path / "resolved-workspace")
+    assert started.capabilities.workspace_paths == [str(tmp_path / "resolved-workspace")]
 
     turn.task_id = "react-task-1"
     turn.objective_id = "react-task-1"
@@ -55,6 +58,68 @@ def test_realtime_react_lifecycle_projects_to_task_supervisor(tmp_path):
     assert paused.latest_checkpoint_id == 7
     assert paused.terminal_reason == "iteration_limit"
     assert paused.metadata["turn_id"] == "turn-1"
+
+
+def test_new_react_attempt_closes_superseded_task_lease(tmp_path):
+    supervisor = TaskSupervisor.from_path(
+        tmp_path / "task_runs.json",
+        holder_id="realtime-worker",
+        lease_ttl_seconds=30,
+    )
+    runtime = SimpleNamespace(_task_supervisor=supervisor, _trace_store=None)
+    params = TurnParams(threadId="thread-repair", input=[], cwd=str(tmp_path))
+    turn = Turn(id="turn-repair", threadId="thread-repair", params=params)
+
+    _record_react_trace_event(
+        runtime,
+        turn,
+        {"type": "react_started", "task_id": "react-attempt-1"},
+    )
+    turn.task_id = "react-attempt-1"
+    _record_react_trace_event(
+        runtime,
+        turn,
+        {"type": "react_started", "task_id": "react-attempt-2"},
+    )
+
+    first = supervisor.store.get("react-attempt-1")
+    second = supervisor.store.get("react-attempt-2")
+    assert first is not None
+    assert second is not None
+    assert first.status == TaskRunStatus.DISCONNECTED
+    assert first.terminal_reason == "superseded_by_react_attempt"
+    assert first.metadata["superseded_by_task_id"] == "react-attempt-2"
+    assert first.lease is None
+    assert second.status == TaskRunStatus.RUNNING
+
+
+def test_non_react_turn_backfills_goal_workspace_and_terminal_reason(tmp_path):
+    supervisor = TaskSupervisor.from_path(
+        tmp_path / "task_runs.json",
+        holder_id="realtime-worker",
+        lease_ttl_seconds=30,
+    )
+    runtime = SimpleNamespace(_task_supervisor=supervisor, _trace_store=None)
+    params = TurnParams(
+        threadId="thread-group",
+        input=[],
+        cwd=str(tmp_path / "requested-workspace"),
+    )
+    turn = Turn(id="turn-group", threadId="thread-group", params=params)
+    turn.items.append(UserMessageItem(text="你们都在线么？"))
+    turn.execution_workspace_path = str(tmp_path / "resolved-workspace")
+    turn.status = TurnStatus.COMPLETED
+    turn.outcome_reason = "group_presence"
+
+    _record_task_run_finished(runtime, turn)
+
+    record = supervisor.store.get("turn-group")
+    assert record is not None
+    assert record.status == TaskRunStatus.COMPLETED
+    assert record.title == "你们都在线么？"
+    assert record.goal == "你们都在线么？"
+    assert record.workspace_path == str(tmp_path / "resolved-workspace")
+    assert record.terminal_reason == "group_presence"
 
 
 def test_task_supervisor_persists_lifecycle_and_releases_terminal_lease(tmp_path):

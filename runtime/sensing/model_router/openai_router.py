@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import socket
+import threading
 from typing import Any
 
 from runtime.adapters.instrumentation import record_gen_ai_cost, trace_stage
@@ -278,6 +280,8 @@ class OpenAIModelRouter(Provider, ModelRouter):
         OpenAI-compat provider gets streaming for free by following
         the same pattern.
         """
+        from runtime.safety.approval.cancellation import current_cancellation_token
+
         from .openai_compat_stream import iter_openai_sse
 
         model = request.model or self.default_model
@@ -315,23 +319,107 @@ class OpenAIModelRouter(Provider, ModelRouter):
             )
             close_after = self._client is None
             url = f"{self.base_url}/chat/completions"
+            cancellation = current_cancellation_token()
+            transport_cancelled = threading.Event()
+            response_lock = threading.Lock()
+            active_response: Any = None
+
+            def _close_quietly(target: Any) -> None:
+                close = getattr(target, "close", None)
+                if not callable(close):
+                    return
+                try:
+                    close()
+                except Exception:  # noqa: BLE001 — cancellation is best-effort
+                    return
+
+            def _shutdown_owned_response_socket(response: Any) -> None:
+                """Wake a cross-thread socket read before closing the response.
+
+                ``httpx.Response.close()`` alone does not reliably interrupt a
+                synchronous ``recv`` already blocked in another thread (notably
+                on macOS). The response exposes its dedicated httpcore network
+                stream through extensions; shutting that socket down wakes the
+                reader immediately. Only owned clients take this path so a
+                multiplexed/shared transport cannot lose unrelated requests.
+                """
+                if not close_after:
+                    return
+                extensions = getattr(response, "extensions", None)
+                if not isinstance(extensions, dict):
+                    return
+                network_stream = extensions.get("network_stream")
+                get_extra_info = getattr(network_stream, "get_extra_info", None)
+                if not callable(get_extra_info):
+                    return
+                try:
+                    response_socket = get_extra_info("socket")
+                    shutdown = getattr(response_socket, "shutdown", None)
+                    if callable(shutdown):
+                        shutdown(socket.SHUT_RDWR)
+                except (OSError, RuntimeError, ValueError):
+                    return
+
+            def _cancel_active_transport(_reason: str) -> None:
+                """Abort the provider read instead of waiting for its timeout."""
+                transport_cancelled.set()
+                with response_lock:
+                    response = active_response
+                if response is not None:
+                    _shutdown_owned_response_socket(response)
+                    _close_quietly(response)
+                # An owned client may still be waiting for response headers,
+                # before ``client.stream`` has exposed a response to close.
+                # Never close an injected/shared client: abort only this
+                # response in that case.
+                if close_after:
+                    _close_quietly(client)
+
+            def _activate_response(response: Any) -> bool:
+                nonlocal active_response
+                with response_lock:
+                    if transport_cancelled.is_set():
+                        close_now = True
+                    else:
+                        active_response = response
+                        close_now = False
+                if close_now:
+                    _shutdown_owned_response_socket(response)
+                    _close_quietly(response)
+                return not close_now
+
+            def _deactivate_response(response: Any) -> None:
+                nonlocal active_response
+                with response_lock:
+                    if active_response is response:
+                        active_response = None
+
+            unsubscribe_cancel = cancellation.on_cancelled(_cancel_active_transport)
             try:
+                if cancellation.is_cancelled:
+                    return
                 with client.stream(
                     "POST",
                     url,
                     json=payload,
                     headers=self._build_headers(),
                 ) as r:
-                    if r.status_code < 400:
-                        yield from iter_openai_sse(
-                            r,
-                            model=model,
-                            provider="openai_compat",
-                        )
+                    if not _activate_response(r):
                         return
-                    r.read()
-                    first_status = r.status_code
-                    first_text = r.text
+                    try:
+                        if r.status_code < 400:
+                            yield from iter_openai_sse(
+                                r,
+                                model=model,
+                                provider="openai_compat",
+                                cancelled=lambda: cancellation.is_cancelled,
+                            )
+                            return
+                        r.read()
+                        first_status = r.status_code
+                        first_text = r.text
+                    finally:
+                        _deactivate_response(r)
 
                 seen_payloads = {_compat_payload_fingerprint(payload)}
                 retry_queue = self._retry_payloads(
@@ -343,6 +431,8 @@ class OpenAIModelRouter(Provider, ModelRouter):
                 )
                 attempt = 0
                 while retry_queue and attempt < _MAX_COMPAT_RETRY_ATTEMPTS:
+                    if cancellation.is_cancelled:
+                        return
                     retry = retry_queue.pop(0)
                     attempt += 1
                     self._record_compat_retry(span, model, profile, attempt, retry)
@@ -352,16 +442,22 @@ class OpenAIModelRouter(Provider, ModelRouter):
                         json=retry.payload,
                         headers=self._build_headers(),
                     ) as r:
-                        if r.status_code < 400:
-                            yield from iter_openai_sse(
-                                r,
-                                model=model,
-                                provider="openai_compat",
-                            )
+                        if not _activate_response(r):
                             return
-                        r.read()
-                        first_status = r.status_code
-                        first_text = r.text
+                        try:
+                            if r.status_code < 400:
+                                yield from iter_openai_sse(
+                                    r,
+                                    model=model,
+                                    provider="openai_compat",
+                                    cancelled=lambda: cancellation.is_cancelled,
+                                )
+                                return
+                            r.read()
+                            first_status = r.status_code
+                            first_text = r.text
+                        finally:
+                            _deactivate_response(r)
                     retry_queue.extend(
                         self._retry_payloads(
                             first_status,
@@ -379,9 +475,18 @@ class OpenAIModelRouter(Provider, ModelRouter):
                         compatibility_events=self.last_compatibility_events,
                     )
                 )
+            except Exception:
+                # Closing a live httpx response/client wakes a blocked read by
+                # raising a transport exception on the producer thread. Once
+                # the caller has explicitly cancelled, that exception is an
+                # expected control signal rather than a provider failure.
+                if cancellation.is_cancelled:
+                    return
+                raise
             finally:
+                unsubscribe_cancel()
                 if close_after:
-                    client.close()
+                    _close_quietly(client)
 
     def _build_payload(self, request: ModelRequest, model: str) -> dict[str, Any]:
         # Message shape · caller may hand us Anthropic-style
@@ -705,14 +810,14 @@ def build_fallback_router_from_custom_models(prefer: str | None = None) -> Any:
     """Build a ModelRouter from the user's custom_models.json — a self-configured
     upstream usable as the dispatch *fallback*.
 
-    Why: the default fallback is Molili, which requires a logged-in actor; any
-    unresolved / guest model request then dies with "no current_actor set".
+    Why: an account-backed fallback may require a logged-in actor; any
+    unresolved / guest model request would otherwise die with "no current_actor set".
     Pointing the fallback at a self-configured model (e.g. the planner's own
     model) keeps the runtime usable without a login.
 
     Picks the entry matching ``prefer`` (the planner model), else the first
     entry with a ``base_url``. Returns ``None`` when no usable entry exists, so
-    callers can keep Molili as the last-resort fallback.
+    callers can keep their existing last-resort fallback.
     """
     models = _read_custom_models()
     if not models:
@@ -781,7 +886,7 @@ def build_fallback_router_from_custom_models(prefer: str | None = None) -> Any:
             extra_headers=headers,
             timeout_seconds=timeout_seconds,
         )
-    except Exception:  # noqa: BLE001 — fall back to Molili if the entry is malformed
+    except Exception:  # noqa: BLE001 — keep the existing fallback if the entry is malformed
         return None
 
 

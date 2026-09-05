@@ -258,6 +258,9 @@ class ParallelTaskRunner:
 
         try:
             from runtime.core.cerebrum.react_loop import run_react_loop
+            from runtime.core.cerebrum.react_step_evaluator import (
+                build_runtime_step_evaluator,
+            )
             from runtime.platform.models import ParsedIntent
 
             authenticated = bool(task.owner_actor_id and task.tenant_id)
@@ -330,6 +333,7 @@ class ParallelTaskRunner:
                     agent=None,
                     max_iterations=6,
                     thread_id=task.thread_id or task.id,
+                    step_evaluator=build_runtime_step_evaluator(),
                 )
             with self._lock:
                 if task_id in self._cancelled:

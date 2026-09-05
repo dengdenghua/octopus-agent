@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import shutil
 import time
 import tomllib
@@ -18,6 +19,7 @@ from runtime.execution.codex_backend.command import resolve_codex_app_server_com
 from runtime.execution.codex_backend.responses_proxy import (
     CodexResponsesScope,
     ScopedResponsesProxy,
+    load_or_create_compaction_key,
 )
 from runtime.execution.codex_backend.security import CodexSecurityPolicy, CodexSidecarSecurity
 from runtime.execution.codex_backend.types import (
@@ -193,13 +195,14 @@ async def _post(
     payload: dict[str, Any],
     *,
     token: str | None = None,
+    endpoint: str = "responses",
 ) -> tuple[int, dict[str, str], bytes]:
     parsed = urlsplit(profile.base_url)
     reader, writer = await asyncio.open_connection(parsed.hostname, parsed.port)
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
     bearer = token if token is not None else profile.scoped_bearer_token
     request = (
-        f"POST {parsed.path}/responses HTTP/1.1\r\n"
+        f"POST {parsed.path}/{endpoint} HTTP/1.1\r\n"
         f"Host: {parsed.hostname}:{parsed.port}\r\n"
         f"Authorization: Bearer {bearer}\r\n"
         "Content-Type: application/json\r\n"
@@ -242,6 +245,7 @@ async def test_proxy_normalizes_real_tool_history_and_emits_codex_sse() -> None:
     rendered = body.decode()
     assert "response.output_item.done" in rendered
     assert '"type":"message"' in rendered
+    assert '"phase":"commentary"' in rendered
     assert '"type":"function_call"' in rendered
     assert '"type":"custom_tool_call"' in rendered
     assert '"type":"local_shell_call"' in rendered
@@ -257,6 +261,265 @@ async def test_proxy_normalizes_real_tool_history_and_emits_codex_sse() -> None:
     assert any(blocks[0].get("name") == "local_shell" for blocks in structured)
     assert sum(blocks[0].get("type") == "tool_result" for blocks in structured) == 3
     assert router.sessions == [trusted]
+
+
+def test_responses_translation_preserves_assistant_phase_metadata() -> None:
+    from runtime.execution.codex_backend.responses_proxy import (
+        model_response_to_responses,
+        responses_payload_to_model_request,
+    )
+
+    payload = {
+        "model": "deepseek-chat",
+        "input": [
+            {
+                "type": "message",
+                "role": "assistant",
+                "phase": "commentary",
+                "content": [{"type": "output_text", "text": "working"}],
+            },
+            {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "continue"}],
+            },
+        ],
+        "stream": False,
+    }
+
+    request, projections = responses_payload_to_model_request(
+        payload,
+        expected_model="deepseek-chat",
+    )
+    assert request.messages[0].phase == "commentary"
+    assert request.messages[1].phase is None
+
+    rendered = model_response_to_responses(
+        ModelResponse(text="done"),
+        model="deepseek-chat",
+        projections=projections,
+    )
+    assert rendered["output"][0]["phase"] == "final_answer"
+
+
+def test_responses_translation_keeps_plaintext_compaction_state() -> None:
+    from runtime.execution.codex_backend.responses_proxy import (
+        responses_payload_to_model_request,
+    )
+
+    request, _ = responses_payload_to_model_request(
+        {
+            "model": "deepseek-chat",
+            "input": [
+                {
+                    "type": "compaction",
+                    "summary": "Goal fixed; runtime/a.py edited; tests still pending.",
+                },
+                {"type": "message", "role": "user", "content": "continue"},
+            ],
+        },
+        expected_model="deepseek-chat",
+    )
+
+    rendered = "\n".join(str(message.content) for message in request.messages)
+    assert "<provider-compaction>" in rendered
+    assert "runtime/a.py edited" in rendered
+
+
+def test_responses_translation_marks_opaque_compaction_for_regrounding() -> None:
+    from runtime.execution.codex_backend.responses_proxy import (
+        responses_payload_to_model_request,
+    )
+
+    request, _ = responses_payload_to_model_request(
+        {
+            "model": "deepseek-chat",
+            "input": [
+                {"type": "compaction", "encrypted_content": "opaque"},
+                {"type": "message", "role": "user", "content": "continue"},
+            ],
+        },
+        expected_model="deepseek-chat",
+    )
+
+    assert "provider-compaction-unavailable" in str(request.messages[0].content)
+
+
+@pytest.mark.asyncio
+async def test_proxy_compact_endpoint_roundtrips_encrypted_continuation_state() -> None:
+    router = _RecordingRouter(tools=False)
+    compact_payload = {
+        "model": "deepseek-chat",
+        "instructions": "Keep verified file receipts and unfinished work.",
+        "input": [
+            {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "fix the long task runtime"}],
+            },
+            {
+                "type": "message",
+                "role": "assistant",
+                "phase": "commentary",
+                "content": [{"type": "output_text", "text": "runtime/a.py was inspected"}],
+            },
+            {
+                "type": "function_call_output",
+                "call_id": "call-check",
+                "output": "12 tests passed",
+            },
+        ],
+    }
+
+    async with ScopedResponsesProxy(
+        router,
+        scope=_scope(),
+        trusted_session=None,
+    ) as proxy:
+        status, headers, body = await _post(
+            proxy.provider_profile,
+            compact_payload,
+            endpoint="responses/compact",
+        )
+        assert status == 200
+        assert headers["content-type"] == "application/json"
+        compacted = json.loads(body)
+        assert compacted["object"] == "response.compaction"
+        assert compacted["output"][0]["role"] == "user"
+        item = compacted["output"][-1]
+        assert item["type"] == "compaction"
+        assert item["encrypted_content"].startswith("octopus.compaction.v1.")
+        assert "proxy response" not in item["encrypted_content"]
+
+        status, _, _ = await _post(
+            proxy.provider_profile,
+            {
+                "model": "deepseek-chat",
+                "input": [
+                    *compacted["output"],
+                    {"type": "message", "role": "user", "content": "continue"},
+                ],
+                "stream": False,
+            },
+        )
+
+    assert status == 200
+    compact_request, resumed_request = router.requests
+    assert compact_request.tools == []
+    assert "historical evidence" in str(compact_request.messages[0].content)
+    resumed = "\n".join(str(message.content) for message in resumed_request.messages)
+    assert "<provider-compaction>" in resumed
+    assert "proxy response" in resumed
+    assert "provider-compaction-unavailable" not in resumed
+
+
+@pytest.mark.asyncio
+async def test_proxy_tampered_local_compaction_is_never_trusted() -> None:
+    router = _RecordingRouter(tools=False)
+    async with ScopedResponsesProxy(
+        router,
+        scope=_scope(),
+        trusted_session=None,
+    ) as proxy:
+        status, _, body = await _post(
+            proxy.provider_profile,
+            {
+                "model": "deepseek-chat",
+                "input": [{"type": "message", "role": "user", "content": "compact me"}],
+            },
+            endpoint="responses/compact",
+        )
+        assert status == 200
+        item = json.loads(body)["output"][-1]
+        encrypted = item["encrypted_content"]
+        replacement = "A" if encrypted[-1] != "A" else "B"
+        item["encrypted_content"] = encrypted[:-1] + replacement
+        status, _, _ = await _post(
+            proxy.provider_profile,
+            {
+                "model": "deepseek-chat",
+                "input": [item, {"type": "message", "role": "user", "content": "continue"}],
+                "stream": False,
+            },
+        )
+
+    assert status == 200
+    resumed = "\n".join(str(message.content) for message in router.requests[-1].messages)
+    assert "provider-compaction-unavailable" in resumed
+    assert "proxy response" not in resumed
+
+
+@pytest.mark.asyncio
+async def test_compaction_survives_turn_proxy_rotation_and_backend_key_reload(
+    tmp_path: Path,
+) -> None:
+    state_root = tmp_path / "state"
+    key_a = load_or_create_compaction_key(
+        state_root,
+        tenant_id="tenant-a",
+        principal_id="alice",
+        thread_id="thread-a",
+    )
+    key_b = load_or_create_compaction_key(
+        state_root,
+        tenant_id="tenant-a",
+        principal_id="alice",
+        thread_id="thread-a",
+    )
+    other_thread_key = load_or_create_compaction_key(
+        state_root,
+        tenant_id="tenant-a",
+        principal_id="alice",
+        thread_id="thread-b",
+    )
+    assert key_a == key_b
+    assert key_a != other_thread_key
+    master_path = state_root / "responses-compaction" / "master.key"
+    assert master_path.read_bytes() != key_a
+    if os.name == "posix":
+        assert master_path.stat().st_mode & 0o777 == 0o600
+
+    first_router = _RecordingRouter(tools=False)
+    async with ScopedResponsesProxy(
+        first_router,
+        scope=_scope(turn="turn-a"),
+        trusted_session=None,
+        compaction_key=key_a,
+    ) as first:
+        status, _, body = await _post(
+            first.provider_profile,
+            {
+                "model": "deepseek-chat",
+                "input": [{"type": "message", "role": "user", "content": "durable goal"}],
+            },
+            endpoint="responses/compact",
+        )
+    assert status == 200
+    compacted = json.loads(body)
+
+    second_router = _RecordingRouter(tools=False)
+    async with ScopedResponsesProxy(
+        second_router,
+        scope=_scope(turn="turn-b"),
+        trusted_session=None,
+        compaction_key=key_b,
+    ) as second:
+        status, _, _ = await _post(
+            second.provider_profile,
+            {
+                "model": "deepseek-chat",
+                "input": [
+                    *compacted["output"],
+                    {"type": "message", "role": "user", "content": "continue next turn"},
+                ],
+                "stream": False,
+            },
+        )
+
+    assert status == 200
+    resumed = "\n".join(str(message.content) for message in second_router.requests[0].messages)
+    assert "<provider-compaction>" in resumed
+    assert "proxy response" in resumed
 
 
 @pytest.mark.asyncio
@@ -414,6 +677,8 @@ async def test_proxy_token_only_enters_app_server_environment(tmp_path: Path) ->
         parsed = tomllib.loads(config_text)
 
         assert launch_env["OCTOPUS_CODEX_PROXY_TOKEN"] == token
+        assert launch_env["NO_PROXY"] == "127.0.0.1,localhost,::1"
+        assert launch_env["no_proxy"] == "127.0.0.1,localhost,::1"
         assert "UPSTREAM_API_KEY" not in launch_env
         assert parsed["model_providers"]["octopus_proxy"]["env_key"] == (
             "OCTOPUS_CODEX_PROXY_TOKEN"
@@ -551,10 +816,20 @@ async def test_real_codex_app_server_completes_scoped_text_and_tool_loop(
                     notifications.append(notification)
                     if notification.method == "turn/completed":
                         break
+                compact_result = await execution._require_client().request(
+                    "thread/compact/start",
+                    {"threadId": execution.inner_thread_id},
+                    timeout_s=20.0,
+                )
         finally:
             await execution.close()
 
-    assert len(router.requests) == 2
+    assert isinstance(compact_result, dict)
+    assert len(router.requests) == 3
+    compact_prompt = "\n".join(
+        str(message.content) for message in router.requests[-1].messages
+    ).casefold()
+    assert "compaction" in compact_prompt
     assert len(tool_calls) == 1
     assert tool_calls[0].params["tool"] == "probe"
     agent_texts: list[str] = []

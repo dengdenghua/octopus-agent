@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+
 import pytest
 
 from runtime.core.graph_runtime import GraphRuntime
@@ -269,6 +271,32 @@ class TestAgentRegistry:
 
         assert len(reg) == len(expected_ids)
         assert set(reg.all_ids()) == expected_ids
+
+    def test_all_agents_reads_published_snapshot_without_waiting_for_writer_lock(self):
+        reg = AgentRegistry()
+        agent = make_coder_agent(_fake_runtime())
+        reg.register(agent)
+        finished = threading.Event()
+        observed: list[Agent] = []
+
+        reg._lock.acquire()  # noqa: SLF001 - intentional lock-contention regression
+        try:
+            reader = threading.Thread(
+                target=lambda: (observed.extend(reg.all_agents()), finished.set()),
+                daemon=True,
+            )
+            reader.start()
+            assert finished.wait(0.25), "agent roster read waited behind a registry reload"
+        finally:
+            reg._lock.release()  # noqa: SLF001
+        reader.join(timeout=1)
+        assert observed == [agent]
+
+        replacement = make_coder_agent(_fake_runtime())
+        reg.replace(replacement)
+        assert reg.all_agents() == [replacement]
+        assert reg.remove("coder") is True
+        assert reg.all_agents() == []
 
 
 # ═══════════════════════════════════════════════════════════

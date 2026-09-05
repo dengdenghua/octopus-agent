@@ -136,7 +136,7 @@ def test_verification_plan_stops_at_first_failure(
     assert batches[0]["passed_count"] == 0
 
 
-def test_verification_plan_requires_workspace_write_sandbox(tmp_path: Path) -> None:
+def test_verification_plan_rejects_read_only_sandbox(tmp_path: Path) -> None:
     assert (
         auto_verifier.run_verification_plan(
             _plan(tmp_path),
@@ -144,6 +144,90 @@ def test_verification_plan_requires_workspace_write_sandbox(tmp_path: Path) -> N
         )
         == []
     )
+
+
+def test_verification_plan_runs_in_danger_full_access(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executed: list[str] = []
+
+    def fake_run(
+        command: dict[str, Any],
+        _workspace: Path,
+        _sandbox_policy: dict[str, Any],
+    ) -> VerificationItem:
+        executed.append(str(command["command"]))
+        return _item(command, ItemStatus.COMPLETED)
+
+    monkeypatch.setattr(auto_verifier, "_run_command", fake_run)
+    monkeypatch.setattr(
+        auto_verifier,
+        "rank_verification_commands",
+        lambda candidates: candidates,
+    )
+
+    items = auto_verifier.run_verification_plan(
+        _plan(tmp_path),
+        sandbox_policy={"type": "dangerFullAccess", "networkAccess": False},
+        max_commands=1,
+    )
+
+    assert len(items) == 1
+    assert items[0].status == ItemStatus.COMPLETED
+    assert executed == ["python -m ruff check src.py"]
+
+
+def test_verification_plan_uses_project_fallback_when_matrix_has_no_command(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.execution.suckers import verify_skills
+
+    target = tmp_path / "main.go"
+    target.write_text("package main\n", encoding="utf-8")
+    profile = verify_skills.ProjectProfile(
+        kind="go",
+        root=str(tmp_path),
+        checks=[
+            {
+                "name": "build",
+                "argv": ["go", "build", "./..."],
+                "display_cmd": "go build ./...",
+            }
+        ],
+    )
+    monkeypatch.setattr(verify_skills, "detect_project", lambda _workspace: profile)
+    monkeypatch.setattr(
+        verify_skills,
+        "run_checks",
+        lambda *_args, **_kwargs: [
+            verify_skills.CheckResult(
+                name="build",
+                command="go build ./...",
+                passed=True,
+                exit_code=0,
+                stdout="ok",
+                stderr="",
+                duration_ms=1,
+            )
+        ],
+    )
+
+    items = auto_verifier.run_verification_plan(
+        {
+            "workspace": str(tmp_path),
+            "targets": ["main.go"],
+            "commands": [],
+        },
+        sandbox_policy={"type": "dangerFullAccess", "networkAccess": False},
+    )
+
+    assert len(items) == 1
+    assert items[0].command == "go build ./..."
+    assert items[0].kind == "build"
+    assert items[0].status == ItemStatus.COMPLETED
+    assert items[0].related_files == ["main.go"]
 
 
 def test_verification_repair_request_is_bounded_and_carries_failure_evidence(

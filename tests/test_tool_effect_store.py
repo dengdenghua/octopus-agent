@@ -3,6 +3,7 @@ from __future__ import annotations
 import multiprocessing
 import os
 import shutil
+import sqlite3
 import threading
 import time
 from pathlib import Path
@@ -385,6 +386,97 @@ def test_sqlite_store_recovers_after_state_directory_is_recreated(tmp_path: Path
     assert after_reset.kind == "execute"
     assert store_path.is_file()
     assert [receipt.effect_key for receipt in store.list_receipts()] == ["effect:after-reset"]
+
+
+def test_sqlite_store_migrates_result_summary_for_existing_receipts(
+    tmp_path: Path,
+) -> None:
+    store_path = tmp_path / "effects.sqlite3"
+    with sqlite3.connect(store_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE tool_effect_receipts (
+                effect_key TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                step_id INTEGER NOT NULL,
+                sucker_id TEXT NOT NULL,
+                args_fingerprint TEXT NOT NULL,
+                side_effecting INTEGER NOT NULL,
+                state TEXT NOT NULL,
+                holder_id TEXT NOT NULL DEFAULT '',
+                fencing_token INTEGER NOT NULL DEFAULT 0,
+                lease_expires_at REAL NOT NULL DEFAULT 0,
+                call_id TEXT NOT NULL DEFAULT '',
+                step_json TEXT,
+                reason TEXT NOT NULL DEFAULT '',
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO tool_effect_receipts(
+                effect_key, task_id, step_id, sucker_id, args_fingerprint,
+                side_effecting, state, step_json, created_at, updated_at
+            ) VALUES(?, '', 0, '', '', 0, 'committed', ?, 1, 1)
+            """,
+            ("effect:legacy", _sample_step().model_dump_json()),
+        )
+
+    migrated = SQLiteEffectStore(store_path)
+
+    [receipt] = migrated.list_receipts()
+    assert receipt.effect_key == "effect:legacy"
+    assert receipt.has_result is True
+
+
+def test_sqlite_receipt_listing_skips_large_results_and_uses_sort_indexes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = SQLiteEffectStore(tmp_path / "effects.sqlite3")
+    store.record_committed(
+        effect_key="effect:large-result",
+        step=_sample_step("x" * 100_000),
+    )
+    real_connect = store._connect  # noqa: SLF001
+    traced_queries: list[str] = []
+
+    def _constrained_connect() -> sqlite3.Connection:
+        conn = real_connect()
+        conn.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, 1_024)
+        conn.set_trace_callback(traced_queries.append)
+        return conn
+
+    monkeypatch.setattr(store, "_connect", _constrained_connect)
+
+    [receipt] = store.list_receipts(limit=1)
+    assert receipt.effect_key == "effect:large-result"
+    assert receipt.has_result is True
+    unfiltered_query = next(
+        query for query in traced_queries if query.lstrip().startswith("SELECT")
+    )
+
+    traced_queries.clear()
+    [filtered_receipt] = store.list_receipts(state="committed", limit=1)
+    assert filtered_receipt.effect_key == "effect:large-result"
+    filtered_query = next(query for query in traced_queries if query.lstrip().startswith("SELECT"))
+
+    conn = real_connect()
+    try:
+        unfiltered_plan = conn.execute(f"EXPLAIN QUERY PLAN {unfiltered_query}").fetchall()
+        filtered_plan = conn.execute(f"EXPLAIN QUERY PLAN {filtered_query}").fetchall()
+    finally:
+        conn.close()
+    unfiltered_details = [str(row[3]) for row in unfiltered_plan]
+    filtered_details = [str(row[3]) for row in filtered_plan]
+    assert any(
+        "idx_tool_effect_receipts_priority_updated" in detail for detail in unfiltered_details
+    )
+    assert any("idx_tool_effect_receipts_state" in detail for detail in filtered_details)
+    assert all("USE TEMP B-TREE" not in detail for detail in unfiltered_details)
+    assert all("USE TEMP B-TREE" not in detail for detail in filtered_details)
 
 
 def test_sqlite_journal_repair_cannot_overwrite_live_takeover(tmp_path: Path) -> None:
@@ -837,14 +929,28 @@ def test_tool_effect_reconciliation_api_is_admin_fenced_and_audited(
     )
 
     class _Identity:
-        def __init__(self, actor_id: str, roles: tuple[str, ...]) -> None:
+        def __init__(
+            self,
+            actor_id: str,
+            roles: tuple[str, ...],
+            *,
+            scopes: tuple[str, ...] = (),
+        ) -> None:
             self.actor_id = actor_id
             self.roles = roles
+            self.metadata = {
+                "tenant_id": f"tenant-{actor_id}",
+                "scopes": list(scopes),
+            }
 
     class _Identities:
         def verify_api_key(self, token: str):
             if token == "admin-token":
-                return _Identity("admin-user", ("admin",))
+                return _Identity(
+                    "admin-user",
+                    ("admin",),
+                    scopes=("global:admin",),
+                )
             if token == "user-token":
                 return _Identity("regular-user", ("user",))
             return None
@@ -891,7 +997,13 @@ def test_tool_effect_reconciliation_api_is_admin_fenced_and_audited(
         "/api/tool-effects?state=indeterminate",
         headers={"Authorization": "Bearer admin-token"},
     )
+    assert admin_listed.status_code == 403
+    admin_listed = client.get(
+        "/api/tool-effects?state=indeterminate&cross_tenant=true",
+        headers={"Authorization": "Bearer admin-token"},
+    )
     assert admin_listed.status_code == 200
+    assert admin_listed.json()["global_control_plane"] is True
     assert admin_listed.json()["state_counts"]["indeterminate"] == 1
     assert admin_listed.json()["can_authorize_retry"] is True
     body = {
@@ -906,21 +1018,24 @@ def test_tool_effect_reconciliation_api_is_admin_fenced_and_audited(
     )
     assert forbidden.status_code == 403
     stale = client.post(
-        "/api/tool-effects/effect:payment/authorize-retry",
+        "/api/tool-effects/effect:payment/authorize-retry?cross_tenant=true",
         headers={"Authorization": "Bearer admin-token"},
         json={**body, "fencing_token": claim.fencing_token + 1},
     )
     assert stale.status_code == 409
     resolved = client.post(
-        "/api/tool-effects/effect:payment/authorize-retry",
+        "/api/tool-effects/effect:payment/authorize-retry?cross_tenant=true",
         headers={"Authorization": "Bearer admin-token"},
         json=body,
     )
     assert resolved.status_code == 200
+    assert resolved.json()["global_control_plane"] is True
     assert resolved.json()["state"] == "retry_authorized"
     events = journal.read_by_type("tool_effect_reconciliation")
     assert len(events) == 1
     assert events[0].actor == "admin-user"
+    assert events[0].tenant_id == "tenant-admin-user"
+    assert events[0].owner_actor_id == "admin-user"
 
 
 def test_distributed_readiness_rejects_local_only_store(tmp_path: Path) -> None:

@@ -753,8 +753,8 @@ _AUDIT_INTENT_RE = re.compile(
 # phrasing ("哪些问题需要修复？") in audit mode; only imperative language or a
 # bare repair verb opts into mutation.
 _EXPLICIT_CHANGE_RE = re.compile(
-    r"^(?:修复|修改|重构|实现|改造|清理|部署|安装|删除|补上|加上|提交)(?:\b|[\u4e00-\u9fff])|"
-    r"(?:请|帮我|直接|现在|开始|着手|把|将).{0,24}(?:修复|修改|重构|实现|改造|清理|部署|安装|删除|补上|加上|提交)",
+    r"^(?:修复|修改|优化|重构|实现|改造|清理|部署|安装|删除|补上|加上|提交)(?:\b|[\u4e00-\u9fff])|"
+    r"(?:请|帮我|直接|现在|开始|着手|把|将).{0,24}(?:修复|修改|优化|重构|实现|改造|清理|部署|安装|删除|补上|加上|提交)",
     re.IGNORECASE,
 )
 
@@ -778,7 +778,15 @@ def _is_audit_intent(text: str, context_payload: dict[str, Any]) -> bool:
     # A declared read-only / audit capability also opts in.
     mode = str(context_payload.get("mode") or "").strip().lower()
     capability = str(context_payload.get("capability_mode") or "").strip().lower()
-    return mode == "audit" or capability == "audit" or bool(context_payload.get("audit_mode"))
+    agent_mode = str(context_payload.get("agent_mode") or "").strip().lower()
+    workflow = str(context_payload.get("workflow_preset") or "").strip().lower()
+    return bool(
+        mode == "audit"
+        or capability == "audit"
+        or agent_mode == "audit"
+        or workflow.startswith("audit.")
+        or context_payload.get("audit_mode")
+    )
 
 
 def _build_intent(
@@ -943,6 +951,26 @@ def _build_intent(
     approval_policy = params.approval_policy
     if approval_policy == "never" and not allow_client_auto_approve:
         approval_policy = "on-request"
+    permission_mode = str(context_payload.get("permission_mode") or "").strip().lower()
+    full_access_requested = permission_mode in {
+        "bypasspermissions",
+        "bypass-permissions",
+        "bypass",
+        "yolo",
+        "full",
+    }
+    if full_access_requested and approval_policy == "never":
+        # Full access is an inclusive backend contract, not merely an
+        # approval shortcut. Canonicalize stale or hand-crafted clients so
+        # execution and network cannot remain narrower than the selected mode.
+        context_payload = {
+            **context_payload,
+            "permission_mode": "bypassPermissions",
+            "approval_policy": "never",
+            "execution_environment": "local",
+            "sandbox_mode": "full",
+            "network_access": "full",
+        }
     # Audit / review turns get a prompt-level audit contract (inspect →
     # report; any code edit must be explicitly justified). This is a
     # behavioural nudge, not a permission gate — an audit may legitimately
@@ -959,6 +987,7 @@ def _build_intent(
                 **context_payload,
                 "audit_mode": False,
                 "mode": "code",
+                "agent_mode": "develop",
                 "workflow_mode": "develop",
                 "completion_policy": "develop",
                 "mode_preset": "develop.mode",
@@ -968,6 +997,14 @@ def _build_intent(
     # exec_shell can honour ``sandboxPolicy.networkAccess``. Default when
     # absent is network denied — a turn must explicitly opt in.
     sb_policy = getattr(params, "sandbox_policy", None) or {}
+    if full_access_requested and approval_policy == "never":
+        sb_policy = {
+            **(sb_policy if isinstance(sb_policy, dict) else {}),
+            "type": "dangerFullAccess",
+            "networkAccess": True,
+        }
+        sb_policy.pop("egressAllowCommon", None)
+        sb_policy.pop("egress_allow_common", None)
     if isinstance(sb_policy, dict) and sb_policy:
         context_payload = {
             **context_payload,

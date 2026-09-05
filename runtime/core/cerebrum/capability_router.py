@@ -14,6 +14,70 @@ _PATHISH_RE = re.compile(
     r"([A-Za-z]:\\|/[\w.-]+|\.{1,2}/|[\w.-]+\.(?:py|ts|tsx|js|jsx|go|rs|md|json|yaml|yml|css|html))"
 )
 
+_BROWSER_TOOL_PREFIXES = ("browser_", "live_browser_")
+_BROWSER_UI_TOOLS = frozenset({"screen_capture", "screen_info"})
+_BROWSER_INTERACTION_RE = re.compile(
+    r"(?:"
+    r"\b(?:click|type|fill|submit|upload|sign[ -]?in|log[ -]?in|navigate|"
+    r"screenshot|visual regression|browser automation)\b"
+    r"|点击|填写|输入|提交|上传|登录|跳转|导航|截图|检查|查看|视觉回归|浏览器操作|浏览器自动化"
+    r")",
+    re.IGNORECASE,
+)
+_EXPLICIT_BROWSER_SURFACE_RE = re.compile(r"@(?:browser|chrome)\b", re.IGNORECASE)
+
+
+def browser_tools_requested(
+    user_context: dict[str, Any] | None,
+    *,
+    goal: str = "",
+) -> bool:
+    """Return whether this turn genuinely needs an interactive browser lane.
+
+    Ordinary research and URL reading stay on ``web_search`` / HTTP extraction.
+    Browser tools are exposed only for an explicit Browser/Chrome surface, UI
+    regression, or a goal containing a concrete interaction verb.  This keeps
+    a generic word such as "page" from opening a visible browser during search.
+    """
+
+    context = user_context if isinstance(user_context, dict) else {}
+    metadata = context.get("metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    surface = (
+        str(context.get("browser_surface") or metadata.get("browser_surface") or "").strip().lower()
+    )
+    runtime_surfaces = context.get("runtime_surfaces") or metadata.get("runtime_surfaces")
+    mode = str(context.get("mode") or metadata.get("mode") or "").strip().lower()
+    capability_mode = (
+        str(context.get("capability_mode") or metadata.get("capability_mode") or "").strip().lower()
+    )
+    surface_names = (
+        {str(item).strip().lower() for item in runtime_surfaces}
+        if isinstance(runtime_surfaces, list)
+        else set()
+    )
+    if bool(
+        context.get("browser_operation_mode")
+        or metadata.get("browser_operation_mode")
+        or context.get("browser_regression_enabled")
+        or metadata.get("browser_regression_enabled")
+        or context.get("chrome_operation_mode")
+        or metadata.get("chrome_operation_mode")
+        or surface in {"browser", "chrome"}
+        or {"browser", "chrome"} & surface_names
+        or mode in {"browser", "chrome"}
+        or capability_mode == "browser"
+    ):
+        return True
+    goal_text = str(goal or "")
+    return bool(
+        _EXPLICIT_BROWSER_SURFACE_RE.search(goal_text) or _BROWSER_INTERACTION_RE.search(goal_text)
+    )
+
+
+def _is_browser_ui_tool(name: str) -> bool:
+    return name.startswith(_BROWSER_TOOL_PREFIXES) or name in _BROWSER_UI_TOOLS
+
 
 def _dedupe(items: Iterable[str]) -> tuple[str, ...]:
     seen: set[str] = set()
@@ -57,10 +121,13 @@ def filter_surface_compatible_skills(
     names: Iterable[str],
     *,
     user_context: dict[str, Any] | None,
+    goal: str = "",
 ) -> list[str]:
-    """Remove tools that are incompatible with the active runtime surface."""
+    """Remove tools that are incompatible with or unnecessary for this turn."""
 
     values = list(names)
+    if not browser_tools_requested(user_context, goal=goal):
+        return [name for name in values if not _is_browser_ui_tool(name)]
     if isolated_code_ui_regression(user_context):
         return [name for name in values if not name.startswith("live_browser_")]
     return values
@@ -110,6 +177,18 @@ class CapabilityActivation:
                 "When spawning subagents, pass explicit `skill_packs`, `skills`, or `plugins` in the delegation spec so workers get the same relevant capabilities.\n"
                 "</active-capability-router>",
             )
+            if "media-generation" in self.labels:
+                sections.append(
+                    "<media-generation-routing>\n"
+                    "For a direct image or video creation request, call the native "
+                    "`generate_image` or `generate_video` tool immediately. Do not "
+                    "search for or activate `agnes-*-generate` skill packs first: "
+                    "those packages are adapter documentation, while the native tools "
+                    "are the executable entry points and resolve provider credentials "
+                    "inside the trusted tool host. An `exec_shell` environment check is "
+                    "not evidence that the native media tool lacks credentials.\n"
+                    "</media-generation-routing>",
+                )
         if (
             self.pinned_skills
             or self.pinned_plugins
@@ -163,6 +242,35 @@ class CapabilityActivation:
 
 
 _RULES: tuple[dict[str, Any], ...] = (
+    {
+        "label": "media-generation",
+        "modes": {"media", "image", "video"},
+        "keywords": (
+            "generate image",
+            "create image",
+            "draw an image",
+            "generate video",
+            "create video",
+            "text to image",
+            "text-to-image",
+            "image to video",
+            "image-to-video",
+            "生图",
+            "生成图片",
+            "生成一张",
+            "画一张",
+            "画图",
+            "插画",
+            "生视频",
+            "生成视频",
+            "图生视频",
+            "文生图",
+        ),
+        "skills": (
+            "generate_image",
+            "generate_video",
+        ),
+    },
     {
         "label": "research",
         "modes": {"research", "deep", "deep_research"},
@@ -685,6 +793,7 @@ def activate_capabilities(
     skills = filter_surface_compatible_skills(
         skills,
         user_context=user_context,
+        goal=goal,
     )
     if skills:
         for name in (
@@ -757,11 +866,12 @@ def order_skill_names(
         "search_skills",
         "query_skill",
     )
-    front = [
-        name
-        for name in (*anchors, *pinned_plugin_actions, *activation.priority_skills)
-        if name in available
-    ]
+    candidates = (
+        (*activation.priority_skills, *anchors)
+        if "media-generation" in activation.labels
+        else (*anchors, *activation.priority_skills)
+    )
+    front = [name for name in (*pinned_plugin_actions, *candidates) if name in available]
     ordered_front = _dedupe(front)
     front_set = set(ordered_front)
     return [*ordered_front, *(name for name in original if name not in front_set)]

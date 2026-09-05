@@ -1346,6 +1346,7 @@ def test_app_state_attaches_trace_store_to_injected_jsonl_journal(tmp_path: Path
         journal=injected,
         trace_store_path=tmp_path / "agent_trace.sqlite",
     )
+    assert state.journal_path == tmp_path / "injected.jsonl"
 
     task_id = uuid4()
     state.journal.write_token_usage(

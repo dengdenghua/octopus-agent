@@ -336,21 +336,26 @@ def _code_mode_false_no_tool_guard(
     goal: str,
     tools_active: bool,
 ) -> str | None:
-    """Reject code-mode finals that hallucinate missing file tools."""
+    """Reject finals that hallucinate missing tools on a tool-active turn."""
     if not tools_active:
-        return None
-    if not _goal_requests_project_inspection(goal):
         return None
     if _has_real_react_action(steps):
         return None
     if not _final_answer_claims_no_tool_access(final_answer):
         return None
+    if _goal_requests_project_inspection(goal):
+        return (
+            "Tools are available in this ReAct turn. Do not claim that "
+            "project/file tools are unavailable before trying a listed tool. "
+            'For this inspection task, call list_cwd({"path":"."}) first, '
+            "then read_file on the smallest relevant file set. If a specific "
+            "tool call fails, report that concrete failure."
+        )
     return (
-        "Tools are available in this ReAct session. Do not claim that "
-        "project/file tools are unavailable before trying a listed tool. "
-        'For this code-mode inspection task, call list_cwd({"path":"."}) '
-        "first, then read_file on the smallest relevant file set. If a "
-        "specific tool call fails, report that concrete failure."
+        "Tools are available in this ReAct turn. Do not claim that the session "
+        "has no tools before trying a relevant listed tool. Call the most "
+        "relevant tool now; if it fails, report that concrete failure instead "
+        "of turning a per-call problem into a session-wide capability claim."
     )
 
 

@@ -87,11 +87,15 @@ def inject_cowork_turn_plan(
         messages = context.get("conversation_messages")
         if isinstance(messages, list) and messages:
             try:
-                from runtime.memory.cowork.context_view import resolve_view, slice_messages
+                from runtime.memory.cowork.context_view import materialize_messages, resolve_view
 
                 view = resolve_view(store.state(thread_id), responders[0], len(messages))
                 if view is not None and view.scope != "all":
-                    context["conversation_messages"] = slice_messages(view, messages)
+                    context["conversation_messages"] = materialize_messages(
+                        view,
+                        messages,
+                        current_message=text,
+                    )
             except Exception as exc:  # noqa: BLE001
                 _logger.debug("cowork grant slice skipped: %s", exc, exc_info=True)
 

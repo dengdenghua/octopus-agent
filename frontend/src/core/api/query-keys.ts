@@ -34,6 +34,8 @@ export const queryKeys = {
       agentId?: string | null;
       turnId?: string | null;
     }) => ["agent-trace", "summary", scope] as const,
+    executionTrace: (turnId?: string | null) =>
+      ["agent-trace", "execution-trace", turnId] as const,
     resumeRequests: (
       scope?: {
         threadId?: string | null;

@@ -38,6 +38,29 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 
+def _adaptive_orchestration_start_marker(context: dict[str, Any]) -> str | None:
+    """Render a compact, factual receipt for a server-granted team capability."""
+
+    if context.get("adaptive_team_orchestration") is not True:
+        return None
+    roster = context.get("agent_roster")
+    if not isinstance(roster, list):
+        return None
+    seen: set[str] = set()
+    for item in roster:
+        if isinstance(item, str):
+            raw = item
+        elif isinstance(item, dict):
+            raw = str(item.get("agent_id") or item.get("id") or item.get("name") or "")
+        else:
+            raw = ""
+        if raw.strip():
+            seen.add(raw.strip())
+    if len(seen) < 2:
+        return None
+    return f"🧭 动态编排已启用 · {len(seen)} 位成员就绪 · 将按实际结果调整分工、顺序与复核"
+
+
 async def _drive_team_topology(
     runtime: CerebrumRuntime,
     turn: Turn,
@@ -213,7 +236,13 @@ async def _drive_team_topology(
         from runtime.platform.process.session import Session, session_scope
 
         session_metadata = dict(intent.user_context or {})
+        params = getattr(turn, "params", None)
+        actor = str(getattr(params, "owner_actor_id", None) or "").strip() or None
+        tenant = str(getattr(params, "tenant_id", None) or "").strip()
+        if tenant:
+            session_metadata["tenant_id"] = tenant
         turn_session = Session(
+            actor=actor,
             agent=None,
             thread_id=thread_id,
             conversation_id=thread_id,
@@ -434,6 +463,18 @@ async def _drive_team_topology(
         subagent_items[agent_key] = completed
         turn.items = [completed if item.id == completed.id else item for item in turn.items]
         await _safe_emit_completed(turn, log, completed)
+
+    adaptive_marker = _adaptive_orchestration_start_marker(
+        dict(getattr(intent, "user_context", None) or {})
+    )
+    if adaptive_marker:
+        await _emit_marker(
+            turn,
+            log,
+            adaptive_marker,
+            icon="🧭",
+            agent_display_name="群主",
+        )
 
     # ── PHASE 5 · consumer loop (event dispatch) ────────────────
     run_result: TeamRunResult | None = None

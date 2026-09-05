@@ -17,29 +17,28 @@ importers and tests are unchanged.
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 from uuid import uuid4
 
-from runtime.execution.tool_engine import (
-    NormalizedToolCall,
-    normalize_step_tool_result,
-    normalize_tool_call,
-    normalize_tool_result,
-    output_signals_error,
+from runtime.execution.tool_engine import NormalizedToolCall, output_signals_error
+from runtime.execution.tool_engine.native_tool_execution import (
+    TOOL_OUTPUT_MAX_CHARS,
+    execute_native_tool_call,
 )
 from runtime.execution.tool_engine.tool_output_pruner import TOOL_RESULT_PRUNE_ENABLED
 from runtime.execution.tool_engine.tool_output_spill import TOOL_RESULT_SPILL_ENABLED
+from runtime.platform.models import ArmId, Budget, TaskId
 from runtime.sensing.model_router.models import ToolCall
-
-from ._tool_bridge_policy import TOOL_OUTPUT_MAX_CHARS
-
-_logger = logging.getLogger("octopus.agentic")
 
 
 def _execute_tool_call(
     stack: Any,
     call: ToolCall | NormalizedToolCall | dict[str, Any],
+    *,
+    task_id: TaskId | None = None,
+    step_id: int = 0,
+    arm_id: ArmId | None = None,
+    budget: Budget | None = None,
 ) -> tuple[str, bool]:
     """Run one tool_use via the existing executor.
 
@@ -47,116 +46,17 @@ def _execute_tool_call(
     direct use as a ``tool_result`` ``content`` field — always a
     string, always bounded in length.
     """
-    executor = getattr(stack, "executor", None)
-    if executor is None:
-        return ("(executor unavailable)", True)
-    try:
-        normalized = normalize_tool_call(call, origin="native")
-    except ValueError as exc:
-        return (f"(invalid tool call: {exc})", True)
-
-    # Use execute_step when available so agentic tool calls get the
-    # same scope/cwd injection, hooks, immunity, budget accounting,
-    # and journal integration as planner/ReAct tool calls.
-    try:
-        registry = executor.registry
-        if not registry.has(normalized.name):
-            return (f"(skill not found: {normalized.name})", True)
-        try:
-            if not registry.is_enabled(normalized.name):
-                return (f"(skill disabled: {normalized.name})", True)
-        except (AttributeError, TypeError, ValueError):  # noqa: BLE001 — is_enabled check unsupported by this registry; proceed to get()
-            pass
-        skill = registry.get(normalized.name)
-    except (AttributeError, TypeError, KeyError) as exc:
-        return (f"(registry error: {exc})", True)
-
-    # Defence in depth for lightweight embedders whose executor does not
-    # implement ``execute_step``. Production reaches the same policy again at
-    # the ToolExecutor chokepoint.
-    from runtime.execution.misc.skill_policy import audit_read_only_tool_denial
-    from runtime.platform.process.session import current_session
-
-    _policy_session = current_session()
-    _audit_denial = audit_read_only_tool_denial(
-        normalized.name,
-        normalized.arguments,
-        context=getattr(_policy_session, "metadata", None) or {},
-    )
-    if _audit_denial is not None:
-        return (_audit_denial, True)
-
-    if hasattr(executor, "execute_step"):
-        try:
-            from runtime.platform.models import (
-                ArmId,
-                Budget,
-                BudgetLimits,
-                SkillId,
-                TaskId,
-            )
-            from runtime.platform.process.session import current_session
-
-            task_id = TaskId(uuid4())
-            session = current_session()
-            step = executor.execute_step(
-                0,
-                f"agentic:{normalized.id}",
-                SkillId(normalized.name),
-                dict(normalized.arguments),
-                caller="agentic",
-                task_id=task_id,
-                arm_id=ArmId("agentic"),
-                budget=Budget(
-                    task_id,
-                    BudgetLimits(tokens=100_000, usd=10.0),
-                ),
-                actor=session.actor if session is not None else None,
-            )
-            output = step.result.output
-            if step.result.status != "success":
-                result = normalize_step_tool_result(
-                    step,
-                    origin="native",
-                    max_chars=TOOL_OUTPUT_MAX_CHARS,
-                    prune_middle=TOOL_RESULT_PRUNE_ENABLED,
-                    spill_oversized=TOOL_RESULT_SPILL_ENABLED,
-                    tool_name=normalized.name,
-                )
-                reason = step.result.error_type or step.result.status
-                return (result.rendered or f"({reason})", True)
-        except (RuntimeError, ValueError, TypeError, OSError) as exc:
-            return (f"(skill error: {type(exc).__name__}: {exc})", True)
-    else:
-        # Fall back to direct handler invocation only for lightweight test
-        # doubles that do not implement the executor contract.
-        try:
-            output = skill.handler(**normalized.arguments)
-        except TypeError as exc:
-            # Handler signature mismatch · surface the error so the
-            # model can correct its arg names on the next round.
-            return (f"(TypeError: {exc})", True)
-        except (RuntimeError, ValueError, OSError) as exc:
-            return (f"(skill error: {type(exc).__name__}: {exc})", True)
-
-    # Detect semantic error: a skill that chose to report failure via
-    # its return value (``{"ok": False, "error": "..."}`` or a bare
-    # ``{"error": "..."}``) should flip ``is_error=True`` on the SSE
-    # event so the frontend LiveToolTimeline marks the row red and
-    # so ``tool_error_count`` in the per-turn score actually increments.
-    # Without this, a skill that cleanly returns ``{"ok": False}``
-    # looks identical to one that succeeded · observability blind spot
-    # found in ``benchmarks/bench_b3_failure_injection.py``.
-    result = normalize_tool_result(
-        normalized,
-        output,
-        origin="native",
+    return execute_native_tool_call(
+        stack,
+        call,
         max_chars=TOOL_OUTPUT_MAX_CHARS,
         prune_middle=TOOL_RESULT_PRUNE_ENABLED,
         spill_oversized=TOOL_RESULT_SPILL_ENABLED,
-        tool_name=normalized.name,
+        task_id=task_id,
+        step_id=step_id,
+        arm_id=arm_id,
+        budget=budget,
     )
-    return (result.rendered, result.is_error)
 
 
 def _is_semantic_error(output: Any) -> bool:

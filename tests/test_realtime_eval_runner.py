@@ -369,15 +369,15 @@ async def test_realtime_trial_runner_agent_selection_cannot_be_overridden(tmp_pa
         port = server.sockets[0].getsockname()[1]
         await RealtimeTrialRunner(
             url=f"ws://127.0.0.1:{port}/api/realtime",
-            agent_id="local_codex_cli",
+            agent_id="coder",
             workspace=tmp_path,
             context_overrides={"agent_id": "coder"},
             timeout_seconds=5,
         ).run("run through Codex")
 
     metadata = received["start"]["params"]["input"][0]["metadata"]
-    assert metadata["agent_id"] == "local_codex_cli"
-    assert metadata["context"]["agent_id"] == "local_codex_cli"
+    assert metadata["agent_id"] == "coder"
+    assert metadata["context"]["agent_id"] == "coder"
 
 
 @pytest.mark.asyncio

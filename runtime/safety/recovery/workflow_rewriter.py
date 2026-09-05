@@ -10,6 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from runtime.adapters.instrumentation import trace_stage
 from runtime.memory.journal import Journal, TrajectoryEvent
 from runtime.platform.models import SkillId, Trajectory, new_id
+from runtime.safety.auth.scope import TenantScope
+from runtime.safety.recovery.tenant_scope import read_learning_events
 
 ProposalKind = Literal[
     "remove_degraded_step",
@@ -73,9 +75,12 @@ class WorkflowRewriter:
         self,
         journal: Journal,
         config: RewriterConfig | None = None,
+        *,
+        scope: TenantScope | None = None,
     ) -> None:
         self.journal = journal
         self.config = config or RewriterConfig()
+        self.scope = scope
 
     def analyze(self, rules: list[Any] | None = None) -> RewriteReport:
         with trace_stage("regeneration.workflow_rewriter.analyze"):
@@ -114,7 +119,7 @@ class WorkflowRewriter:
             if len(matched) < self.config.min_rule_invocations:
                 continue
 
-            success = sum(1 for t in matched if t.outcome.success)
+            success = sum(1 for t in matched if t.outcome.success and not t.outcome.degraded)
             rule_success_rate = success / len(matched)
 
             if rule_success_rate < self.config.low_rule_success_threshold:
@@ -172,7 +177,9 @@ class WorkflowRewriter:
         return proposals
 
     def _propose_new_sequences(self, trajs: list[Trajectory]) -> list[RewriteProposal]:
-        success_trajs = [t for t in trajs if t.outcome.success and t.step_count >= 2]
+        success_trajs = [
+            t for t in trajs if t.outcome.success and not t.outcome.degraded and t.step_count >= 2
+        ]
         if not success_trajs:
             return []
 
@@ -238,7 +245,11 @@ class WorkflowRewriter:
         return proposals
 
     def _collect_trajectories(self) -> list[Trajectory]:
-        events = self.journal.read_by_type("trajectory")
+        events = read_learning_events(
+            self.journal,
+            "trajectory",
+            scope=self.scope,
+        )
         trajs = [e.trajectory for e in events if isinstance(e, TrajectoryEvent)]
 
         # Keep the whole-task swarm aggregate when it exists for a

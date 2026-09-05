@@ -15,7 +15,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from runtime.core.cerebrum.react_checkpointing import _rehydrate_messages_from_steps
-from runtime.core.cerebrum.react_context import _restore_messages_from_checkpoint
+from runtime.core.cerebrum.react_context import (
+    _compress_context,
+    _restore_messages_from_checkpoint,
+    context_budget_tokens_for_model,
+)
 from runtime.core.cerebrum.react_types import ReActStep
 from runtime.platform.config.builder import StackProtocol
 from runtime.platform.models import ParsedIntent, TaskId
@@ -113,6 +117,18 @@ def _carry_prior_spend(stack: Any, resume_task_id: Any) -> tuple[int, float]:
         total_tokens += max(0, int(getattr(event, "output_tokens", 0) or 0))
         total_cost += max(0.0, float(getattr(event, "cost_usd", 0.0) or 0.0))
     return total_tokens, total_cost
+
+
+def _resume_model_name(stack: Any, intent: Any) -> str:
+    """Best-effort model identity for pre-call resume compaction."""
+
+    user_context = getattr(intent, "user_context", None) or {}
+    for key in ("execution_model", "selected_model", "model"):
+        value = user_context.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    planner = getattr(getattr(stack, "config", None), "planner", None)
+    return str(getattr(planner, "model", "") or "")
 
 
 def _load_resume_checkpoint_snapshot(
@@ -307,6 +323,34 @@ def _compute_resume_state(
         progress_summary = last["progress_summary"]
     if last["current_phase"]:
         current_phase = last["current_phase"]
+
+    # A periodic checkpoint intentionally keeps full raw step receipts for
+    # audit/recovery. Rehydration can therefore be much larger than the prompt
+    # snapshot itself. Compact before the very first resumed model call instead
+    # of waiting until the end of another iteration (which may never fit).
+    resume_model = _resume_model_name(stack, intent)
+    resume_is_code_mode = bool(working_set) or any(
+        any(
+            marker in str(step.action or "")
+            for marker in (
+                "read_file",
+                "edit_file",
+                "apply_patch",
+                "write_text_file",
+                "exec_shell",
+            )
+        )
+        for step in steps
+    )
+    messages = _compress_context(
+        messages,
+        max_tokens=context_budget_tokens_for_model(resume_model),
+        model=resume_model,
+        is_code_mode=resume_is_code_mode,
+        progress_summary=progress_summary,
+        current_phase=current_phase,
+        working_set=working_set,
+    )
     if last["has_final_answer"] and last["final_answer"]:
         final_answer = str(last["final_answer"])
         terminated_reason = "final_answer"
@@ -466,13 +510,31 @@ def _resume_or_register_turn(
     if resume_task_id is not None:
         _grant = _pause.consume_grant(str(resume_task_id))
         _extra_iters = int(_grant.get("extra_iterations") or 0)
+        _extra_tokens = int(_grant.get("extra_tokens") or 0)
+        _extra_usd = float(_grant.get("extra_usd") or 0.0)
         if _extra_iters > 0:
             max_iterations = max_iterations + _extra_iters
+            _pause.update_active_iteration_limit(str(resume_task_id), max_iterations)
             _logger.info(
                 "react_loop resume grant: +%d iterations for task %s (new max=%d)",
                 _extra_iters,
                 resume_task_id,
                 max_iterations,
+            )
+        if _extra_tokens > 0 or _extra_usd > 0:
+            _updated_limits = _pause.extend_active_limits(
+                str(resume_task_id),
+                extra_tokens=_extra_tokens,
+                extra_usd=_extra_usd,
+            )
+            _logger.info(
+                "react_loop resume grant: +%d cumulative tokens, +$%.3f for task %s "
+                "(new max tokens=%s, usd=%s)",
+                _extra_tokens,
+                _extra_usd,
+                resume_task_id,
+                getattr(_updated_limits, "max_tokens", "?"),
+                getattr(_updated_limits, "max_usd", "?"),
             )
         _pause.clear(str(resume_task_id))
     return _ResumedTurn(

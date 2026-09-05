@@ -29,6 +29,7 @@ import pytest
 from scripts.ttft_smoke import check, run_turn
 
 pytestmark = [
+    pytest.mark.live,
     pytest.mark.skipif(
         os.environ.get("OCTOPUS_TTFT_LIVE_SMOKE") != "1",
         reason="set OCTOPUS_TTFT_LIVE_SMOKE=1 with a live config to run the TTFT gate",

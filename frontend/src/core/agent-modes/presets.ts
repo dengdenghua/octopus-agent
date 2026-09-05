@@ -3,10 +3,7 @@ import type {
   AuditIntensity,
 } from "@/components/workspace/mode-selector";
 
-export type ModePresetId =
-  | "develop"
-  | "audit"
-  | "uxui";
+export type ModePresetId = "develop" | "audit" | "uxui";
 
 export type SkillPackProfile = "develop" | "audit" | "uxui";
 export type VerificationPolicy = "light" | "standard" | "strict" | "visual";
@@ -65,26 +62,21 @@ const MODE_PRESETS: Record<ModePresetId, ModeOrchestrationPreset> = {
 export function modePresetForAgentMode(
   agentMode: AgentModeName,
 ): ModeOrchestrationPreset {
-  if (agentMode === "audit") return MODE_PRESETS.audit;
+  // Legacy audit selections migrate into the general-purpose workflow. Review
+  // is inferred from the request and no longer changes the permission surface.
+  if (agentMode === "audit") return MODE_PRESETS.develop;
   if (agentMode === "uxui") return MODE_PRESETS.uxui;
   return MODE_PRESETS.develop;
 }
 
 /**
- * Resolve the workflow preset to SEND, applying the audit-intensity toggle.
- *
- * Only audit mode carries an intensity switch: "max" upgrades the sent preset to
- * `audit.deep`, a soft exhaustive mode — the backend directs the model to
- * fan out and self-check, but the model chooses its own orchestration (depth
- * still governed by the operator orchestration budget). Every other mode — and
- * audit at "standard" — keeps its base preset unchanged.
+ * Resolve the workflow preset to send. The intensity parameter is retained for
+ * source compatibility with old clients, but the unified two-mode UI no longer
+ * exposes or emits an audit workflow.
  */
 export function workflowPresetForMode(
   agentMode: AgentModeName,
-  auditIntensity: AuditIntensity = "standard",
+  _auditIntensity: AuditIntensity = "standard",
 ): ModeOrchestrationPreset["workflowPreset"] {
-  if (agentMode === "audit" && auditIntensity === "max") {
-    return "audit.deep";
-  }
   return modePresetForAgentMode(agentMode).workflowPreset;
 }

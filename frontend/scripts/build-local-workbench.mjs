@@ -1,5 +1,5 @@
 // Build the existing standalone page into the source-checkout marketplace layout.
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build, loadConfigFromFile } from "vite";
@@ -66,6 +66,13 @@ const output = path.resolve(
   "../extensions/workbench-apps",
   packageId,
 );
+// Package metadata is source-controlled; rebuilding assets must not reset
+// upstream permissions, release notes or data ownership declarations.
+const manifest = JSON.parse(
+  await readFile(path.join(output, "app.json"), "utf8"),
+);
+if (manifest.id !== packageId)
+  throw new Error("Workbench manifest id mismatch");
 const loaded = await loadConfigFromFile(
   { command: "build", mode: "production" },
   path.join(frontend, "vite.config.ts"),
@@ -88,31 +95,6 @@ try {
     css: { postcss: frontend },
     build: { outDir: path.join(output, "dist"), emptyOutDir: true },
   });
-  await mkdir(output, { recursive: true });
-  await writeFile(
-    path.join(output, "app.json"),
-    JSON.stringify(
-      {
-        schema: "octopus.workbench_app.v1",
-        id: packageId,
-        name: descriptor.name,
-        description: descriptor.description,
-        route: descriptor.route,
-        module_id: descriptor.module,
-        version: descriptor.version || "1.0.0",
-        runtime_plugin: descriptor.runtime,
-        host_api: ">=0.2,<0.3",
-        dependencies: [],
-        entry: "dist/index.html",
-        isolation: "iframe",
-        // This trusted first-party page uses the host's existing auth interceptor.
-        permissions: ["backend.api", "host.same_origin"],
-        data_paths: descriptor.data || [],
-      },
-      null,
-      2,
-    ) + "\n",
-  );
   console.log(`Workbench package ready: ${output}`);
 } finally {
   if (path.dirname(temporary) !== frontend.replace(/[\\/]$/, "")) {

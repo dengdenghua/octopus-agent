@@ -83,7 +83,15 @@ class ModelDispatchRouter(ModelRouter):
                     # the image; re-raise the original so we never mask.
                     raise exc from None
             if not yielded_any and _is_provider_unavailable_error(exc):
-                rescue = self._pick_provider_rescue(request.model, picked)
+                # A row-level selection id is an explicit endpoint choice from
+                # the model picker.  Silently rescuing it through another
+                # provider both violates that choice and replaces the useful
+                # upstream error with a misleading provider-branded one.
+                rescue = (
+                    None
+                    if request.model.startswith("octopus-custom-model:v1:")
+                    else self._pick_provider_rescue(request.model, picked)
+                )
                 if rescue is not None:
                     rescue_model, rescue_router = rescue
                     rewritten = request.model_copy(update={"model": rescue_model})
@@ -157,7 +165,11 @@ class ModelDispatchRouter(ModelRouter):
                 except Exception:
                     raise exc from None
             if _is_provider_unavailable_error(exc):
-                rescue = self._pick_provider_rescue(request.model, picked)
+                rescue = (
+                    None
+                    if request.model.startswith("octopus-custom-model:v1:")
+                    else self._pick_provider_rescue(request.model, picked)
+                )
                 if rescue is not None:
                     rescue_model, rescue_router = rescue
                     rewritten = request.model_copy(update={"model": rescue_model})
@@ -167,7 +179,7 @@ class ModelDispatchRouter(ModelRouter):
                         original_exc=exc,
                     )
                     return response.model_copy(update={"model": rescue_model})
-            # Guest-mode rescue · the default fallback (Molili) requires
+            # Guest-mode rescue · an account-backed fallback may require
             # a logged-in actor. A guest with ONE registered custom
             # model of the same family should just use that. Without
             # this rescue every guest turn that doesn't explicitly
@@ -178,9 +190,8 @@ class ModelDispatchRouter(ModelRouter):
             #   * the exception looks like an auth/credentials issue
             #   * a rescue candidate is registered
             #
-            # We check by class NAME rather than importing the exception
-            # to avoid a circular import (molili_router imports from
-            # .models, which this module also imports).
+            # We check by class NAME rather than importing provider-specific
+            # exceptions, which keeps this dispatcher provider-neutral.
             if picked is self._fallback:
                 exc_class = type(exc).__name__
                 exc_msg = str(exc)

@@ -8,6 +8,8 @@ from runtime.adapters.instrumentation import trace_stage
 from runtime.memory.journal import Journal, StepEvent, TrajectoryEvent
 from runtime.memory.knowledge_graph import AddResult, KnowledgeGraph, Triple
 from runtime.platform.models import default_source
+from runtime.safety.auth.scope import TenantScope, tenant_scoped_path
+from runtime.safety.recovery.tenant_scope import read_learning_journal
 
 
 class KGUpdateReport(BaseModel):
@@ -21,32 +23,64 @@ class KGUpdateReport(BaseModel):
 
 
 class KGUpdater:
-    def __init__(self, journal: Journal, kg: KnowledgeGraph) -> None:
+    def __init__(
+        self,
+        journal: Journal,
+        kg: KnowledgeGraph,
+        *,
+        scope: TenantScope | None = None,
+    ) -> None:
         self.journal = journal
         self.kg = kg
+        self.scope = scope
 
     def update(self) -> KGUpdateReport:
         with trace_stage("regeneration.kg_updater.update"):
-            events = self.journal.read_all()
+            events = read_learning_journal(self.journal, scope=self.scope)
 
             proposed: list[Triple] = []
+            step_events: list[StepEvent] = []
             trajectory_buckets: dict[object, list[tuple[int, TrajectoryEvent]]] = {}
             for idx, e in enumerate(events):
                 if isinstance(e, StepEvent):
-                    proposed.extend(self._triples_from_step(e))
+                    step_events.append(e)
                 elif isinstance(e, TrajectoryEvent):
                     trajectory_buckets.setdefault(e.trajectory.task_id, []).append((idx, e))
 
+            selected_trajectories: list[TrajectoryEvent] = []
             for bucket in trajectory_buckets.values():
                 swarm_entries = [
                     item for item in bucket if item[1].trajectory.strategy_id == "swarm"
                 ]
                 if swarm_entries:
                     _idx, event = max(swarm_entries, key=lambda item: item[0])
-                    proposed.extend(self._triples_from_trajectory(event))
+                    selected_trajectories.append(event)
                 else:
                     for _idx, event in bucket:
-                        proposed.extend(self._triples_from_trajectory(event))
+                        selected_trajectories.append(event)
+
+            # A completed trajectory is authoritative for whether its task's
+            # successful-looking StepEvents may become positive knowledge. A
+            # degraded/failed task remains failure evidence in the journal but
+            # cannot publish tool outputs or a completed_strategy edge. Legacy
+            # standalone intel StepEvents remain compatible when no trajectory
+            # exists for that task.
+            clean_task: dict[str, bool] = {}
+            for event in selected_trajectories:
+                trajectory = event.trajectory
+                key = str(trajectory.task_id)
+                clean = trajectory.outcome.success and not trajectory.outcome.degraded
+                clean_task[key] = clean_task.get(key, True) and clean
+
+            for event in selected_trajectories:
+                if clean_task.get(str(event.trajectory.task_id), False):
+                    proposed.extend(self._triples_from_trajectory(event))
+
+            for event in step_events:
+                key = str(event.task_id or "")
+                if key in clean_task and not clean_task[key]:
+                    continue
+                proposed.extend(self._triples_from_step(event))
 
             accepted = superseded_old = ignored = 0
             for t in proposed:
@@ -150,7 +184,7 @@ class KGUpdater:
 
     def _triples_from_trajectory(self, ev: TrajectoryEvent) -> list[Triple]:
         traj = ev.trajectory
-        if not traj.outcome.success:
+        if not traj.outcome.success or traj.outcome.degraded:
             return []
         src = default_source(f"trajectory:{traj.trajectory_id}", "trajectory")
         return [
@@ -169,6 +203,7 @@ def persist_kg_from_journal(
     kg_db_path: str | Path,
     *,
     multi_valued_predicates: set[str] | None = None,
+    scope: TenantScope | None = None,
 ) -> KGUpdateReport:
     """Distil triples from a journal and PERSIST them to a durable KG.
 
@@ -185,11 +220,12 @@ def persist_kg_from_journal(
     """
     from runtime.memory.knowledge_graph.sqlite_kg import SqliteKnowledgeGraph
 
+    effective_path = tenant_scoped_path(kg_db_path, scope) if scope is not None else kg_db_path
     kg = SqliteKnowledgeGraph(
-        kg_db_path,
+        effective_path,
         multi_valued_predicates=multi_valued_predicates,
     )
     try:
-        return KGUpdater(journal, kg).update()
+        return KGUpdater(journal, kg, scope=scope).update()
     finally:
         kg.close()

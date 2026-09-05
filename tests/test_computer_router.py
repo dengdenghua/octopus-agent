@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import platform
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from runtime.execution.suckers import computer_skills, computer_uia_skills
+from runtime.execution.suckers import computer_macos, computer_skills, computer_uia_skills
 from runtime.memory.learning.review_queue import ReviewQueue
 from runtime.safety.auth import Identity, IdentityStore
 from runtime.safety.replay.browser_desktop_replay import computer_activity_replay_identity
@@ -127,6 +128,52 @@ def test_uia_status_endpoint_reports_unavailable(monkeypatch):
     assert "uiautomation not installed" in data["error"]
 
 
+def test_execute_activates_selected_desktop_window_before_click(monkeypatch):
+    client = TestClient(_app())
+    activations: list[dict[str, object]] = []
+    clicks: list[tuple[int, int]] = []
+    monkeypatch.setattr(computer_macos, "MACOS_NATIVE_AVAILABLE", True)
+    monkeypatch.setattr(
+        computer_macos,
+        "activate_window_target",
+        lambda **kwargs: activations.append(kwargs) or {"ok": True},
+    )
+    monkeypatch.setattr(
+        computer_skills,
+        "_mouse_click",
+        lambda x, y, **_kwargs: clicks.append((x, y)) or {"clicked": True},
+    )
+
+    preview = client.post(
+        "/api/computer/actions/preview",
+        json={
+            "action": "click",
+            "x": 12,
+            "y": 34,
+            "automation_target": {
+                "kind": "desktop_window",
+                "source": "computer",
+                "id": "42-1",
+                "title": "Inbox",
+                "app_id": "com.example.App",
+                "app_name": "Example",
+            },
+        },
+    ).json()
+    executed = client.post("/api/computer/actions/execute", json={"token": preview["token"]})
+
+    assert executed.status_code == 200
+    assert activations == [
+        {
+            "app_id": "com.example.App",
+            "app_name": "Example",
+            "window_id": "42-1",
+            "window_title": "Inbox",
+        }
+    ]
+    assert clicks == [(12, 34)]
+
+
 def test_router_requires_auth_when_enabled() -> None:
     client = TestClient(_secured_app())
 
@@ -198,6 +245,177 @@ def test_status_reports_blocked_when_screen_observation_fails(monkeypatch):
     assert data["health"] == "blocked"
     assert [item["id"] for item in data["critical_blockers"]] == ["screen_observation"]
     assert "check_display_or_desktop_permissions" in data["recommended_actions"]
+
+
+def test_appshot_combines_screenshot_target_and_accessibility(monkeypatch):
+    monkeypatch.setattr(computer_macos, "MACOS_NATIVE_AVAILABLE", True)
+
+    def capture_appshot(path: str, **_kwargs):
+        Path(path).write_bytes(b"appshot")
+        return {
+            "path": path,
+            "size_bytes": 7,
+            "backend": "macos-native",
+        }
+
+    monkeypatch.setattr(
+        computer_skills,
+        "_screen_capture",
+        capture_appshot,
+    )
+    monkeypatch.setattr(
+        computer_macos,
+        "accessibility_snapshot",
+        lambda **_kwargs: {
+            "available": True,
+            "backend": "macos-accessibility",
+            "app": {"id": "com.example.App", "displayName": "Example"},
+            "window": {"id": "42-0", "title": "Example document"},
+            "elements": [
+                {
+                    "index": 0,
+                    "role": "AXButton",
+                    "title": "Save",
+                    "position": [100, 200],
+                    "size": [80, 40],
+                }
+            ],
+        },
+    )
+
+    response = TestClient(_app()).post("/api/computer/appshot", json={})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["schema"] == "octopus.appshot.v1"
+    assert data["ok"] is True
+    assert data["snapshot_id"].startswith("appshot-")
+    assert data["target"] == {
+        "kind": "desktop_window",
+        "source": "computer",
+        "id": "42-0",
+        "title": "Example document",
+        "app_id": "com.example.App",
+        "app_name": "Example",
+    }
+    assert data["accessibility"]["elements"][0]["title"] == "Save"
+
+
+def test_appshot_element_preview_uses_stable_snapshot_bounds(monkeypatch):
+    monkeypatch.setattr(computer_macos, "MACOS_NATIVE_AVAILABLE", True)
+
+    def capture_appshot(path: str, **_kwargs):
+        Path(path).write_bytes(b"appshot")
+        return {"path": path, "size_bytes": 7, "backend": "macos-native"}
+
+    monkeypatch.setattr(computer_skills, "_screen_capture", capture_appshot)
+    monkeypatch.setattr(
+        computer_macos,
+        "accessibility_snapshot",
+        lambda **_kwargs: {
+            "available": True,
+            "backend": "macos-accessibility",
+            "app": {"id": "com.example.App", "displayName": "Example"},
+            "window": {"id": "42-0", "title": "Example document"},
+            "elements": [
+                {
+                    "index": 3,
+                    "role": "AXButton",
+                    "title": "Save",
+                    "position": [100, 200],
+                    "size": [80, 40],
+                }
+            ],
+        },
+    )
+    client = TestClient(_app())
+    shot = client.post("/api/computer/appshot", json={}).json()
+
+    response = client.post(
+        f"/api/computer/appshots/{shot['snapshot_id']}/elements/3/preview",
+        json={"action": "click"},
+    )
+
+    assert response.status_code == 200
+    preview = response.json()
+    assert preview["action"]["x"] == 140
+    assert preview["action"]["y"] == 220
+    assert preview["action"]["source"] == "appshot"
+    assert preview["action"]["matched_control"]["snapshot_id"] == shot["snapshot_id"]
+
+
+def test_appshot_preview_ignores_malformed_semantic_indexes(monkeypatch):
+    monkeypatch.setattr(computer_macos, "MACOS_NATIVE_AVAILABLE", True)
+
+    def capture_appshot(path: str, **_kwargs):
+        Path(path).write_bytes(b"appshot")
+        return {"path": path, "size_bytes": 7, "backend": "macos-native"}
+
+    monkeypatch.setattr(computer_skills, "_screen_capture", capture_appshot)
+    monkeypatch.setattr(
+        computer_macos,
+        "accessibility_snapshot",
+        lambda **_kwargs: {
+            "available": True,
+            "backend": "macos-accessibility",
+            "app": {"id": "com.example.App", "displayName": "Example"},
+            "window": {"id": "42-0", "title": "Example document"},
+            "elements": [
+                {"index": {"invalid": True}, "role": "AXGroup"},
+                {
+                    "index": 3,
+                    "role": "AXButton",
+                    "title": "Save",
+                    "position": [100, 200],
+                    "size": [80, 40],
+                },
+            ],
+        },
+    )
+    client = TestClient(_app())
+    shot = client.post("/api/computer/appshot", json={}).json()
+
+    response = client.post(
+        f"/api/computer/appshots/{shot['snapshot_id']}/elements/3/preview",
+        json={"action": "click"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["action"]["matched_control"]["name"] == "Save"
+
+
+def test_targets_keep_frontmost_app_visible_without_accessibility_windows(monkeypatch):
+    monkeypatch.setattr(computer_macos, "MACOS_NATIVE_AVAILABLE", True)
+    monkeypatch.setattr(
+        computer_macos,
+        "list_apps",
+        lambda: {
+            "backend": "macos-native",
+            "apps": [
+                {
+                    "id": "com.example.App",
+                    "displayName": "Example",
+                    "frontmost": True,
+                    "windows": [],
+                }
+            ],
+        },
+    )
+
+    data = TestClient(_app()).get("/api/computer/targets").json()
+
+    assert data["count"] == 1
+    assert data["targets"][0] == {
+        "kind": "desktop_window",
+        "source": "computer",
+        "id": "foreground",
+        "title": "Example",
+        "app_id": "com.example.App",
+        "app_name": "Example",
+        "frontmost": True,
+        "position": None,
+        "size": None,
+    }
 
 
 def test_uia_tree_and_find_endpoints(monkeypatch):

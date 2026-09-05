@@ -199,8 +199,9 @@ def test_todo_write_emits_plan_update_and_resume_snapshot(gateway: Any) -> None:
     assert phases[1]["status"] == "running"
     assert phases[1]["activeItemId"] == "todo-1"
     assert updates[0].params["workspaceFocus"]["view"] == "trace"
-    # The canonical snapshot ships on the dedicated notification; duplicating
-    # it in every plan update wastes bandwidth and can drift between clients.
+    # SUNSET: embedded workbenchSnapshot no longer ships on
+    # turn/plan/updated by default (dedicated workbench/snapshot below
+    # carries the identical frame).
     assert "workbenchSnapshot" not in updates[0].params
 
     snapshots = [n for n in out["notifications"] if n.method == "workbench/snapshot"]

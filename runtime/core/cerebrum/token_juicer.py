@@ -48,6 +48,10 @@ _HTML_SCRIPT_RE = re.compile(
 )
 _HTML_INDICATOR_RE = re.compile(r"<(html|body|div|p|span|a)\b", re.IGNORECASE)
 _LONG_URL_RE = re.compile(r"https?://[^\s\"'<>\)]{80,}")
+_MEDIA_TOOL_RESULT_RE = re.compile(
+    r"\(real tool execution succeeded\)\s+"
+    r"(?:generate_image|generate_video|generate_speech|generate_sound_effects)\b",
+)
 _DUPLICATE_LINE_RUN_RE = re.compile(r"(.+)(\n\1){3,}")
 # Same shape but for JSON-escaped strings (tool outputs that
 # embed stdout as a "stdout" field literally write "\n" not a real
@@ -106,6 +110,13 @@ def _strip_html(text: str) -> str:
 
 def _shorten_long_urls(text: str) -> str:
     """https://very.long/.../...?a=…&b=… → <very.long/...>"""
+
+    # For generated media the URL is the actual artifact handoff, not noisy
+    # context. Shortening it makes the assistant emit a broken image/video
+    # even though the tool succeeded. These observations are already compacted
+    # upstream, so preserving their complete URLs has negligible token cost.
+    if _MEDIA_TOOL_RESULT_RE.search(text):
+        return text
 
     def _replace(m: re.Match[str]) -> str:
         url = m.group(0)

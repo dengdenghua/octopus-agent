@@ -47,7 +47,7 @@ tier: "standard"
 - `estimate_cache_savings`
 - `get_cached_capabilities`
 - `mark_cache_breakpoint`
-- `molili_current_actor`
+- `current_actor`
 - `prepare_cached_system`
 - `prepare_cached_tools`
 - `probe_provider`
@@ -58,7 +58,7 @@ tier: "standard"
 | --- | --- |
 | `_providers_data.py` | Provider profile data and data-layer accessors for OpenAI-compatible gateways. |
 | `_response_parsers.py` | Response-parsing helpers for OpenAI-compatible providers. |
-| `actor_context.py` | Actor context for model-router calls — a provider-neutral home. |
+| `actor_context.py` | Provider-neutral actor context for model-router calls. |
 | `anthropic_router.py` | — |
 | `capability_probe.py` | Provider Capability Auto-Detection. |
 | `chatgpt_subscription_router.py` | ChatGPT-subscription model transport for the native Octopus kernel. |
@@ -75,6 +75,7 @@ tier: "standard"
 | `openai_compat_providers.py` | Provider profiles for OpenAI-compatible chat-completion gateways. |
 | `openai_compat_smoke_matrix.py` | Live-smoke metadata for OpenAI-compatible provider profiles. |
 | `openai_compat_stream.py` | Shared OpenAI-compatible SSE stream parser. |
+| `openai_responses_router.py` | OpenAI Responses-compatible transport for API-key model providers. |
 | `openai_router.py` | — |
 | `pooled_router.py` | — |
 | `prompt_cache.py` | Anthropic prompt-cache hint helpers. |
@@ -212,7 +213,7 @@ tier: "standard"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | class | `class OctCredentialsRequired(RuntimeError)` |  |
-| class | `class OctModelRouter(Provider, ModelRouter)` | 走 oct 账号网关(api.octoapk.com)/v1/chat/completions 的模型路由。 |
+| class | `class OctModelRouter(Provider, ModelRouter)` | 走 EchoAI 账号网关(api.echo-age.com)/v1/chat/completions 的模型路由。 |
 | class | `class OctFallbackRouter(ModelRouter)` | actor 感知的 dispatcher fallback。 |
 
 ### `ollama_router.py`
@@ -249,7 +250,14 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def iter_openai_sse(response, model, provider, cost_usd)` | Parse an httpx streaming response of OpenAI-compat SSE chunks. |
+| func | `def iter_openai_sse(response, model, provider, cost_usd, cancelled)` | Parse an httpx streaming response of OpenAI-compat SSE chunks. |
+
+### `openai_responses_router.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class OpenAIResponsesRouterError(LLMResponseFormatError)` | An API-key Responses provider could not complete a request. |
+| class | `class OpenAIResponsesModelRouter(Provider, ModelRouter)` | Run a Responses-only upstream while retaining the Octopus native loop. |
 
 ### `openai_router.py`
 

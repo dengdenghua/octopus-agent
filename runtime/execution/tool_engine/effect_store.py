@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS tool_effect_receipts (
     lease_expires_at REAL NOT NULL DEFAULT 0,
     call_id          TEXT NOT NULL DEFAULT '',
     step_json        TEXT,
+    has_result       INTEGER NOT NULL DEFAULT 0,
     reason           TEXT NOT NULL DEFAULT '',
     created_at       REAL NOT NULL,
     updated_at       REAL NOT NULL
@@ -51,6 +52,35 @@ CREATE TABLE IF NOT EXISTS tool_effect_receipts (
 
 CREATE INDEX IF NOT EXISTS idx_tool_effect_receipts_state
     ON tool_effect_receipts(state, updated_at);
+
+CREATE INDEX IF NOT EXISTS idx_tool_effect_receipts_priority_updated
+    ON tool_effect_receipts(
+        CASE state
+            WHEN 'indeterminate' THEN 0
+            WHEN 'started' THEN 1
+            WHEN 'claimed' THEN 2
+            WHEN 'retry_authorized' THEN 3
+            ELSE 4
+        END,
+        updated_at DESC
+    );
+"""
+
+_RECEIPT_SUMMARY_COLUMNS = """
+    effect_key, task_id, step_id, sucker_id, side_effecting, state,
+    holder_id, fencing_token, lease_expires_at, call_id, reason,
+    updated_at, has_result
+"""
+
+_RECEIPT_PRIORITY_ORDER = """
+    CASE state
+        WHEN 'indeterminate' THEN 0
+        WHEN 'started' THEN 1
+        WHEN 'claimed' THEN 2
+        WHEN 'retry_authorized' THEN 3
+        ELSE 4
+    END,
+    updated_at DESC
 """
 
 
@@ -244,6 +274,7 @@ class SQLiteEffectStore:
                     conn.execute("PRAGMA journal_mode=WAL")
                     conn.execute("PRAGMA synchronous=FULL")
                     conn.executescript(_SCHEMA)
+                    self._migrate_receipt_summary(conn)
                 break
             except sqlite3.OperationalError as exc:
                 if "locked" not in str(exc).lower() or time.monotonic() >= deadline:
@@ -251,6 +282,35 @@ class SQLiteEffectStore:
                 time.sleep(0.02)
         with contextlib.suppress(OSError):
             os.chmod(self.path, 0o600)
+
+    @staticmethod
+    def _migrate_receipt_summary(conn: sqlite3.Connection) -> None:
+        """Add the small result-presence summary to pre-existing stores."""
+
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            columns = {
+                str(row["name"]) for row in conn.execute("PRAGMA table_info(tool_effect_receipts)")
+            }
+            if "has_result" not in columns:
+                conn.execute(
+                    """
+                    ALTER TABLE tool_effect_receipts
+                    ADD COLUMN has_result INTEGER NOT NULL DEFAULT 0
+                    """
+                )
+                conn.execute(
+                    """
+                    UPDATE tool_effect_receipts
+                    SET has_result = 1
+                    WHERE step_json IS NOT NULL AND step_json <> ''
+                    """
+                )
+            conn.execute("COMMIT")
+        except Exception:
+            with contextlib.suppress(sqlite3.Error):
+                conn.execute("ROLLBACK")
+            raise
 
     def ping(self) -> bool:
         try:
@@ -266,22 +326,14 @@ class SQLiteEffectStore:
         limit: int = 100,
     ) -> list[EffectReceipt]:
         safe_limit = max(1, min(int(limit), 500))
-        query = "SELECT * FROM tool_effect_receipts"
+        query = f"SELECT {_RECEIPT_SUMMARY_COLUMNS} FROM tool_effect_receipts"
         params: tuple[object, ...]
         if state is not None:
-            query += " WHERE state = ?"
+            query += " WHERE state = ? ORDER BY updated_at DESC LIMIT ?"
             params = (state, safe_limit)
         else:
+            query += f" ORDER BY {_RECEIPT_PRIORITY_ORDER} LIMIT ?"
             params = (safe_limit,)
-        query += """
-            ORDER BY CASE state
-                WHEN 'indeterminate' THEN 0
-                WHEN 'started' THEN 1
-                WHEN 'claimed' THEN 2
-                WHEN 'retry_authorized' THEN 3
-                ELSE 4
-            END, updated_at DESC LIMIT ?
-        """
         with contextlib.closing(self._connect()) as conn:
             rows = conn.execute(query, params).fetchall()
         return [_receipt_from_sqlite_row(row) for row in rows]
@@ -446,7 +498,8 @@ class SQLiteEffectStore:
                 SET task_id = ?, step_id = ?, sucker_id = ?,
                     args_fingerprint = ?, side_effecting = ?, state = 'claimed',
                     holder_id = ?, fencing_token = ?, lease_expires_at = ?,
-                    call_id = '', step_json = NULL, reason = '', updated_at = ?
+                    call_id = '', step_json = NULL, has_result = 0,
+                    reason = '', updated_at = ?
                 WHERE effect_key = ?
                 """,
                 (
@@ -540,8 +593,8 @@ class SQLiteEffectStore:
             cursor = conn.execute(
                 """
                 UPDATE tool_effect_receipts
-                SET state = 'committed', step_json = ?, lease_expires_at = 0,
-                    reason = '', updated_at = ?
+                SET state = 'committed', step_json = ?, has_result = 1,
+                    lease_expires_at = 0, reason = '', updated_at = ?
                 WHERE effect_key = ? AND holder_id = ? AND fencing_token = ?
                   AND state IN ('claimed', 'started')
                 """,
@@ -581,11 +634,12 @@ class SQLiteEffectStore:
                 INSERT INTO tool_effect_receipts(
                     effect_key, task_id, step_id, sucker_id,
                     args_fingerprint, side_effecting, state, fencing_token,
-                    step_json, created_at, updated_at
-                ) VALUES(?, '', 0, '', '', 0, 'committed', 0, ?, ?, ?)
+                    step_json, has_result, created_at, updated_at
+                ) VALUES(?, '', 0, '', '', 0, 'committed', 0, ?, 1, ?, ?)
                 ON CONFLICT(effect_key) DO UPDATE SET
                     state = 'committed', step_json = excluded.step_json,
-                    lease_expires_at = 0, reason = '', updated_at = excluded.updated_at
+                    has_result = 1, lease_expires_at = 0, reason = '',
+                    updated_at = excluded.updated_at
                 """,
                 (effect_key, step.model_dump_json(), now, now),
             )
@@ -685,7 +739,7 @@ def _receipt_from_sqlite_row(row: sqlite3.Row) -> EffectReceipt:
         call_id=str(row["call_id"] or ""),
         reason=str(row["reason"] or ""),
         updated_at=float(row["updated_at"] or 0.0),
-        has_result=bool(row["step_json"]),
+        has_result=bool(row["has_result"]),
     )
 
 

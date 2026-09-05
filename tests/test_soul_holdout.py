@@ -401,3 +401,28 @@ def test_deep_evolve_refuses_on_holdout_regression(
     assert applied.get("applied") is False
     assert applied.get("old_pass_rate") == 1.0
     assert applied.get("new_pass_rate") == 0.0
+
+
+def test_deep_evolve_candidate_requires_validation_before_rollout(tmp_path: Path) -> None:
+    from runtime.memory import deep_evolution as dev
+    from runtime.safety.evolution.candidate_registry import CandidateStatus
+
+    candidate = dev._record_deep_evolve_candidate(
+        agent_id="general",
+        candidate={
+            "id": "c1",
+            "kind": "add_lesson",
+            "lesson": "Verify changed files with the project fixture.",
+            "tag": "verification",
+            "risk": "low",
+            "predicted_impact": "fewer false completion claims",
+        },
+        judgment={"verdict": "apply", "predicted_avg_score_delta": 0.2},
+        holdout_passed=True,
+        source_failures=["verification_missing"],
+        registry_path=tmp_path / "candidates.jsonl",
+    )
+
+    assert candidate.status == CandidateStatus.VALIDATED
+    assert candidate.metadata["next_stage"] == "structured_shadow"
+    assert candidate.patch["op"] == "append_lesson"

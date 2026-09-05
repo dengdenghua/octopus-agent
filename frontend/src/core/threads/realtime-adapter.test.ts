@@ -12,6 +12,7 @@ import type {
   PlanItem,
   ReasoningItem,
   SteeringUserMessageItem,
+  SubagentItem,
   TodoListItem,
   Turn,
   UserMessageItem,
@@ -304,6 +305,84 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
         makeConv([makeTurn([legacyReasoning, agentMsg("answer")])]),
       ),
     ).not.toThrow();
+  });
+
+  it("sanitizes legacy planner errors and repairs their member status", () => {
+    const leaked = "[planner error] LLM response lacks JSON: '稍后我再处理。'";
+    const member: SubagentItem = {
+      id: "member-1",
+      type: "subagent",
+      status: "completed",
+      createdAt: "2026-05-09T00:00:00Z",
+      subagentId: "general",
+      role: "cowork",
+      name: "Eve",
+      codename: "Eve",
+      avatar: null,
+      summary: leaked,
+      error: null,
+      iterationCount: 1,
+      filesTouched: [],
+    };
+    const state = conversationToAgentThreadState(
+      makeConv([
+        makeTurn([
+          member,
+          agentMsg(leaked),
+          agentMsg("协作汇总: 5 位成员已回应；优先采纳 general 的视角继续。"),
+        ]),
+      ]),
+    );
+
+    const memberTool = state.messages.find(
+      (message) =>
+        message.type === "ai" &&
+        message.tool_calls?.some((toolCall) => toolCall.name === "subagent"),
+    ) as AIMessage;
+    expect(memberTool.tool_calls?.[0]?.args).toMatchObject({
+      status: "failed",
+      summary: null,
+      error: "该成员当时未能生成有效回复。",
+    });
+    const answer = state.messages.find(
+      (message) => message.type === "ai" && message.content,
+    ) as AIMessage;
+    expect(answer.content).toBe("⚠️ 该成员当时未能生成有效回复。");
+    expect(
+      state.messages.some(
+        (message) =>
+          message.type === "ai" &&
+          message.content ===
+            "协作汇总：本轮部分成员未能生成有效回复，已按失败状态展示。",
+      ),
+    ).toBe(true);
+    expect(
+      state.messages.some(
+        (message) =>
+          typeof message.content === "string" &&
+          message.content.includes("优先采纳 general"),
+      ),
+    ).toBe(false);
+  });
+
+  it("marks legacy length-ranked group summaries as not newly validated", () => {
+    const state = conversationToAgentThreadState(
+      makeConv([
+        makeTurn([
+          agentMsg(
+            "协作汇总: 6 位成员已回应；采用并行圆桌；主要观点来自 Kane。",
+          ),
+        ]),
+      ]),
+    );
+
+    const answer = state.messages.find(
+      (message) => message.type === "ai" && message.content,
+    ) as AIMessage;
+    expect(answer.content).toBe(
+      "协作汇总: 6 位成员已回应；采用并行圆桌。 历史记录未经过新版协作验收。",
+    );
+    expect(answer.content).not.toContain("主要观点来自 Kane");
   });
 
   it("keeps the terminal narrative stable across reversed turn lifecycle events", () => {
@@ -826,6 +905,43 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     expect(state.messages[1]?.content).not.toMatch(/Thought|Action|read_file/);
   });
 
+  it("moves a legacy pre-tool report draft out of the final-answer lane", () => {
+    const draft = [
+      "三个 fetch 调用失败，但现有证据足够，直接汇总。",
+      "UpdateAnswer:法律程序横跨消费者诉讼、专利与合同争议。",
+      "## 风险评估",
+      "专利有效性是最大风险。",
+    ].join("\n\n");
+    const final = [
+      "Final Answer:",
+      "## 最终报告",
+      "Eight Sleep 涉及多类公开法律程序。",
+    ].join("\n\n");
+    const state = conversationToAgentThreadState(
+      makeConv([
+        makeTurn([
+          userMsg("调研一下 Eight Sleep 的官司诉讼"),
+          agentMsg(draft, "draft-report"),
+          cmd("todo_write", "todo-finish"),
+          agentMsg(final, "final-report"),
+        ]),
+      ]),
+    );
+
+    expect(state.messages.map((message) => message.id)).toEqual([
+      "u1",
+      "draft-report",
+      "todo-finish",
+      "final-report",
+    ]);
+    expect(state.messages[1]?.additional_kwargs?.message_kind).toBe(
+      "commentary",
+    );
+    expect(state.messages[1]?.additional_kwargs?.public_progress).toBe(true);
+    expect(state.messages[3]?.additional_kwargs?.message_kind).toBe("answer");
+    expect(state.messages[3]?.content).toContain("## 最终报告");
+  });
+
   it("suppresses post-final todo bookkeeping from the main conversation", () => {
     const state = conversationToAgentThreadState(
       makeConv([
@@ -894,6 +1010,41 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
       content: report,
       additional_kwargs: { message_kind: "answer" },
     });
+  });
+
+  it("keeps a generated-media answer when its URL contains a task id", () => {
+    const mediaAnswer = [
+      "图片已生成 ✅",
+      "",
+      "![戴黑色围巾的小章鱼](https://platform-outputs.agnes-ai.space/images/t2i/task_abc123/output.png)",
+      "",
+      "**实际模型**：`agnes-image-2.5-flash`（Agnes 图像生成服务）",
+    ].join("\n");
+    const state = conversationToAgentThreadState(
+      makeConv([
+        makeTurn([
+          userMsg("生成一张小章鱼图片"),
+          agentMsg(
+            "我来直接生成这张戴黑色围巾的小章鱼 3D 插画。",
+            "checkpoint",
+          ),
+          cmd("generate_image", "image-tool"),
+          reasoning(
+            "The image was generated successfully. I need to present it in the final answer with the actual model used.",
+            "media-reasoning",
+          ),
+          agentMsg(mediaAnswer, "media-final"),
+        ]),
+      ]),
+    );
+
+    expect(state.messages.map((message) => message.id)).toEqual([
+      "u1",
+      "checkpoint",
+      "image-tool",
+      "media-final",
+    ]);
+    expect(state.messages.at(-1)?.content).toBe(mediaAnswer);
   });
 
   it("merges post-final trace items back into the delivered answer", () => {

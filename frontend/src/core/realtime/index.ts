@@ -59,10 +59,11 @@ export type {
 } from "./reducer";
 export { itemStreamText, reduce } from "./reducer";
 
-export type { RealtimeClientOptions } from "./client";
+export type { RealtimeClientOptions, RealtimeRequestOptions } from "./client";
 export { RealtimeClient, createDefaultClient } from "./client";
 
 export type {
+  ThreadConnectionPhase,
   UseRealtimeThreadArgs,
   UseRealtimeThreadValue,
 } from "./use-realtime-thread";

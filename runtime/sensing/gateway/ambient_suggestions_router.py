@@ -104,7 +104,10 @@ def create_ambient_suggestions_router(
         return bucket
 
     @router.post("/api/ambient-suggestions/run")
-    def run_generator(body: dict[str, Any] | None = None) -> dict[str, Any]:
+    def run_generator(
+        request: Request,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         _require_flag()
         payload = body or {}
         proj = _resolve_project(payload.get("project"))
@@ -120,6 +123,7 @@ def create_ambient_suggestions_router(
             title_lookup = {str(k): str(v) for k, v in title_lookup_raw.items()}
 
         from runtime.memory import ambient_suggestions as _amb
+        from runtime.safety.auth.scope import scope_from_request
 
         return _amb.generate_suggestions(
             proj,
@@ -129,6 +133,7 @@ def create_ambient_suggestions_router(
             base_dir=base_dir,
             title_lookup=title_lookup,
             locale=locale,
+            scope=scope_from_request(request),
         )
 
     @router.patch("/api/ambient-suggestions/{suggestion_id}")

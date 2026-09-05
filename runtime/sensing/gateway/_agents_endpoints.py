@@ -9,7 +9,7 @@ bundle so the handlers stay free of module-level globals — the same
 one used by ``_config_endpoints.py`` / ``_observability_router_factory.py``.
 
 The handler bodies themselves live in ``_agents_endpoints_*`` submodules
-(``_agents_endpoints_crud``, ``_local_partners``, ``_tasks``, ``_tools``,
+(``_agents_endpoints_crud``, ``_tasks``, ``_tools``,
 ``_system``, ``_conversations``, ``_groups``), each exposing a
 ``_register_*`` function that attaches its endpoints to the router. This
 module keeps ``_AgentsCtx`` and ``_build_endpoints`` and delegates to
@@ -36,36 +36,21 @@ except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     HTTPException = None  # type: ignore[assignment, misc]
 
-from runtime.sensing.gateway.agents_local_partner import (
-    identity_has_admin_role as _identity_has_admin_role,
-)
-
 from ._agents_endpoints_conversations import _register_conversations
 from ._agents_endpoints_crud import _register_agents_crud
 from ._agents_endpoints_groups import _register_groups
-from ._agents_endpoints_local_partners import _register_local_partners
 from ._agents_endpoints_shared import _AuthActions
 from ._agents_endpoints_system import _register_system
 from ._agents_endpoints_tasks import _register_tasks
 from ._agents_endpoints_tools import _register_agents_tools
 
 
-# These two LocalPartner primitives used to be module-level names on
-# ``agents_router`` and are monkeypatched by tests
-# (``monkeypatch.setattr(agents_router_module, "_which_local_partner_command", ...)``).
-# Resolve them through the parent module at call time so the patched
-# value is what the endpoint handlers see — preserving the pre-split
-# behavior exactly.
-def _which_local_partner_command(*args, **kwargs):
-    from . import agents_router as _parent
-
-    return _parent._which_local_partner_command(*args, **kwargs)
-
-
-def _safe_local_partner_executable(*args, **kwargs):
-    from . import agents_router as _parent
-
-    return _parent._safe_local_partner_executable(*args, **kwargs)
+def _identity_has_admin_role(identity: Any) -> bool:
+    """Return whether the authenticated identity carries the admin role."""
+    if identity is None:
+        return False
+    roles = getattr(identity, "roles", ()) or ()
+    return "admin" in {str(role).casefold() for role in roles}
 
 
 @dataclass
@@ -89,6 +74,7 @@ class _AgentsCtx:
     group_registry: Any = None
     runtime: Any = None
     thread_store: Any = None
+    allow_local_workspace_access: bool = False
 
 
 def _build_endpoints(ctx: _AgentsCtx) -> None:
@@ -239,12 +225,6 @@ def _build_endpoints(ctx: _AgentsCtx) -> None:
         require_thread_owner=_require_thread_owner,
     )
 
-    # Register local-partners BEFORE the wildcard `/api/agents/{agent_id}` CRUD
-    # routes so `/api/agents/local-partners` is not captured by `{agent_id}`
-    # (matches the original monolithic agents_router.py registration order).
-    _register_local_partners(
-        router, ctx, auth, _which_local_partner_command, _safe_local_partner_executable
-    )
     _register_agents_crud(router, ctx, auth)
     _register_tasks(router, ctx, auth)
     _register_agents_tools(router, ctx, auth)

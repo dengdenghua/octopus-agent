@@ -489,6 +489,43 @@ class TestExecutorApprovalGate:
 
 
 class TestHandlerException:
+    def test_semantic_error_return_is_persisted_as_failed(
+        self,
+        registry,
+        immunity,
+        journal,
+        budget,
+    ):
+        registry.register(
+            Skill(
+                name="semantic_failure",
+                description="reports failure without raising",
+                affinity=["demo"],
+                trusted_source="skill://public/semantic_failure",
+                handler=lambda **kw: {"ok": False, "error": "not found"},
+            )
+        )
+        exe = ToolExecutor(registry, immunity, journal)
+
+        step = exe.execute_step(
+            step_id=0,
+            node_id="n0",
+            sucker_id=SkillId("semantic_failure"),
+            args={},
+            caller="arms/code_arm",
+            task_id=budget.task_id,
+            arm_id=ArmId("code_arm"),
+            budget=budget,
+        )
+
+        assert not step.success
+        assert step.result.status == "failed"
+        assert step.result.error_type == "semantic_error"
+        assert "semantic_error" in step.result.stderr_tags
+        [persisted] = journal.read_by_type("step")
+        assert persisted.step.result.status == "failed"
+        assert persisted.step.result.error_type == "semantic_error"
+
     def test_handler_raises_marked_failed(self, executor, budget, journal):
         step = executor.execute_step(
             step_id=0,
@@ -503,6 +540,7 @@ class TestHandlerException:
         assert not step.success
         assert step.result.status == "failed"
         assert step.result.error_type == "ValueError"
+        assert "semantic_error" not in step.result.stderr_tags
 
     def test_transient_handler_error_retries_once(self, registry, immunity, journal, budget):
         calls = {"count": 0}

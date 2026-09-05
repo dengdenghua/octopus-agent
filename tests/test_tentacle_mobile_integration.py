@@ -20,6 +20,8 @@ from runtime.tentacle.base import ToolCall
 from runtime.tentacle.coordinator import TentacleCoordinator
 from runtime.tentacle.mobile.device import MobileDevice
 
+pytestmark = pytest.mark.integration
+
 # ── fixtures ──────────────────────────────────────────────
 
 

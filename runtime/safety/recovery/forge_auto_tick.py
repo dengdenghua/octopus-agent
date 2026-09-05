@@ -49,6 +49,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from runtime.platform.process.service_provider import get_provider
+from runtime.safety.auth.scope import TenantScope
 
 _LOG = logging.getLogger("octopus.forge.auto_tick")
 
@@ -109,6 +110,7 @@ def run_tick(
     min_lead: float | None = None,
     apply: bool = True,
     journal: Any = None,
+    scope: TenantScope | None = None,
 ) -> TickResult:
     from runtime.safety.recovery.gepa_runs import (
         GepaRunRecord,
@@ -145,7 +147,7 @@ def run_tick(
         if not rid:
             continue
         try:
-            comps = collect_variant_stats(j, base_recipe_id=rid)
+            comps = collect_variant_stats(j, base_recipe_id=rid, scope=scope)
             if not comps:
                 results.append(
                     {

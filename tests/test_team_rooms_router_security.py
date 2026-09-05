@@ -12,6 +12,7 @@ share the same underlying authz model.
 
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,7 @@ import pytest
 fastapi = pytest.importorskip("fastapi")
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+from starlette.websockets import WebSocketDisconnect  # noqa: E402
 
 from runtime.safety.auth.identity import Identity, IdentityStore  # noqa: E402
 from runtime.sensing.gateway.team_rooms_router import (  # noqa: E402
@@ -648,6 +650,21 @@ def test_room_websocket_rejects_authenticated_non_member(tmp_path: Path) -> None
         assert error == {"type": "error", "message": "team invite required"}
 
 
+def test_room_websocket_accepts_browser_safe_bearer_subprotocol(tmp_path: Path) -> None:
+    client, keys = _build_app(tmp_path)
+    team = _create_team(client, keys, "alice-team", owner="alice")
+    participant_id = team["participants"][0]["id"]
+    encoded = base64.urlsafe_b64encode(keys["alice"].encode()).decode().rstrip("=")
+
+    with client.websocket_connect(
+        f"/api/teams/alice-team/ws?participant_id={participant_id}",
+        subprotocols=["bearer.b64", encoded],
+    ) as websocket:
+        ready = websocket.receive_json()
+        assert ready["type"] == "ready"
+        assert ready["participant"]["actor_id"] == "alice"
+
+
 def test_room_websocket_allows_invited_actor_and_resolves_stale_client_id(
     tmp_path: Path,
 ) -> None:
@@ -656,13 +673,119 @@ def test_room_websocket_allows_invited_actor_and_resolves_stale_client_id(
     bob_pid = _invite_and_join(client, keys, "alice-team", "alice", "bob")
 
     with client.websocket_connect(
-        "/api/teams/alice-team/ws?participant_id=stale-browser-id",
+        "/api/teams/alice-team/ws?participant_id=stale-browser-id&display_name=Stale%20Name",
         headers=_bearer(keys["bob"]),
     ) as websocket:
         ready = websocket.receive_json()
         assert ready["type"] == "ready"
         assert ready["participant"]["id"] == bob_pid
         assert ready["participant"]["actor_id"] == "bob"
+        assert ready["participant"]["display_name"] == "bob"
+
+
+@pytest.mark.parametrize("push_kind", ["team:update", "presence", "message"])
+def test_cross_worker_push_evicts_revoked_websocket_before_payload(
+    tmp_path: Path,
+    push_kind: str,
+) -> None:
+    identities = IdentityStore()
+    keys: dict[str, str] = {}
+    for actor in ("alice", "bob"):
+        key = f"sk-{actor}"
+        identities.add(
+            Identity(actor_id=actor, metadata={"tenant_id": "tenant-acme"}),
+            api_key_plaintext=key,
+        )
+        keys[actor] = key
+    state_path = tmp_path / "rooms.json"
+    writer_app = FastAPI()
+    writer_app.include_router(
+        create_team_rooms_router(
+            state_path=state_path,
+            identity_store=identities,
+            require_auth=True,
+        )
+    )
+    stale_app = FastAPI()
+    stale_app.include_router(
+        create_team_rooms_router(
+            state_path=state_path,
+            identity_store=identities,
+            require_auth=True,
+        )
+    )
+    writer = TestClient(writer_app)
+    stale = TestClient(stale_app)
+    _create_team(writer, keys, "alice-team", owner="alice")
+    bob_id = _invite_and_join(writer, keys, "alice-team", "alice", "bob")
+    ws_url = "/api/teams/alice-team/ws"
+
+    with stale.websocket_connect(
+        f"{ws_url}?participant_id={bob_id}",
+        headers=_bearer(keys["bob"]),
+    ) as bob:
+        assert bob.receive_json()["type"] == "ready"
+        assert bob.receive_json()["type"] == "presence"
+
+        if push_kind == "message":
+            alice_socket = stale.websocket_connect(
+                f"{ws_url}?participant_id=owner-alice",
+                headers=_bearer(keys["alice"]),
+            )
+            alice = alice_socket.__enter__()
+            assert alice.receive_json()["type"] == "ready"
+            assert bob.receive_json()["type"] == "presence"
+            assert alice.receive_json()["type"] == "presence"
+        else:
+            alice_socket = None
+            alice = None
+
+        removed = writer.delete(
+            f"/api/teams/alice-team/participants/{bob_id}",
+            headers=_bearer(keys["alice"]),
+        )
+        assert removed.status_code == 200, removed.json()
+
+        if push_kind == "team:update":
+            pushed = stale.patch(
+                "/api/teams/alice-team/speaker-policy",
+                headers=_bearer(keys["alice"]),
+                json={"speaker_policy": "admin_only"},
+            )
+            assert pushed.status_code == 200, pushed.json()
+        elif push_kind == "presence":
+            alice_socket = stale.websocket_connect(
+                f"{ws_url}?participant_id=owner-alice",
+                headers=_bearer(keys["alice"]),
+            )
+            alice = alice_socket.__enter__()
+            assert alice.receive_json()["type"] == "ready"
+            assert alice.receive_json()["type"] == "presence"
+        else:
+            assert alice is not None
+            alice.send_json({"type": "message", "text": "still authorized"})
+            assert alice.receive_json()["type"] == "message"
+
+        bob.send_json({"type": "ping"})
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            bob.receive_json()
+        assert exc_info.value.code == 4403
+        if alice_socket is not None:
+            alice_socket.__exit__(None, None, None)
+
+    durable = writer.get(
+        "/api/teams/alice-team",
+        headers=_bearer(keys["alice"]),
+    ).json()
+    removed_participant = next(item for item in durable["participants"] if item["id"] == bob_id)
+    assert removed_participant["status"] == "removed"
+    assert (
+        stale.get(
+            "/api/teams/alice-team",
+            headers=_bearer(keys["bob"]),
+        ).status_code
+        == 403
+    )
 
 
 def test_transcript_rejects_unbound_legacy_participant_id(tmp_path: Path) -> None:

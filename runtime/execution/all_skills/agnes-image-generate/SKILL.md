@@ -1,6 +1,6 @@
 ---
 name: agnes-image-generate
-description: "使用火山引擎(火山方舟)或 Agnes AI 网关从文字描述生成图像。默认火山 doubao-seedream-5.0-lite（文生图+图生图），未配置火山 key 时自动回退 Agnes agnes-image-2.1-flash。当用户需要生成图片、插画或封面时调用此技能。"
+description: "使用火山引擎(火山方舟)或 Agnes AI 网关从文字描述生成图像。默认火山 doubao-seedream-5.0-lite（文生图+图生图），未配置火山 key 时自动回退 Agnes agnes-image-2.5-flash。当用户需要生成图片、插画或封面时调用此技能。"
 enabled: true
 aliases: [agnes_image, generate_image_agnes, volcano_image, generate_image_volcano]
 ---
@@ -10,14 +10,14 @@ aliases: [agnes_image, generate_image_agnes, volcano_image, generate_image_volca
 根据 `base_url` 自动选择 provider：
 
 - **火山方舟**（默认）：`https://ark.cn-beijing.volces.com/api/plan/v3`，模型 `doubao-seedream-5.0-lite`
-- **Agnes AI Gateway**：`https://apihub.agnes-ai.com/v1`，模型 `agnes-image-2.1-flash`
+- **Agnes AI Gateway**：`https://apihub.agnes-ai.com/v1`，模型 `agnes-image-2.5-flash`
 
 ## Models
 
 | Provider | ID | 用途 |
 |----------|----|----|
 | 火山 | `doubao-seedream-5.0-lite` | text→image + image→image（默认） |
-| Agnes | `agnes-image-2.1-flash` | text→image + image→image（回退） |
+| Agnes | `agnes-image-2.5-flash` | text→image + image→image + 多图合成（回退） |
 
 ## Configuration
 
@@ -52,7 +52,7 @@ result = generate_image(
 ```python
 result = generate_image(
     prompt="cinematic dragon over Hong Kong skyline at dusk",
-    size="2048x2048",   # 火山推荐 2048x2048 / 2304x1728 / 2560x1440 ...
+    size="1:1",         # 也支持 16:9 / 9:16，并自动转成 provider 可接受的尺寸
     n=2,
 )
 # {"urls": ["...", "..."], ...}

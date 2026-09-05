@@ -77,6 +77,26 @@ def _is_schema_rejection(detail: str, error_type: str) -> bool:
     return False
 
 
+def _is_pre_execution_schema_rejection(
+    step: Any,
+    detail: str,
+    error_type: str,
+) -> bool:
+    """Require executor-owned proof that the captured handler never ran.
+
+    A plugin may itself return a structured ``missing argument`` error after
+    already performing work. Text shape is useful for diagnosis, but only the
+    executor's provenance can authorize automatic same-tool repair coaching.
+    """
+
+    result = getattr(step, "result", None)
+    return bool(
+        result is not None
+        and getattr(result, "execution_source", "") == "handler_not_executed"
+        and _is_schema_rejection(detail, error_type)
+    )
+
+
 def _schema_repair_feedback(skill_name: str) -> str:
     """Directive retry coaching for an argument-validation rejection.
 
@@ -431,7 +451,7 @@ def _execute_action_via_beak(
         )
         detail = normalized_result.rendered.strip()
         detail_line = f"\n{detail}" if detail else ""
-        if _is_schema_rejection(detail, err):
+        if _is_pre_execution_schema_rejection(step, detail, err):
             return (
                 f"(参数校验失败) status={status} error={err}{detail_line}\n"
                 + _schema_repair_feedback(skill_name)

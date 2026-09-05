@@ -81,10 +81,25 @@ async def run_device_task(coordinator: Any, tentacle_id: str, task: str) -> dict
             rec["error"] = "planner produced no device actions for this goal"
             return rec
 
+        executor = getattr(coordinator, "device_executor", None)
+        if executor is not None:
+            results = await executor.execute_sequence(
+                device,
+                tool_calls,
+                owner=f"team:{tentacle_id}:{id(task)}",
+                task_id=f"team:{tentacle_id}",
+            )
+        else:
+            results = []
+            for call in tool_calls:
+                result = await device.execute(call)
+                results.append(result)
+                if not result.success:
+                    break
+
         lines: list[str] = []
         all_ok = True
-        for call in tool_calls:
-            result = await device.execute(call)
+        for call, result in zip(tool_calls, results, strict=False):
             ok = bool(getattr(result, "success", False))
             tool = getattr(call, "tool", "?")
             detail = getattr(result, "data", None) or getattr(result, "error_message", "")

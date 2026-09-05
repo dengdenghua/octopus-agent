@@ -53,7 +53,9 @@ export function groupTaskStrategyContext(
     };
   }
 
-  const agentMode: AgentModeName = strategy;
+  // `audit` can still arrive from old group-task state, but review is now a
+  // behavior inside General rather than a third user-facing work mode.
+  const agentMode: AgentModeName = strategy === "audit" ? "develop" : strategy;
   const preset = modePresetForAgentMode(agentMode);
   return {
     ...EMPTY_GROUP_TASK_CONTEXT,

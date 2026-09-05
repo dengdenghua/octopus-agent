@@ -224,22 +224,21 @@ test.describe("Full-stack golden smoke", () => {
 
       await page.goto(`${origin}/#/workspace/agents?surface=chat`);
       await page.waitForLoadState("domcontentloaded");
-      await expect(page.getByRole("heading", { name: "HUB" })).toBeVisible({
-        timeout: 20_000,
-      });
-      await expect(page.getByRole("tabpanel")).toBeVisible();
+      const agentSurface = page
+        .getByPlaceholder(
+          /搜索角色、应用或 Skills|Search roles, apps or Skills/i,
+        )
+        .or(page.getByRole("heading", { name: "HUB" }));
+      await expect(agentSurface).toBeVisible({ timeout: 20_000 });
 
       await page.goto(`${origin}/#/workspace/intelligence?surface=chat`);
       await page.waitForLoadState("domcontentloaded");
-      await expect(
-        page.getByRole("heading", { name: "订阅暂时不可用" }),
-      ).toBeVisible({ timeout: 20_000 });
-      await expect(
-        page.getByRole("button", { name: "重新检查" }),
-      ).toBeVisible();
-      await expect(
-        page.getByRole("button", { name: "前往应用中心" }),
-      ).toBeVisible();
+      const intelligenceSurface = page.getByTestId("intelligence-panel").or(
+        page.getByRole("heading", {
+          name: /订阅暂时不可用|Subscriptions unavailable/i,
+        }),
+      );
+      await expect(intelligenceSurface).toBeVisible({ timeout: 20_000 });
     }
     expect(originSnapshots).toHaveLength(2);
     expect(originSnapshots[1].status).toMatchObject({
@@ -264,7 +263,8 @@ test.describe("Full-stack golden smoke", () => {
     });
 
     await page.getByTestId("chat-tools-trigger").click();
-    await page.getByRole("menuitem", { name: "Commands" }).hover();
+    await page.getByTestId("chat-commands-submenu").hover();
+    await expect(page.getByTestId("chat-insert-codex-plan")).toBeVisible();
     await page.getByTestId("chat-insert-codex-plan").click();
     await expect(page.getByTestId("composer-command-prefix")).toContainText(
       "Plan",

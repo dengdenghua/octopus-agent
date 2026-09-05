@@ -35,11 +35,12 @@ def mount_agents(
 
             agent_registry = AgentRegistry()
             _runtime = stack.runtime if stack is not None else None
-            for agent in load_all_agents(_runtime):
-                try:
-                    agent_registry.register(agent)
-                except (TypeError, ValueError, KeyError):
-                    continue
+            if _runtime is not None:
+                for agent in load_all_agents(_runtime):
+                    try:
+                        agent_registry.register(agent)
+                    except (TypeError, ValueError, KeyError):
+                        continue
             # Also load admin explicitly (excluded from load_all_agents)
             try:
                 from runtime.execution.agents.presets import make_admin_agent
@@ -62,6 +63,34 @@ def mount_agents(
             pass
     ctx.agent_registry = agent_registry
 
+    # Regeneration starts during ``wire_stack`` but this compatibility loader
+    # runs afterwards. Rebind so fitness/drift always resolve against the
+    # actual runtime registry, never ``stack.config.name``.
+    if stack is not None:
+        try:
+            from runtime.safety.recovery.scheduler import get_scheduler
+
+            get_scheduler().bind_agent_registry(agent_registry)
+        except (ImportError, AttributeError, TypeError) as exc:
+            logging.getLogger(__name__).debug(
+                "regeneration agent registry bind skipped: %s",
+                exc,
+            )
+
+    # ``wire_stack`` runs before this fallback loader.  Rebind the evolution
+    # trigger after mounting so create_app(stack=..., agent_registry=None)
+    # still evaluates the actual registered agents instead of the app name.
+    if stack is not None and getattr(stack, "is_llm_planner", False):
+        try:
+            from runtime.safety.evolution.auto_trigger import get_auto_trigger
+
+            get_auto_trigger().bind_agent_registry(agent_registry)
+        except (ImportError, AttributeError, TypeError) as exc:
+            logging.getLogger(__name__).debug(
+                "evolution agent registry bind skipped: %s",
+                exc,
+            )
+
     if agent_registry is not None:
         from runtime.sensing.gateway.agents_router import create_agents_router
 
@@ -76,6 +105,7 @@ def mount_agents(
                 journal=state.journal,  # /api/conversations/*
                 group_registry=group_registry,  # /api/groups/*
                 runtime=stack.runtime if stack is not None else None,  # /api/agents/{id}/reload
+                allow_local_workspace_access=ctx.allow_local_workspace_access,
             )
         )
 
@@ -114,12 +144,15 @@ def mount_agents(
         if callable(delete_room):
             delete_room(room_id)
 
-    def _project_room_message_to_collaboration(room_id: str, message: dict[str, Any]) -> None:
+    def _project_room_message_to_collaboration(
+        room_id: str,
+        message: dict[str, Any],
+    ) -> int | None:
         collab_store = getattr(app.state, "collaboration_store", None)
         append_message = getattr(collab_store, "append_message_for_room", None)
         if not callable(append_message):
-            return
-        append_message(
+            return None
+        return append_message(
             room_id,
             text=str(message.get("text") or ""),
             participant_id=str(message.get("participant_id") or ""),
@@ -146,6 +179,17 @@ def mount_agents(
         history = getattr(collab_store, "messages_for_room", None)
         return history(room_id, limit=limit, after_seq=after_seq) if callable(history) else []
 
+    def _project_room_receipt_to_collaboration(
+        room_id: str,
+        receipt: dict[str, Any],
+    ) -> None:
+        collab_store = getattr(app.state, "collaboration_store", None)
+        record = getattr(collab_store, "record_receipt_for_room", None)
+        if callable(record):
+            payload = dict(receipt)
+            payload.pop("room_id", None)
+            record(room_id, **payload)
+
     team_rooms_router = create_team_rooms_router(
         identity_store=ctx.identity_store,
         require_auth=ctx.require_auth,
@@ -159,7 +203,13 @@ def mount_agents(
         room_projection=_project_room_to_collaboration,
         room_delete_projection=_delete_room_from_collaboration,
         room_message_projection=_project_room_message_to_collaboration,
+        room_receipt_projection=_project_room_receipt_to_collaboration,
         room_message_provider=_collaboration_room_messages,
+        group_store=(
+            getattr(ctx.cowork_runtime, "group_store", None)
+            if ctx.cowork_runtime is not None
+            else None
+        ),
         twin_responder=make_twin_responder(stack),
     )
     app.state.team_rooms_router = team_rooms_router

@@ -25,6 +25,7 @@ from ..base import (
     ToolResult,
     now_ms,
 )
+from ..contract import DeviceManifest, legacy_manifest
 from ..transport.ws_server import TentacleWebSocketServer
 from .capabilities import android_capabilities
 
@@ -74,6 +75,17 @@ class MobileDevice:
     @property
     def capabilities(self) -> list[str]:
         return list(self._capabilities)
+
+    @property
+    def manifest(self) -> DeviceManifest:
+        """Structured device contract; legacy skill ids remain unchanged."""
+        return legacy_manifest(
+            device_id=self.tentacle_id,
+            kind=self.tentacle_type.value,
+            platform=self.platform,
+            capabilities=self._capabilities,
+            meta=self.meta,
+        )
 
     @property
     def status(self) -> TentacleStatus:
@@ -145,6 +157,9 @@ class MobileDevice:
             return ToolResult.fail(call.call_id, -32011, "Device offline", 0)
         if call.tool not in self._capabilities:
             return ToolResult.fail(call.call_id, -32003, f"Unknown tool: {call.tool}", 0)
+        safety_errors = self.manifest.validate_action(call.tool, call.args)
+        if safety_errors:
+            return ToolResult.fail(call.call_id, -32004, "; ".join(safety_errors), 0)
         if self._ws_server is None:
             # Mock 模式：模拟成功执行
             return ToolResult(

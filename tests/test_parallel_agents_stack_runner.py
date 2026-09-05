@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -217,8 +218,8 @@ class TestRunnerHappyPath:
 
 
 class TestPlannerError:
-    def test_planner_error_returns_message_not_failed(self):
-        """Implementation note."""
+    def test_planner_error_raises_so_bridge_marks_the_subagent_failed(self):
+        """A planner failure must not be counted as a successful text reply."""
 
         class _S:
             pass
@@ -229,9 +230,42 @@ class TestPlannerError:
         s.runtime = object()
 
         runner = make_stack_subagent_runner(stack=s)
-        out = runner("anything", subagent_name="x", context={})
-        assert out.startswith("[planner error]")
-        assert "boom simulated" in out
+        with pytest.raises(RuntimeError, match="planner error: boom simulated"):
+            runner("anything", subagent_name="x", context={})
+
+    def test_direct_conversation_reply_skips_json_planning_and_tools(self):
+        captured: dict = {}
+
+        class _Router:
+            def call(self, request):
+                captured["request"] = request
+                return SimpleNamespace(text="在线，随时可以开始。")
+
+        class _Planner:
+            router = _Router()
+            planner_model = "test-chat-model"
+
+            def plan(self, _intent, **_kwargs):
+                raise AssertionError("task planner must not run for a chat bubble")
+
+        stack = SimpleNamespace(planner=_Planner(), runtime=object())
+        runner = make_stack_subagent_runner(stack=stack)
+
+        out = runner(
+            "请简短回应用户",
+            subagent_name="general",
+            context={
+                "direct_conversation_reply": True,
+                "model_name": "octopus-agent",
+            },
+        )
+
+        assert out == "在线，随时可以开始。"
+        request = captured["request"]
+        assert request.model == "test-chat-model"
+        assert request.max_tokens == 512
+        assert request.messages[-1].content == "请简短回应用户"
+        assert "no JSON" in str(request.messages[0].content)
 
 
 # ═══════════════════════════════════════════════════════════════

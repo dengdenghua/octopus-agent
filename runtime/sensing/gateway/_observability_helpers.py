@@ -82,13 +82,24 @@ def _safe_call(fn: Any) -> dict[str, Any]:
         return {"error": f"{type(e).__name__}: {e}"}
 
 
-def _skill_forge_stub(journal: Any, registry: Any) -> dict[str, Any]:
-    from runtime.safety.recovery import SkillForge
+def _skill_forge_stub(
+    journal: Any,
+    registry: Any,
+    *,
+    scope: Any = None,
+) -> dict[str, Any]:
+    from runtime.safety.recovery import ForgeConfig, SkillForge
 
-    result = SkillForge(journal, registry).run()
+    result = SkillForge(
+        journal,
+        registry,
+        config=ForgeConfig(governed_rollout=True),
+        scope=scope,
+    ).run()
     return {
         "candidates": result.candidates_total,
         "promoted": len(result.promoted),
+        "governed": len(result.governed),
         "retired": len(result.retired),
     }
 

@@ -77,6 +77,12 @@ def create_plugin_hub_router(
         """Scan plugin directories and return unloaded plugin candidates."""
         return hub.discover()
 
+    @router.get("/contributions")
+    def list_contributions(kind: str | None = None, owner: str | None = None):
+        """List public metadata for active Octopus plugin contributions."""
+
+        return [row.to_public() for row in hub.contribution_registry.list(kind=kind, owner=owner)]
+
     # ── Lifecycle control ──────────────────────────────────────
 
     def _lifecycle_error(exc: Exception) -> HTTPException:

@@ -19,6 +19,7 @@ tier: "standard"
 - `Channel`
 - `ChannelManager`
 - `ChannelMetadata`
+- `ChannelOperationsStore`
 - `ChannelRoutingError`
 - `DingTalkChannel`
 - `DingTalkError`
@@ -37,6 +38,9 @@ tier: "standard"
 - `HomeAssistantChannel`
 - `HomeAssistantError`
 - `InboundMessage`
+- `IRCChannel`
+- `IRCError`
+- `IRCMessage`
 - `LineChannel`
 - `LineError`
 - `LineSignatureError`
@@ -72,6 +76,7 @@ tier: "standard"
 - `TelegramError`
 - `TelegramSecretMismatch`
 - `ThreadConversationStore`
+- `TwitchChannel`
 - `WeComChannel`
 - `WeComError`
 - `WeComSignatureError`
@@ -87,6 +92,7 @@ tier: "standard"
 - `YuanbaoError`
 - `YuanbaoSignatureError`
 - `resolve_attachment_data`
+- `parse_irc_line`
 
 ## Modules
 
@@ -100,12 +106,14 @@ tier: "standard"
 | `feishu.py` | — |
 | `google_chat.py` | — |
 | `homeassistant.py` | — |
+| `irc.py` | — |
 | `line.py` | — |
 | `manager.py` | — |
 | `matrix.py` | — |
 | `mattermost.py` | — |
 | `ntfy.py` | — |
 | `open_webui.py` | — |
+| `operations.py` | — |
 | `qqbot.py` | — |
 | `signal.py` | — |
 | `simplex.py` | — |
@@ -188,6 +196,16 @@ tier: "standard"
 | class | `class HomeAssistantError(RuntimeError)` |  |
 | class | `class HomeAssistantChannel(Channel)` |  |
 
+### `irc.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class IRCError(RuntimeError)` |  |
+| class | `class IRCMessage` |  |
+| func | `def parse_irc_line(line)` | Parse one IRC/IRCv3 line without accepting embedded control lines. |
+| class | `class IRCChannel(Channel)` | Long-lived IRC adapter with IRCv3 IDs and automatic reconnects. |
+| class | `class TwitchChannel(IRCChannel)` |  |
+
 ### `line.py`
 
 | Kind | Symbol | Doc |
@@ -233,6 +251,12 @@ tier: "standard"
 | --- | --- | --- |
 | class | `class OpenWebUIError(RuntimeError)` |  |
 | class | `class OpenWebUIChannel(Channel)` |  |
+
+### `operations.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class ChannelOperationsStore` | Durable, bounded operational state for external message channels. |
 
 ### `qqbot.py`
 
@@ -337,10 +361,12 @@ tier: "standard"
 
 ## Who imports this
 
-**4** file(s) reference this package:
+**5** file(s) reference this package:
 
 - **`runtime/cli_serve.py/`** · 1 file(s)
   - `runtime/cli_serve.py`
+- **`runtime/evals/`** · 1 file(s)
+  - `runtime/evals/multi_agent_benchmark.py`
 - **`runtime/execution/`** · 1 file(s)
   - `runtime/execution/suckers/cron_skills.py`
 - **`runtime/sensing/`** · 2 file(s)

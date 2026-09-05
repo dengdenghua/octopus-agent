@@ -5,9 +5,14 @@ import {
   SearchIcon,
   UsersIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { useCollabSession, useCoworkSearch } from "@/core/cowork/hooks";
+import {
+  useCollabSession,
+  useCoworkSearch,
+  useMarkCoworkRead,
+} from "@/core/cowork/hooks";
+import { useOptionalCollab } from "@/components/workspace/collab/collab-provider";
 import type {
   CoworkMemberPresence,
   CoworkSearchHit,
@@ -131,6 +136,9 @@ export function CoworkCollabBar({
   const [query, setQuery] = useState("");
   const session = useCollabSession(threadId, { live: true });
   const search = useCoworkSearch(threadId, query);
+  const collabTransport = useOptionalCollab();
+  const markRead = useMarkCoworkRead();
+  const lastMarkedSeq = useRef(0);
 
   const seatNames: Record<string, string> = {};
   for (const seat of rosterSeats) seatNames[seat.id] = seat.name;
@@ -139,6 +147,17 @@ export function CoworkCollabBar({
   const members = collab?.presence ?? [];
   const hasOnlineMembers = members.some((m) => m.online);
   const trimmed = query.trim();
+
+  const latestMessageSeq = Math.max(
+    0,
+    ...(collab?.room_messages ?? []).map((message) => Number(message.seq) || 0),
+  );
+  useEffect(() => {
+    const memberId = collabTransport?.currentUser?.id;
+    if (!memberId || latestMessageSeq <= lastMarkedSeq.current) return;
+    lastMarkedSeq.current = latestMessageSeq;
+    markRead.mutate({ threadId, memberId, messageSeq: latestMessageSeq });
+  }, [collabTransport?.currentUser?.id, latestMessageSeq, markRead, threadId]);
 
   if (!hasOnlineMembers && trimmed.length === 0) return null;
 

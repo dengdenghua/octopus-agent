@@ -8,8 +8,13 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { FileTree } from "@/components/workspace/file-tree";
 import { WorkstationSeat } from "@/components/workspace/workstation-seat";
+import {
+  MemberProfilePopover,
+  summarizeAgentCapabilities,
+} from "@/components/workspace/member-profile-popover";
 import { WorkDirSelector } from "@/components/workspace/workdir-selector";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import { useI18n } from "@/core/i18n/hooks";
@@ -56,8 +61,16 @@ export function TeamWorkbenchPanel({
     Icon: typeof ClipboardListIcon;
   }> = [
     { id: "members", label: t.collab.workbench.tabMembers, Icon: UsersIcon },
-    { id: "tasks", label: t.collab.workbench.tabTasks, Icon: ClipboardListIcon },
-    { id: "workspace", label: t.collab.workbench.tabWorkspace, Icon: FolderIcon },
+    {
+      id: "tasks",
+      label: t.collab.workbench.tabTasks,
+      Icon: ClipboardListIcon,
+    },
+    {
+      id: "workspace",
+      label: t.collab.workbench.tabWorkspace,
+      Icon: FolderIcon,
+    },
   ];
 
   return (
@@ -188,58 +201,117 @@ function TeamMachineRail({
           const avatarSrc = rawAvatar
             ? withAgentAvatarVersion(rawAvatar)
             : undefined;
+          const presenceLabel = isLeader
+            ? t.collab.workbench.leaderStandby
+            : t.collab.workbench.standby;
+          const capabilitySummary = summarizeAgentCapabilities(
+            agent.tool_groups,
+          );
           return (
-            <WorkstationSeat
+            <MemberProfilePopover
               key={agent.name}
               name={name}
-              avatar={agent.icon}
-              avatarUrl={avatarSrc}
-              avatarNode={
-                <BotIcon
-                  className="size-3.5 text-muted-foreground"
-                  aria-hidden="true"
+              avatar={
+                <Avatar className="size-14 shrink-0 rounded-2xl">
+                  {avatarSrc ? (
+                    <AvatarImage src={avatarSrc} alt={name} />
+                  ) : null}
+                  <AvatarFallback className="rounded-2xl text-lg font-semibold">
+                    {agent.icon?.trim() || name.charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+              }
+              roleLabel={
+                isLeader
+                  ? t.collab.common.leader
+                  : t.collab.roster.workstationGroup
+              }
+              presenceLabel={presenceLabel}
+              summary={agent.description || t.collab.roster.aiMemberDefault}
+              details={[
+                ...(agent.model ? [{ label: "模型", value: agent.model }] : []),
+                ...(capabilitySummary
+                  ? [{ label: "擅长", value: capabilitySummary }]
+                  : []),
+              ]}
+              actionLabel={onMention ? "提及成员" : undefined}
+              onAction={
+                onMention
+                  ? () => {
+                      onSelectMembers();
+                      onMention(agent.name);
+                    }
+                  : undefined
+              }
+              trigger={
+                <WorkstationSeat
+                  name={name}
+                  avatar={agent.icon}
+                  avatarUrl={avatarSrc}
+                  avatarNode={
+                    <BotIcon
+                      className="size-3.5 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                  }
+                  showBotBadge
+                  fallbackInitial={name.charAt(0)}
+                  dotClassName="bg-muted-foreground/45"
+                  dotLabel={presenceLabel}
+                  title={
+                    agent.description ||
+                    t.collab.workbench.memberNameWithRole(name, isLeader)
+                  }
+                  ariaLabel={`@${name} · 查看成员信息`}
+                  selected={isLeader}
+                  interactive
+                  iconOnly
+                  iconCaption={isLeader ? t.collab.common.leader : undefined}
+                  className="shrink-0"
                 />
               }
-              showBotBadge
-              fallbackInitial={name.charAt(0)}
-              dotClassName="bg-muted-foreground/45"
-              dotLabel={isLeader ? t.collab.workbench.leaderStandby : t.collab.workbench.standby}
-              title={
-                agent.description ||
-                t.collab.workbench.memberNameWithRole(name, isLeader)
-              }
-              ariaLabel={`@${name}`}
-              selected={isLeader}
-              iconOnly
-              iconCaption={isLeader ? t.collab.common.leader : undefined}
-              onClick={() => {
-                onSelectMembers();
-                onMention?.(agent.name);
-              }}
-              className="shrink-0"
             />
           );
         })}
         {humans.map((participant) => {
           const isSelf = participant.id === currentParticipantId;
           const isOnline = participant.status === "active";
-          const statusText = isOnline ? t.collab.common.online : t.collab.common.offline;
+          const statusText = isOnline
+            ? t.collab.common.online
+            : t.collab.common.offline;
           return (
-            <WorkstationSeat
+            <MemberProfilePopover
               key={participant.id}
               name={participant.display_name}
-              fallbackInitial={participant.display_name.charAt(0)}
-              dotClassName={
-                isOnline ? "bg-success" : "bg-muted-foreground/35"
+              avatar={
+                <Avatar className="size-14 shrink-0 rounded-2xl">
+                  <AvatarFallback className="rounded-2xl text-lg font-semibold">
+                    {participant.display_name.charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
               }
-              dotLabel={statusText}
-              title={`${participant.display_name} · ${statusText} · ${participant.role}`}
-              ariaLabel={`${participant.display_name} · ${statusText}`}
-              selected={isSelf}
-              iconOnly
-              iconCaption={isSelf ? "You" : undefined}
-              onClick={onSelectMembers}
-              className="shrink-0"
+              roleLabel={participant.role}
+              presenceLabel={statusText}
+              summary={
+                isSelf ? "这是你当前在该协作中的视角。" : "正在参与当前协作。"
+              }
+              trigger={
+                <WorkstationSeat
+                  name={participant.display_name}
+                  fallbackInitial={participant.display_name.charAt(0)}
+                  dotClassName={
+                    isOnline ? "bg-success" : "bg-muted-foreground/35"
+                  }
+                  dotLabel={statusText}
+                  title={`${participant.display_name} · ${statusText} · ${participant.role}`}
+                  ariaLabel={`${participant.display_name} · ${statusText} · 查看成员信息`}
+                  selected={isSelf}
+                  interactive
+                  iconOnly
+                  iconCaption={isSelf ? "You" : undefined}
+                  className="shrink-0"
+                />
+              }
             />
           );
         })}

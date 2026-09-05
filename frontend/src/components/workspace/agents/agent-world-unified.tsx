@@ -114,6 +114,7 @@ import { AgentCard } from "./agent-card";
 import { AgentWorldCard } from "./agent-world-card";
 import { CapabilityMarketPanel } from "@/components/store/capability-market-panel";
 import { DEFAULT_FEATURED_APP_IDS } from "@/components/store/app-marketplace-panel";
+import { A2AAgentsPanel } from "@/components/workspace/a2a-agents-panel";
 import { CloudSkillsPanel } from "@/components/store/cloud-skills-panel";
 import { WorkBuddyCloudStorePanel } from "@/components/store/workbuddy-cloud-store-panel";
 import { SmartTeamDialog } from "./smart-team-dialog";
@@ -1273,7 +1274,9 @@ export function resolveHubMarketRoute(search: string): {
     return {
       section: "applications",
       applicationView:
-        view === "installed" || view === "all" ? view : "featured",
+        view === "installed" || view === "all" || view === "remote"
+          ? view
+          : "featured",
     };
   }
   if (tab === "codex-plugins") {
@@ -1627,7 +1630,7 @@ export function AgentWorldUnified() {
   );
 
   const navigateToApplicationView = useCallback(
-    (view: "featured" | "all" | "installed") => {
+    (view: "featured" | "all" | "installed" | "remote") => {
       const params = new URLSearchParams(location.search);
       params.set("tab", "plugins");
       params.set("view", view);
@@ -1790,7 +1793,12 @@ export function AgentWorldUnified() {
                 <h2 id="application-library-title" className="sr-only">
                   应用中心
                 </h2>
-                <div className="mb-6">
+                <div
+                  className={cn(
+                    "mb-6",
+                    marketRoute.applicationView === "remote" && "hidden",
+                  )}
+                >
                   <h3 className="mb-2 text-sm font-semibold">应用</h3>
                   <div className="grid gap-x-8 sm:grid-cols-2">
                     {WORKBENCH_BUILTIN_APPS.map((app) => {
@@ -2030,14 +2038,18 @@ export function AgentWorldUnified() {
                   <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                       <h3 className="text-sm font-semibold">
-                        {pluginDirectoryView === "featured"
-                          ? "推荐插件"
-                          : "插件"}
+                        {marketRoute.applicationView === "remote"
+                          ? "远程 Agent"
+                          : pluginDirectoryView === "featured"
+                            ? "推荐插件"
+                            : "插件"}
                       </h3>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {pluginDirectoryView === "featured"
-                          ? "精选内置能力，安装后即可为对话、创作和工程任务补充工具。"
-                          : "插件、连接器与 MCP；安装状态直接显示在各项中。"}
+                        {marketRoute.applicationView === "remote"
+                          ? "连接兼容 A2A 的外部智能体，并管理可恢复的远程任务。"
+                          : pluginDirectoryView === "featured"
+                            ? "精选内置能力，安装后即可为对话、创作和工程任务补充工具。"
+                            : "插件、连接器与 MCP；安装状态直接显示在各项中。"}
                       </p>
                     </div>
                     <div
@@ -2050,17 +2062,18 @@ export function AgentWorldUnified() {
                           ["featured", "推荐"],
                           ["all", "全部"],
                           ["installed", "已安装"],
+                          ["remote", "远程 Agent"],
                         ] as const
                       ).map(([view, label]) => (
                         <button
                           key={view}
                           type="button"
                           role="tab"
-                          aria-selected={pluginDirectoryView === view}
+                          aria-selected={marketRoute.applicationView === view}
                           onClick={() => navigateToApplicationView(view)}
                           className={cn(
                             "h-7 rounded-md px-3 text-xs transition-colors",
-                            pluginDirectoryView === view
+                            marketRoute.applicationView === view
                               ? "bg-background font-medium text-foreground shadow-sm"
                               : "text-muted-foreground hover:text-foreground",
                           )}
@@ -2070,7 +2083,7 @@ export function AgentWorldUnified() {
                       ))}
                     </div>
                   </div>
-                  {pluginDirectoryView === "featured" ? (
+                  {marketRoute.applicationView === "featured" ? (
                     <div className="relative mb-4 overflow-hidden rounded-xl border border-primary/15 bg-gradient-to-br from-primary/[0.09] via-background to-violet-500/[0.08] p-4">
                       <div className="pointer-events-none absolute -right-8 -top-10 size-36 rounded-full bg-primary/10 blur-3xl" />
                       <div className="relative flex items-start gap-3">
@@ -2088,16 +2101,20 @@ export function AgentWorldUnified() {
                       </div>
                     </div>
                   ) : null}
-                  <CapabilityMarketPanel
-                    searchQuery={searchQuery}
-                    view={pluginDirectoryView}
-                    featuredIds={DEFAULT_FEATURED_APP_IDS}
-                    maxItems={
-                      pluginDirectoryView === "featured" ? 7 : undefined
-                    }
-                    showToolbar={false}
-                    compact
-                  />
+                  {marketRoute.applicationView === "remote" ? (
+                    <A2AAgentsPanel className="min-h-[calc(100dvh-10rem)] rounded-xl border border-border-subtle" />
+                  ) : (
+                    <CapabilityMarketPanel
+                      searchQuery={searchQuery}
+                      view={pluginDirectoryView}
+                      featuredIds={DEFAULT_FEATURED_APP_IDS}
+                      maxItems={
+                        pluginDirectoryView === "featured" ? 7 : undefined
+                      }
+                      showToolbar={false}
+                      compact
+                    />
+                  )}
                 </div>
               </section>
             </TabsContent>

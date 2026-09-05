@@ -71,6 +71,10 @@ _VERIFY_CMD_RE = re.compile(
     r")",
     re.IGNORECASE,
 )
+_VERIFY_PROBE_ONLY_RE = re.compile(
+    r"(?:^|\s)(?:--version|-V|--help|-h|--collect-only|--co)(?:\s|$)",
+    re.IGNORECASE,
+)
 
 _CODE_EXT_RE = re.compile(
     r"\.(?:py|pyw|js|mjs|cjs|jsx|ts|mts|cts|tsx|go|rs|java|c|cc|cpp|h|hpp|cs|rb|php|sh|zsh|bash|vue|svelte|sql|kt|kts|swift|scala|dart|ex|exs|erl|lua|r|pl)$",
@@ -100,6 +104,29 @@ def written_code_path(tool_input: Any) -> str | None:
 
 def is_verification_tool(name: str, tool_input: Any) -> bool:
     """True when a tool call counts as a verification step."""
+    probe_text = ""
+    if isinstance(tool_input, dict):
+        raw_args = tool_input.get("args") or tool_input.get("argv") or ""
+        probe_text = (
+            " ".join(str(part) for part in raw_args)
+            if isinstance(raw_args, list)
+            else str(raw_args)
+        )
+        probe_text = " ".join(
+            part
+            for part in (
+                str(
+                    tool_input.get("command")
+                    or tool_input.get("cmd")
+                    or tool_input.get("script")
+                    or ""
+                ),
+                probe_text,
+            )
+            if part
+        )
+    if _VERIFY_PROBE_ONLY_RE.search(probe_text):
+        return False
     if name in _VERIFY_TOOL_NAMES:
         return True
     if name in _SHELL_TOOL_NAMES:

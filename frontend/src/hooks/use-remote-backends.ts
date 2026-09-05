@@ -8,6 +8,7 @@
  */
 
 import { swallow } from "@/core/utils/log";
+import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
 import { useCallback, useEffect, useState } from "react";
 
 export interface RemoteSshTunnel {
@@ -27,6 +28,13 @@ export interface RemoteBackend {
   last_health: "ok" | "error" | null;
   last_health_at: string | null;
   health_detail: string | null;
+  has_auth: boolean;
+  transport?: "direct" | "ssh_tunnel";
+  capabilities?: {
+    http: boolean;
+    realtime: boolean;
+    ssh_tunnel: boolean;
+  };
 }
 
 export interface RemoteBackendsState {
@@ -39,6 +47,7 @@ export interface RemoteBackendsState {
     name: string;
     url: string;
     ssh?: RemoteSshTunnel | null;
+    authToken?: string;
   }) => Promise<{
     ok: boolean;
     error: string | null;
@@ -66,7 +75,9 @@ export function useRemoteBackends(
     setLoading(true);
     setError(null);
     try {
-      const resp = await fetch(`${baseUrl}/api/remote-backends`);
+      const resp = await fetch(`${baseUrl}/api/remote-backends`, {
+        headers: authHeaders(),
+      });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const body = (await resp.json()) as {
         enabled: boolean;
@@ -88,15 +99,17 @@ export function useRemoteBackends(
       name: string;
       url: string;
       ssh?: RemoteSshTunnel | null;
+      authToken?: string;
     }) => {
       try {
         const resp = await fetch(`${baseUrl}/api/remote-backends`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: jsonAuthHeaders(),
           body: JSON.stringify({
             name: input.name,
             url: input.url,
             ssh: input.ssh ?? null,
+            auth_token: input.authToken || undefined,
           }),
         });
         if (!resp.ok) {
@@ -126,7 +139,7 @@ export function useRemoteBackends(
     async (id: string) => {
       const resp = await fetch(
         `${baseUrl}/api/remote-backends/${encodeURIComponent(id)}`,
-        { method: "DELETE" },
+        { method: "DELETE", headers: authHeaders() },
       );
       const ok = resp.ok;
       await refresh();
@@ -139,7 +152,7 @@ export function useRemoteBackends(
     async (id: string) => {
       const resp = await fetch(
         `${baseUrl}/api/remote-backends/${encodeURIComponent(id)}/health`,
-        { method: "POST" },
+        { method: "POST", headers: authHeaders() },
       );
       if (!resp.ok) {
         return { status: "error", detail: `HTTP ${resp.status}` };

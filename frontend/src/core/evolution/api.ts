@@ -322,6 +322,12 @@ export interface DualHelixShadowStatus {
   ok: boolean;
   schema?: string;
   enabled: boolean;
+  automatic_enabled?: boolean;
+  automatic_policy?: {
+    risk_gated: boolean;
+    repeated_failure_threshold?: number;
+    low_confidence_threshold?: number;
+  };
   isolation?: string;
   runs: Array<{
     run_id: string;
@@ -340,6 +346,8 @@ export interface DualHelixShadowStatus {
     hard_gates?: Record<string, boolean> | null;
     evidence?: string[] | null;
     recommendations?: string[] | null;
+    trigger?: string;
+    trigger_signals?: string[] | null;
     error?: string | null;
   }>;
   error?: string;
@@ -472,6 +480,10 @@ export interface DualHelixShadowRunRequest {
   source_message_id?: string;
   candidate_id?: string;
   experiment_id?: string;
+  automatic?: boolean;
+  risk_level?: "low" | "medium" | "high" | "critical";
+  failure_count?: number;
+  confidence?: number | "low" | "medium" | "high";
 }
 
 export async function queueDualHelixShadowRun(

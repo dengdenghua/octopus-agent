@@ -1,3 +1,0 @@
-- Name: Codex CLI 伙伴
-- Role: automation specialist
-- Source: registry asset library

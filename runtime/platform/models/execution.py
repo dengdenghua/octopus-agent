@@ -62,6 +62,11 @@ class ExecutionResult(BaseModel):
     # callers must not infer trust from a registry name or skill metadata.
     trusted_execution: bool = False
     execution_source: str = ""
+    # Server-stamped effect proof. Tool/plugin output cannot populate this
+    # field: ToolExecutor overwrites it after every pre/post hook has run.
+    # Older journal rows remain valid through the empty default and therefore
+    # fail closed when a consumer requires a sealed receipt.
+    effect_receipt: dict[str, Any] = Field(default_factory=dict)
     ts: datetime = Field(default_factory=now_utc)
 
     @property

@@ -27,6 +27,7 @@ def run_reflect(
     from runtime.execution.suckers.builtins import register_all
     from runtime.memory.knowledge_graph import KnowledgeGraph
     from runtime.safety.recovery import (
+        ForgeConfig,
         KGUpdater,
         MemoryConsolidator,
         RuleExtractor,
@@ -57,7 +58,11 @@ def run_reflect(
     register_all(registry)
 
     if "skill_forge" not in skip:
-        result = SkillForge(journal=journal, registry=registry).run()
+        result = SkillForge(
+            journal=journal,
+            registry=registry,
+            config=ForgeConfig(governed_rollout=True),
+        ).run()
         print(
             f"{c.cyan(_('cli.reflect.skillforge_label'))} · "
             f"{_('cli.reflect.skillforge_fmt', promoted=c.green(str(len(result.promoted))), retired=c.red(str(len(result.retired))), total=result.candidates_total)}"
@@ -271,9 +276,13 @@ def run_loop(
                 f"  {c.dim(_('cli.loop.rewrite_label'))} · {_('cli.loop.rewrite_info', applied=rw.applied_count, skipped=rw.skipped_count, rules=len(stack.planner.rules))}"
             )
 
-        from runtime.safety.recovery import SkillForge
+        from runtime.safety.recovery import ForgeConfig, SkillForge
 
-        forge = SkillForge(journal=stack.journal, registry=stack.registry).run()
+        forge = SkillForge(
+            journal=stack.journal,
+            registry=stack.registry,
+            config=ForgeConfig(governed_rollout=True),
+        ).run()
         if forge.promoted or forge.retired:
             print(
                 f"  {c.dim(_('cli.loop.forge_label'))} · {_('cli.loop.forge_info', promoted=len(forge.promoted), retired=len(forge.retired))}"

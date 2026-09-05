@@ -505,6 +505,9 @@ export function MessageOutputSummary({
   threadId,
   onOpenArtifact: onOpenArtifactProp,
   onRetryTask,
+  onAuthorizeNetwork,
+  authorizingNetworkTier = null,
+  isRetrying = false,
   failure,
   className,
   presentation = "final",
@@ -523,6 +526,12 @@ export function MessageOutputSummary({
   onOpenArtifact?: (path: string) => void;
   /** Retry the failed task while preserving the host conversation context. */
   onRetryTask?: (prompt: string) => void;
+  /** Grant the network tier required by an environment-blocked task. */
+  onAuthorizeNetwork?: (tier: "common" | "full") => void;
+  /** Prevent duplicate grants while thread settings are being persisted. */
+  authorizingNetworkTier?: "common" | "full" | null;
+  /** Keep retry controls honest while a replacement turn is being dispatched. */
+  isRetrying?: boolean;
   failure?: FailurePresentation | null;
   className?: string;
   presentation?: "final" | "process";
@@ -580,7 +589,7 @@ export function MessageOutputSummary({
   };
 
   const handleMakeSimilar = () => {
-    if (!originalPrompt) return;
+    if (!originalPrompt || isRetrying) return;
     if (onRetryTask) {
       onRetryTask(originalPrompt);
       return;
@@ -767,21 +776,65 @@ export function MessageOutputSummary({
             )}
           {isFailure &&
             !isResolvedFailure &&
+            failure?.kind === "environment" &&
+            onAuthorizeNetwork && (
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onAuthorizeNetwork("common")}
+                  disabled={authorizingNetworkTier !== null || isRetrying}
+                  aria-busy={authorizingNetworkTier === "common"}
+                  className="inline-flex min-h-7 items-center gap-1.5 rounded-md border border-warning/35 bg-warning/[0.08] px-2 py-1 text-left text-xs font-medium leading-4 text-warning transition-colors hover:border-warning/55 hover:bg-warning/15 disabled:cursor-wait disabled:opacity-70"
+                >
+                  {authorizingNetworkTier === "common" ? (
+                    <Loader2Icon
+                      className="size-3 animate-spin"
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                  {t.streaming.environmentBlockedAuthorizeCommon}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onAuthorizeNetwork("full")}
+                  disabled={authorizingNetworkTier !== null || isRetrying}
+                  aria-busy={authorizingNetworkTier === "full"}
+                  className="inline-flex min-h-7 items-center gap-1.5 rounded-md border border-warning/25 px-2 py-1 text-left text-xs font-medium leading-4 text-warning/90 transition-colors hover:border-warning/45 hover:bg-warning/10 disabled:cursor-wait disabled:opacity-70"
+                >
+                  {authorizingNetworkTier === "full" ? (
+                    <Loader2Icon
+                      className="size-3 animate-spin"
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                  {t.streaming.environmentBlockedAuthorizeFull}
+                </button>
+              </div>
+            )}
+          {isFailure &&
+            !isResolvedFailure &&
             failure?.kind !== "auth" &&
+            (failure?.kind !== "environment" || !onAuthorizeNetwork) &&
             originalPrompt && (
               <button
                 type="button"
                 onClick={handleMakeSimilar}
+                disabled={isRetrying}
+                aria-busy={isRetrying}
                 title={t.message.retryTaskHint}
                 className={cn(
-                  "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-colors",
+                  "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-colors disabled:cursor-wait disabled:opacity-70",
                   isWarningFailure
                     ? "border-warning/35 bg-warning/[0.08] text-warning hover:border-warning/55 hover:bg-warning/15"
                     : "border-destructive/30 bg-destructive/[0.08] text-destructive hover:border-destructive/50 hover:bg-destructive/15",
                 )}
               >
-                <WandSparklesIcon className="size-3" />
-                {t.message.retryTask}
+                {isRetrying ? (
+                  <Loader2Icon className="size-3 animate-spin" aria-hidden />
+                ) : (
+                  <WandSparklesIcon className="size-3" aria-hidden />
+                )}
+                {isRetrying ? t.message.retryingTask : t.message.retryTask}
               </button>
             )}
         </div>

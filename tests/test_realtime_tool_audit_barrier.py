@@ -236,10 +236,10 @@ async def test_full_queue_drains_after_producer_done_when_apply_was_blocked(
     """Completion must not depend on a capacity-bound queue sentinel.
 
     Once the consumer removes event 1 and blocks in its reducer, events
-    2..64 plus the terminal event fill every remaining queue slot. Holding
-    the reducer beyond the former five-second sentinel timeout reproduces
-    the exact lost-sentinel window; after release, all events must still be
-    applied in order and the driver must terminate promptly.
+    2..64 plus the terminal event fill every remaining queue slot. The old
+    implementation then tried to enqueue a ``None`` sentinel with a five-
+    second timeout. Make that sentinel illegal so the regression fails
+    immediately instead of making the suite sleep beyond the old timeout.
     """
     import runtime.core.cerebrum.react_loop as react_loop
     import runtime.sensing.gateway._realtime_react_stream_drive as drive
@@ -247,7 +247,16 @@ async def test_full_queue_drains_after_producer_done_when_apply_was_blocked(
     apply_entered = asyncio.Event()
     release_apply = asyncio.Event()
     producer_body_done = threading.Event()
+    sentinel_attempted = threading.Event()
     applied: list[int | str] = []
+
+    original_queue_put = asyncio.Queue.put
+
+    async def _reject_sentinel(queue: asyncio.Queue[Any], event: Any) -> None:
+        if event is None:
+            sentinel_attempted.set()
+            raise AssertionError("producer completion must not use a queue sentinel")
+        await original_queue_put(queue, event)
 
     def _full_queue_stream(*_args: Any, **_kwargs: Any):
         for sequence in range(1, 65):
@@ -276,11 +285,13 @@ async def test_full_queue_drains_after_producer_done_when_apply_was_blocked(
     monkeypatch.setattr(react_loop, "stream_react_loop", _full_queue_stream)
     monkeypatch.setattr(drive, "_should_use_native_tool_loop", lambda *_a, **_k: False)
     monkeypatch.setattr(drive, "_apply_react_event", _blocked_first_apply)
+    monkeypatch.setattr(asyncio.Queue, "put", _reject_sentinel)
 
     task = asyncio.create_task(_run_drive(_RuntimeStub(), SimpleNamespace(), _EmitterStub()))
     await asyncio.wait_for(apply_entered.wait(), timeout=1.0)
     assert await asyncio.to_thread(producer_body_done.wait, 1.0)
-    await asyncio.sleep(5.2)
+    await asyncio.sleep(0.05)
+    assert not sentinel_attempted.is_set()
     assert not task.done()
 
     release_apply.set()

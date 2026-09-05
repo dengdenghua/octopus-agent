@@ -41,17 +41,19 @@ for sucker in suckers.public.all():
 
 ### 地位
 Google 主推（2025 年发布）。面向"**agent 之间跨组织协作**"。核心概念：
-- `agent.json` 发现文件（类似 robots.txt）
+- `/.well-known/agent-card.json` 发现文件
 - Task / Message / Artifact 数据模型
 - HTTP + JSON-RPC
 
 ### 我们的对接
 | 方向 | 模块 | 状态 |
 |---|---|---|
-| **作为 A2A Agent** · 被其他 agent 调 | `siphon/a2a_server/` | ❌ 待实现 |
-| **调外部 A2A Agent** | `suckers/a2a_client/` | ❌ 待实现（可选）|
+| **作为 A2A Agent** · 被其他 agent 调 | `runtime/sensing/gateway/a2a_server.py` | ✅ A2A v1 双向服务 |
+| **调外部 A2A Agent** | `runtime/sensing/gateway/a2a_router.py` | ✅ 已实现完整任务生命周期 |
 
-E:\octopus 的 `backend/packages/harness/octopus/a2a/` 目录有现成实现，可 fork。
+客户端基于官方 `a2a-sdk`：支持 Agent Card 注册与健康检查、消息发送、持久任务快照、顺序事件、幂等请求、状态刷新、取消和 SSE 订阅。远端响应会镜像到 `~/.octopus/a2a/tasks.db`，页面或进程重连后可继续查询，不依赖聊天窗口保存运行状态。
+
+服务端同样使用官方 SDK，提供 well-known Agent Card、A2A v1 JSON-RPC、REST 与流式端点；入站任务按调用者隔离并持久化到 `inbound_tasks.db`，重启后仍支持标准 `GetTask`。外部请求默认只进入隔离、只读、最小上下文的 specialist 执行面。
 
 ### 映射表
 
@@ -59,13 +61,13 @@ A2A 概念 ↔ 本系统：
 
 | A2A | 本系统 |
 |---|---|
-| Agent Card (agent.json) | `cerebrum/` 生成，含 arm_registry 摘要 |
-| Task | `cerebrum` 接到的 ArmTask（复用 digestion 流水线）|
-| Message | 每阶段的 In/Out 封装 |
-| Artifact | `genome/journal` 产出的结构化结果 |
-| Streaming | 复用 `siphon/` 的 SSE |
+| Agent Card | `a2a_server.py` 的公开能力卡 |
+| Task | 按调用者隔离的官方 A2A Task，SQLite 持久化 |
+| Message | 外部输入与 specialist 最终回复 |
+| Artifact | 官方 Task Artifact（客户端/服务端协议原生承载） |
+| Streaming | 官方 A2A JSON-RPC/REST SSE |
 
-### agent.json 示例
+### Agent Card 示例
 ```json
 {
   "name": "octopus-agent",
@@ -86,8 +88,8 @@ A2A 概念 ↔ 本系统：
 ```
 
 ### 约束
-- 来自 A2A 外部的 Task **trust_score 初始 0.3**（比 user=0.8 低 —— 不知道对方 agent 可信度）
-- A2A Artifact 输出前过 DIS-I5 端加密检查
+- 来自 A2A 外部的 Task `trust_score` 初始 0.3，并标记为外部不可信输入。
+- 入站执行强制 `context_steward_managed`、禁用父历史共享、只读工具面；外部请求不能扩大本地权限。
 
 ---
 
@@ -193,7 +195,7 @@ span.set_attribute("octopus.cost_usd", 0.023)
 | **OpenTelemetry + Langfuse** | ✅ **必装** | ✅ | ✅ |
 | Agent Protocol server | ⚠️ 小工程，看对外需求 | ✅ | ✅ |
 | MCP Server (对外暴露 skill) | ❌ | ✅ | ✅ |
-| A2A Server | ❌ | ⚠️ | ✅ |
+| A2A Server | ✅ | ✅ | ✅ |
 | A2A Client | ❌ | ❌ | ✅（跨组织协作时）|
 
 ---

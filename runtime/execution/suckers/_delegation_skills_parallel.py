@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+import time
 from contextvars import copy_context
 from typing import Any
 
@@ -77,6 +78,8 @@ def _call_agent_parallel(
     *,
     timeout_s: int | str = _DEFAULT_SUBAGENT_TIMEOUT_S,
     max_workers: int | str = 8,
+    completion_policy: str = "all",
+    quorum: int | str | None = None,
     context: dict[str, Any] | None = None,
     session: Any = None,
     **_kw: Any,
@@ -94,6 +97,12 @@ def _call_agent_parallel(
             300s in 2026-06 after research workloads hit the 5-round
             ceiling. Failed subagents auto-retry ONCE on transient
             (timeout / connection / rate-limit) errors.
+        completion_policy: ``all`` (default), ``first_completed``,
+            ``first_success``, or ``quorum``. Early-settling policies
+            cooperatively cancel lanes that are no longer needed.
+        quorum: required successful lanes for ``completion_policy=quorum``.
+            Defaults to a strict majority and is clamped to the submitted
+            lane count.
 
     Returns:
         ``{"ok": bool, "successes": [...], "failures": [...],
@@ -143,6 +152,13 @@ def _call_agent_parallel(
     if not specs or not isinstance(specs, list):
         return _empty_parallel_result(
             "specs is required (list of {agent_id, prompt})",
+        )
+    policy = str(completion_policy or "all").strip().lower().replace("-", "_")
+    if policy == "first":
+        policy = "first_completed"
+    if policy not in {"all", "first_completed", "first_success", "quorum"}:
+        return _empty_parallel_result(
+            "completion_policy must be all | first_completed | first_success | quorum",
         )
 
     # Validate every spec up front so a bad input doesn't waste an
@@ -199,6 +215,14 @@ def _call_agent_parallel(
                 "bb_key": str(raw.get("bb_key") or raw.get("key") or "").strip(),
                 "prompt": _wrap_prompt_with_role_label(str(prm), role_label),
                 "task_preview": str(prm).replace("\n", " ").strip()[:240],
+                "task_id": str(
+                    raw.get("task_id") or raw.get("bb_key") or f"task-{len(cleaned) + 1}"
+                ).strip()[:160],
+                "objective": str(raw.get("objective") or prm).strip()[:4000],
+                "inputs": raw.get("inputs") if raw.get("inputs") is not None else [],
+                "deliverable": str(raw.get("deliverable") or "").strip()[:2000],
+                "dependencies": raw.get("dependencies") or [],
+                "acceptance_criteria": raw.get("acceptance_criteria") or [],
                 "role_label": role_label,
                 "cheap": cheap_flag,
                 "context": _skill_context_from_spec(raw, context),
@@ -267,6 +291,15 @@ def _call_agent_parallel(
             dropped_specs = len(cleaned) - slots
             cleaned = cleaned[:slots]
 
+    if policy == "quorum":
+        try:
+            completion_target = int(quorum) if quorum is not None else len(cleaned) // 2 + 1
+        except (TypeError, ValueError):
+            return _empty_parallel_result("quorum must be an integer")
+        completion_target = max(1, min(completion_target, len(cleaned)))
+    else:
+        completion_target = len(cleaned) if policy == "all" else 1
+
     # Concurrent fan-out · one worker thread per spec. Each worker
     # binds the parent's Session into its own ContextVar so
     # blackboard / memory skills inside the sub-agent see the same
@@ -274,6 +307,13 @@ def _call_agent_parallel(
     import concurrent.futures as _cf
 
     from runtime.execution.subagents import call_subagent
+    from runtime.safety.approval.cancellation import (
+        CancellationSource,
+        current_cancellation_token,
+        scoped_cancellation,
+    )
+
+    lane_cancellations = {int(spec["spec_index"]): CancellationSource() for spec in cleaned}
 
     # ContextVars don't propagate across threads, so capture the parent's
     # react stack HERE (parent thread) and hand it to each worker explicitly.
@@ -396,6 +436,23 @@ def _call_agent_parallel(
         if call_context.get("react_stack") is None and _ambient_react_stack is not None:
             call_context["react_stack"] = _ambient_react_stack
         call_context["subagent_route_decision"] = route_decision
+        lane_source = lane_cancellations[int(spec["spec_index"])]
+        if lane_source.is_cancelled:
+            return {
+                "agent_id": original_id,
+                "resolved_to": spec.get("agent_id"),
+                "custom_role": role_label,
+                "output": "",
+                "success": False,
+                "status": "cancelled_by_completion_policy",
+                "error": "lane was no longer needed after completion policy settled",
+                "error_type": "cancelled",
+                "spec_index": spec.get("spec_index"),
+                "task_label": task_label,
+                "bb_key": spec.get("bb_key"),
+                "task_preview": spec.get("task_preview"),
+                "subagent_route_decision": route_decision,
+            }
         if orch_budget is not None and not orch_budget.try_charge():
             return {
                 "agent_id": original_id,
@@ -417,7 +474,8 @@ def _call_agent_parallel(
                 "subagent_route_decision": route_decision,
             }
         try:
-            result = _invoke(spec, call_context)
+            with scoped_cancellation(lane_source.token):
+                result = _invoke(spec, call_context)
         except (
             ConnectionError,
             TimeoutError,
@@ -462,7 +520,8 @@ def _call_agent_parallel(
                     # A retried isolated lane gets a FRESH worktree: the first
                     # attempt's tree is already gone, and reusing a half-written
                     # one would hand the retry a dirty starting state.
-                    retry = _invoke(spec, call_context)
+                    with scoped_cancellation(lane_source.token):
+                        retry = _invoke(spec, call_context)
                     if retry.get("success"):
                         retry["retried"] = True
                         result = retry
@@ -512,27 +571,34 @@ def _call_agent_parallel(
         max_workers=worker_count,
         thread_name_prefix="subagent-parallel",
     )
+    parent_cancellation = current_cancellation_token()
+    unlink_parent = [
+        parent_cancellation.on_cancelled(
+            lambda reason, source=source: source.cancel(reason=reason or "parent cancelled")
+        )
+        for source in lane_cancellations.values()
+    ]
     try:
         future_specs = {pool.submit(copy_context().run, _run_one, s): s for s in cleaned}
-        # ``timeout_s`` here is a batch-level guard. Finished workers
-        # still return normally; stragglers become per-agent failures
-        # instead of blowing away the whole parallel envelope.
-        done, not_done = _cf.wait(
-            future_specs.keys(),
-            timeout=timeout_s * ((len(cleaned) + worker_count - 1) // worker_count) + 30,
-            return_when=_cf.ALL_COMPLETED,
+        pending = set(future_specs)
+        deadline = (
+            time.monotonic() + timeout_s * ((len(cleaned) + worker_count - 1) // worker_count) + 30
         )
-        for f in done:
+        policy_satisfied = False
+        policy_impossible = False
+
+        def _collect(future: Any) -> None:
             try:
-                results.append(f.result(timeout=1))
+                results.append(future.result(timeout=1))
             except (
                 ConnectionError,
                 TimeoutError,
                 TypeError,
                 ValueError,
+                OSError,
                 subprocess.SubprocessError,
             ) as exc:  # noqa: BLE001
-                spec = future_specs.get(f, {})
+                spec = future_specs.get(future, {})
                 task_label = (
                     spec.get("bb_key") or spec.get("role_label") or spec.get("agent_id_original")
                 )
@@ -549,8 +615,55 @@ def _call_agent_parallel(
                         "error_type": type(exc).__name__,
                     }
                 )
-        for f in not_done:
+
+        while pending:
+            remaining = max(0.0, deadline - time.monotonic())
+            if remaining <= 0:
+                break
+            done_now, pending = _cf.wait(
+                pending,
+                timeout=remaining,
+                return_when=_cf.FIRST_COMPLETED,
+            )
+            if not done_now:
+                break
+            for future in done_now:
+                _collect(future)
+
+            success_count = sum(1 for result in results if result.get("success"))
+            if policy == "first_completed":
+                policy_satisfied = bool(results)
+            elif policy == "first_success":
+                policy_satisfied = success_count >= 1
+            elif policy == "quorum":
+                policy_satisfied = success_count >= completion_target
+                policy_impossible = success_count + len(pending) < completion_target
+            else:
+                policy_satisfied = not pending
+            if policy_satisfied or policy_impossible:
+                break
+
+        cancelled_specs: list[dict[str, Any]] = []
+        if pending and (policy_satisfied or policy_impossible):
+            reason = (
+                f"completion policy {policy} satisfied"
+                if policy_satisfied
+                else f"completion policy {policy} became impossible"
+            )
+            for future in pending:
+                spec = future_specs.get(future, {})
+                cancelled_specs.append(spec)
+                source = lane_cancellations.get(int(spec.get("spec_index") or 0))
+                if source is not None:
+                    source.cancel(reason=reason)
+                future.cancel()
+
+        timed_out = pending if not (policy_satisfied or policy_impossible) else set()
+        for f in timed_out:
             spec = future_specs.get(f, {})
+            source = lane_cancellations.get(int(spec.get("spec_index") or 0))
+            if source is not None:
+                source.cancel(reason=f"parallel batch timed out after {timeout_s + 30}s")
             f.cancel()
             task_label = (
                 spec.get("bb_key") or spec.get("role_label") or spec.get("agent_id_original")
@@ -572,9 +685,42 @@ def _call_agent_parallel(
                 }
             )
     finally:
+        for unlink in unlink_parent:
+            unlink()
         pool.shutdown(wait=False, cancel_futures=True)
 
     envelope = _build_parallel_envelope(results, total=len(cleaned))
+    if policy == "all":
+        policy_satisfied = len(results) == len(cleaned) and not timed_out
+    elif policy == "first_completed":
+        policy_satisfied = bool(results)
+    elif policy == "first_success":
+        policy_satisfied = envelope["success_count"] >= 1
+    else:
+        policy_satisfied = envelope["success_count"] >= completion_target
+    envelope.update(
+        {
+            "completion_policy": policy,
+            "completion_target": completion_target,
+            "policy_satisfied": policy_satisfied,
+            "cancelled_count": len(cancelled_specs),
+            "cancelled": [
+                {
+                    "agent_id": spec.get("agent_id_original") or spec.get("agent_id"),
+                    "spec_index": spec.get("spec_index"),
+                    "task_label": spec.get("bb_key")
+                    or spec.get("role_label")
+                    or spec.get("agent_id_original"),
+                }
+                for spec in cancelled_specs
+            ],
+        }
+    )
+    if cancelled_specs:
+        envelope.setdefault("notes", []).append(
+            f"[early-settle] {policy} reached its terminal condition; "
+            f"cancelled {len(cancelled_specs)} no-longer-needed lane(s)."
+        )
     if dropped_specs:
         # Honesty: the lead must know it did NOT run every requested lane.
         envelope["dropped"] = dropped_specs
@@ -723,18 +869,24 @@ def _build_parallel_envelope(
     status_summary = (
         f"{success_count}/{total} sub-agents succeeded" if total else "0/0 sub-agents succeeded"
     )
-    honesty_warning = ""
+    honesty_warning = (
+        "Sub-agent outputs are delegated reports, not independently verified facts. "
+        "Before presenting factual or code-audit claims, the parent must check their "
+        "cited file/tool/source evidence and label anything unchecked as unverified."
+    )
     if partial:
         failed_labels = [
             str(f.get("task_label") or f.get("agent_id") or f.get("role") or "?") for f in failures
         ]
-        honesty_warning = (
+        honesty_warning += (
+            " "
             "PARTIAL RUN: do not claim all sub-agents completed. "
             f"State that {status_summary}; failed lanes: "
             f"{', '.join(failed_labels)}."
         )
     elif failure_count > 0:
-        honesty_warning = (
+        honesty_warning += (
+            " "
             "FAILED RUN: no sub-agent completed successfully. Do not present "
             "a complete multi-agent result unless you independently filled "
             "the gaps and disclose that fallback."

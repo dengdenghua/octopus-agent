@@ -81,11 +81,11 @@ class SqliteBlackboard:
                     (self.turn_id, key),
                 ).fetchone()
                 if row is None:
-                    writers = [writer] if writer else []
+                    initial_writers = [writer] if writer else []
                     cur.execute(
                         "INSERT INTO blackboard(turn_id, key, value_json, writers_json,"
                         " write_count, overwrite_count, updated_at) VALUES(?,?,?,?,?,?,?)",
-                        (self.turn_id, key, payload, json.dumps(writers), 1, 0, now),
+                        (self.turn_id, key, payload, json.dumps(initial_writers), 1, 0, now),
                     )
                 else:
                     writers = set(json.loads(row[0] or "[]"))

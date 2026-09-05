@@ -161,11 +161,17 @@ export interface Translations {
       completed: number,
       errors: number,
     ) => string;
+    agentResponseSummary: (
+      total: number,
+      responded: number,
+      errors: number,
+    ) => string;
     processDetails: string;
     completedSteps: (n: number) => string;
     completedThings: (n: number) => string;
     statusViewing: string;
     statusCompleted: string;
+    statusResponded: string;
     statusError: string;
     statusWaiting: string;
     assistant: string;
@@ -187,8 +193,10 @@ export interface Translations {
     showMoreAgents: (n: number) => string;
     collapseAgents: string;
     viewReport: string;
+    viewReply: string;
     viewReportError: string;
     collapseReport: string;
+    collapseReply: string;
     latestTool: string;
     execution: string;
     verification: string;
@@ -212,6 +220,7 @@ export interface Translations {
     makeSimilar: string;
     makeSimilarHint: string;
     retryTask: string;
+    retryingTask: string;
     retryTaskHint: string;
     taskFailedReason: string;
     resultUrl: string;
@@ -385,6 +394,10 @@ export interface Translations {
     seedWorkflow: string;
     send: string;
     stop: string;
+    stopping: string;
+    restoringConnection: string;
+    connectionRecoveryFailed: string;
+    retryConnection: string;
     projectModeLabel: string;
     projectModeHint: string;
     projectStatusTitle: string;
@@ -439,6 +452,55 @@ export interface Translations {
     kindRoomMessage: string;
     kindRoomTask: string;
     linkedRoom: string;
+    deliveryPending: (n: number) => string;
+    deliveryWaiting: string;
+    deliveryFailed: string;
+    deliveryRetry: string;
+    deliveryDismiss: string;
+    deliveryUnknownMember: string;
+    deliveryMonitorUnavailable: string;
+    collectorTitle: string;
+    collectorProgress: (completed: number, total: number) => string;
+    collectorSuccess: string;
+    collectorFailed: string;
+    collectorWaiting: string;
+    collectorRetrying: string;
+    collectorCancelled: string;
+    collectorRetryFailedOnly: string;
+    collectorRetryFailedRuns: (n: number) => string;
+    collectorStop: string;
+    collectorStopRuns: (n: number) => string;
+    collectorStopFailed: string;
+    collectorSteer: string;
+    collectorSteerMemberLabel: (name: string) => string;
+    collectorSteerPlaceholder: (name: string) => string;
+    collectorSteerSubmit: string;
+    collectorSteerCancel: string;
+    collectorSteerFailed: string;
+    collectorStopMember: string;
+    collectorStopMemberLabel: (name: string) => string;
+    collectorStopMemberFailed: string;
+    collectorRetryFailed: string;
+    collectorQueueFull: string;
+    collectorAttempts: (n: number) => string;
+    collectorAttempt: (n: number) => string;
+    collectorContextDelivery: (
+      mode: string,
+      sent: number,
+      avoided: number,
+    ) => string;
+    collectorContextPlan: (
+      mode: "recall" | "selective",
+      selected: number,
+      full: number,
+      reductionPercent: number,
+    ) => string;
+    collectorMemoryCheckpoint: (
+      throughTurn: number,
+      rawTurns: number,
+    ) => string;
+    collectorArchived: string;
+    collectorMonitorUnavailable: string;
   };
 
   // Collaboration capability
@@ -1459,6 +1521,21 @@ export interface Translations {
     nameAria: string;
     urlPlaceholder: string;
     urlAria: string;
+    tokenPlaceholder: string;
+    tokenAria: string;
+    authConfigured: string;
+    useSsh: string;
+    sshHint: string;
+    sshHostPlaceholder: string;
+    sshHostAria: string;
+    sshUserPlaceholder: string;
+    sshUserAria: string;
+    sshPortPlaceholder: string;
+    sshPortAria: string;
+    sshIdentityPlaceholder: string;
+    sshIdentityAria: string;
+    directTransport: string;
+    sshTransport: string;
     add: string;
     adding: string;
     loading: string;
@@ -2103,14 +2180,30 @@ export interface Translations {
     assignDialogTitle: (name: string) => string;
     assignDialogDesc: string;
     noAgentsAvailable: string;
+    searchRespondersPlaceholder: string;
+    aiTeams: string;
+    singleAgents: string;
+    teamMembers: (n: number) => string;
+    toastTeamBound: string;
     unassignCurrent: string;
     unassignConfirmTitle: string;
     unassignConfirmDescription: string;
     howToSetup: string;
     clickToChangeAgent: string;
     handlingMessages: string;
+    handlingMessagesAsTeam: string;
     rebindOrUnbind: string;
     helpDocsComingSoon: string;
+    healthHealthy: string;
+    healthDegraded: string;
+    healthUnknown: string;
+    healthUnsupported: string;
+    healthChecking: string;
+    runHealthCheck: string;
+    healthCheckPassed: string;
+    healthCheckFailed: string;
+    activeThreads: (n: number) => string;
+    duplicatesBlocked: (n: number) => string;
   };
 
   // Pairing Authorization
@@ -2378,6 +2471,7 @@ export interface Translations {
 
   chatPage: {
     stopNote: string;
+    stopFailed: string;
   };
 
   // Agents
@@ -2574,6 +2668,7 @@ export interface Translations {
 
   // Conversation
   conversation: {
+    messageLog: string;
     noMessages: string;
     startConversation: string;
     noArtifactSelected: string;
@@ -5332,6 +5427,7 @@ export interface Translations {
     firstResponseSlow: string;
     modelWorking: string;
     thinkingCompleted: string;
+    runEnded: string;
     slowResponse: string;
     reconnecting: string;
     processing: string;
@@ -5602,6 +5698,10 @@ export interface Translations {
     status: string;
     nonTextContent: string;
     binaryContent: string;
+    taskHistory: string;
+    noTasks: string;
+    refreshTask: string;
+    cancelTask: string;
   };
 
   // Live Tool Timeline

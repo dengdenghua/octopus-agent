@@ -114,6 +114,28 @@ def test_work_purpose_is_distinct_from_available_tools(context, intent_type, cod
 
 
 @pytest.mark.parametrize(
+    ("text", "coding"),
+    [
+        ("整理会议纪要并生成 Word 文档", False),
+        ("研究行业趋势并制作演示文稿", False),
+        ("修复前端页面报错并补充单元测试", True),
+        ("review the Python code in this repository", True),
+        ("build a website for the team", True),
+        ("设计一张海报", False),
+    ],
+)
+@pytest.mark.parametrize("mode", ["develop", "uxui"])
+def test_unified_modes_route_by_task_purpose(text, coding, mode):
+    intent = ParsedIntent(
+        raw=text,
+        normalized_goal=text,
+        intent_type="task",
+        user_context={"agent_mode": mode, "mode": "code", "capability_mode": "code"},
+    )
+    assert is_coding_task(intent) is coding
+
+
+@pytest.mark.parametrize(
     ("preference", "role_codex", "ready", "engine", "reason"),
     [
         ("auto", False, True, "codex", "coding_task"),

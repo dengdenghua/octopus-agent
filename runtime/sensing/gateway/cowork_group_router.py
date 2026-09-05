@@ -12,12 +12,16 @@ static AgentGroupRegistry of agent-team *templates*, a different concept).
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import inspect
+import os
 from contextlib import suppress
 from typing import Any
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from runtime.memory.cowork.async_work import AsyncWorkQueueFullError
 from runtime.memory.cowork.group import (
     LEGACY_PROJECT_MODE,
     ContextGrant,
@@ -30,10 +34,18 @@ from runtime.memory.threads.event_log import validate_thread_id
 
 from ._cowork_group_access import CoworkGroupAccess
 from ._cowork_group_models import (
+    AnnotationBody,
+    AnnotationReplyBody,
+    AnnotationResolvedBody,
     AssignBody,
     BoardBody,
     BreakoutBody,
     CollabTaskBody,
+    CollectorBatchArchiveBody,
+    CollectorBatchCancelBody,
+    CollectorBatchRetryBody,
+    CollectorChildCancelBody,
+    CollectorRetryBody,
     CompleteBody,
     EnsureRoomBody,
     HeartbeatBody,
@@ -42,9 +54,12 @@ from ._cowork_group_models import (
     MergeBody,
     MessageProjectActionBody,
     ModeBody,
+    PinMessageBody,
+    ReactionBody,
     ReadBody,
     RoomMessageBody,
     RosterBody,
+    SteeringBody,
     response_mode,
 )
 from ._cowork_group_models import GrantBody as GrantBody
@@ -340,6 +355,1054 @@ def create_cowork_group_router(
             _require_room_member(room_id, request)
         return _session_payload(thread_id)
 
+    @router.get("/api/collab/{thread_id}/runs")
+    def list_collaboration_runs(
+        thread_id: str,
+        request: Request,
+        status: str = "",
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        """Durable multi-agent executions for timeline replay and recovery UI."""
+
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
+        statuses = [part.strip() for part in status.split(",") if part.strip()]
+        try:
+            runs = _collaboration_store().collaboration_runs_for_session(
+                thread_id,
+                statuses=statuses,
+                limit=max(1, min(1000, limit)),
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {
+            "thread_id": thread_id,
+            "runs": runs,
+            "count": len(runs),
+        }
+
+    @router.get("/api/collab/{thread_id}/runs/{run_id}")
+    def get_collaboration_run(
+        thread_id: str,
+        run_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        """One run plus its immutable lifecycle events."""
+
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
+        store = _collaboration_store()
+        try:
+            run = store.collaboration_run(run_id)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if run is None or str(run.get("session_id") or "") != thread_id:
+            raise HTTPException(404, "collaboration run not found")
+        read_collector = getattr(store, "collaboration_collector", None)
+        return {
+            "thread_id": thread_id,
+            "run": run,
+            "events": store.collaboration_run_events(run_id),
+            "collector": read_collector(run_id) if callable(read_collector) else None,
+        }
+
+    @router.get("/api/collab/{thread_id}/runs/{run_id}/collector")
+    async def get_collaboration_collector(
+        thread_id: str,
+        run_id: str,
+        request: Request,
+        after_revision: int = 0,
+        wait_ms: int = 0,
+    ) -> dict[str, Any]:
+        """Revision-aware long poll for durable child results."""
+
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
+        store = _collaboration_store()
+        after_revision = max(0, int(after_revision))
+        wait_ms = max(0, min(30_000, int(wait_ms)))
+        deadline = asyncio.get_running_loop().time() + wait_ms / 1000
+        collector = None
+        run = None
+        while True:
+            try:
+                run = await asyncio.to_thread(store.collaboration_run, run_id)
+                collector = await asyncio.to_thread(store.collaboration_collector, run_id)
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
+            if run is None or str(run.get("session_id") or "") != thread_id:
+                raise HTTPException(404, "collaboration run not found")
+            if collector is None:
+                raise HTTPException(404, "collaboration collector not found")
+            revision = int(collector.get("revision") or 0)
+            if (
+                revision > after_revision
+                or collector.get("status") != "collecting"
+                or wait_ms == 0
+                or asyncio.get_running_loop().time() >= deadline
+            ):
+                break
+            await asyncio.sleep(0.1)
+        return {
+            "thread_id": thread_id,
+            "changed": int(collector.get("revision") or 0) > after_revision,
+            "collector": collector,
+        }
+
+    @router.get("/api/collab/{thread_id}/runs/{run_id}/collector/attempts")
+    def get_collaboration_collector_attempts(
+        thread_id: str,
+        run_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        """Append-only attempt history retained across member retries."""
+
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
+        store = _collaboration_store()
+        try:
+            run = store.collaboration_run(run_id)
+            attempts = store.collaboration_collector_attempts(run_id)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if run is None or str(run.get("session_id") or "") != thread_id:
+            raise HTTPException(404, "collaboration run not found")
+        if store.collaboration_collector(run_id) is None:
+            raise HTTPException(404, "collaboration collector not found")
+        return {"thread_id": thread_id, "attempts": attempts, "count": len(attempts)}
+
+    @router.get("/api/collab/{thread_id}/runs/{run_id}/collector/steering")
+    def get_collaboration_collector_steering(
+        thread_id: str,
+        run_id: str,
+        request: Request,
+        child_id: str = "",
+        generation: int | None = None,
+        after_seq: int = 0,
+    ) -> dict[str, Any]:
+        """Ordered correction history for one collector generation."""
+
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
+        store = _collaboration_store()
+        try:
+            run = store.collaboration_run(run_id)
+            if run is None or str(run.get("session_id") or "") != thread_id:
+                raise HTTPException(404, "collaboration run not found")
+            rows = store.collaboration_collector_steering(
+                run_id,
+                child_id=child_id or None,
+                generation=generation,
+                after_seq=max(0, after_seq),
+            )
+        except KeyError as exc:
+            raise HTTPException(404, "collaboration collector not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"thread_id": thread_id, "steering": rows, "count": len(rows)}
+
+    @router.post(
+        "/api/collab/{thread_id}/runs/{run_id}/collector/{child_id}/steer",
+        dependencies=[Depends(_auth_dep)],
+    )
+    def steer_collaboration_collector_child(
+        thread_id: str,
+        run_id: str,
+        child_id: str,
+        body: SteeringBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        """Persist a user correction for exactly one still-running member."""
+
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
+        store = _collaboration_store()
+        try:
+            run = store.collaboration_run(run_id)
+            if run is None or str(run.get("session_id") or "") != thread_id:
+                raise HTTPException(404, "collaboration run not found")
+            result = store.submit_collaboration_collector_steering(
+                run_id,
+                child_id=child_id,
+                text=body.text,
+                actor_id=_actor(request),
+            )
+        except KeyError as exc:
+            raise HTTPException(404, "collaboration collector not found") from exc
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return {"ok": True, "thread_id": thread_id, **result}
+
+    @router.post(
+        "/api/collab/{thread_id}/runs/{run_id}/collector/{child_id}/cancel",
+        dependencies=[Depends(_auth_dep)],
+    )
+    def cancel_collaboration_collector_child(
+        thread_id: str,
+        run_id: str,
+        child_id: str,
+        body: CollectorChildCancelBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        """Stop exactly one active member while the rest of the group continues."""
+
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
+        store = _collaboration_store()
+        try:
+            run = store.collaboration_run(run_id)
+            if run is None or str(run.get("session_id") or "") != thread_id:
+                raise HTTPException(404, "collaboration run not found")
+            collector = store.collaboration_collector(run_id)
+            if collector is None:
+                raise HTTPException(404, "collaboration collector not found")
+            if child_id not in collector.get("expected_child_ids", []):
+                raise HTTPException(404, "collaboration member not found")
+            existing = next(
+                (
+                    item
+                    for item in collector.get("results") or []
+                    if isinstance(item, dict) and item.get("child_id") == child_id
+                ),
+                None,
+            )
+            if isinstance(existing, dict) and existing.get("status") == "cancelled":
+                return {
+                    "ok": True,
+                    "thread_id": thread_id,
+                    "collector": collector,
+                    "cancelled_task_count": 0,
+                }
+            if child_id not in collector.get("remaining_child_ids", []):
+                raise HTTPException(409, "collaboration member has already settled")
+            generation = int(collector.get("generation") or 1)
+            bindings = store.collaboration_collector_retry_tasks(
+                run_id,
+                generation=generation,
+            )
+            task_ids = [
+                str(binding["task_id"])
+                for binding in bindings
+                if str(binding.get("child_id") or "") == child_id
+            ]
+            reason = str(body.reason or "member cancelled by user").strip()[:1000]
+            if not reason:
+                reason = "member cancelled by user"
+            cancelled_task_count = _async_store().cancel_batch(
+                task_ids,
+                reason=reason,
+            )
+            collector = store.record_collaboration_collector_result(
+                run_id,
+                child_id=child_id,
+                status="cancelled",
+                result={
+                    "agent_id": child_id,
+                    "actor_id": _actor(request),
+                    "error": reason,
+                    "source": "member_cancel",
+                },
+                expected_generation=generation,
+            )
+        except HTTPException:
+            raise
+        except KeyError as exc:
+            raise HTTPException(404, "collaboration collector not found") from exc
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return {
+            "ok": True,
+            "thread_id": thread_id,
+            "collector": collector,
+            "cancelled_task_count": cancelled_task_count,
+        }
+
+    def _collector_retryable_ids(collector: dict[str, Any]) -> list[str]:
+        if collector.get("status") == "collecting" or collector.get("archived"):
+            return []
+        retryable = [
+            str(item.get("child_id") or "")
+            for item in collector.get("results") or []
+            if isinstance(item, dict) and item.get("status") in {"failed", "cancelled"}
+        ]
+        retryable.extend(
+            str(item) for item in collector.get("cancellation_requested_child_ids") or []
+        )
+        return list(dict.fromkeys(item for item in retryable if item))
+
+    def _collector_cancel_plan(
+        store: Any,
+        *,
+        thread_id: str,
+        run_id: str,
+    ) -> dict[str, Any]:
+        try:
+            run = store.collaboration_run(run_id)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if run is None or str(run.get("session_id") or "") != thread_id:
+            raise HTTPException(404, "collaboration run not found")
+        collector = store.collaboration_collector(run_id)
+        if collector is None:
+            raise HTTPException(404, "collaboration collector not found")
+        return {"run": run, "collector": collector}
+
+    def _cancel_collector_plans(
+        *,
+        thread_id: str,
+        plans: list[dict[str, Any]],
+        reason: str,
+    ) -> dict[str, Any]:
+        """Stop active collector generations and fence their late results."""
+
+        store = _collaboration_store()
+        async_tasks = _async_store()
+        reason = str(reason or "collaboration cancelled by user").strip()[:1000]
+        if not reason:
+            reason = "collaboration cancelled by user"
+        task_ids: list[str] = []
+        for plan in plans:
+            collector = plan["collector"]
+            if collector.get("status") != "collecting":
+                continue
+            generation = int(collector.get("generation") or 1)
+            bindings = store.collaboration_collector_retry_tasks(
+                str(plan["run"]["run_id"]),
+                generation=generation,
+            )
+            task_ids.extend(str(binding["task_id"]) for binding in bindings)
+
+        # Cancel background rows before settling collectors. This makes the
+        # async task status a durable fence, so provider responses that arrive
+        # late cannot write to the blackboard or collector observer.
+        cancelled_task_count = async_tasks.cancel_batch(task_ids, reason=reason)
+        cancelled_run_ids: list[str] = []
+        collectors: list[dict[str, Any]] = []
+        for plan in plans:
+            run = plan["run"]
+            collector = plan["collector"]
+            run_id = str(run["run_id"])
+            if collector.get("status") == "collecting":
+                collector = store.close_collaboration_collector(
+                    run_id,
+                    status="cancelled",
+                    reason=reason,
+                )
+                cancelled_run_ids.append(run_id)
+            if str(run.get("status") or "") in {
+                "queued",
+                "running",
+                "waiting",
+                "interrupted",
+            }:
+                run = store.transition_collaboration_run(
+                    run_id,
+                    status="cancelled",
+                    error=reason,
+                    event_type="cancelled_by_user",
+                    payload={"reason": reason},
+                )
+            collectors.append(
+                {
+                    "run_id": run_id,
+                    "run_status": run.get("status"),
+                    "collector": collector,
+                }
+            )
+        return {
+            "ok": True,
+            "thread_id": thread_id,
+            "cancelled_run_ids": cancelled_run_ids,
+            "cancelled_run_count": len(cancelled_run_ids),
+            "cancelled_task_count": cancelled_task_count,
+            "collectors": collectors,
+            "queue": async_tasks.queue_health(thread_id),
+        }
+
+    def _collector_retry_plan(
+        store: Any,
+        *,
+        thread_id: str,
+        run_id: str,
+        requested_child_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        try:
+            run = store.collaboration_run(run_id)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if run is None or str(run.get("session_id") or "") != thread_id:
+            raise HTTPException(404, "collaboration run not found")
+        original = run.get("input") if isinstance(run.get("input"), dict) else {}
+        message = str(original.get("message") or original.get("objective") or "").strip()
+        if not message:
+            raise HTTPException(409, "collaboration run has no retryable task brief")
+        current = store.collaboration_collector(run_id)
+        if current is None:
+            raise HTTPException(404, "collaboration collector not found")
+        retryable = _collector_retryable_ids(current)
+        retrying = list(dict.fromkeys(requested_child_ids)) if requested_child_ids else retryable
+        unknown = [
+            child_id
+            for child_id in retrying
+            if child_id not in current.get("expected_child_ids", [])
+        ]
+        if unknown:
+            raise HTTPException(
+                409,
+                f"child_id is not registered with this collector: {unknown[0]}",
+            )
+        not_retryable = [child_id for child_id in retrying if child_id not in retryable]
+        if not_retryable:
+            raise HTTPException(
+                409,
+                f"child_id already has a successful result: {not_retryable[0]}",
+            )
+        if not retrying:
+            raise HTTPException(409, "collector has no failed or cancelled children to retry")
+        previous = {
+            str(item.get("child_id") or ""): item
+            for item in current.get("results") or []
+            if isinstance(item, dict)
+        }
+        return {
+            "run_id": run_id,
+            "message": message,
+            "retrying": retrying,
+            "previous": previous,
+        }
+
+    def _dispatch_collector_retry_plans(
+        *,
+        thread_id: str,
+        plans: list[dict[str, Any]],
+        actor: str,
+    ) -> dict[str, Any]:
+        runner = getattr(runtime, "runner", None)
+        if runner is None:
+            raise HTTPException(503, "background cowork runner is not available")
+        store = _collaboration_store()
+        async_tasks = _async_store()
+        bindings: list[dict[str, str]] = []
+        staged_specs: list[tuple[str, str, str]] = []
+        for plan in plans:
+            run_id = str(plan["run_id"])
+            message = str(plan["message"])
+            previous = plan["previous"]
+            for child_id in plan["retrying"]:
+                prior = previous.get(str(child_id), {})
+                raw_prior_result = prior.get("result")
+                prior_result: dict[str, Any] = (
+                    raw_prior_result if isinstance(raw_prior_result, dict) else {}
+                )
+                reason = str(prior_result.get("error") or prior.get("status") or "未完成")[:1000]
+                prompt = (
+                    "你正在重试一个多人协作中的定向子任务。\n"
+                    f"原始请求：{message}\n"
+                    f"上次未通过原因：{reason}\n"
+                    "请直接完成与自己角色相关的部分，给出本轮已经得到的结果和必要依据；"
+                    "不要承诺稍后处理，也不要复述重试说明。"
+                )
+                task_id = f"collector-retry:{uuid4().hex}"
+                bindings.append({"task_id": task_id, "run_id": run_id, "child_id": str(child_id)})
+                staged_specs.append((task_id, str(child_id), prompt))
+        try:
+            staged_tasks = async_tasks.stage_batch(
+                thread_id,
+                staged_specs,
+                actor=actor,
+            )
+        except AsyncWorkQueueFullError as exc:
+            raise HTTPException(
+                429,
+                {
+                    "code": "COWORK_QUEUE_FULL",
+                    "message": "background collaboration queue is at capacity",
+                    "requested": exc.requested,
+                    "queue": exc.health,
+                },
+            ) from exc
+
+        task_ids = [task.task_id for task in staged_tasks]
+        reopened: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        try:
+            for binding in bindings:
+                store.bind_collaboration_collector_retry_task(
+                    binding["run_id"],
+                    child_id=binding["child_id"],
+                    task_id=binding["task_id"],
+                )
+            for plan in plans:
+                collector = store.reopen_collaboration_collector(
+                    plan["run_id"],
+                    child_ids=plan["retrying"],
+                )
+                reopened.append((plan, collector))
+            activated = async_tasks.activate_staged(task_ids)
+            if activated != len(staged_tasks):
+                raise RuntimeError("collector retry batch activation was not atomic")
+        except Exception as exc:  # noqa: BLE001 - settle every reopened lane on dispatch failure
+            discarded = async_tasks.discard_staged(task_ids)
+            if discarded == len(task_ids):
+                with suppress(Exception):
+                    store.discard_collaboration_collector_retry_tasks(task_ids)
+            for plan, collector in reopened:
+                generation = int(collector.get("generation") or 0)
+                for child_id in plan["retrying"]:
+                    with suppress(Exception):
+                        store.record_collaboration_collector_result(
+                            plan["run_id"],
+                            child_id=child_id,
+                            status="failed",
+                            result={"error": f"retry dispatch failed: {type(exc).__name__}"},
+                            expected_generation=generation,
+                        )
+            status_code = 409 if isinstance(exc, (KeyError, ValueError)) else 500
+            raise HTTPException(status_code, str(exc)) from exc
+
+        binding_by_task = {binding["task_id"]: binding for binding in bindings}
+        tasks = [
+            {
+                **task.to_dict(),
+                **binding_by_task[task.task_id],
+                "status": "pending",
+            }
+            for task in staged_tasks
+        ]
+        wake = getattr(runner, "wake", None)
+        if callable(wake):
+            wake()
+        return {
+            "ok": True,
+            "thread_id": thread_id,
+            "collectors": [store.collaboration_collector(str(plan["run_id"])) for plan in plans],
+            "tasks": tasks,
+            "count": len(tasks),
+            "run_count": len(plans),
+            "queue": async_tasks.queue_health(thread_id),
+        }
+
+    @router.get("/api/collab/{thread_id}/collectors")
+    def list_collaboration_collectors(
+        thread_id: str,
+        request: Request,
+        retryable_only: bool = False,
+        include_archived: bool = False,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        """Cross-run collector operations view for long-lived projects."""
+
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
+        store = _collaboration_store()
+        # Reads remain available when an operator supplied a malformed value;
+        # startup applies the validated fallback policy separately.
+        with suppress(TypeError, ValueError):
+            store.apply_collaboration_collector_retention(
+                session_id=thread_id,
+                ttl_seconds=max(
+                    0,
+                    int(
+                        os.environ.get(
+                            "OCTOPUS_COWORK_COLLECTOR_RETENTION_SECONDS",
+                            str(90 * 24 * 60 * 60),
+                        )
+                    ),
+                ),
+                max_collectors_per_session=max(
+                    0,
+                    int(os.environ.get("OCTOPUS_COWORK_COLLECTOR_RETENTION_COUNT", "1000")),
+                ),
+            )
+        try:
+            runs = store.collaboration_runs_for_session(
+                thread_id,
+                limit=max(1, min(100, limit)),
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        items = []
+        for run in runs:
+            collector = store.collaboration_collector(str(run["run_id"]))
+            if collector is None:
+                continue
+            if collector.get("archived") and not include_archived:
+                continue
+            retryable_ids = _collector_retryable_ids(collector)
+            if retryable_only and not retryable_ids:
+                continue
+            items.append(
+                {
+                    "run_id": run["run_id"],
+                    "run_status": run["status"],
+                    "updated_at": run["updated_at"],
+                    "retryable_child_ids": retryable_ids,
+                    "collector": collector,
+                }
+            )
+        return {
+            "thread_id": thread_id,
+            "collectors": items,
+            "count": len(items),
+            "retryable_run_count": sum(bool(item["retryable_child_ids"]) for item in items),
+            "cancellable_run_count": sum(
+                item["collector"].get("status") == "collecting" for item in items
+            ),
+            "archived_run_count": sum(bool(item["collector"].get("archived")) for item in items),
+            "queue": _async_store().queue_health(thread_id),
+        }
+
+    @router.post(
+        "/api/collab/{thread_id}/runs/{run_id}/collector/retry",
+        dependencies=[Depends(_auth_dep)],
+    )
+    def retry_collaboration_collector(
+        thread_id: str,
+        run_id: str,
+        body: CollectorRetryBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        """Re-dispatch selected failed lanes through the durable cowork queue."""
+
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
+        store = _collaboration_store()
+        plan = _collector_retry_plan(
+            store,
+            thread_id=thread_id,
+            run_id=run_id,
+            requested_child_ids=body.child_ids,
+        )
+        result = _dispatch_collector_retry_plans(
+            thread_id=thread_id,
+            plans=[plan],
+            actor=_actor(request),
+        )
+        result["collector"] = result["collectors"][0]
+        return result
+
+    @router.post(
+        "/api/collab/{thread_id}/collectors/retry",
+        dependencies=[Depends(_auth_dep)],
+    )
+    def retry_collaboration_collectors(
+        thread_id: str,
+        body: CollectorBatchRetryBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        """Atomically reserve and retry failed lanes across collaboration runs."""
+
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
+        store = _collaboration_store()
+        run_ids = list(dict.fromkeys(body.run_ids))
+        if not run_ids:
+            runs = store.collaboration_runs_for_session(thread_id, limit=100)
+            run_ids = [
+                str(run["run_id"])
+                for run in runs
+                if (
+                    (collector := store.collaboration_collector(str(run["run_id"]))) is not None
+                    and _collector_retryable_ids(collector)
+                )
+            ]
+        if not run_ids:
+            raise HTTPException(409, "no failed collaboration collectors to retry")
+        plans = [
+            _collector_retry_plan(store, thread_id=thread_id, run_id=run_id) for run_id in run_ids
+        ]
+        return _dispatch_collector_retry_plans(
+            thread_id=thread_id,
+            plans=plans,
+            actor=_actor(request),
+        )
+
+    @router.post(
+        "/api/collab/{thread_id}/runs/{run_id}/collector/cancel",
+        dependencies=[Depends(_auth_dep)],
+    )
+    def cancel_collaboration_collector(
+        thread_id: str,
+        run_id: str,
+        body: CollectorBatchCancelBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        """Stop one collector generation; repeated calls are idempotent."""
+
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
+        result = _cancel_collector_plans(
+            thread_id=thread_id,
+            plans=[
+                _collector_cancel_plan(
+                    _collaboration_store(),
+                    thread_id=thread_id,
+                    run_id=run_id,
+                )
+            ],
+            reason=body.reason,
+        )
+        result["collector"] = result["collectors"][0]["collector"]
+        return result
+
+    @router.post(
+        "/api/collab/{thread_id}/collectors/cancel",
+        dependencies=[Depends(_auth_dep)],
+    )
+    def cancel_collaboration_collectors(
+        thread_id: str,
+        body: CollectorBatchCancelBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        """Stop selected active collector generations across a long project."""
+
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
+        store = _collaboration_store()
+        run_ids = list(dict.fromkeys(body.run_ids))
+        if not run_ids:
+            run_ids = [
+                str(run["run_id"])
+                for run in store.collaboration_runs_for_session(thread_id, limit=100)
+                if (
+                    (collector := store.collaboration_collector(str(run["run_id"]))) is not None
+                    and collector.get("status") == "collecting"
+                )
+            ]
+        if not run_ids:
+            return {
+                "ok": True,
+                "thread_id": thread_id,
+                "cancelled_run_ids": [],
+                "cancelled_run_count": 0,
+                "cancelled_task_count": 0,
+                "collectors": [],
+                "queue": _async_store().queue_health(thread_id),
+            }
+        plans = [
+            _collector_cancel_plan(store, thread_id=thread_id, run_id=run_id) for run_id in run_ids
+        ]
+        return _cancel_collector_plans(
+            thread_id=thread_id,
+            plans=plans,
+            reason=body.reason,
+        )
+
+    @router.post(
+        "/api/collab/{thread_id}/collectors/archive",
+        dependencies=[Depends(_auth_dep)],
+    )
+    def archive_collaboration_collectors(
+        thread_id: str,
+        body: CollectorBatchArchiveBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        """Compact selected terminal collectors while retaining audit metadata."""
+
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
+        store = _collaboration_store()
+        run_ids = list(dict.fromkeys(body.run_ids))
+        plans = [
+            _collector_cancel_plan(store, thread_id=thread_id, run_id=run_id) for run_id in run_ids
+        ]
+        active = [
+            str(plan["run"]["run_id"])
+            for plan in plans
+            if plan["collector"].get("status") == "collecting"
+        ]
+        if active:
+            raise HTTPException(
+                409, f"active collaboration collector cannot be archived: {active[0]}"
+            )
+        previously_archived = sum(bool(plan["collector"].get("archived")) for plan in plans)
+        try:
+            collectors = store.archive_collaboration_collectors(
+                run_ids,
+                reason=body.reason,
+            )
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return {
+            "ok": True,
+            "thread_id": thread_id,
+            "archived_run_ids": [str(item["run_id"]) for item in collectors],
+            "archived_run_count": max(0, len(collectors) - previously_archived),
+            "collectors": collectors,
+        }
+
+    @router.get("/api/collab/{thread_id}/deliveries")
+    def list_collaboration_deliveries(
+        thread_id: str,
+        request: Request,
+        status: str = "",
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        """Reliable result-delivery state for recovery and operator visibility."""
+
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id:
+            _require_room_member(room_id, request)
+        statuses = [part.strip() for part in status.split(",") if part.strip()]
+        try:
+            deliveries = _collaboration_store().collaboration_deliveries_for_session(
+                thread_id,
+                statuses=statuses,
+                limit=max(1, min(1000, limit)),
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {
+            "thread_id": thread_id,
+            "deliveries": deliveries,
+            "count": len(deliveries),
+        }
+
+    def _collaboration_delivery_for_thread(
+        thread_id: str,
+        delivery_id: str,
+    ) -> tuple[Any, dict[str, Any]]:
+        store = _collaboration_store()
+        try:
+            delivery = store.collaboration_delivery(delivery_id)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if delivery is None or str(delivery.get("session_id") or "") != thread_id:
+            raise HTTPException(404, "collaboration delivery not found")
+        return store, delivery
+
+    @router.get("/api/collab/{thread_id}/deliveries/{delivery_id}")
+    def get_collaboration_delivery(
+        thread_id: str,
+        delivery_id: str,
+    ) -> dict[str, Any]:
+        store, delivery = _collaboration_delivery_for_thread(thread_id, delivery_id)
+        return {
+            "thread_id": thread_id,
+            "delivery": delivery,
+            "events": store.collaboration_delivery_events(delivery_id),
+        }
+
+    @router.post(
+        "/api/collab/{thread_id}/deliveries/{delivery_id}/retry",
+        dependencies=[Depends(_auth_dep)],
+    )
+    def retry_collaboration_delivery(
+        thread_id: str,
+        delivery_id: str,
+    ) -> dict[str, Any]:
+        store, _delivery = _collaboration_delivery_for_thread(thread_id, delivery_id)
+        try:
+            delivery = store.retry_collaboration_delivery(delivery_id)
+            logs_root = getattr(runtime, "_logs_root", None)
+            if logs_root is not None:
+                from runtime.sensing.gateway.collaboration_delivery_outbox import (
+                    drain_collaboration_delivery_outbox,
+                )
+
+                drain_collaboration_delivery_outbox(
+                    store,
+                    logs_root=logs_root,
+                    session_id=thread_id,
+                    limit=100,
+                )
+                delivery = store.collaboration_delivery(delivery_id) or delivery
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return {"ok": True, "delivery": delivery}
+
+    @router.post(
+        "/api/collab/{thread_id}/deliveries/{delivery_id}/dismiss",
+        dependencies=[Depends(_auth_dep)],
+    )
+    def dismiss_collaboration_delivery(
+        thread_id: str,
+        delivery_id: str,
+    ) -> dict[str, Any]:
+        store, _delivery = _collaboration_delivery_for_thread(thread_id, delivery_id)
+        try:
+            delivery = store.dismiss_collaboration_delivery(delivery_id)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return {"ok": True, "delivery": delivery}
+
+    def _annotation_author(
+        request: Request,
+        *,
+        display_name: str,
+        avatar_color: str,
+    ) -> tuple[str, dict[str, str]]:
+        actor_id = str(_actor(request) or "anonymous").strip() or "anonymous"
+        name = display_name.strip() or actor_id
+        color = avatar_color.strip()
+        if not color.startswith("#") or len(color) not in {4, 7, 9}:
+            # A deterministic, safe fallback makes server-rendered history
+            # look stable even when a client has no avatar profile.
+            color = f"#{hashlib.sha256(actor_id.encode()).hexdigest()[:6]}"
+        return actor_id, {"display_name": name[:160], "avatar_color": color}
+
+    def _annotation_room_id(thread_id: str, request: Request) -> str:
+        room_id = str(getattr(group_store.state(thread_id), "room_id", None) or "").strip()
+        if not room_id:
+            raise HTTPException(409, "no room linked to this session")
+        _require_room_member(room_id, request)
+        return room_id
+
+    @router.get("/api/collab/{thread_id}/reactions")
+    def list_message_reactions(thread_id: str, request: Request) -> dict[str, Any]:
+        room_id = _annotation_room_id(thread_id, request)
+        return {
+            "thread_id": thread_id,
+            "room_id": room_id,
+            "reactions": _collaboration_store().reactions_for_session(thread_id),
+        }
+
+    @router.post("/api/collab/{thread_id}/reactions", dependencies=[Depends(_auth_dep)])
+    def toggle_message_reaction(
+        thread_id: str,
+        body: ReactionBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        room_id = _annotation_room_id(thread_id, request)
+        participant_id = str(_actor(request) or "anonymous").strip() or "anonymous"
+        reaction = _collaboration_store().toggle_message_reaction(
+            thread_id,
+            room_id=room_id,
+            message_id=body.message_id,
+            participant_id=participant_id,
+            emoji=body.emoji,
+        )
+        return {"ok": True, "reaction": reaction}
+
+    @router.get("/api/collab/{thread_id}/pinned-messages")
+    def list_pinned_messages(thread_id: str, request: Request) -> dict[str, Any]:
+        room_id = _annotation_room_id(thread_id, request)
+        return {
+            "thread_id": thread_id,
+            "room_id": room_id,
+            "pinned_messages": _collaboration_store().pinned_messages_for_session(thread_id),
+        }
+
+    @router.post("/api/collab/{thread_id}/pinned-messages", dependencies=[Depends(_auth_dep)])
+    def toggle_pinned_message(
+        thread_id: str,
+        body: PinMessageBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        room_id = _annotation_room_id(thread_id, request)
+        participant_id = str(_actor(request) or "anonymous").strip() or "anonymous"
+        pin = _collaboration_store().toggle_pinned_message(
+            thread_id,
+            room_id=room_id,
+            message_id=body.message_id,
+            participant_id=participant_id,
+        )
+        return {"ok": True, "pin": pin}
+
+    @router.get("/api/collab/{thread_id}/annotations")
+    def list_annotations(thread_id: str, request: Request) -> dict[str, Any]:
+        room_id = _annotation_room_id(thread_id, request)
+        return {
+            "thread_id": thread_id,
+            "room_id": room_id,
+            "annotations": _collaboration_store().annotations_for_session(thread_id),
+        }
+
+    @router.post("/api/collab/{thread_id}/annotations", dependencies=[Depends(_auth_dep)])
+    def create_annotation(
+        thread_id: str,
+        body: AnnotationBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        room_id = _annotation_room_id(thread_id, request)
+        author_id, author = _annotation_author(
+            request,
+            display_name=body.display_name,
+            avatar_color=body.avatar_color,
+        )
+        annotation = _collaboration_store().add_annotation(
+            thread_id,
+            room_id=room_id,
+            message_id=body.message_id,
+            author_id=author_id,
+            author=author,
+            body=body.body,
+        )
+        return {"ok": True, "annotation": annotation}
+
+    @router.patch(
+        "/api/collab/{thread_id}/annotations/{annotation_id}",
+        dependencies=[Depends(_auth_dep)],
+    )
+    def update_annotation(
+        thread_id: str,
+        annotation_id: str,
+        body: AnnotationResolvedBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        _annotation_room_id(thread_id, request)
+        annotation = _collaboration_store().set_annotation_resolved(
+            thread_id,
+            annotation_id,
+            resolved=body.resolved,
+        )
+        if annotation is None:
+            raise HTTPException(404, "annotation not found")
+        return {"ok": True, "annotation": annotation}
+
+    @router.delete(
+        "/api/collab/{thread_id}/annotations/{annotation_id}",
+        dependencies=[Depends(_auth_dep)],
+    )
+    def delete_annotation(
+        thread_id: str,
+        annotation_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        _annotation_room_id(thread_id, request)
+        if not _collaboration_store().delete_annotation(thread_id, annotation_id):
+            raise HTTPException(404, "annotation not found")
+        return {"ok": True}
+
+    @router.post(
+        "/api/collab/{thread_id}/annotations/{annotation_id}/replies",
+        dependencies=[Depends(_auth_dep)],
+    )
+    def create_annotation_reply(
+        thread_id: str,
+        annotation_id: str,
+        body: AnnotationReplyBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        _annotation_room_id(thread_id, request)
+        author_id, author = _annotation_author(
+            request,
+            display_name=body.display_name,
+            avatar_color=body.avatar_color,
+        )
+        reply = _collaboration_store().add_annotation_reply(
+            thread_id,
+            annotation_id,
+            author_id=author_id,
+            author=author,
+            body=body.body,
+        )
+        if reply is None:
+            raise HTTPException(404, "annotation not found")
+        return {"ok": True, "reply": reply}
+
     @router.post("/api/collab/{thread_id}/room", dependencies=[Depends(_owner_dep)])
     async def ensure_session_room(
         thread_id: str,
@@ -485,6 +1548,8 @@ def create_cowork_group_router(
             raise HTTPException(409, "no room linked to this session — link one first")
         _require_room_member(room_id, request)
         metadata = dict(body.metadata)
+        if body.reply_to is not None:
+            metadata["reply_to"] = body.reply_to
         if body.source_message_id:
             metadata["source_message_id"] = body.source_message_id
         if body.message_type:
@@ -653,11 +1718,21 @@ def create_cowork_group_router(
         group events past each member's read marker (floored at their join)."""
         from runtime.memory.cowork.presence import group_presence
 
+        message_head: int | None = None
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        if room_id and collaboration_store is not None:
+            messages_for_room = getattr(collaboration_store, "messages_for_room", None)
+            if callable(messages_for_room):
+                with suppress(Exception):
+                    latest = messages_for_room(room_id, limit=1, after_seq=0)
+                    if latest:
+                        message_head = max(int(item.get("seq", 0) or 0) for item in latest)
         members = group_presence(
             group_store,
             _presence_store(),
             thread_id,
             online_window_s=max(1, online_window_s),
+            message_head=message_head,
         )
         return {"thread_id": thread_id, "members": [m.to_dict() for m in members]}
 
@@ -665,6 +1740,14 @@ def create_cowork_group_router(
     def mark_read(thread_id: str, body: ReadBody) -> dict[str, Any]:
         """Mark ``member_id`` caught up to ``seq`` (default: the current event
         head). The marker is monotonic — it never rewinds."""
+        if body.message_seq is not None:
+            _presence_store().mark_read(
+                thread_id,
+                body.member_id,
+                int(body.message_seq),
+                coordinate="message",
+            )
+            return {"ok": True, **_presence_store().get(thread_id, body.member_id)}
         seq = body.seq
         if seq is None:
             events = group_store.events(thread_id)
@@ -711,6 +1794,7 @@ def create_cowork_group_router(
                 "runner_reason": "runtime not attached",
                 "task_counts": store.counts(thread_id),
             }
+        status.setdefault("queue_health", store.queue_health(thread_id))
         return {"thread_id": thread_id, **status}
 
     @router.get("/api/cowork/{thread_id}/health")
@@ -748,6 +1832,7 @@ def create_cowork_group_router(
             "tasks": {
                 "counts": async_store.counts(thread_id),
                 "failures": failures,
+                "queue": async_store.queue_health(thread_id),
             },
             "presence": {
                 "members": len(members),
@@ -761,7 +1846,24 @@ def create_cowork_group_router(
     def assign_task(thread_id: str, body: AssignBody, request: Request) -> dict[str, Any]:
         """Give a member a task to work in the background; result lands on the
         shared blackboard when complete."""
-        task = _async_store().assign(thread_id, body.assignee, body.prompt, actor=_actor(request))
+        async_tasks = _async_store()
+        try:
+            task = async_tasks.assign(
+                thread_id,
+                body.assignee,
+                body.prompt,
+                actor=_actor(request),
+            )
+        except AsyncWorkQueueFullError as exc:
+            raise HTTPException(
+                429,
+                {
+                    "code": "COWORK_QUEUE_FULL",
+                    "message": "background collaboration queue is at capacity",
+                    "requested": exc.requested,
+                    "queue": exc.health,
+                },
+            ) from exc
         return {"ok": True, "task": task.to_dict()}
 
     @router.post(

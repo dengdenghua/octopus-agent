@@ -388,17 +388,25 @@ class CloudCatalog:
                 # defaults when an id happens to be absent.
                 defaults = (*_REMOTE_SURFACE_PLUGINS, *_WORKBENCH_APPS)
                 defaults_by_id = {str(item["id"]): item for item in defaults}
+                workbench_defaults_by_package = {
+                    str(item["plugin"]): item
+                    for item in _WORKBENCH_APPS
+                    if item.get("kind") == "workbench"
+                }
                 merged: list[dict[str, Any]] = []
                 emitted_defaults: set[str] = set()
                 for item in items:
                     item_id = str(item.get("id") or "")
                     official = defaults_by_id.get(item_id)
+                    if official is None and item.get("kind") == "workbench":
+                        official = workbench_defaults_by_package.get(str(item.get("plugin") or ""))
                     if official is None:
                         merged.append(item)
                         continue
-                    if item_id not in emitted_defaults:
+                    official_id = str(official["id"])
+                    if official_id not in emitted_defaults:
                         merged.append(dict(official))
-                        emitted_defaults.add(item_id)
+                        emitted_defaults.add(official_id)
                 for official in defaults:
                     item_id = str(official["id"])
                     if item_id not in emitted_defaults:
@@ -2185,7 +2193,9 @@ class CloudCatalog:
         transaction_path = lifecycle / "transactions" / f"{transaction_id}.json"
         trust_path = lifecycle / "trust" / f"{plugin_id}.json"
         previous_trust = backup.parent / "trust.json"
-        operation = "update" if target.exists() else "install"
+        had_target = target.exists()
+        operation = "update" if had_target else "install"
+        previous_valid = False
         try:
             staging_container.mkdir(parents=True, exist_ok=False)
             shutil.copytree(source, staging)
@@ -2196,25 +2206,43 @@ class CloudCatalog:
                 manifest,
                 require_trusted=require_trusted,
             )
-            if target.exists():
+            if had_target:
                 backup.parent.mkdir(parents=True, exist_ok=False)
                 if trust_path.is_file():
-                    shutil.copy2(trust_path, previous_trust)
+                    try:
+                        WorkbenchPackageStore(
+                            dest,
+                            require_integrity=True,
+                        ).load_manifest(plugin_id)
+                    except (FileNotFoundError, ValueError):
+                        # A repair must still be able to replace an installed
+                        # generation that the current manifest or integrity
+                        # rules reject. Keep it as forensic backup, but never
+                        # advertise that broken generation as rollback-safe.
+                        pass
+                    else:
+                        shutil.copy2(trust_path, previous_trust)
+                        previous_valid = True
                 else:
-                    previous_manifest = WorkbenchPackageStore(dest).load_manifest(plugin_id)
-                    previous_record = verify_workbench_package_trust(
-                        target,
-                        previous_manifest,
-                        require_trusted=False,
-                    )
-                    previous_record.update(
-                        {
-                            "source": "legacy_local",
-                            "installed_at": None,
-                            "transaction_id": None,
-                        }
-                    )
-                    atomic_write_json(previous_trust, previous_record, sort_keys=True)
+                    try:
+                        previous_manifest = WorkbenchPackageStore(dest).load_manifest(plugin_id)
+                        previous_record = verify_workbench_package_trust(
+                            target,
+                            previous_manifest,
+                            require_trusted=False,
+                        )
+                    except (FileNotFoundError, ValueError):
+                        pass
+                    else:
+                        previous_record.update(
+                            {
+                                "source": "legacy_local",
+                                "installed_at": None,
+                                "transaction_id": None,
+                            }
+                        )
+                        atomic_write_json(previous_trust, previous_record, sort_keys=True)
+                        previous_valid = True
                 target.replace(backup)
             try:
                 staging.replace(target)
@@ -2236,7 +2264,7 @@ class CloudCatalog:
             "destination": str(target),
             "backup": str(backup) if backup.exists() else "",
             "committed_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-            "rollback_available": True,
+            "rollback_available": not had_target or previous_valid,
         }
         trust.update(
             {
@@ -2765,11 +2793,20 @@ class CloudCatalog:
         official = next(
             (
                 item
-                for item in self.items()
+                for item in _WORKBENCH_APPS
                 if item.get("kind") == "workbench" and item.get("plugin") == manifest.id
             ),
             None,
         )
+        if official is None:
+            official = next(
+                (
+                    item
+                    for item in self.items()
+                    if item.get("kind") == "workbench" and item.get("plugin") == manifest.id
+                ),
+                None,
+            )
         if official is not None:
             expected_version = str(official.get("version") or "").strip()
             if expected_version and manifest.version != expected_version:

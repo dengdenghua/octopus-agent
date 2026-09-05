@@ -105,6 +105,110 @@ describe("CoworkRoomTimeline", () => {
     expect(screen.getByText("规划师")).toBeInTheDocument();
   });
 
+  test("opens the author's member card from an in-conversation avatar", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <CoworkRoomTimelineEntry
+        message={messages[0]}
+        participants={[
+          {
+            id: "planner",
+            display_name: "规划师",
+            kind: "agent",
+            description: "负责规划协作步骤。",
+          },
+        ]}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "规划师 · 查看成员信息" }),
+    );
+    expect(screen.getByLabelText("规划师 的成员信息")).toBeInTheDocument();
+    expect(screen.getByText("负责规划协作步骤。")).toBeInTheDocument();
+  });
+
+  test("keeps only one member card open across conversation avatars", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <CoworkRoomTimeline
+        messages={[
+          messages[0],
+          {
+            seq: 7,
+            participant_id: "researcher",
+            display_name: "研究员",
+            text: "我会补充资料。",
+          },
+        ]}
+        participants={[
+          { id: "planner", display_name: "规划师", kind: "agent" },
+          { id: "researcher", display_name: "研究员", kind: "agent" },
+        ]}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "规划师 · 查看成员信息" }),
+    );
+    expect(screen.getByLabelText("规划师 的成员信息")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "研究员 · 查看成员信息" }),
+    );
+    expect(
+      screen.queryByLabelText("规划师 的成员信息"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("研究员 的成员信息")).toBeInTheDocument();
+  });
+
+  test("renders a structured reply reference without relying on markdown quotes", () => {
+    renderWithProviders(
+      <CoworkRoomTimelineEntry
+        message={{
+          seq: 6,
+          participant_id: "researcher",
+          display_name: "研究员",
+          text: "我会今天完成",
+          metadata: {
+            reply_to: {
+              seq: 4,
+              participant_id: "planner",
+              display_name: "规划师",
+              text: "请完成竞品调研",
+            },
+          },
+        }}
+        participants={[{ id: "planner", display_name: "规划师" }]}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(screen.getByText("回复 规划师")).toBeInTheDocument();
+    expect(screen.getByText("请完成竞品调研")).toBeInTheDocument();
+  });
+
+  test("keeps reply and mention available when the room has no project binding", async () => {
+    const user = userEvent.setup();
+    const onReply = vi.fn();
+    const onMentionAuthor = vi.fn();
+    renderWithProviders(
+      <CoworkRoomTimelineEntry
+        message={messages[0]}
+        messageActions={{ onReply, onMentionAuthor }}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    await user.click(screen.getByRole("button", { name: "回复消息" }));
+    await user.click(screen.getByRole("button", { name: "提及 规划师" }));
+    expect(onReply).toHaveBeenCalledWith(messages[0]);
+    expect(onMentionAuthor).toHaveBeenCalledWith(messages[0]);
+    expect(screen.queryByLabelText("消息项目操作")).not.toBeInTheDocument();
+  });
+
   test("removes thread mirrors and repeated producer source ids", () => {
     expect(
       dedupeCoworkRoomMessages([

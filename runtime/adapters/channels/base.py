@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 
 _CRED_PATTERN = re.compile(
     r"(bot|token|key|secret|password|access_token|app_secret|signing_secret)"
@@ -39,7 +39,17 @@ class ChannelMetadata(TypedDict, total=False):
     sender_id: str
     conversation_id: str
     agent_id: str
+    group_id: str
+    primary_agent_id: str
+    member_agent_ids: list[str]
+    collaboration_spoke: int
+    collaboration_count: int
+    duplicate: bool
     source: str
+    message_guid: str
+    message_reference_id: str
+    item_id: str
+    message_sid: str
     discord_channel_id: str
     slack_thread_ts: str
     telegram_message_id: str
@@ -71,7 +81,9 @@ class InboundMessage:
     thread_id: str
     sender_id: str = ""
     content: str = ""
-    metadata: ChannelMetadata = field(default_factory=dict)
+    metadata: ChannelMetadata = field(
+        default_factory=lambda: cast(ChannelMetadata, {}),
+    )
     received_at: datetime | None = None
     attachments: list[Attachment] = field(default_factory=list)
 
@@ -81,7 +93,9 @@ class OutboundMessage:
     channel_id: str
     thread_id: str
     content: str
-    metadata: ChannelMetadata = field(default_factory=dict)
+    metadata: ChannelMetadata = field(
+        default_factory=lambda: cast(ChannelMetadata, {}),
+    )
     attachments: list[Attachment] = field(default_factory=list)
 
 

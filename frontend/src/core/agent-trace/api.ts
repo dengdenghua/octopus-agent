@@ -163,6 +163,46 @@ export interface AgentTraceTaskRun {
   token_totals?: Partial<AgentTraceTokenTotals>;
 }
 
+export interface AgentTraceExecutionStep {
+  sequence: number;
+  call_id: string;
+  tool: string;
+  input?: unknown;
+  output?: unknown;
+  status: "running" | "completed" | "failed" | "cancelled" | "unknown" | string;
+  started_at?: string | null;
+  ended_at?: string | null;
+  duration_ms?: number | null;
+  event_ids: Array<number | string | null>;
+}
+
+export interface AgentTraceExecutionTrace {
+  schema: "octopus.execution_trace.v1" | string;
+  trace_id?: string | null;
+  thread_id?: string | null;
+  turn_id: string;
+  task_id?: string | null;
+  agent_id?: string | null;
+  engine: string;
+  model?: string | null;
+  steps: AgentTraceExecutionStep[];
+  outcome: {
+    status: string;
+    reason?: unknown;
+    event_id?: number | string | null;
+    ts?: string | null;
+  };
+  integrity: {
+    event_count: number;
+    tool_start_count: number;
+    tool_end_count: number;
+    orphan_start_count: number;
+    orphan_end_count: number;
+    has_terminal: boolean;
+    complete: boolean;
+  };
+}
+
 export interface AgentTraceTaskLeaseHealth {
   state?: string;
   holder_id?: string | null;
@@ -1401,6 +1441,18 @@ export async function fetchAgentTraceTaskRuns(
     `/api/agent-trace/task-runs?${params.toString()}`,
   );
   return data.task_runs;
+}
+
+export async function fetchAgentTraceExecutionTrace(
+  turnId: string,
+  scope?: AgentTraceScope,
+): Promise<AgentTraceExecutionTrace> {
+  const params = new URLSearchParams({ turn_id: turnId });
+  appendScope(params, scope);
+  const data = await fetchJson<{ trace: AgentTraceExecutionTrace }>(
+    `/api/agent-trace/execution-trace?${params.toString()}`,
+  );
+  return data.trace;
 }
 
 export async function fetchTaskRecoveryQueue(options?: {

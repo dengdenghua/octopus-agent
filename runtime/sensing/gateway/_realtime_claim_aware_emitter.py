@@ -75,6 +75,23 @@ class _ClaimAwareEmitter:
     async def notify(self, method: ServerMethod | str, params: dict[str, Any]) -> None:
         await self._delegate.notify(method, params)
 
+    async def notify_terminal(
+        self,
+        method: ServerMethod | str,
+        params: dict[str, Any],
+    ) -> None:
+        """Forward terminal fan-out when the transport supports it.
+
+        Keep compatibility with lightweight emitters used by embedders and
+        tests: they only expose ``notify`` and therefore retain the previous
+        single-target behavior.
+        """
+        terminal = getattr(self._delegate, "notify_terminal", None)
+        if callable(terminal):
+            await terminal(method, params)
+        else:
+            await self._delegate.notify(method, params)
+
     async def request_approval(
         self,
         method: ServerMethod | str,

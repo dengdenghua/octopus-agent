@@ -76,6 +76,41 @@ def test_extracts_xlsx_shared_and_inline_strings() -> None:
     assert "Ada\t98" in result.text
 
 
+def test_xlsx_extraction_preserves_sparse_cell_columns() -> None:
+    data = _archive(
+        {
+            "xl/worksheets/sheet1.xml": (
+                '<worksheet xmlns="x"><sheetData><row r="1">'
+                '<c r="A1" t="inlineStr"><is><t>Left</t></is></c>'
+                '<c r="C1" t="inlineStr"><is><t>Right</t></is></c>'
+                "</row></sheetData></worksheet>"
+            )
+        }
+    )
+
+    result = extract_document_text(data, "xlsx")
+
+    assert result is not None
+    assert "Left\t\tRight" in result.text
+
+
+def test_xlsx_extraction_preserves_source_row_numbers() -> None:
+    data = _archive(
+        {
+            "xl/worksheets/sheet1.xml": (
+                '<worksheet xmlns="x"><sheetData><row r="10">'
+                '<c r="B10" t="inlineStr"><is><t>Actual row</t></is></c>'
+                "</row></sheetData></worksheet>"
+            )
+        }
+    )
+
+    result = extract_document_text(data, "xlsx")
+
+    assert result is not None
+    assert "Row 10\t\tActual row" in result.text
+
+
 def test_truncates_with_read_file_hint() -> None:
     result = extract_document_text(b"x" * 200, "txt", max_chars=20)
     assert result is not None

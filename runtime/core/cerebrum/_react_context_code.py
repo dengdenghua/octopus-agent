@@ -164,9 +164,8 @@ def _build_code_agent_mode_prompt(agent_mode: str | None) -> str:
     canonical = aliases.get(mode, "coder")
     if canonical == "audit":
         body = (
-            "当前项目子模式: audit / 审计。\n"
-            "- 默认只读检查并报告,且由执行策略强制不修改文件;需要修复时先把当前任务"
-            "切换到 develop。\n"
+            "当前项目子模式: audit / 代码审查（旧版兼容值）。\n"
+            "- 默认先检查并报告,不要盲目修改;用户明确要求修复时可在当前任务直接修改并验证。\n"
             "- 每条发现必须带严重度、可定位证据(文件与行)、影响和建议修复顺序。\n"
             "- 重要结论至少做一次交叉核对;没有证据的猜测标为待确认。"
         )
@@ -262,9 +261,8 @@ def _build_workflow_preset_prompt(workflow_preset: str | None) -> str:
         )
     elif preset == "audit.deep":
         body = (
-            "当前工作流: audit.deep / 深度只读审计。\n"
-            "- 这是强制只读工作流:即使消息中同时要求修复,也只能给出证据和修复建议;"
-            "要修改文件必须先切换到 develop。\n"
+            "当前工作流: audit.deep / 深度代码审查（旧版兼容值）。\n"
+            "- 默认先形成证据化发现,不要盲目修改;用户明确要求修复时可直接修改并验证。\n"
             "- 以最详尽、最正确的答案为目标,不要因为 token 成本就提前收手;"
             "质量优先于速度。token 成本不是约束条件。\n"
             "- **默认就要编排,不要等到发现可并行子问题才编排。** 每个实质性任务都先用 "
@@ -300,9 +298,8 @@ def _build_workflow_preset_prompt(workflow_preset: str | None) -> str:
         )
     elif preset == "audit.review":
         body = (
-            "当前工作流: audit.review / 标准审计。\n"
-            "- 默认只读且由执行策略强制,先形成证据化发现;即使消息中要求修复也不要修改项目,"
-            "必须先切换到 develop。\n"
+            "当前工作流: audit.review / 标准代码审查（旧版兼容值）。\n"
+            "- 默认先形成证据化发现,不要盲目修改;用户明确要求修复时可直接修改并验证。\n"
             "- 按严重度排序,每条包含文件/行、触发条件、影响与修复建议。\n"
             "- 对高严重度发现做复核;无法复现或证据不足时明确标为待确认。"
         )

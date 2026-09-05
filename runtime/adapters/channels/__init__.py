@@ -13,12 +13,14 @@ from .email import EmailChannel, EmailError
 from .feishu import FeishuChannel, FeishuError, FeishuSignatureError
 from .google_chat import GoogleChatChannel, GoogleChatError, GoogleChatSignatureError
 from .homeassistant import HomeAssistantChannel, HomeAssistantError
+from .irc import IRCChannel, IRCError, IRCMessage, TwitchChannel, parse_irc_line
 from .line import LineChannel, LineError, LineSignatureError
 from .manager import ChannelManager, ChannelRoutingError
 from .matrix import MatrixChannel, MatrixError, MatrixSignatureError
 from .mattermost import MattermostChannel, MattermostError, MattermostSignatureError
 from .ntfy import NtfyChannel, NtfyError
 from .open_webui import OpenWebUIChannel, OpenWebUIError
+from .operations import ChannelOperationsStore
 from .qqbot import QQBotChannel, QQBotError, QQBotSignatureError
 from .signal import SignalChannel, SignalError, SignalSignatureError
 from .simplex import SimpleXChannel, SimpleXError
@@ -44,6 +46,7 @@ __all__ = [
     "Channel",
     "ChannelManager",
     "ChannelMetadata",
+    "ChannelOperationsStore",
     "ChannelRoutingError",
     "DingTalkChannel",
     "DingTalkError",
@@ -62,6 +65,9 @@ __all__ = [
     "HomeAssistantChannel",
     "HomeAssistantError",
     "InboundMessage",
+    "IRCChannel",
+    "IRCError",
+    "IRCMessage",
     "LineChannel",
     "LineError",
     "LineSignatureError",
@@ -97,6 +103,7 @@ __all__ = [
     "TelegramError",
     "TelegramSecretMismatch",
     "ThreadConversationStore",
+    "TwitchChannel",
     "WeComChannel",
     "WeComError",
     "WeComSignatureError",
@@ -112,4 +119,5 @@ __all__ = [
     "YuanbaoError",
     "YuanbaoSignatureError",
     "resolve_attachment_data",
+    "parse_irc_line",
 ]

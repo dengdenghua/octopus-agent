@@ -188,6 +188,9 @@ def gate_inner_dispatch(
     unreviewed and must not defer to a gate that never saw it.
     """
     from runtime.execution.misc.capability_permissions import is_skill_allowed
+    from runtime.platform.capabilities.permission_grants import (
+        is_marketplace_skill_allowed,
+    )
     from runtime.safety.approval.approval_gate import injection_taint_block
 
     skill_id = str(getattr(skill, "name", "") or "")
@@ -196,6 +199,9 @@ def gate_inner_dispatch(
     allowed, reason = is_skill_allowed(skill_id)
     if not allowed:
         return GateBlock(GATE_CAPABILITY, reason or "capability disabled")
+    allowed, reason = is_marketplace_skill_allowed(skill)
+    if not allowed:
+        return GateBlock(GATE_CAPABILITY, reason or "capability permission denied")
 
     # 2. Indirect prompt-injection taint.
     inj = injection_taint_block(

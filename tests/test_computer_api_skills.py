@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from runtime.execution.suckers import computer_api_skills
+from runtime.platform.process.session import Session, session_scope
 
 
 class _FakeResponse:
@@ -84,6 +85,36 @@ def test_computer_api_call_includes_bridge_diagnostics_on_unreachable(
     assert data["ok"] is False
     assert "http://localhost:8123/api/computer" in data["error"]
     assert data["computer_api"]["base_url"] == "http://localhost:8123/api/computer"
+
+
+def test_computer_api_call_carries_selected_desktop_target(monkeypatch) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_urlopen(req: object, timeout: int) -> _FakeResponse:
+        seen["body"] = json.loads(req.data.decode("utf-8"))  # type: ignore[attr-defined]
+        return _FakeResponse({"ok": True})
+
+    monkeypatch.setattr(computer_api_skills.urllib_request, "urlopen", fake_urlopen)
+    with session_scope(
+        Session(
+            metadata={
+                "automation_target": {
+                    "kind": "desktop_window",
+                    "source": "computer",
+                    "id": "42-1",
+                    "title": "Inbox",
+                    "app_id": "com.example.App",
+                    "app_name": "Example",
+                }
+            }
+        )
+    ):
+        result = computer_api_skills._call(
+            "POST", "/actions/preview", {"action": "click", "x": 10, "y": 20}
+        )
+
+    assert result["ok"] is True
+    assert seen["body"]["automation_target"]["id"] == "42-1"  # type: ignore[index]
 
 
 def test_computer_observe_exposes_bridge_without_capture(monkeypatch) -> None:

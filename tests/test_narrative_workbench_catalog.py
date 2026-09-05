@@ -219,6 +219,31 @@ def test_remote_install_materializes_frontend_and_backend_and_uninstall_keeps_wo
     assert catalog.plugin_statuses()["narrative_studio"]["lifecycle_state"] == "available"
 
 
+def test_remote_alias_without_runtime_identity_cannot_shadow_official_workbench(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    catalog, plugin_root = _catalog(tmp_path, monkeypatch)
+    catalog._store = {
+        "items": [
+            {
+                "id": "workbench_narrative_studio",
+                "plugin": "narrative_studio",
+                "source": "octopus",
+                "kind": "workbench",
+                "version": "0.2.0",
+            }
+        ]
+    }
+
+    aliases = [item for item in catalog.items() if item.get("plugin") == "narrative_studio"]
+    installed = catalog.install_plugin("narrative_studio", plugin_kind="workbench")
+
+    assert [item["id"] for item in aliases] == ["workbench_narrative"]
+    assert aliases[0]["runtime_plugin"] == "narrative_studio"
+    assert installed["runtime_plugin"] == "narrative_studio"
+    assert (plugin_root / "workbench" / "narrative_studio" / "dist" / "index.html").is_file()
+
+
 def test_remote_trash_is_confirmed_recoverable_and_reinstall_can_restore(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -269,6 +294,39 @@ def test_installed_package_with_missing_entry_is_reported_broken(
     assert "entry is missing" in status["error"]
     assert status["trust"]["level"] == "unverified"
     assert status["compatibility"]["status"] == "not_checked"
+
+
+def test_reinstall_replaces_legacy_broken_workbench_without_offering_bad_rollback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    catalog, plugin_root = _catalog(tmp_path, monkeypatch)
+    target = plugin_root / "workbench" / "narrative_studio"
+    target.mkdir(parents=True)
+    (target / "app.json").write_text(
+        json.dumps(
+            {
+                "schema": "octopus.workbench_app.v1",
+                "id": "narrative_studio",
+                "name": "Narrative Studio",
+                "description": "legacy package without a web entry",
+                "route": "/workspace/narrative",
+                "module_id": "narrative",
+                "version": "0.2.0",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert catalog.plugin_statuses()["narrative_studio"]["lifecycle_state"] == "broken"
+
+    repaired = catalog.install_plugin("narrative_studio", plugin_kind="workbench")
+
+    assert repaired["operation"] == "update"
+    assert repaired["rollback_available"] is False
+    assert (target / "dist" / "index.html").is_file()
+    status = catalog.plugin_statuses()["narrative_studio"]
+    assert status["lifecycle_state"] == "enabled"
+    assert status["rollback_available"] is False
 
 
 def test_installed_package_incompatible_with_current_host_is_reported_broken(

@@ -46,6 +46,18 @@ def test_ambient_scope_sets_and_resets() -> None:
     assert current_subagent_session_id() == ""
 
 
+def test_ambient_root_scope_sets_and_resets() -> None:
+    from runtime.execution.subagents._ambient import (
+        current_subagent_root_id,
+        subagent_root_scope,
+    )
+
+    assert current_subagent_root_id() == ""
+    with subagent_root_scope("root-turn"):
+        assert current_subagent_root_id() == "root-turn"
+    assert current_subagent_root_id() == ""
+
+
 def test_ambient_scope_isolates_per_thread() -> None:
     from runtime.execution.subagents._ambient import (
         current_subagent_session_id,

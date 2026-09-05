@@ -6,8 +6,7 @@ A pure structural split of the former monolithic ``agents_router.py``
 (registered via ``_build_endpoints`` with an injected ``_AgentsCtx``), and
 the stateless helpers (soul / avatar / visual resolution, wire-model
 converters) live in ``_agents_helpers.py``. Pydantic wire models were
-already split into ``agents_models.py``; LocalPartner primitives already
-live in ``agents_local_partner.py``.
+already split into ``agents_models.py``.
 
 This module keeps the closure factory ``create_agents_router`` and
 re-exports the public names moved into the submodules so existing
@@ -32,18 +31,6 @@ from ._agents_endpoints import _AgentsCtx, _build_endpoints
 from ._agents_helpers import (
     _avatar_url_for,  # noqa: F401 — re-exported for realtime_team_stream / _team_stream_group_fanout
 )
-from .agents_local_partner import (  # noqa: F401 — re-exported for test_agents_router_local_partner_security
-    identity_has_admin_role as _identity_has_admin_role,
-)
-from .agents_local_partner import (  # noqa: F401 — re-exported for test_agents_router_local_partner_security
-    safe_executable as _safe_local_partner_executable,
-)
-from .agents_local_partner import (  # noqa: F401 — re-exported for test_agents_router_local_partner_security
-    validate_alias as _validate_local_partner_alias,
-)
-from .agents_local_partner import (  # noqa: F401 — re-exported for test_agents_router / test_agents_router_local_partner_security
-    which_command as _which_local_partner_command,
-)
 from .agents_models import (
     AgentDetailWire,
     AgentVisualsWire,
@@ -56,12 +43,6 @@ from .agents_models import (
     GroupCreate,
     GroupUpdate,
     GroupWire,
-    LocalPartnerDoctorResponse,
-    LocalPartnerProbeResponse,
-    LocalPartnerRegisterRequest,
-    LocalPartnerRegisterResponse,
-    LocalPartnerRegisterResult,
-    LocalPartnerWire,
     PauseTaskBody,
     ResumeTaskBody,
     ToolRegistryWire,
@@ -81,6 +62,7 @@ def create_agents_router(
     group_registry: Any = None,
     runtime: Any = None,
     thread_store: Any = None,
+    allow_local_workspace_access: bool = False,
 ) -> Any:
     require_fastapi(__name__)
 
@@ -99,6 +81,7 @@ def create_agents_router(
             group_registry=group_registry,
             runtime=runtime,
             thread_store=thread_store,
+            allow_local_workspace_access=allow_local_workspace_access,
         )
     )
 
@@ -117,20 +100,10 @@ __all__ = [
     "GroupCreate",
     "GroupUpdate",
     "GroupWire",
-    "LocalPartnerDoctorResponse",
-    "LocalPartnerProbeResponse",
-    "LocalPartnerRegisterRequest",
-    "LocalPartnerRegisterResponse",
-    "LocalPartnerRegisterResult",
-    "LocalPartnerWire",
     "PauseTaskBody",
     "ResumeTaskBody",
     "ToolRegistryWire",
     "UpdateAgentRequest",
     "create_agents_router",
     "_avatar_url_for",
-    "_identity_has_admin_role",
-    "_safe_local_partner_executable",
-    "_validate_local_partner_alias",
-    "_which_local_partner_command",
 ]

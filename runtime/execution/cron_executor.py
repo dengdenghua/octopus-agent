@@ -10,10 +10,9 @@ them: ``last_run`` had no writer outside this module. One tick of
    / ``recurring`` fields the store's fixed projection would strip).
 2. Decide per job whether it is due (see ``_is_due`` — one-shot vs
    recurring, with single-run catch-up after downtime).
-3. Dispatch: agent jobs (``prompt`` field / ``creator_actor ==
-   "agent_self"``) go to the ``prompt_runner``; UI shell jobs go to the
-   ``shell_runner``. Both default to subprocess runners so this module
-   stays dependency-free and testable.
+3. Enforce the caller's tenant scope (or the serve scheduler's explicit global
+   authority), then dispatch: prompt jobs go to the ``prompt_runner`` and UI
+   shell jobs to the ``shell_runner``. Both default to subprocess runners.
 4. Write back ``last_run`` / ``last_status`` / ``last_output`` in one
    atomic write.
 
@@ -22,9 +21,10 @@ tick itself never raises — the scheduler treats callback exceptions as
 task errors, and a crashing igniter would take down every other
 periodic task sharing the runner.
 
-Concurrency note: last-write-wins against concurrent UI edits. The
-window is one tick (~ms), and the UI's own mutations are equally
-atomic, so a lost update is benign (a job fires one tick late).
+Concurrency note: a cross-process execution lock prevents double firing, while
+short store transactions claim and settle one logical scoped job. Concurrent
+settings edits are preserved; replacing/deleting an in-flight job cannot be
+undone by a stale whole-file write.
 """
 
 from __future__ import annotations
@@ -41,10 +41,20 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from runtime.adapters.scheduler.cron import CronExpression
+from runtime.execution.cron_context import cron_child_environment, cron_session_for_job
+from runtime.execution.cron_store import (
+    _mutate_cron_jobs,
+    cron_job_effective_scope,
+    cron_job_has_incomplete_scope,
+    cron_job_identity,
+    cron_job_visible_to_scope,
+)
 from runtime.platform.io import atomic_write_json
 from runtime.platform.process.paths import app_paths
+from runtime.safety.auth.scope import TenantScope
 
 _log = logging.getLogger(__name__)
 
@@ -141,11 +151,21 @@ def default_prompt_runner(
     """
     if stop_event is not None and stop_event.is_set():
         return "interrupted", "service shutdown before cron process start"
+    from runtime.platform.process.session import current_session
+
+    active_session = current_session()
+    child_env = (
+        cron_child_environment(active_session)
+        if active_session is not None
+        and (active_session.metadata or {}).get("automation_trigger") == "cron"
+        else None
+    )
     proc, timed_out, interrupted = _run_process(
         [sys.executable, "-m", "runtime", "run", prompt],
         timeout=PROMPT_JOB_TIMEOUT_S,
         on_start=_pid_recorder(job, persist_pid),
         stop_event=stop_event,
+        env=child_env,
     )
     if interrupted:
         return "interrupted", "service shutdown interrupted cron process"
@@ -164,6 +184,7 @@ def _run_process(
     timeout: float,
     on_start: Callable[[subprocess.Popen[Any]], None] | None = None,
     stop_event: threading.Event | None = None,
+    env: dict[str, str] | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], bool, bool]:
     """Run a scheduled command in its own session and kill its descendants.
 
@@ -182,6 +203,7 @@ def _run_process(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        env=env,
         **process_group_kwargs(),
     )
     if on_start is not None:
@@ -375,8 +397,16 @@ def run_due_cron_jobs(
     prompt_runner: PromptRunner | None = None,
     deliver: Callable[[dict[str, Any]], None] | None = None,
     stop_event: threading.Event | None = None,
+    scope: TenantScope | None = None,
+    allow_cross_tenant: bool = False,
 ) -> dict[str, Any]:
-    """Run due jobs once, serialized across scheduler processes."""
+    """Run due jobs once, serialized across scheduler processes.
+
+    A caller without scope can only execute legacy-unowned rows.  The serve
+    scheduler is the one trusted global caller and must pass
+    ``allow_cross_tenant=True`` explicitly; request-driven callers pass their
+    exact server-resolved ``TenantScope``.
+    """
     path = cron_path or app_paths().cron_jobs_path
     with _cron_execution_lock(path) as acquired:
         if not acquired:
@@ -389,6 +419,8 @@ def run_due_cron_jobs(
             prompt_runner=prompt_runner,
             deliver=deliver,
             stop_event=stop_event,
+            scope=scope,
+            allow_cross_tenant=allow_cross_tenant,
         )
 
 
@@ -400,6 +432,8 @@ def _run_due_cron_jobs(
     prompt_runner: PromptRunner | None = None,
     deliver: Callable[[dict[str, Any]], None] | None = None,
     stop_event: threading.Event | None = None,
+    scope: TenantScope | None = None,
+    allow_cross_tenant: bool = False,
 ) -> dict[str, Any]:
     """Fire every due job once. Returns a per-tick summary; never raises.
 
@@ -415,49 +449,68 @@ def _run_due_cron_jobs(
     if not jobs:
         return {"ok": True, "fired": 0, "results": []}
 
-    def _persist_pid() -> None:
-        atomic_write_json(path, jobs)
-
-    if shell_runner is None:
-
-        def shell_fn(command: str, job: dict[str, Any]) -> RunResult:
-            return default_shell_runner(
-                command,
-                job,
-                persist_pid=_persist_pid,
-                stop_event=stop_event,
-            )
-
-    else:
-        shell_fn = shell_runner
-
-    if prompt_runner is None:
-
-        def prompt_fn(prompt: str, job: dict[str, Any]) -> RunResult:
-            return default_prompt_runner(
-                prompt,
-                job,
-                persist_pid=_persist_pid,
-                stop_event=stop_event,
-            )
-
-    else:
-        prompt_fn = prompt_runner
-
     results: list[dict[str, Any]] = []
-    changed = False
     run_records: list[dict[str, Any]] = []
-    for job in jobs:
+    persistence_failed = False
+    for snapshot in jobs:
         if stop_event is not None and stop_event.is_set():
             break
-        name = str(job.get("name") or "")
+        name = str(snapshot.get("name") or "")
+        if cron_job_has_incomplete_scope(snapshot):
+            _log.error("cron_executor: refusing half-scoped job %r", name)
+            continue
+        if not allow_cross_tenant and not cron_job_visible_to_scope(snapshot, scope):
+            continue
         try:
-            due = _is_due(job, tick_now)
+            due = _is_due(snapshot, tick_now)
         except Exception:  # noqa: BLE001 — paranoid: never let one job break the tick
             _log.exception("cron_executor: due-check failed for job %r", name)
             continue
         if not due:
             continue
+
+        import time as _time
+
+        run_id = uuid4().hex
+        logical_key = cron_job_identity(snapshot)
+
+        # Atomically re-read and claim the current row.  This closes the old
+        # read/dispatch race where an API update could be overwritten by the
+        # executor's stale whole-file write, or a deleted job could reappear.
+        def _claim(
+            current_jobs: list[dict[str, Any]],
+            *,
+            _logical_key: tuple[str, str, str] = logical_key,
+            _run_id: str = run_id,
+        ) -> dict[str, Any] | None:
+            for candidate in current_jobs:
+                if cron_job_identity(candidate) != _logical_key:
+                    continue
+                if cron_job_has_incomplete_scope(candidate):
+                    return None
+                if not allow_cross_tenant and not cron_job_visible_to_scope(candidate, scope):
+                    return None
+                if not _is_due(candidate, tick_now):
+                    return None
+                candidate["started_at"] = tick_now.isoformat()
+                candidate["active_run_id"] = _run_id
+                candidate["pid"] = None
+                return dict(candidate)
+            return None
+
+        try:
+            claimed = _mutate_cron_jobs(
+                path,
+                _claim,
+                persist_if=lambda value: value is not None,
+            )
+        except Exception:  # noqa: BLE001 — never dispatch without a durable claim
+            _log.exception("cron_executor: failed to claim job %r", name)
+            persistence_failed = True
+            continue
+        if claimed is None:
+            continue
+        job = claimed
 
         is_agent_job = bool(job.get("prompt")) or job.get("creator_actor") == "agent_self"
         payload = str(job.get("prompt") or job.get("command") or "").strip()
@@ -465,37 +518,115 @@ def _run_due_cron_jobs(
             results.append({"name": name, "status": "skipped_empty"})
             continue
 
-        import time as _time
+        execution_session = cron_session_for_job(
+            job,
+            fired_at=tick_now,
+            run_id=run_id,
+        )
 
-        # Audit T-02: persist the in-flight marker BEFORE dispatching so a
-        # crash mid-run leaves a recoverable trace. The tick skips marked
-        # jobs; startup recovery reclaims them (kill orphan + no re-fire).
-        job["started_at"] = tick_now.isoformat()
-        job["pid"] = None
-        changed = True
-        try:
-            atomic_write_json(path, jobs)
-        except OSError:
-            _log.exception("cron_executor: failed to persist in-flight marker for %r", name)
+        def _persist_pid(
+            *,
+            _job: dict[str, Any] = job,
+            _logical_key: tuple[str, str, str] = logical_key,
+            _run_id: str = run_id,
+        ) -> None:
+            pid = _job.get("pid")
+
+            def _update_pid(
+                current_jobs: list[dict[str, Any]],
+                *,
+                _key: tuple[str, str, str] = _logical_key,
+                _active_run_id: str = _run_id,
+                _pid: Any = pid,
+            ) -> bool:
+                for candidate in current_jobs:
+                    if (
+                        cron_job_identity(candidate) == _key
+                        and candidate.get("active_run_id") == _active_run_id
+                    ):
+                        candidate["pid"] = _pid
+                        return True
+                return False
+
+            persisted = _mutate_cron_jobs(
+                path,
+                _update_pid,
+                persist_if=bool,
+            )
+            if not persisted:
+                raise RuntimeError("cron job was replaced before pid persistence")
 
         started = _time.monotonic()
         try:
-            if is_agent_job:
-                status, output = prompt_fn(payload, job)
-            else:
-                status, output = shell_fn(payload, job)
+            from runtime.memory.journal.journal_context import journal_context
+            from runtime.platform.process.session import session_scope
+
+            effective_scope = cron_job_effective_scope(job)
+            with (
+                session_scope(execution_session),
+                journal_context(
+                    conversation_id=execution_session.conversation_id,
+                    tenant_id=(effective_scope.tenant_id if effective_scope is not None else None),
+                    owner_actor_id=(
+                        effective_scope.actor_id if effective_scope is not None else None
+                    ),
+                ),
+            ):
+                if is_agent_job:
+                    if prompt_runner is None:
+                        status, output = default_prompt_runner(
+                            payload,
+                            job,
+                            persist_pid=_persist_pid,
+                            stop_event=stop_event,
+                        )
+                    else:
+                        status, output = prompt_runner(payload, job)
+                else:
+                    if shell_runner is None:
+                        status, output = default_shell_runner(
+                            payload,
+                            job,
+                            persist_pid=_persist_pid,
+                            stop_event=stop_event,
+                        )
+                    else:
+                        status, output = shell_runner(payload, job)
         except Exception as exc:  # noqa: BLE001 — a runner bug must not kill the tick
             status, output = "error", f"{type(exc).__name__}: {exc}"
         duration_ms = int((_time.monotonic() - started) * 1000)
 
-        job.pop("started_at", None)
-        job.pop("pid", None)
-        job["last_run"] = tick_now.isoformat()
-        job["last_status"] = status
-        job["last_output"] = (output or "")[-_OUTPUT_EXCERPT_CHARS:]
+        def _settle(
+            current_jobs: list[dict[str, Any]],
+            *,
+            _logical_key: tuple[str, str, str] = logical_key,
+            _run_id: str = run_id,
+            _status: str = status,
+            _output: str = output,
+        ) -> bool:
+            for candidate in current_jobs:
+                if (
+                    cron_job_identity(candidate) == _logical_key
+                    and candidate.get("active_run_id") == _run_id
+                ):
+                    candidate.pop("started_at", None)
+                    candidate.pop("active_run_id", None)
+                    candidate.pop("pid", None)
+                    candidate["last_run"] = tick_now.isoformat()
+                    candidate["last_status"] = _status
+                    candidate["last_output"] = (_output or "")[-_OUTPUT_EXCERPT_CHARS:]
+                    return True
+            return False
+
+        try:
+            _mutate_cron_jobs(path, _settle, persist_if=bool)
+        except OSError:
+            _log.exception("cron_executor: failed to persist result for %r", name)
+            persistence_failed = True
         results.append({"name": name, "status": status})
-        record = {
-            "run_id": f"{name}-{tick_now.strftime('%Y%m%dT%H%M%S')}",
+        record: dict[str, Any] = {
+            # Opaque identifier: names and ownership never enter a URL/path.
+            "run_id": run_id,
             "name": name,
             "kind": "prompt" if is_agent_job else "shell",
             "creator_actor": job.get("creator_actor"),
@@ -507,26 +638,44 @@ def _run_due_cron_jobs(
             "channel_id": str(job.get("channel_id") or ""),
             "thread_id": str(job.get("thread_id") or ""),
         }
+        if effective_scope is not None:
+            record["tenant_id"] = effective_scope.tenant_id
+            record["owner_actor_id"] = effective_scope.actor_id
         run_records.append(record)
         _log.info("cron_executor: fired job %r → %s", name, status)
-
-    if changed:
-        try:
-            atomic_write_json(path, jobs)
-        except OSError:
-            _log.exception("cron_executor: failed to persist results to %s", path)
-            return {"ok": False, "fired": len(results), "results": results}
 
     if run_records:
         _append_run_ledger(_runs_ledger_path(path), run_records)
         if deliver is not None:
             for record in run_records:
                 try:
-                    deliver(record)
+                    from runtime.memory.journal.journal_context import journal_context
+                    from runtime.platform.process.session import session_scope
+
+                    fired_at = _parse_dt(record.get("fired_at")) or tick_now
+                    delivery_session = cron_session_for_job(
+                        record,
+                        fired_at=fired_at,
+                        run_id=str(record["run_id"]),
+                    )
+                    delivery_scope = cron_job_effective_scope(record)
+                    with (
+                        session_scope(delivery_session),
+                        journal_context(
+                            conversation_id=delivery_session.conversation_id,
+                            tenant_id=(
+                                delivery_scope.tenant_id if delivery_scope is not None else None
+                            ),
+                            owner_actor_id=(
+                                delivery_scope.actor_id if delivery_scope is not None else None
+                            ),
+                        ),
+                    ):
+                        deliver(record)
                 except Exception:  # noqa: BLE001 — delivery must never break the tick
                     _log.exception("cron_executor: deliver hook failed for %r", record["name"])
 
-    return {"ok": True, "fired": len(results), "results": results}
+    return {"ok": not persistence_failed, "fired": len(results), "results": results}
 
 
 # ─── Run ledger ──────────────────────────────────────────────
@@ -611,7 +760,12 @@ def _process_group_alive(pid: int) -> bool:
         return True
 
 
-def recover_interrupted_cron_jobs(cron_path: Path | None = None) -> dict[str, Any]:
+def recover_interrupted_cron_jobs(
+    cron_path: Path | None = None,
+    *,
+    scope: TenantScope | None = None,
+    allow_cross_tenant: bool = False,
+) -> dict[str, Any]:
     """Startup sweep (audit T-02): reclaim jobs left in-flight by a crash.
 
     A job whose subprocess died with the server leaves a persisted
@@ -640,6 +794,11 @@ def recover_interrupted_cron_jobs(cron_path: Path | None = None) -> dict[str, An
     for job in jobs:
         if not job.get("started_at"):
             continue
+        if cron_job_has_incomplete_scope(job):
+            _log.error("cron recovery: refusing half-scoped job %r", job.get("name"))
+            continue
+        if not allow_cross_tenant and not cron_job_visible_to_scope(job, scope):
+            continue
         name = str(job.get("name") or "?")
         pid = job.get("pid")
         if isinstance(pid, int) and pid > 0 and _process_group_alive(pid):
@@ -657,6 +816,7 @@ def recover_interrupted_cron_jobs(cron_path: Path | None = None) -> dict[str, An
                 "killed" if terminated else "kill-failed",
             )
         job.pop("started_at", None)
+        job.pop("active_run_id", None)
         job.pop("pid", None)
         job["last_run"] = now
         job["last_status"] = "interrupted"

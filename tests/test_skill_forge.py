@@ -18,6 +18,7 @@ from runtime.platform.models import (
     Trajectory,
     TrajectoryOutcome,
 )
+from runtime.safety.evolution.candidate_registry import CandidateRegistry, CandidateStatus
 from runtime.safety.recovery import (
     ForgeConfig,
     SkillForge,
@@ -45,6 +46,7 @@ def _make_traj(
     suckers: list[str],
     *,
     success: bool = True,
+    degraded: bool = False,
     args: dict | None = None,
 ) -> Trajectory:
     steps = [_make_step(i, s, args) for i, s in enumerate(suckers)]
@@ -52,7 +54,7 @@ def _make_traj(
         task_id=TaskId(uuid4()),
         arm_id=ArmId("code_arm"),
         steps=steps,
-        outcome=TrajectoryOutcome(success=success),
+        outcome=TrajectoryOutcome(success=success, degraded=degraded),
     )
 
 
@@ -126,6 +128,34 @@ class TestPatternSignature:
 
 
 class TestPropose:
+    def test_degraded_success_is_not_positive_forge_evidence(self, base_registry):
+        journal = InMemoryJournal()
+        for _ in range(3):
+            journal.write_trajectory(_make_traj(["list_cwd", "count_words"], degraded=True))
+
+        forge = SkillForge(
+            journal=journal,
+            registry=base_registry,
+            config=ForgeConfig(min_hits=1, min_success_rate=0.0),
+        )
+
+        assert forge.propose() == []
+
+    def test_candidate_sources_exclude_degraded_successes(self, base_registry):
+        journal = InMemoryJournal()
+        clean = [_make_traj(["list_cwd", "count_words"]) for _ in range(3)]
+        degraded = _make_traj(["list_cwd", "count_words"], degraded=True)
+        for trajectory in [*clean, degraded]:
+            journal.write_trajectory(trajectory)
+
+        [candidate] = SkillForge(journal=journal, registry=base_registry).propose()
+
+        assert candidate.source_success_rate == 0.75
+        assert candidate.source_sample_count == 3
+        assert set(candidate.source_trajectory_ids) == {
+            str(trajectory.trajectory_id) for trajectory in clean
+        }
+
     def test_single_step_trajectories_excluded(self, journal_with_samples, base_registry):
         forge = SkillForge(journal=journal_with_samples, registry=base_registry)
         candidates = forge.propose()
@@ -298,6 +328,28 @@ class TestTrajectoryCollection:
 
 
 class TestRunPipeline:
+    def test_governed_run_registers_candidate_without_live_skill(
+        self,
+        tmp_path,
+        journal_with_samples,
+        base_registry,
+    ):
+        forge = SkillForge.for_governed_rollout(
+            journal=journal_with_samples,
+            registry=base_registry,
+            candidate_registry_path=tmp_path / "candidates.jsonl",
+        )
+
+        result = forge.run()
+
+        assert forge.config.governed_rollout is True
+        assert result.promoted == []
+        assert result.governed
+        assert not any(name.startswith("forged_") for name in base_registry.all_names())
+        candidate = CandidateRegistry(tmp_path / "candidates.jsonl").list()[0]
+        assert candidate.status == CandidateStatus.VALIDATED
+        assert candidate.patch["op"] == "register_forged_skill"
+
     def test_successful_run_promotes_candidate(self, journal_with_samples, base_registry):
         forge = SkillForge(journal=journal_with_samples, registry=base_registry)
         result = forge.run()

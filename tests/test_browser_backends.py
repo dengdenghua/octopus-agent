@@ -19,6 +19,7 @@ from runtime.execution.suckers.browser_backends import (
     ExtensionBackend,
     PlaywrightBackend,
 )
+from runtime.platform.process.session import Session, session_scope
 
 
 class _FakeResponse:
@@ -87,6 +88,19 @@ class TestElectronBackend:
     def test_available_probe(self):
         assert ElectronBackend(_Recorder(), available_probe=lambda: False).available() is False
         assert ElectronBackend(_Recorder(), available_probe=lambda: True).available() is True
+
+    def test_default_availability_requires_live_bridge(self, monkeypatch):
+        from runtime.execution.suckers import browser_act_skills
+
+        monkeypatch.setattr(browser_act_skills, "_bridge_status", lambda: None)
+        assert ElectronBackend().available() is False
+
+        monkeypatch.setattr(
+            browser_act_skills,
+            "_bridge_status",
+            lambda: {"ok": True, "browser_ready": True},
+        )
+        assert ElectronBackend().available() is True
 
 
 class TestPlaywrightBackend:
@@ -224,6 +238,42 @@ class TestExtensionBackend:
                 13.0,
             )
         ]
+
+    def test_default_relay_transport_honors_selected_tab(self, monkeypatch):
+        calls = []
+
+        def fake_request(method, path, body=None, *, timeout_seconds=10):
+            calls.append((method, path, body, timeout_seconds))
+            return {"ok": True}
+
+        monkeypatch.setattr(
+            "runtime.execution.suckers.browser_backends._browser_relay_request",
+            fake_request,
+        )
+
+        with session_scope(
+            Session(
+                metadata={
+                    "automation_target": {
+                        "kind": "browser_tab",
+                        "source": "browser_relay",
+                        "id": "73",
+                        "url": "https://selected.example/path",
+                        "title": "Selected tab",
+                    }
+                }
+            )
+        ):
+            result = ExtensionBackend().click("#confirm")
+
+        assert result.ok is True
+        assert calls[0][2] == {
+            "action": "click",
+            "selector": "#confirm",
+            "target_tab_id": "73",
+            "target_tab_url": "https://selected.example/path",
+            "target_tab_title": "Selected tab",
+        }
 
     def test_wired_transport_maps_actions(self):
         rec = _Recorder({"ok": True})

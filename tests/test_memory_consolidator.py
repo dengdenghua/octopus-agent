@@ -32,6 +32,7 @@ def _mk_traj(
     cost_usd: float = 0.01,
     tokens: int = 300,
     age_hours: float = 0.0,
+    degraded: bool = False,
 ) -> Trajectory:
     started = now_utc() - timedelta(hours=age_hours + 0.1)
     completed = now_utc() - timedelta(hours=age_hours)
@@ -42,6 +43,7 @@ def _mk_traj(
         steps=[],  # Implementation note.
         outcome=TrajectoryOutcome(
             success=success,
+            degraded=degraded,
             cost=CostEntry(tokens_in=tokens // 2, tokens_out=tokens // 2, usd=cost_usd),
         ),
         started_at=started,
@@ -91,6 +93,17 @@ class TestConsolidate:
         assert main.trajectories_count == 8
         assert main.success_count == 5
         assert abs(main.success_rate - 5 / 8) < 1e-6
+
+    def test_degraded_completion_is_not_counted_as_clean_success(self):
+        j = InMemoryJournal()
+        j.write_trajectory(_mk_traj(success=True, degraded=False))
+        j.write_trajectory(_mk_traj(success=True, degraded=True))
+
+        memory = MemoryConsolidator(j).consolidate().memories_produced[0]
+
+        assert memory.trajectories_count == 2
+        assert memory.success_count == 1
+        assert memory.success_rate == 0.5
 
     def test_cost_aggregation(self, journal_mixed):
         report = MemoryConsolidator(journal_mixed).consolidate()

@@ -154,8 +154,9 @@ describe("placeTimelineEntries", () => {
       },
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "还没有消息，可以直接开始讨论",
+    expect(screen.getByText("还没有消息，可以直接开始讨论")).toHaveAttribute(
+      "role",
+      "status",
     );
     expect(
       document.querySelector('[data-density="compact"]'),

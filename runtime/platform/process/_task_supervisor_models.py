@@ -83,6 +83,10 @@ class TaskCapabilityManifest(BaseModel):
 
     groups: dict[str, bool] = Field(default_factory=lambda: dict(DEFAULT_CAPABILITY_GROUPS))
     workspace_paths: list[str] = Field(default_factory=list)
+    # ``None`` preserves the historical group-only policy.  Supplying a list
+    # switches the manifest to a fail-closed, exact skill allowlist; an empty
+    # list therefore intentionally grants no tools at all.
+    allowed_skill_ids: list[str] | None = None
     source: str = "default"
     created_at: str = Field(default_factory=_now_iso)
 
@@ -108,6 +112,27 @@ class TaskCapabilityManifest(BaseModel):
             if text and text not in out:
                 out.append(text)
         return out
+
+    @field_validator("allowed_skill_ids", mode="before")
+    @classmethod
+    def _normalize_allowed_skill_ids(cls, value: Any) -> list[str] | None:
+        if value is None:
+            return None
+        if not isinstance(value, (list, tuple, set, frozenset)):
+            # An explicitly malformed allowlist must fail closed rather than
+            # silently restoring legacy group-only access.
+            return []
+        out: list[str] = []
+        for item in value:
+            skill_id = str(item or "").strip()
+            if skill_id and skill_id not in out:
+                out.append(skill_id)
+        return out
+
+    def allows_skill(self, skill_id: str) -> bool:
+        if self.allowed_skill_ids is None:
+            return True
+        return str(skill_id or "").strip() in self.allowed_skill_ids
 
     def allows_group(self, group: str | None) -> bool:
         if not group:

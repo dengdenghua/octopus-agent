@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-import shlex
-import subprocess
 from io import BytesIO
 from pathlib import Path
 
@@ -23,10 +21,9 @@ from runtime.execution.agents import (
 )
 from runtime.execution.arms.base import ArmPool, Worker
 from runtime.execution.arms.presets import make_web_read_arm
-from runtime.platform.process.paths import project_root
 from runtime.safety.auth import Identity, IdentityStore
+from runtime.sensing.gateway import _agents_endpoints_crud as agents_crud_module
 from runtime.sensing.gateway import agent_world_router
-from runtime.sensing.gateway import agents_router as agents_router_module
 from runtime.sensing.gateway.agent_world_router import create_agent_world_router
 from runtime.sensing.gateway.agents_router import create_agents_router
 
@@ -109,6 +106,61 @@ class TestListAgents:
                 "soul",
             ]:
                 assert key in agent, f"missing '{key}' in {agent['name']}"
+
+    def test_compact_list_skips_gallery_visual_discovery(self, registry_with_presets):
+        app = FastAPI()
+        app.include_router(create_agents_router(registry=registry_with_presets))
+
+        response = TestClient(app).get("/api/agents?include_visuals=false")
+
+        assert response.status_code == 200
+        data = response.json()
+        general = next(agent for agent in data if agent["name"] == "general")
+        assert general["avatar_url"] == "/api/agents/general/avatar"
+        assert general["visual_urls"] == {}
+
+    def test_compact_list_reuses_wire_snapshot_until_registry_changes(self, monkeypatch):
+        registry = AgentRegistry()
+        registry.register(
+            Agent(
+                agent_id="general",
+                display_name="Octopus",
+                description="",
+                soul="",
+                arms=ArmPool([make_web_read_arm(_rt())]),
+            )
+        )
+        original_to_wire = agents_crud_module._to_wire
+        wire_calls = 0
+
+        def counted_to_wire(agent, *, include_visuals=True):  # noqa: ANN001
+            nonlocal wire_calls
+            wire_calls += 1
+            return original_to_wire(agent, include_visuals=include_visuals)
+
+        monkeypatch.setattr(agents_crud_module, "_to_wire", counted_to_wire)
+        app = FastAPI()
+        app.include_router(create_agents_router(registry=registry))
+        client = TestClient(app)
+
+        assert client.get("/api/agents?include_visuals=false").status_code == 200
+        assert client.get("/api/agents?include_visuals=false").status_code == 200
+        assert wire_calls == 1
+
+        registry.replace(
+            Agent(
+                agent_id="general",
+                display_name="Octopus 2",
+                description="",
+                soul="",
+                arms=ArmPool([make_web_read_arm(_rt())]),
+            )
+        )
+        response = client.get("/api/agents?include_visuals=false")
+
+        assert response.status_code == 200
+        assert response.json()[0]["display_name"] == "Octopus 2"
+        assert wire_calls == 2
 
     def test_tool_groups_are_arm_ids(self, registry_with_presets):
         app = FastAPI()
@@ -759,6 +811,32 @@ class TestAgentDetail:
         assert avatar_bbox[2] - avatar_bbox[0] >= 430
         assert avatar_bbox[3] - avatar_bbox[1] >= 400
 
+    def test_primary_alpha_cleanup_removes_only_detached_islands(self):
+        pytest.importorskip("PIL")
+        from PIL import Image, ImageDraw
+
+        from runtime.execution.misc.image_generation import (
+            _keep_primary_alpha_component,
+        )
+
+        image = Image.new("RGBA", (200, 120), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((20, 20, 100, 100), fill=(48, 68, 96, 255))
+        # Low-alpha diagonal pixels model antialiased hair or strap edges.
+        image.putpixel((19, 19), (48, 68, 96, 96))
+        image.putpixel((18, 18), (48, 68, 96, 12))
+        # A generated shard far away from the connected character.
+        draw.rectangle((160, 45, 174, 72), fill=(244, 200, 24, 255))
+
+        cleaned = _keep_primary_alpha_component(image)
+
+        assert cleaned.size == image.size
+        assert cleaned.getpixel((50, 50)) == image.getpixel((50, 50))
+        assert cleaned.getpixel((19, 19)) == image.getpixel((19, 19))
+        assert cleaned.getpixel((18, 18)) == image.getpixel((18, 18))
+        assert cleaned.getpixel((17, 17))[3] == 0
+        assert cleaned.getpixel((165, 55))[3] == 0
+
     def test_agnes_generation_payload_accepts_reference_images(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -875,768 +953,13 @@ class TestAgentDetail:
 # ═══════════════════════════════════════════════════════════
 
 
-class TestLocalPartners:
-    def test_list_local_partners_reports_detection(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
-
-        def fake_which(commands: list[str]) -> tuple[str | None, str | None]:
-            if any(cmd.startswith("codex") for cmd in commands):
-                return "codex", str(tmp_path / "codex.exe")
-            if "trae-cli" in commands:
-                return "trae-cli", str(tmp_path / "trae-cli")
-            if "codebuddy" in commands:
-                return "codebuddy", str(tmp_path / "codebuddy")
-            return None, None
-
-        monkeypatch.setattr(
-            agents_router_module,
-            "_which_local_partner_command",
-            fake_which,
-        )
+class TestRemovedLocalPartnerSurface:
+    def test_legacy_local_partner_routes_are_not_mounted(self):
         app = FastAPI()
         app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
+        paths = app.openapi()["paths"]
 
-        r = TestClient(app).get("/api/agents/local-partners")
-
-        assert r.status_code == 200
-        partners = {p["id"]: p for p in r.json()["partners"]}
-        assert partners["codex-cli"]["detected"] is True
-        assert partners["codex-cli"]["registered"] is False
-        assert partners["codex-cli"]["agent_id"] == "local_codex_cli"
-        assert partners["codex-cli"]["avatar_url"] == "https://chatgpt.com/favicon.ico"
-        assert partners["codex-cli"]["ready"] is True
-        assert partners["codex-cli"]["headless_supported"] is True
-        assert partners["codex-cli"]["readiness_status"] == "ready"
-        assert partners["codex-cli"]["effective_status"] == "ready"
-        assert partners["codex-cli"]["native_command"] == "codex"
-        assert partners["codex-cli"]["native_launch_cwd"] == str(project_root())
-        assert partners["codex-cli"]["native_launch_command"].startswith("cd ")
-        assert partners["codex-cli"]["native_launch_command"].endswith(" && codex")
-        assert "codex exec" in partners["codex-cli"]["verify_command"]
-        assert "/model <模型名>" in partners["codex-cli"]["interaction_hint"]
-        assert partners["codex-cli"]["command_hints"][0] == {
-            "command": "/model <模型名>",
-            "scope": "一次性覆盖",
-            "behavior": "换行接任务时，转成该 CLI 本次调用的模型参数。",
-        }
-        codex_diagnostics = {
-            item["label"]: item for item in partners["codex-cli"]["diagnostic_items"]
-        }
-        assert codex_diagnostics["模型来源"]["value"] == "可一次性覆盖"
-        assert codex_diagnostics["Headless"]["value"] == "可自动派工"
-        assert partners["trae-cli"]["detected"] is True
-        assert partners["trae-cli"]["agent_id"] == "local_trae_cli"
-        assert "traecdn" in partners["trae-cli"]["avatar_url"]
-        assert partners["trae-cli"]["native_command"] == "trae-cli"
-        assert partners["trae-cli"]["native_launch_cwd"] == str(project_root())
-        assert partners["trae-cli"]["native_launch_command"].endswith(" && trae-cli")
-        assert partners["trae-cli"]["verify_command"] == "trae-cli models --json"
-        assert "模型选择" in partners["trae-cli"]["setup_hint"]
-        assert "Trae CLI 自己管理" in partners["trae-cli"]["interaction_hint"]
-        assert partners["trae-cli"]["command_hints"][0]["scope"] == "CLI 默认"
-        assert partners["trae-cli"]["command_hints"][-1]["command"] == "trae-cli models --json"
-        trae_diagnostics = {
-            item["label"]: item for item in partners["trae-cli"]["diagnostic_items"]
-        }
-        assert trae_diagnostics["模型来源"]["value"] == "Trae CLI models"
-        assert "桌面端可用不代表 CLI" in trae_diagnostics["账号/权益"]["detail"]
-        assert trae_diagnostics["检查命令"]["value"] == "trae-cli models --json"
-        assert partners["qoder-cli"]["detected"] is False
-        assert partners["qoder-cli"]["agent_id"] == "local_qoder_cli"
-        assert "alicdn" in partners["qoder-cli"]["avatar_url"]
-        assert partners["qoder-cli"]["native_command"] is None
-        assert partners["kimi-cli"]["detected"] is False
-        assert partners["kimi-cli"]["agent_id"] == "local_kimi_cli"
-        assert partners["kimi-cli"]["avatar_url"] == "https://www.kimi.com/favicon.ico"
-        assert partners["kimi-cli"]["ready"] is False
-        assert partners["codebuddy-cli"]["detected"] is True
-        assert partners["codebuddy-cli"]["agent_id"] == "local_codebuddy_cli"
-        assert "codebuddy" in partners["codebuddy-cli"]["avatar_url"]
-        assert partners["codebuddy-cli"]["ready"] is True
-        assert partners["codebuddy-cli"]["native_command"] == "codebuddy"
-        assert partners["codebuddy-cli"]["native_launch_cwd"] == str(project_root())
-        assert partners["codebuddy-cli"]["native_launch_command"].endswith(" && codebuddy")
-        assert "codebuddy -p --output-format text" in partners["codebuddy-cli"]["verify_command"]
-        assert partners["codebuddy-cli"]["install_command"] is None
-        assert "原生 CLI 使用" in partners["codebuddy-cli"]["interaction_hint"]
-        assert partners["codebuddy-cli"]["command_hints"][0]["scope"] == "一次性覆盖"
-        codebuddy_diagnostics = {
-            item["label"]: item for item in partners["codebuddy-cli"]["diagnostic_items"]
-        }
-        assert codebuddy_diagnostics["模型来源"]["value"] == "可一次性覆盖"
-        assert "桌面端权益不保证同步" in codebuddy_diagnostics["账号/权益"]["detail"]
-        assert partners["openclaw"]["detected"] is False
-        assert partners["openclaw"]["readiness_status"] == "missing"
-        assert partners["openclaw"]["effective_status"] == "missing"
-
-    def test_local_partner_brand_avatar_serves_bundled_logo(self):
-        app = FastAPI()
-        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
-        client = TestClient(app)
-
-        r = client.get("/api/agents/local-partners/claude-code/brand-avatar")
-
-        assert r.status_code == 200
-        assert r.headers["content-type"].startswith("image/svg+xml")
-        assert r.text.lstrip().startswith("<svg")
-
-    def test_local_partner_brand_avatar_unknown_partner_is_404(self):
-        app = FastAPI()
-        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
-        client = TestClient(app)
-
-        r = client.get("/api/agents/local-partners/does-not-exist/brand-avatar")
-
-        assert r.status_code == 404
-
-    def test_local_partners_doctor_summarizes_machine_readiness(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
-
-        def fake_which(commands: list[str]) -> tuple[str | None, str | None]:
-            if any(cmd.startswith("codex") for cmd in commands):
-                return "codex", str(tmp_path / "codex")
-            if "trae-cli" in commands:
-                return "trae-cli", str(tmp_path / "trae-cli")
-            return None, None
-
-        def fake_run(*args, **kwargs):
-            class Result:
-                returncode = 0
-                stdout = "[]"
-                stderr = ""
-
-            return Result()
-
-        monkeypatch.setattr(
-            agents_router_module,
-            "_which_local_partner_command",
-            fake_which,
-        )
-        monkeypatch.setattr(subprocess, "run", fake_run)
-
-        app = FastAPI()
-        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
-        r = TestClient(app).get("/api/agents/local-partners/doctor")
-
-        assert r.status_code == 200
-        body = r.json()
-        assert body["total"] >= 6
-        assert body["ready"] >= 1
-        assert body["needs_attention"] >= 1
-        assert "本地 CLI 伙伴可自动派工" in body["summary"]
-        groups = {group["status"]: group for group in body["groups"]}
-        assert "ready" in groups
-        assert "model_unconfigured" in groups
-        assert groups["model_unconfigured"]["label"] == "模型未配置"
-        assert "trae-cli" in groups["model_unconfigured"]["partner_ids"]
-        assert any("原生 CLI" in action for action in body["next_actions"])
-
-    def test_local_partner_copy_commands_quote_shell_special_paths(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        # The point of the chdir is to run from a directory that is NOT the repo
-        # root. Derive it from this file rather than ``project_root()``, which
-        # walks up from the cwd and so yields the cwd itself when pytest is
-        # invoked from outside the tree.
-        repo_root = Path(__file__).resolve().parents[1]
-        monkeypatch.chdir(repo_root / "runtime" / "sensing")
-        executable = tmp_path / "Code Buddy (Beta)" / "codebuddy"
-        executable.parent.mkdir()
-        executable.touch()
-
-        def fake_which(commands: list[str]) -> tuple[str | None, str | None]:
-            if "codebuddy" in commands:
-                return str(executable), str(executable)
-            return None, None
-
-        monkeypatch.setattr(
-            agents_router_module,
-            "_which_local_partner_command",
-            fake_which,
-        )
-        app = FastAPI()
-        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
-
-        r = TestClient(app).get("/api/agents/local-partners")
-
-        assert r.status_code == 200
-        partners = {p["id"]: p for p in r.json()["partners"]}
-        codebuddy = partners["codebuddy-cli"]
-        assert codebuddy["native_command"].startswith("'")
-        assert "Code Buddy (Beta)" in codebuddy["native_command"]
-        assert codebuddy["native_launch_cwd"] == str(repo_root)
-        assert codebuddy["native_launch_command"].startswith(
-            f"cd {shlex.quote(str(repo_root))} && "
-        )
-        assert codebuddy["native_launch_command"].endswith(f" && {codebuddy['native_command']}")
-
-    def test_local_partner_effective_status_reflects_not_ready_state(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        from runtime.sensing.gateway import agents_local_partner
-
-        monkeypatch.setattr(
-            agents_router_module,
-            "_which_local_partner_command",
-            lambda commands: (
-                ("trae-cli", str(tmp_path / "trae-cli")) if "trae-cli" in commands else (None, None)
-            ),
-        )
-
-        class _Proc:
-            stdout = "[]"
-
-        monkeypatch.setattr(
-            agents_local_partner.subprocess,
-            "run",
-            lambda *args, **kwargs: _Proc(),
-        )
-        app = FastAPI()
-        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
-
-        r = TestClient(app).get("/api/agents/local-partners")
-
-        assert r.status_code == 200
-        partners = {p["id"]: p for p in r.json()["partners"]}
-        assert partners["trae-cli"]["status"] == "detected"
-        assert partners["trae-cli"]["readiness_status"] == "model_unconfigured"
-        assert partners["trae-cli"]["effective_status"] == "model_unconfigured"
-
-    def test_register_local_partner_creates_real_agent(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
-
-        def fake_which(commands: list[str]) -> tuple[str | None, str | None]:
-            if any(cmd.startswith("codex") for cmd in commands):
-                return "codex", str(tmp_path / "codex.exe")
-            return None, None
-
-        monkeypatch.setattr(
-            agents_router_module,
-            "_which_local_partner_command",
-            fake_which,
-        )
-        registry = AgentRegistry()
-        app = FastAPI()
-        app.include_router(create_agents_router(registry=registry, runtime=_rt()))
-        client = TestClient(app)
-
-        r = client.post(
-            "/api/agents/local-partners/register",
-            json={"partners": [{"id": "codex-cli", "alias": "Codex 本地伙伴"}]},
-        )
-
-        assert r.status_code == 200
-        data = r.json()
-        assert data["registered_count"] == 1
-        assert data["results"][0]["status"] == "registered"
-        assert registry.has("local_codex_cli")
-        assert (tmp_path / "local_codex_cli" / "profile.jsonc").is_file()
-        assert (tmp_path / "local_codex_cli" / "agent-core" / "SOUL.md").is_file()
-
-        agents = client.get("/api/agents").json()
-        local_agent = next(a for a in agents if a["name"] == "local_codex_cli")
-        assert local_agent["display_name"] == "Codex 本地伙伴"
-        assert local_agent["capabilities"]["local_partner"] is True
-
-        partners = {p["id"]: p for p in client.get("/api/agents/local-partners").json()["partners"]}
-        assert partners["codex-cli"]["effective_status"] == "registered"
-
-        duplicate = client.post(
-            "/api/agents/local-partners/register",
-            json={"partners": [{"id": "codex-cli"}]},
-        )
-        assert duplicate.status_code == 200
-        assert duplicate.json()["already_exists_count"] == 1
-        assert duplicate.json()["results"][0]["status"] == "already_exists"
-
-    def test_registered_local_partner_effective_status_reflects_current_readiness(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
-        agent_dir = tmp_path / "local_codex_cli"
-        agent_dir.mkdir()
-        (agent_dir / "profile.jsonc").write_text("{}", encoding="utf-8")
-        monkeypatch.setattr(
-            agents_router_module,
-            "_which_local_partner_command",
-            lambda commands: (None, None),
-        )
-        app = FastAPI()
-        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
-
-        r = TestClient(app).get("/api/agents/local-partners")
-
-        assert r.status_code == 200
-        partners = {p["id"]: p for p in r.json()["partners"]}
-        assert partners["codex-cli"]["registered"] is True
-        assert partners["codex-cli"]["status"] == "registered"
-        assert partners["codex-cli"]["readiness_status"] == "missing"
-        assert partners["codex-cli"]["effective_status"] == "missing"
-
-    def test_register_missing_local_partner_skips_without_creating_agent(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
-        monkeypatch.setattr(
-            agents_router_module,
-            "_which_local_partner_command",
-            lambda _commands: (None, None),
-        )
-        registry = AgentRegistry()
-        app = FastAPI()
-        app.include_router(create_agents_router(registry=registry, runtime=_rt()))
-
-        r = TestClient(app).post(
-            "/api/agents/local-partners/register",
-            json={"partners": [{"id": "openclaw"}]},
-        )
-
-        assert r.status_code == 200
-        assert r.json()["skipped_count"] == 1
-        assert r.json()["results"][0]["status"] == "not_detected"
-        assert not registry.has("local_openclaw")
-        assert not (tmp_path / "local_openclaw").exists()
-
-    def test_codebuddy_launcher_only_is_detected_but_not_registerable(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
-
-        launcher = "/Users/me/.codebuddy/bin/buddy"  # lint: allow-user-path
-        app_code = "/Volumes/CodeBuddy/CodeBuddy.app/Contents/Resources/app/bin/code"
-
-        def fake_which(commands: list[str]) -> tuple[str | None, str | None]:
-            if "~/.codebuddy/bin/buddy" in commands:
-                return launcher, app_code
-            return None, None
-
-        monkeypatch.setattr(
-            agents_router_module,
-            "_which_local_partner_command",
-            fake_which,
-        )
-        registry = AgentRegistry()
-        app = FastAPI()
-        app.include_router(create_agents_router(registry=registry, runtime=_rt()))
-        client = TestClient(app)
-
-        partners = {p["id"]: p for p in client.get("/api/agents/local-partners").json()["partners"]}
-        assert partners["codebuddy-cli"]["detected"] is True
-        assert partners["codebuddy-cli"]["ready"] is False
-        assert partners["codebuddy-cli"]["readiness_status"] == "launcher_only"
-        assert "headless CLI" in partners["codebuddy-cli"]["readiness_message"]
-        assert partners["codebuddy-cli"]["native_command"] == launcher
-        assert partners["codebuddy-cli"]["verify_command"] is None
-        assert partners["codebuddy-cli"]["install_command"] is None
-
-        r = client.post(
-            "/api/agents/local-partners/register",
-            json={"partners": [{"id": "codebuddy-cli"}]},
-        )
-
-        assert r.status_code == 200
-        assert r.json()["skipped_count"] == 1
-        assert r.json()["results"][0]["status"] == "launcher_only"
-        assert not registry.has("local_codebuddy_cli")
-
-    def test_codebuddy_missing_reports_install_command(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        monkeypatch.setattr(
-            agents_router_module,
-            "_which_local_partner_command",
-            lambda commands: (None, None),
-        )
-        app = FastAPI()
-        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
-        client = TestClient(app)
-
-        partners = {p["id"]: p for p in client.get("/api/agents/local-partners").json()["partners"]}
-
-        assert partners["codebuddy-cli"]["detected"] is False
-        assert partners["codebuddy-cli"]["install_command"] == (
-            "npm install -g @tencent-ai/codebuddy-code"
-        )
-        assert partners["codebuddy-cli"]["native_command"] is None
-        assert partners["codebuddy-cli"]["verify_command"] is None
-        diagnostics = {
-            item["label"]: item for item in partners["codebuddy-cli"]["diagnostic_items"]
-        }
-        assert diagnostics["Headless"]["value"] == "仅原生/待适配"
-        assert diagnostics["检查命令"]["tone"] == "blocked"
-
-    def test_local_partner_command_hints_have_explicit_openapi_schema(self):
-        app = FastAPI()
-        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
-
-        schemas = app.openapi()["components"]["schemas"]
-
-        assert schemas["LocalPartnerCommandHint"]["properties"] == {
-            "command": {"title": "Command", "type": "string"},
-            "scope": {"title": "Scope", "type": "string"},
-            "behavior": {"title": "Behavior", "type": "string"},
-        }
-        command_hints = schemas["LocalPartnerWire"]["properties"]["command_hints"]
-        assert command_hints["items"]["$ref"] == "#/components/schemas/LocalPartnerCommandHint"
-        assert schemas["LocalPartnerWire"]["properties"]["effective_status"] == {
-            "default": "missing",
-            "title": "Effective Status",
-            "type": "string",
-        }
-        assert schemas["LocalPartnerWire"]["properties"]["native_launch_cwd"] == {
-            "anyOf": [{"type": "string"}, {"type": "null"}],
-            "title": "Native Launch Cwd",
-        }
-
-    def test_probe_local_partner_success(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        from runtime.execution.agents.local_partner_bridge import LocalPartnerResult
-        from runtime.sensing.gateway import agents_local_partner
-
-        monkeypatch.setattr(
-            agents_router_module,
-            "_which_local_partner_command",
-            lambda commands: (
-                ("codex", str(tmp_path / "codex"))
-                if any(cmd.startswith("codex") for cmd in commands)
-                else (None, None)
-            ),
-        )
-        monkeypatch.setattr(agents_router_module, "_safe_local_partner_executable", lambda _: True)
-        seen: dict = {}
-
-        def fake_run(**kw):
-            seen.update(kw)
-            return LocalPartnerResult(ok=True, output="OK", exit_code=0)
-
-        monkeypatch.setattr(agents_local_partner, "run_local_partner", fake_run)
-        app = FastAPI()
-        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
-        client = TestClient(app)
-
-        r = client.post("/api/agents/local-partners/codex-cli/probe")
-
-        assert r.status_code == 200
-        data = r.json()
-        assert data["ok"] is True
-        assert data["status"] == "ok"
-        assert data["output"] == "OK"
-        assert data["detected"] is True
-        assert data["ready"] is True
-        assert data["failure_kind"] is None
-        assert seen["partner_id"] == "codex-cli"
-        assert seen["command"] == str(tmp_path / "codex")
-        assert "不要修改文件" in seen["prompt"]
-
-    def test_probe_local_partner_surfaces_diagnosis(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        from runtime.execution.agents.local_partner_bridge import LocalPartnerResult
-        from runtime.sensing.gateway import agents_local_partner
-
-        monkeypatch.setattr(
-            agents_router_module,
-            "_which_local_partner_command",
-            lambda commands: (
-                ("codex", str(tmp_path / "codex"))
-                if any(cmd.startswith("codex") for cmd in commands)
-                else (None, None)
-            ),
-        )
-        monkeypatch.setattr(agents_router_module, "_safe_local_partner_executable", lambda _: True)
-
-        monkeypatch.setattr(
-            agents_local_partner,
-            "run_local_partner",
-            lambda **kw: LocalPartnerResult(
-                ok=False,
-                error="Codex CLI 需要登录或授权\n建议：打开原生 CLI。\n\n原始错误：\nnot logged in",
-                raw_error="not logged in",
-                exit_code=1,
-                failure_kind="auth",
-                failure_title="Codex CLI 需要登录或授权",
-                fix_hint="请打开原生 CLI：`codex`。",
-            ),
-        )
-        app = FastAPI()
-        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
-        client = TestClient(app)
-
-        r = client.post("/api/agents/local-partners/codex-cli/probe")
-
-        assert r.status_code == 200
-        data = r.json()
-        assert data["ok"] is False
-        assert data["status"] == "auth"
-        assert data["raw_error"] == "not logged in"
-        assert data["failure_kind"] == "auth"
-        assert data["failure_title"] == "Codex CLI 需要登录或授权"
-        assert "原生 CLI" in data["fix_hint"]
-
-    def test_probe_local_partner_reports_not_ready_without_spawning(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        from runtime.sensing.gateway import agents_local_partner
-
-        monkeypatch.setattr(
-            agents_router_module,
-            "_which_local_partner_command",
-            lambda commands: (
-                ("trae-cli", str(tmp_path / "trae-cli")) if "trae-cli" in commands else (None, None)
-            ),
-        )
-        monkeypatch.setattr(agents_router_module, "_safe_local_partner_executable", lambda _: True)
-
-        class _Proc:
-            stdout = "[]"
-
-        monkeypatch.setattr(
-            agents_local_partner.subprocess,
-            "run",
-            lambda *args, **kwargs: _Proc(),
-        )
-        monkeypatch.setattr(
-            agents_local_partner,
-            "run_local_partner",
-            lambda **kw: (_ for _ in ()).throw(AssertionError("should not spawn")),
-        )
-        app = FastAPI()
-        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
-        client = TestClient(app)
-
-        r = client.post("/api/agents/local-partners/trae-cli/probe")
-
-        assert r.status_code == 200
-        data = r.json()
-        assert data["ok"] is False
-        assert data["detected"] is True
-        assert data["ready"] is False
-        assert data["status"] == "model_unconfigured"
-        assert "没有有效模型配置" in data["error"]
-
-    def test_probe_local_partner_rejects_unsafe_executable(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        monkeypatch.setattr(
-            agents_router_module,
-            "_which_local_partner_command",
-            lambda commands: (
-                ("codex", str(tmp_path / "codex"))
-                if any(cmd.startswith("codex") for cmd in commands)
-                else (None, None)
-            ),
-        )
-        monkeypatch.setattr(agents_router_module, "_safe_local_partner_executable", lambda _: False)
-        app = FastAPI()
-        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
-        client = TestClient(app)
-
-        r = client.post("/api/agents/local-partners/codex-cli/probe")
-
-        assert r.status_code == 200
-        data = r.json()
-        assert data["ok"] is False
-        assert data["status"] == "unsafe_executable"
-        assert data["failure_kind"] == "unsafe_executable"
-
-    def test_register_trae_local_partner_creates_real_agent(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
-
-        def fake_which(commands: list[str]) -> tuple[str | None, str | None]:
-            if "trae-cli" in commands:
-                return "trae-cli", str(tmp_path / "trae-cli")
-            return None, None
-
-        monkeypatch.setattr(
-            agents_router_module,
-            "_which_local_partner_command",
-            fake_which,
-        )
-        registry = AgentRegistry()
-        app = FastAPI()
-        app.include_router(create_agents_router(registry=registry, runtime=_rt()))
-
-        r = TestClient(app).post(
-            "/api/agents/local-partners/register",
-            json={"partners": [{"id": "trae-cli", "alias": "Trae 本地伙伴"}]},
-        )
-
-        assert r.status_code == 200
-        data = r.json()
-        assert data["registered_count"] == 1
-        assert data["results"][0]["status"] == "registered"
-        assert registry.has("local_trae_cli")
-        profile = tmp_path / "local_trae_cli" / "profile.jsonc"
-        assert profile.is_file()
-        text = profile.read_text(encoding="utf-8")
-        assert '"local_partner_id": "trae-cli"' in text
-        assert '"local_partner_command": "trae-cli"' in text
-        agents = TestClient(app).get("/api/agents").json()
-        local_agent = next(a for a in agents if a["name"] == "local_trae_cli")
-        assert local_agent["avatar_url"].startswith("/api/agents/local_trae_cli/avatar?v=")
-
-    def test_local_partner_model_reports_domestic_cli_defaults(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        from runtime.sensing.gateway import agents_local_partner
-
-        monkeypatch.setattr(
-            agents_local_partner,
-            "which_command",
-            lambda commands: (
-                ("trae-cli", "/usr/bin/trae-cli") if "trae-cli" in commands else (None, None)
-            ),
-        )
-
-        class _Proc:
-            stdout = '[{"name":"trae-default"}]'
-
-        monkeypatch.setattr(
-            agents_local_partner.subprocess,
-            "run",
-            lambda *args, **kwargs: _Proc(),
-        )
-        app = FastAPI()
-        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
-        client = TestClient(app)
-
-        trae = client.get("/api/agents/local-partners/trae-cli/model")
-        qoder = client.get("/api/agents/local-partners/qoder-cli/model")
-        kimi = client.get("/api/agents/local-partners/kimi-cli/model")
-        codebuddy = client.get("/api/agents/local-partners/codebuddy-cli/model")
-
-        assert trae.status_code == 200
-        assert trae.json() == {
-            "partner_id": "trae-cli",
-            "model": "Trae CLI 默认",
-            "source": "trae-cli",
-        }
-        assert qoder.status_code == 200
-        assert qoder.json()["model"] == "Qoder CLI 默认"
-        assert kimi.status_code == 200
-        assert kimi.json()["model"] == "Kimi CLI 默认"
-        assert codebuddy.status_code == 200
-        assert codebuddy.json()["model"] == "CodeBuddy 默认"
-
-    def test_trae_partner_model_reports_unconfigured_when_models_empty(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        monkeypatch.setattr(
-            agents_router_module,
-            "_which_local_partner_command",
-            lambda commands: (
-                ("trae-cli", "/usr/bin/trae-cli") if "trae-cli" in commands else (None, None)
-            ),
-        )
-        from runtime.sensing.gateway import agents_local_partner
-
-        monkeypatch.setattr(
-            agents_local_partner,
-            "which_command",
-            lambda commands: (
-                ("trae-cli", "/usr/bin/trae-cli") if "trae-cli" in commands else (None, None)
-            ),
-        )
-
-        class _Proc:
-            stdout = "[]"
-
-        monkeypatch.setattr(
-            agents_local_partner.subprocess,
-            "run",
-            lambda *args, **kwargs: _Proc(),
-        )
-        app = FastAPI()
-        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
-        client = TestClient(app)
-
-        r = client.get("/api/agents/local-partners/trae-cli/model")
-
-        assert r.status_code == 200
-        assert r.json() == {
-            "partner_id": "trae-cli",
-            "model": "未配置模型",
-            "source": "trae-cli models --json",
-        }
-
-    def test_codebuddy_partner_model_reports_supported_models(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        from runtime.sensing.gateway import agents_local_partner
-
-        monkeypatch.setattr(
-            agents_local_partner,
-            "which_command",
-            lambda commands: (
-                ("codebuddy", "/usr/bin/codebuddy") if "codebuddy" in commands else (None, None)
-            ),
-        )
-
-        class _Proc:
-            stdout = (
-                "Usage: codebuddy [options]\n"
-                "  --model <model>  Currently supported: "
-                "(default-model, gpt-5.5, gpt-5.3-codex, kimi-k2.5)"
-            )
-            stderr = ""
-
-        monkeypatch.setattr(
-            agents_local_partner.subprocess,
-            "run",
-            lambda *args, **kwargs: _Proc(),
-        )
-        app = FastAPI()
-        app.include_router(create_agents_router(registry=AgentRegistry(), runtime=_rt()))
-        client = TestClient(app)
-
-        r = client.get("/api/agents/local-partners/codebuddy-cli/model")
-
-        assert r.status_code == 200
-        assert r.json() == {
-            "partner_id": "codebuddy-cli",
-            "model": "CodeBuddy 默认",
-            "source": "codebuddy --help",
-            "models": ["default-model", "gpt-5.5", "gpt-5.3-codex", "kimi-k2.5"],
-        }
+        assert not any(path.startswith("/api/agents/local-partners") for path in paths)
 
 
 class TestAuth:

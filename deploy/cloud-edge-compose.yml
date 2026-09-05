@@ -1,5 +1,7 @@
-# Lightweight cloud control plane for a small server. Put Caddy/Nginx in front
-# and expose it through HTTPS; the service itself binds loopback by default.
+# Lightweight cloud control plane and public-share relay for a small server.
+# Put Caddy/Nginx in front and expose it through HTTPS; the service itself binds
+# loopback by default.  See deploy/SHARE_RELAY.md before enabling the public
+# hostname.
 services:
   account-message-service:
     build:
@@ -24,17 +26,32 @@ services:
       OCTOPUS_CLOUD_EDGE_TOKEN_SECRET: ${OCTOPUS_CLOUD_EDGE_TOKEN_SECRET:?set an independent 32+ character token secret}
       OCTOPUS_CLOUD_EDGE_ADMIN_KEY: ${OCTOPUS_CLOUD_EDGE_ADMIN_KEY:?set an independent 32+ character admin key}
       OCTOPUS_CLOUD_REGISTRATION_CODE: ${OCTOPUS_CLOUD_REGISTRATION_CODE:?set a 12+ character registration code}
+      # Narrow server-to-server credential accepted only by thread-share routes.
+      # It must be independent from the general Cloud Edge admin key.
+      OCTOPUS_CLOUD_SHARE_RELAY_KEY: ${OCTOPUS_CLOUD_SHARE_RELAY_KEY:?set an independent 32+ character share relay key}
       OCTOPUS_CLOUD_EDGE_OWNER_ID: ${OCTOPUS_CLOUD_EDGE_OWNER_ID:-admin}
       OCTOPUS_CLOUD_EDGE_TENANT_ID: ${OCTOPUS_CLOUD_EDGE_TENANT_ID:-default}
       OCTOPUS_CLOUD_EDGE_DATA_DIR: /data
+      # Canonical origin used to mint absolute links for desktop clients.  It
+      # must be a stable HTTPS origin; never derive public links from Host or
+      # X-Forwarded-* request headers.
+      OCTOPUS_PUBLIC_SHARE_BASE_URL: ${OCTOPUS_PUBLIC_SHARE_BASE_URL:-https://share.echo-age.com}
+      # Public-share retention and disk-abuse guards.  Values are bytes/seconds.
+      OCTOPUS_CLOUD_EDGE_SHARE_TTL_SECONDS: ${OCTOPUS_CLOUD_EDGE_SHARE_TTL_SECONDS:-2592000}
+      OCTOPUS_CLOUD_EDGE_SHARE_MAX_PER_OWNER: ${OCTOPUS_CLOUD_EDGE_SHARE_MAX_PER_OWNER:-50}
+      OCTOPUS_CLOUD_EDGE_SHARE_MAX_SNAPSHOT_BYTES: ${OCTOPUS_CLOUD_EDGE_SHARE_MAX_SNAPSHOT_BYTES:-1048576}
+      OCTOPUS_CLOUD_EDGE_SHARE_MAX_TOTAL_BYTES: ${OCTOPUS_CLOUD_EDGE_SHARE_MAX_TOTAL_BYTES:-536870912}
     volumes:
+      # Durable SQLite/share state.  Create and back up this host directory;
+      # do not replace it with an anonymous container volume.
       - ../data/cloud-edge:/data
+    stop_grace_period: 30s
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/readyz', timeout=3)"]
-      interval: 30s
+      test: ["CMD", "python", "-c", "import urllib.request; r=urllib.request.urlopen('http://localhost:8090/readyz', timeout=3); raise SystemExit(0 if r.status == 200 else 1)"]
+      interval: 15s
       timeout: 5s
-      retries: 3
-      start_period: 10s
+      retries: 5
+      start_period: 15s
     deploy:
       resources:
         limits:

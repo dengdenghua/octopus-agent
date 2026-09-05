@@ -3,8 +3,8 @@
 Pure structural extraction from ``_observability_router_factory.py`` (no logic
 changes). Builder that registers ``/api/progress`` and the SSE feeds
 (``/api/stream``, ``/api/preview/stream``, ``/api/files/stream``) onto the
-router. The ``TaskProgressTracker`` is built here per router instance, as in
-the original factory.
+router. A ``TaskProgressTracker`` is built from a request-scoped journal view
+for each snapshot response so aggregated task ids cannot cross ownership.
 """
 
 from __future__ import annotations
@@ -14,9 +14,14 @@ from typing import Any
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
+from ._observability_auth import (
+    _observability_scope,
+    _scoped_observability_journal,
+)
 from ._observability_helpers import (
     _SSE_HEADERS,
     HTTPException,
+    Query,
     Request,
     StreamingResponse,
     _safe_put,
@@ -217,47 +222,56 @@ def register_progress_stream_endpoints(router: Any, ctx: ObservabilityContext) -
 
     journal = ctx.journal
 
-    # Progress tracker owns incremental O(N_tasks) snapshots · build
-    # once per app, not per request.
+    # A process-global progress tracker would erase ownership metadata after
+    # aggregation. Build each response from a request-scoped journal view so a
+    # guessed task id cannot address another tenant's snapshot.
     from runtime.memory.journal import TaskProgressTracker
-
-    progress_tracker = TaskProgressTracker(journal)
 
     # ─── /api/progress ──────────────────────────────────────
     @router.get("/api/progress")
     def api_progress(
+        request: Request,
         task_id: str | None = None,
+        cross_tenant: bool = Query(default=False),
     ) -> dict[str, Any]:
-        if task_id is not None:
-            snap = progress_tracker.get(task_id)
-            if snap is None:
-                raise HTTPException(
-                    404,
-                    f"no events for task_id={task_id!r}",
-                )
-            return _snapshot_to_dict(snap)
+        scope = _observability_scope(request, ctx, cross_tenant=cross_tenant)
+        scoped_journal = _scoped_observability_journal(journal, scope)
+        with TaskProgressTracker(scoped_journal) as progress_tracker:
+            if task_id is not None:
+                snap = progress_tracker.get(task_id)
+                if snap is None:
+                    raise HTTPException(
+                        404,
+                        f"no events for task_id={task_id!r}",
+                    )
+                return _snapshot_to_dict(snap)
 
-        snaps = progress_tracker.snapshots
-        return {
-            "count": progress_tracker.count(),
-            "running": progress_tracker.running_count(),
-            "tasks": [_snapshot_to_dict(s) for s in snaps[:50]],
-        }
+            snaps = progress_tracker.snapshots
+            return {
+                "count": progress_tracker.count(),
+                "running": progress_tracker.running_count(),
+                "tasks": [_snapshot_to_dict(s) for s in snaps[:50]],
+            }
 
     # ─── /api/stream (SSE) ──────────────────────────────────
     @router.get("/api/stream")
-    def api_stream(request: Request) -> Any:
+    def api_stream(
+        request: Request,
+        cross_tenant: bool = Query(default=False),
+    ) -> Any:
         import queue as _queue
 
+        scope = _observability_scope(request, ctx, cross_tenant=cross_tenant)
+        scoped_journal = _scoped_observability_journal(journal, scope)
         q: _queue.Queue[Any] = _queue.Queue(maxsize=500)
-        unsubscribe = journal.subscribe(
+        unsubscribe = scoped_journal.subscribe(
             lambda event: _safe_put(q, event),
         )
 
         def _gen():
             try:
                 yield from _iter_sse_frames(
-                    journal,
+                    scoped_journal,
                     q,
                     request.headers.get("last-event-id"),
                 )
@@ -267,23 +281,28 @@ def register_progress_stream_endpoints(router: Any, ctx: ObservabilityContext) -
         return StreamingResponse(_gen(), media_type="text/event-stream", headers=_SSE_HEADERS)
 
     @router.get("/api/preview/stream")
-    def api_preview_stream(request: Request) -> Any:
+    def api_preview_stream(
+        request: Request,
+        cross_tenant: bool = Query(default=False),
+    ) -> Any:
         import queue as _queue
 
+        scope = _observability_scope(request, ctx, cross_tenant=cross_tenant)
+        scoped_journal = _scoped_observability_journal(journal, scope)
         q: _queue.Queue[Any] = _queue.Queue(maxsize=200)
 
         def _only_preview(event: Any) -> None:
             if getattr(event, "event_type", "") == "preview_refresh":
                 _safe_put(q, event)
 
-        unsubscribe = journal.subscribe(_only_preview)
+        unsubscribe = scoped_journal.subscribe(_only_preview)
 
         def _gen():
             try:
                 from runtime.memory.journal import PreviewRefreshEvent
 
                 yield from _iter_sse_frames(
-                    journal,
+                    scoped_journal,
                     q,
                     request.headers.get("last-event-id"),
                     event_name="preview_refresh",
@@ -296,23 +315,28 @@ def register_progress_stream_endpoints(router: Any, ctx: ObservabilityContext) -
         return StreamingResponse(_gen(), media_type="text/event-stream", headers=_SSE_HEADERS)
 
     @router.get("/api/files/stream")
-    def api_files_stream(request: Request) -> Any:
+    def api_files_stream(
+        request: Request,
+        cross_tenant: bool = Query(default=False),
+    ) -> Any:
         import queue as _queue
 
+        scope = _observability_scope(request, ctx, cross_tenant=cross_tenant)
+        scoped_journal = _scoped_observability_journal(journal, scope)
         q: _queue.Queue[Any] = _queue.Queue(maxsize=500)
 
         def _only_file_op(event: Any) -> None:
             if getattr(event, "event_type", "") == "file_op":
                 _safe_put(q, event)
 
-        unsubscribe = journal.subscribe(_only_file_op)
+        unsubscribe = scoped_journal.subscribe(_only_file_op)
 
         def _gen():
             try:
                 from runtime.memory.journal import FileOpEvent
 
                 yield from _iter_sse_frames(
-                    journal,
+                    scoped_journal,
                     q,
                     request.headers.get("last-event-id"),
                     event_name="file_op",

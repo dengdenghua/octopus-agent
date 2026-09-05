@@ -3,8 +3,11 @@ from __future__ import annotations
 import concurrent.futures
 import contextlib
 import contextvars
+import logging
 import sys
-from typing import Any
+import time
+from hashlib import sha256
+from typing import Any, cast
 
 from runtime.adapters.instrumentation import trace_stage
 from runtime.memory.journal import journal_context
@@ -21,8 +24,11 @@ from runtime.platform.step_format import (
     summarize_step_for_stream as _summarize_step_for_stream,
 )
 
-from .base import Channel, InboundMessage, OutboundMessage
+from .base import Channel, ChannelMetadata, InboundMessage, OutboundMessage
+from .operations import ChannelOperationsStore
 from .store import ThreadConversationStore
+
+logger = logging.getLogger(__name__)
 
 
 class ChannelRoutingError(RuntimeError):
@@ -50,7 +56,9 @@ class ChannelManager:
         *,
         stack: Any,
         agent_registry: Any,
+        group_registry: Any | None = None,
         store: ThreadConversationStore | None = None,
+        operations_store: ChannelOperationsStore | None = None,
         default_agent_id: str | None = None,
         budget_tokens: int = 50_000,
         budget_usd: float = 0.50,
@@ -72,12 +80,21 @@ class ChannelManager:
         """
         self._stack = stack
         self._agent_registry = agent_registry
+        self._group_registry = group_registry
         self._store = store or ThreadConversationStore()
+        self._operations = operations_store or ChannelOperationsStore()
         self._default_agent_id = default_agent_id
         self._budget_tokens = budget_tokens
         self._budget_usd = budget_usd
         self._strict_gate = strict_gate
         self._channels: dict[str, Channel] = {}
+        self._started = False
+        # Populated by the channels settings router and persisted across
+        # restarts.  Keeping these on the runtime manager makes the saved UI
+        # choice part of the actual dispatch path rather than display-only
+        # configuration.
+        self._channel_assignments: dict[str, str] = {}
+        self._channel_group_assignments: dict[str, str] = {}
         self._executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=8, thread_name_prefix="ch-send"
         )
@@ -101,6 +118,41 @@ class ChannelManager:
         _audit_channel_for_gate(channel, strict=self._strict_gate)
 
         self._channels[channel.channel_id] = channel
+        if self._started:
+            try:
+                channel.start()
+            except Exception:
+                self._channels.pop(channel.channel_id, None)
+                with contextlib.suppress(Exception):
+                    channel.stop()
+                raise
+
+    def unregister(self, channel_id: str) -> Channel | None:
+        """Remove a channel and stop any active transport it owns."""
+        channel = self._channels.pop(channel_id, None)
+        if channel is not None:
+            with contextlib.suppress(Exception):
+                channel.stop()
+        return channel
+
+    def replace(self, channel: Channel) -> None:
+        """Atomically replace a configured channel, preserving the old one on failure."""
+        old = self._channels.get(channel.channel_id)
+        if old is None:
+            self.register(channel)
+            return
+        channel.bind_dispatcher(self.process_inbound)
+        _audit_channel_for_gate(channel, strict=self._strict_gate)
+        if self._started:
+            try:
+                channel.start()
+            except Exception:
+                with contextlib.suppress(Exception):
+                    channel.stop()
+                raise
+        self._channels[channel.channel_id] = channel
+        with contextlib.suppress(Exception):
+            old.stop()
 
     def has(self, channel_id: str) -> bool:
         return channel_id in self._channels
@@ -117,20 +169,30 @@ class ChannelManager:
     # ─── Lifecycle ──────────────────────────────
 
     def start_all(self) -> None:
-        for ch in self._channels.values():
-            ch.start()
+        if self._started:
+            return
+        self._started = True
+        for channel_id, ch in list(self._channels.items()):
+            try:
+                ch.start()
+            except Exception as exc:
+                self._operations.record_error(channel_id, exc)
+                logger.warning(
+                    "channel.start.failed",
+                    extra={"channel": channel_id, "error": type(exc).__name__},
+                )
 
     def stop_all(self) -> None:
+        self._started = False
         for ch in self._channels.values():
             with contextlib.suppress(Exception):
                 ch.stop()
         self.shutdown()
 
     def send_async(self, channel_id: str, msg: OutboundMessage) -> concurrent.futures.Future:
-        ch = self._channels.get(channel_id)
-        if ch is None:
+        if channel_id not in self._channels:
             raise ChannelRoutingError(f"unknown channel: {channel_id!r}")
-        return self._executor.submit(ch.send, msg)
+        return self._executor.submit(self.send_to_channel, channel_id, msg)
 
     def shutdown(self, wait: bool = True) -> None:
         self._executor.shutdown(wait=wait)
@@ -143,44 +205,113 @@ class ChannelManager:
         if not msg.content or not msg.content.strip():
             raise ChannelRoutingError("empty content")
 
-        with trace_stage(
-            "channels.process_inbound",
-            channel_id=msg.channel_id,
-            thread_id=msg.thread_id,
-        ):
-            conv_id = self._store.get_or_create(
-                msg.channel_id,
-                msg.thread_id,
-            )
-            agent = self._pick_agent(msg)
-
-            intent = ParsedIntent(
-                raw=msg.content,
-                intent_type="task",
-                normalized_goal=msg.content,
-            )
-
-            with journal_context(
-                agent_id=agent.agent_id,
-                conversation_id=conv_id,
-            ):
-                tok = _current_channel_target.set((msg.channel_id, msg.thread_id))
-                try:
-                    reply_text = self._plan_and_run(agent, intent)
-                finally:
-                    _current_channel_target.reset(tok)
-
-            outbound_meta = dict(msg.metadata)
-            outbound_meta["agent_id"] = agent.agent_id
-            outbound_meta["conversation_id"] = conv_id
-            out = OutboundMessage(
+        message_key = self._inbound_message_key(msg)
+        if message_key and not self._operations.claim_inbound(msg.channel_id, message_key):
+            conversation_id = self._store.get(msg.channel_id, msg.thread_id) or ""
+            return OutboundMessage(
                 channel_id=msg.channel_id,
                 thread_id=msg.thread_id,
-                content=reply_text,
-                metadata=outbound_meta,
+                content="",
+                metadata=cast(
+                    ChannelMetadata,
+                    {
+                        **dict(msg.metadata),
+                        "conversation_id": conversation_id,
+                        "duplicate": True,
+                    },
+                ),
             )
-            self._channels[msg.channel_id].send(out)
+
+        try:
+            with (
+                self._track_turn(msg.channel_id),
+                trace_stage(
+                    "channels.process_inbound",
+                    channel_id=msg.channel_id,
+                    thread_id=msg.thread_id,
+                ),
+            ):
+                conv_id = self._store.get_or_create(
+                    msg.channel_id,
+                    msg.thread_id,
+                )
+                intent = ParsedIntent(
+                    raw=msg.content,
+                    intent_type="task",
+                    normalized_goal=msg.content,
+                )
+
+                outbound_meta = cast(ChannelMetadata, dict(msg.metadata))
+                group = self._pick_group(msg)
+                if group is not None:
+                    reply_text, collaboration_meta = self._run_group(
+                        group=group,
+                        msg=msg,
+                        conversation_id=conv_id,
+                    )
+                    outbound_meta.pop("agent_id", None)
+                    outbound_meta.update(collaboration_meta)
+                else:
+                    agent = self._pick_agent(msg)
+                    with journal_context(
+                        agent_id=agent.agent_id,
+                        conversation_id=conv_id,
+                    ):
+                        tok = _current_channel_target.set((msg.channel_id, msg.thread_id))
+                        try:
+                            reply_text = self._plan_and_run(agent, intent)
+                        finally:
+                            _current_channel_target.reset(tok)
+                    outbound_meta.pop("group_id", None)
+                    outbound_meta["agent_id"] = agent.agent_id
+                outbound_meta["conversation_id"] = conv_id
+                out = OutboundMessage(
+                    channel_id=msg.channel_id,
+                    thread_id=msg.thread_id,
+                    content=reply_text,
+                    metadata=outbound_meta,
+                )
+                self._channels[msg.channel_id].send(out)
+            if message_key:
+                self._operations.complete_inbound(msg.channel_id, message_key)
             return out
+        except Exception:
+            # Do not turn a transient model/provider failure into a permanent
+            # webhook drop.  The provider can safely retry this event.
+            if message_key:
+                self._operations.release_inbound(msg.channel_id, message_key)
+            raise
+
+    @staticmethod
+    def _inbound_message_key(msg: InboundMessage) -> str | None:
+        """Resolve a stable provider event identity without retaining its body."""
+        for key in (
+            "message_id",
+            "msg_id",
+            "slack_ts",
+            "interaction_id",
+            "mattermost_post_id",
+            "event_id",
+            "teams_activity_id",
+            "google_chat_message",
+            "message_guid",
+            "message_reference_id",
+            "item_id",
+            "message_sid",
+        ):
+            value = msg.metadata.get(key)  # type: ignore[literal-required]
+            if value is not None and str(value).strip():
+                # Provider event IDs are already scoped to the channel.  Do
+                # not include the parsed sender: a retry may omit or format
+                # that field differently while referring to the same event.
+                return f"{key}:{value}"
+        if msg.received_at is not None:
+            content_digest = sha256(msg.content.encode("utf-8", errors="replace")).hexdigest()
+            return (
+                f"fallback:{msg.thread_id}:{msg.sender_id}:"
+                f"{msg.received_at.isoformat()}:{content_digest}"
+            )
+        return None
 
     def send_to_channel(
         self,
@@ -190,7 +321,12 @@ class ChannelManager:
         ch = self._channels.get(channel_id)
         if ch is None:
             raise ChannelRoutingError(f"unknown channel: {channel_id!r}")
-        ch.send(msg)
+        try:
+            ch.send(msg)
+        except Exception as exc:
+            self._operations.record_error(channel_id, exc)
+            raise
+        self._operations.record_outbound(channel_id)
         return None
 
     def edit_on_channel(
@@ -202,10 +338,15 @@ class ChannelManager:
         ch = self._channels.get(channel_id)
         if ch is None:
             raise ChannelRoutingError(f"unknown channel: {channel_id!r}")
-        if ch.supports_edit:
-            ch.edit(msg, original_message_id)
-        else:
-            ch.send(msg)
+        try:
+            if ch.supports_edit:
+                ch.edit(msg, original_message_id)
+            else:
+                ch.send(msg)
+        except Exception as exc:
+            self._operations.record_error(channel_id, exc)
+            raise
+        self._operations.record_outbound(channel_id)
 
     def channel_supports_edit(self, channel_id: str) -> bool:
         ch = self._channels.get(channel_id)
@@ -226,16 +367,91 @@ class ChannelManager:
             content=result_text,
             metadata={"source": "cron"},
         )
-        ch.send(msg)
+        try:
+            ch.send(msg)
+        except Exception as exc:
+            self._operations.record_error(channel_id, exc)
+            raise
+        self._operations.record_outbound(channel_id)
+
+    @contextlib.contextmanager
+    def _track_turn(self, channel_id: str) -> Any:
+        self._operations.record_inbound(channel_id)
+        try:
+            yield
+        except Exception as exc:
+            self._operations.record_error(channel_id, exc)
+            raise
+        else:
+            self._operations.record_outbound(channel_id)
+
+    def channel_diagnostics(self, channel_id: str) -> dict[str, Any]:
+        """Return one credential-free operational snapshot for the UI/API."""
+        ch = self._channels.get(channel_id)
+        if ch is None:
+            raise ChannelRoutingError(f"unknown channel: {channel_id!r}")
+        state = self._operations.snapshot(channel_id)
+        state.update(
+            {
+                "thread_count": self._store.count_for_channel(channel_id),
+                "capabilities": {
+                    "edit": bool(ch.supports_edit),
+                    "typing": bool(ch.supports_typing),
+                    "reactions": bool(ch.supports_reactions),
+                    "health_probe": type(ch).health_check is not Channel.health_check,
+                },
+            }
+        )
+        return state
+
+    def probe_channel(self, channel_id: str) -> dict[str, Any]:
+        """Run the adapter's real health check and persist its outcome."""
+        ch = self._channels.get(channel_id)
+        if ch is None:
+            raise ChannelRoutingError(f"unknown channel: {channel_id!r}")
+        started = time.perf_counter()
+        error: BaseException | str | None = None
+        if type(ch).health_check is Channel.health_check:
+            self._operations.record_probe(
+                channel_id,
+                healthy=None,
+                latency_ms=0,
+            )
+            return self.channel_diagnostics(channel_id)
+        try:
+            healthy = bool(ch.health_check())
+            if not healthy:
+                error = "health check returned false"
+        except Exception as exc:
+            healthy = False
+            error = exc
+        latency_ms = round((time.perf_counter() - started) * 1000)
+        self._operations.record_probe(
+            channel_id,
+            healthy=healthy,
+            latency_ms=latency_ms,
+            error=error,
+        )
+        return self.channel_diagnostics(channel_id)
 
     def _pick_agent(self, msg: InboundMessage) -> Any:
-        """metadata['agent_id'] > default_agent_id > registry.pick_for_intent."""
+        """Explicit metadata > saved channel assignment > default > intent."""
         explicit = msg.metadata.get("agent_id")
         if isinstance(explicit, str) and explicit:
             if self._agent_registry.has(explicit):
                 return self._agent_registry.get(explicit)
             raise ChannelRoutingError(
                 f"metadata agent_id not found: {explicit!r}",
+            )
+
+        assigned = self._channel_assignments.get(msg.channel_id)
+        if assigned:
+            if self._agent_registry.has(assigned):
+                return self._agent_registry.get(assigned)
+            logger.warning(
+                "channel %r has stale agent assignment %r; falling back",
+                msg.channel_id,
+                assigned,
             )
 
         if self._default_agent_id and self._agent_registry.has(
@@ -256,6 +472,105 @@ class ChannelManager:
                 "set default_agent_id or msg.metadata['agent_id']",
             )
         return picked
+
+    def _pick_group(self, msg: InboundMessage) -> Any | None:
+        """Resolve an explicitly or persistently assigned collaboration team.
+
+        An explicit per-message agent target intentionally bypasses the saved
+        team so adapters can still implement directed mentions.
+        """
+        if msg.metadata.get("agent_id"):
+            return None
+        explicit = msg.metadata.get("group_id")
+        group_id = explicit if isinstance(explicit, str) and explicit else None
+        if group_id is None:
+            group_id = self._channel_group_assignments.get(msg.channel_id)
+        if not group_id:
+            return None
+        if self._group_registry is None or not self._group_registry.has(group_id):
+            if explicit:
+                raise ChannelRoutingError(f"metadata group_id not found: {group_id!r}")
+            logger.warning(
+                "channel %r has stale group assignment %r; falling back",
+                msg.channel_id,
+                group_id,
+            )
+            return None
+        return self._group_registry.get(group_id)
+
+    def _run_group(
+        self,
+        *,
+        group: Any,
+        msg: InboundMessage,
+        conversation_id: str,
+    ) -> tuple[str, ChannelMetadata]:
+        """Run one bounded team turn and render it for a plain IM surface."""
+        from runtime.execution.agents.group_fanout import run_group_fanout
+
+        members: list[dict[str, Any]] = []
+        for agent_id in list(getattr(group, "members", []) or []):
+            if not self._agent_registry.has(agent_id):
+                continue
+            agent = self._agent_registry.get(agent_id)
+            members.append(
+                {
+                    "agent_id": agent.agent_id,
+                    "display_name": agent.display_name,
+                }
+            )
+        if not members:
+            raise ChannelRoutingError(
+                f"assigned group {group.group_id!r} has no available members",
+            )
+
+        def _call_member(*, agent_id: str, prompt: str, timeout_s: int) -> dict[str, Any]:
+            del timeout_s  # The graph runtime owns its per-step timeouts.
+            agent = self._agent_registry.get(agent_id)
+            intent = ParsedIntent(raw=prompt, intent_type="task", normalized_goal=prompt)
+            with journal_context(agent_id=agent_id, conversation_id=conversation_id):
+                tok = _current_channel_target.set((msg.channel_id, msg.thread_id))
+                try:
+                    output = self._plan_and_run(agent, intent)
+                finally:
+                    _current_channel_target.reset(tok)
+            failed = output.startswith(("（无法", "[planner error]", "[runner error]"))
+            return {
+                "success": not failed,
+                "output": output if not failed else "",
+                "error": output if failed else None,
+            }
+
+        result = run_group_fanout(
+            msg.content,
+            members,
+            agent_caller=_call_member,
+            max_members=min(len(members), 8),
+            max_concurrency=min(len(members), 4),
+            turn_id=f"channel:{msg.channel_id}:{conversation_id}",
+            speaker=msg.sender_id or "用户",
+        )
+        successful = [
+            reply
+            for reply in result.get("replies") or []
+            if reply.get("ok") and str(reply.get("reply") or "").strip()
+        ]
+        if successful:
+            title = str(getattr(group, "display_name", "") or group.group_id)
+            blocks = [
+                f"{reply['display_name']}\n{str(reply['reply']).strip()}" for reply in successful
+            ]
+            reply_text = f"{title} · 团队回复\n\n" + "\n\n".join(blocks)
+        else:
+            reply_text = f"（团队 {group.group_id} 本轮没有成员生成有效回复）"
+        synthesis = result.get("synthesis") or {}
+        return reply_text, ChannelMetadata(
+            group_id=str(group.group_id),
+            primary_agent_id=str(synthesis.get("primary_agent_id") or ""),
+            member_agent_ids=[str(member["agent_id"]) for member in members],
+            collaboration_spoke=int(result.get("spoke") or 0),
+            collaboration_count=int(result.get("count") or 0),
+        )
 
     def _plan_and_run(self, agent: Any, intent: ParsedIntent) -> str:
         plan_kwargs: dict[str, Any] = {
@@ -468,6 +783,7 @@ def _audit_channel_for_gate(channel: Channel, *, strict: bool = False) -> None:
                 type(channel).__name__,
             )
             return
+    assert src is not None
 
     # Signal: a CALL to safe_send / check_outbound · not just a
     # mention. Require the ``(`` · so a comment like

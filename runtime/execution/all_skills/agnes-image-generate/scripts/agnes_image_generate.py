@@ -6,7 +6,7 @@ from ``base_url``:
 - **Volcano (火山方舟)** — ``https://ark.cn-beijing.volces.com/api/plan/v3``,
   model ``doubao-seedream-5.0-lite``（文生图 + 图生图）。
 - **Agnes AI Gateway** — ``https://apihub.agnes-ai.com/v1``,
-  model ``agnes-image-2.1-flash``（OpenAI 兼容）。
+  model ``agnes-image-2.5-flash``（OpenAI 兼容）。
 
 Both are thin adapters: Authorization header + body shape, returns hosted
 image URL(s).
@@ -40,7 +40,7 @@ VOLC_MODEL = "doubao-seedream-5.0-lite"
 
 # Agnes AI Gateway — OpenAI 兼容
 AGNES_URL = "https://apihub.agnes-ai.com/v1"
-AGNES_MODEL = "agnes-image-2.1-flash"
+AGNES_MODEL = "agnes-image-2.5-flash"
 
 DEFAULT_BASE_URL = VOLC_URL
 DEFAULT_MODEL = VOLC_MODEL
@@ -50,6 +50,20 @@ TIMEOUT_SECONDS = 300
 def _is_volcano(base_url: str) -> bool:
     """True when the base URL points at Volcano Ark (vs. Agnes)."""
     return "volces.com" in (base_url or "").lower()
+
+
+def _normalize_size(size: str | None, *, volcano: bool) -> str | None:
+    """Accept common aspect-ratio shorthand used in natural tool calls."""
+
+    value = str(size or "").strip()
+    if not value:
+        return None
+    aliases = {
+        "1:1": "2048x2048" if volcano else "1024x1024",
+        "16:9": "2560x1440" if volcano else "1536x1024",
+        "9:16": "1440x2560" if volcano else "1024x1536",
+    }
+    return aliases.get(value, value)
 
 
 def _resolve_api_key() -> str:
@@ -105,10 +119,12 @@ def generate_image(
         Text description of the desired image. Required.
     model
         Model id. Defaults to ``doubao-seedream-5.0-lite`` (Volcano) when the
-        base URL is Volcano, else ``agnes-image-2.1-flash``.
+        base URL is Volcano, else ``agnes-image-2.5-flash``.
     size
         Optional WxH string like ``"2048x2048"`` (Volcano) or ``"1024x1024"``
-        (Agnes). When omitted the gateway picks a sensible default.
+        (Agnes). Aspect-ratio aliases ``"1:1"``, ``"16:9"``, and ``"9:16"``
+        are normalized to provider-compatible dimensions. When omitted the
+        gateway picks a sensible default.
     n
         Number of images to generate.
     image
@@ -142,14 +158,15 @@ def generate_image(
     volcano = _is_volcano(base_url)
     if model is None:
         model = VOLC_MODEL if volcano else AGNES_MODEL
+    normalized_size = _normalize_size(size, volcano=volcano)
 
     payload: dict[str, Any] = {
         "model": model,
         "prompt": str(prompt).strip(),
         "n": max(1, int(n)),
     }
-    if size:
-        payload["size"] = size
+    if normalized_size:
+        payload["size"] = normalized_size
     if image is not None:
         # Volcano: image is a first-class request field; Agnes keeps it
         # under extra_body for backward compatibility.
@@ -174,7 +191,7 @@ def generate_image(
         "volcano" if volcano else "agnes",
         model,
         payload["n"],
-        size or "auto",
+        normalized_size or "auto",
     )
 
     try:

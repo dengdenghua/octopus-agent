@@ -164,7 +164,7 @@ def _direct_llm_fallback_impl(
     effective_model = (
         model
         if model and model not in ("octopus-agent", "")
-        else getattr(stack.planner, "planner_model", None) or "molili"
+        else getattr(stack.planner, "planner_model", None) or "octopus-agent"
     )
     requested_model = effective_model
     router, effective_model = _resolve_custom_model_router(
@@ -260,7 +260,9 @@ def _stream_direct_llm_fallback(
     # pick from model_picker and should pass through verbatim.
     _is_auto_or_default = not model or model in ("octopus-agent", "auto")
     effective_model = (
-        getattr(stack.planner, "planner_model", None) or "molili" if _is_auto_or_default else model
+        getattr(stack.planner, "planner_model", None) or "octopus-agent"
+        if _is_auto_or_default
+        else model
     )
     # Smart routing: in the chat fast-path, classify the prompt and
     # let select_model_for_complexity pick the configured tier
@@ -445,7 +447,7 @@ def _stream_chat_wrapped(
         _OWNER_ACTOR_ID,
         _TENANT_ID,
     )
-    from runtime.sensing.model_router.actor_context import current_actor as _molili_actor_ctx
+    from runtime.sensing.model_router.actor_context import current_actor as _model_actor_ctx
 
     # ContextVars are shared across coroutines that reuse the same
     # OS thread (Starlette's SSE streams live in a threadpool). If we
@@ -456,7 +458,7 @@ def _stream_chat_wrapped(
     _convo_token = _CONVERSATION_ID.set(conversation_id)
     _tenant_token = _TENANT_ID.set(tenant_id)
     _owner_token = _OWNER_ACTOR_ID.set(owner_actor_id)
-    _actor_token = _molili_actor_ctx.set(actor) if actor else None
+    _actor_token = _model_actor_ctx.set(actor) if actor else None
     try:
         meta_chunk = {
             "id": f"chatcmpl-{uuid4().hex[:16]}",
@@ -480,6 +482,7 @@ def _stream_chat_wrapped(
             stream_mode=stream_mode,
             conversation_id=conversation_id,
             tenant_id=tenant_id,
+            owner_actor_id=owner_actor_id,
         )
     finally:
         try:  # noqa: SIM105
@@ -497,7 +500,7 @@ def _stream_chat_wrapped(
             pass
         if _actor_token is not None:
             try:  # noqa: SIM105
-                _molili_actor_ctx.reset(_actor_token)
+                _model_actor_ctx.reset(_actor_token)
             except Exception:  # noqa: BLE001 — ContextVar.reset on a foreign token raises; benign on hand-off
                 pass
 
@@ -514,17 +517,44 @@ def _stream_chat(
     stream_mode: str = "full",
     conversation_id: str | None = None,
     tenant_id: str | None = None,
+    owner_actor_id: str | None = None,
 ):
     import json
 
+    from runtime.platform.process.session import session_scope
     from runtime.safety.approval.cancellation import (
         CancellationSource,
+        OperationCancelled,
         current_cancellation_token,
         scoped_cancellation,
     )
 
+    from .turn_context import (
+        candidate_outcome_for_trajectory,
+        prepare_chat_turn,
+        settle_candidate_outcomes,
+    )
+
     cid = f"chatcmpl-{uuid4().hex[:16]}"
     created = int(time.time())
+    turn_id = uuid4().hex
+    turn_session = prepare_chat_turn(
+        stack,
+        turn_id=turn_id,
+        actor=actor,
+        agent=agent,
+        conversation_id=conversation_id,
+        tenant_id=tenant_id,
+        owner_actor_id=owner_actor_id,
+    ).session
+    candidate_settled = False
+
+    def _settle_once(success: bool | None) -> None:
+        nonlocal candidate_settled
+        if candidate_settled:
+            return
+        candidate_settled = True
+        settle_candidate_outcomes(turn_id, success)
 
     def _frame(delta: dict[str, Any], finish_reason: str | None = None) -> str:
         chunk = {
@@ -567,11 +597,18 @@ def _stream_chat(
         plan_kwargs["model"] = model
 
     try:
-        try:
-            graph = stack.planner.plan(intent, **plan_kwargs)
-        except TypeError:
-            graph = stack.planner.plan(intent)
+        with session_scope(turn_session):
+            try:
+                graph = stack.planner.plan(intent, **plan_kwargs)
+            except TypeError:
+                graph = stack.planner.plan(intent)
+    except OperationCancelled as e:
+        _settle_once(None)
+        yield _frame({"content": _failure_content("planning", e)}, "failed")
+        yield "data: [DONE]\n\n"
+        return
     except Exception as e:  # noqa: BLE001
+        _settle_once(False)
         yield _frame({"content": _failure_content("planning", e)}, "failed")
         yield "data: [DONE]\n\n"
         return
@@ -632,28 +669,12 @@ def _stream_chat(
 
     def _worker() -> None:
         try:
-            # Runs on its own thread (below) — a plain contextvar
-            # ``session_scope`` set on the generator's thread would NOT
-            # be visible here, so the Session must be bound inside the
-            # worker itself. Without it, the executor's scope/sandbox/
-            # plan-mode-write-block and approval gates (keyed on
-            # ``current_session() is not None``) are silent no-ops on
-            # this streaming path — see the non-streaming ``_run_chat``
-            # for the same fix.
-            from runtime.platform.process.session import Session, session_scope
-
             with (
                 scoped_cancellation(stream_cancel.token),
-                session_scope(
-                    Session(
-                        actor=actor,
-                        thread_id=conversation_id,
-                        metadata={
-                            "enforce_executor_approval": True,
-                            "tenant_id": tenant_id,
-                        },
-                    )
-                ),
+                # ContextVars do not cross into this worker thread. Rebind the
+                # exact Session used by planning, including its managed
+                # workspace and authoritative owner scope.
+                session_scope(turn_session),
             ):
                 traj = stack.runtime.run(
                     graph,
@@ -725,9 +746,11 @@ def _stream_chat(
 
         if "error" in result_holder:
             exc = result_holder["error"]
+            _settle_once(None if isinstance(exc, OperationCancelled) else False)
             yield _frame({"content": _failure_content("runtime", exc)}, "failed")
         else:
             traj = result_holder.get("trajectory")
+            _settle_once(candidate_outcome_for_trajectory(traj))
             success = bool(getattr(getattr(traj, "outcome", None), "success", False))
             yield _frame({}, "stop" if success else "failed")
         yield "data: [DONE]\n\n"
@@ -743,6 +766,11 @@ def _stream_chat(
             with contextlib.suppress(Exception):
                 unsubscribe()
         worker.join(timeout=2.0)
+        if not candidate_settled:
+            # Generator teardown is a user interruption, not quality
+            # evidence. Discard any activation even if a non-cooperative
+            # worker outlives the bounded join.
+            _settle_once(None)
         if worker.is_alive():
             logging.getLogger(__name__).warning(
                 "openai SSE worker did not stop within teardown grace period"

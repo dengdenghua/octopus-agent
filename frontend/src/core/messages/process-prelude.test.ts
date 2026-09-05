@@ -29,7 +29,6 @@ describe("process-prelude ordering", () => {
       "human",
       "assistant:processing",
     ]);
-    // The plan message must NOT become a standalone assistant bubble.
     expect(result[1]?.messages.map((m) => m.id)).toEqual(["2", "3"]);
   });
 
@@ -56,7 +55,6 @@ describe("process-prelude ordering", () => {
     expect(
       commentary?.type === "commentary" && commentary.commentary,
     ).toContain("圈定3个");
-    // The tool call must come after the prelude in the timeline.
     const commentaryIndex = steps.findIndex(
       (step) => step.type === "commentary",
     );
@@ -92,7 +90,6 @@ describe("process-prelude ordering", () => {
       (step) => step.type === "commentary",
     );
     const toolIndex = steps.findIndex((step) => step.type === "toolCall");
-    // Order must be: reasoning (understand the task) → commentary (announce the plan) → tool call (execute).
     expect(reasoningIndex).toBe(0);
     expect(commentaryIndex).toBeGreaterThan(reasoningIndex);
     expect(toolIndex).toBeGreaterThan(commentaryIndex);

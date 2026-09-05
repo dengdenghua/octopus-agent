@@ -57,7 +57,7 @@ def test_measurement_uses_real_terminal_verification_and_server_usage() -> None:
         trajectory,
         Verdict(passed=True, reason="fixture verifier passed"),
         backend="codex",
-        agent_id="local_codex_cli",
+        agent_id="coder",
         model=None,
     )
 
@@ -86,7 +86,7 @@ def test_v2_records_schedule_and_distinguishes_requested_from_observed_models() 
         ),
         Verdict(passed=True),
         backend="codex",
-        agent_id="local_codex_cli",
+        agent_id="coder",
         model="requested-alias",
         schedule_ordinal=7,
         trial_index=3,
@@ -110,7 +110,7 @@ def test_outer_model_is_not_misreported_as_observed_backend_model() -> None:
         _trajectory(turn_fields={"params": {"model": "outer-control-plane-alias"}}),
         Verdict(passed=True),
         backend="codex",
-        agent_id="local_codex_cli",
+        agent_id="coder",
         model="requested-alias",
     )
 
@@ -291,7 +291,7 @@ def test_all_infrastructure_results_have_null_rate_and_pass_at_k() -> None:
         trajectory,
         Verdict(passed=False),
         backend="codex",
-        agent_id="local_codex_cli",
+        agent_id="coder",
         model=None,
     )
 

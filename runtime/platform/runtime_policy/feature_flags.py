@@ -392,6 +392,16 @@ _BUILTIN: list[FlagSpec] = [
         ),
         experimental=True,
     ),
+    FlagSpec(
+        name="evolution.dual_helix_shadow_auto",
+        default=False,
+        description=(
+            "Allow risk-gated automatic shadow review for validated candidates, "
+            "repeated failures, high risk, or low confidence. Never runs every "
+            "task twice; keep off unless an operator enables staged sampling."
+        ),
+        experimental=True,
+    ),
     # ─── Experimental surfaces ────────────────────────────
     FlagSpec(
         name="ui.ambient_suggestions",

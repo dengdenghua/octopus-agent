@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ import pytest
 from runtime.adapters.channels import (
     Channel,
     ChannelManager,
+    ChannelOperationsStore,
     ChannelRoutingError,
     InboundMessage,
     OutboundMessage,
@@ -20,7 +22,13 @@ from runtime.adapters.channels import (
     ThreadConversationStore,
 )
 from runtime.core.graph_runtime import GraphRuntime
-from runtime.execution.agents import AgentRegistry, make_general_agent
+from runtime.execution.agents import (
+    AgentGroup,
+    AgentGroupRegistry,
+    AgentRegistry,
+    make_coder_agent,
+    make_general_agent,
+)
 
 
 class _FakeExecutor:
@@ -89,6 +97,98 @@ class TestStore:
         # Implementation note.
         assert s2.get_or_create("slack", "T") != cid
 
+    def test_counts_bindings_per_channel(self):
+        store = ThreadConversationStore()
+        store.get_or_create("slack", "one")
+        store.get_or_create("slack", "two")
+        store.get_or_create("telegram", "one")
+        assert store.count_for_channel("slack") == 2
+        assert store.count_for_channel("telegram") == 1
+
+
+class TestChannelOperationsStore:
+    def test_persists_credential_free_operational_state(self, tmp_path: Path):
+        path = tmp_path / "operations.json"
+        store = ChannelOperationsStore(path)
+        store.record_inbound("slack")
+        store.record_outbound("slack")
+        store.record_probe("slack", healthy=True, latency_ms=17)
+
+        restored = ChannelOperationsStore(path).snapshot("slack")
+        assert restored["health_status"] == "healthy"
+        assert restored["check_latency_ms"] == 17
+        assert restored["inbound_count"] == 1
+        assert restored["outbound_count"] == 1
+
+    def test_records_bounded_failures_and_degraded_probe(self):
+        store = ChannelOperationsStore()
+        store.record_error("slack", "x" * 700)
+        store.record_probe(
+            "slack",
+            healthy=False,
+            latency_ms=3,
+            error="provider unavailable",
+        )
+
+        state = store.snapshot("slack")
+        assert state["health_status"] == "degraded"
+        assert state["failure_count"] == 2
+        assert state["last_error"] == "provider unavailable"
+
+    def test_redacts_credentials_from_persisted_error(self):
+        store = ChannelOperationsStore()
+        store.record_error(
+            "slack",
+            "request failed Authorization: Bearer secret-token-value "
+            "api_key=abcdefghijklmnop sk-abcdefghijklmnop",
+        )
+
+        error = store.snapshot("slack")["last_error"]
+        assert "secret-token-value" not in error
+        assert "abcdefghijklmnop" not in error
+        assert "Bearer ***" in error
+
+    def test_deduplicates_provider_events_across_restart_without_plaintext_ids(
+        self, tmp_path: Path
+    ):
+        path = tmp_path / "operations.json"
+        store = ChannelOperationsStore(path)
+        assert store.claim_inbound("slack", "message_id:sensitive-event-id") is True
+        assert store.claim_inbound("slack", "message_id:sensitive-event-id") is False
+        assert "sensitive-event-id" not in path.read_text(encoding="utf-8")
+        assert "sensitive-event-id" not in path.with_suffix(
+            ".json.seen.sqlite3"
+        ).read_bytes().decode("utf-8", errors="ignore")
+
+        restored = ChannelOperationsStore(path)
+        assert restored.claim_inbound("slack", "message_id:sensitive-event-id") is False
+        assert restored.snapshot("slack")["duplicate_count"] == 2
+
+    def test_two_runtime_instances_cannot_claim_same_event(self, tmp_path: Path):
+        path = tmp_path / "operations.json"
+        stores = [ChannelOperationsStore(path), ChannelOperationsStore(path)]
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            claims = list(
+                pool.map(
+                    lambda store: store.claim_inbound("slack", "message_id:shared"),
+                    stores,
+                )
+            )
+
+        assert sorted(claims) == [False, True]
+
+    def test_failed_event_claim_can_be_retried_across_runtime_instances(self, tmp_path: Path):
+        path = tmp_path / "operations.json"
+        first = ChannelOperationsStore(path)
+        second = ChannelOperationsStore(path)
+        key = "message_id:retry-after-transient-failure"
+        assert first.claim_inbound("slack", key) is True
+
+        first.release_inbound("slack", key)
+
+        assert second.claim_inbound("slack", key) is True
+
 
 # ═══════════════════════════════════════════════════════════
 # Channel ABC
@@ -121,6 +221,18 @@ class _FakeChannel(Channel):
 
     def send(self, msg: OutboundMessage) -> None:
         self.sent.append(msg)
+
+    def health_check(self) -> bool:
+        return True
+
+
+class _NoProbeChannel(_FakeChannel):
+    health_check = Channel.health_check
+
+
+class _FailingStartChannel(_FakeChannel):
+    def start(self) -> None:
+        raise ConnectionError("unavailable")
 
 
 def _build_stack(tmp_path: Path):
@@ -225,6 +337,45 @@ class TestManagerLifecycle:
         m.stop_all()
         assert ch.stopped
 
+    def test_register_after_start_activates_transport(self, stack, agent_reg):
+        manager = ChannelManager(stack=stack, agent_registry=agent_reg)
+        manager.start_all()
+        channel = _FakeChannel("hot")
+
+        manager.register(channel)
+
+        assert channel.started
+        manager.stop_all()
+
+    def test_replace_stops_old_transport_after_new_starts(self, stack, agent_reg):
+        manager = ChannelManager(stack=stack, agent_registry=agent_reg)
+        old = _FakeChannel("live")
+        manager.register(old)
+        manager.start_all()
+        replacement = _FakeChannel("live")
+
+        manager.replace(replacement)
+
+        assert replacement.started
+        assert old.stopped
+        assert manager.get("live") is replacement
+        manager.stop_all()
+
+    def test_failed_hot_replace_preserves_working_transport(self, stack, agent_reg):
+        manager = ChannelManager(stack=stack, agent_registry=agent_reg)
+        old = _FakeChannel("live")
+        manager.register(old)
+        manager.start_all()
+
+        failed = _FailingStartChannel("live")
+        with pytest.raises(ConnectionError, match="unavailable"):
+            manager.replace(failed)
+
+        assert manager.get("live") is old
+        assert old.stopped is False
+        assert failed.stopped is True
+        manager.stop_all()
+
 
 class TestManagerProcessInbound:
     def test_happy_path_default_agent(self, stack, agent_reg, tmp_path):
@@ -252,6 +403,118 @@ class TestManagerProcessInbound:
         assert out.metadata["conversation_id"]
         assert len(ch.sent) == 1
         assert ch.sent[0].content
+        diagnostics = m.channel_diagnostics("slack")
+        assert diagnostics["inbound_count"] == 1
+        assert diagnostics["outbound_count"] == 1
+        assert diagnostics["thread_count"] == 1
+
+    def test_probe_channel_records_real_health_and_capabilities(self, stack, agent_reg):
+        manager = ChannelManager(
+            stack=stack,
+            agent_registry=agent_reg,
+            default_agent_id="general",
+        )
+        channel = _FakeChannel("slack")
+        channel.supports_edit = True
+        manager.register(channel)
+
+        diagnostics = manager.probe_channel("slack")
+
+        assert diagnostics["health_status"] == "healthy"
+        assert diagnostics["check_latency_ms"] >= 0
+        assert diagnostics["capabilities"]["edit"] is True
+
+    def test_duplicate_provider_event_is_not_executed_or_sent_twice(self, stack, agent_reg):
+        manager = ChannelManager(
+            stack=stack,
+            agent_registry=agent_reg,
+            default_agent_id="general",
+        )
+        channel = _FakeChannel("slack")
+        manager.register(channel)
+        message = InboundMessage(
+            channel_id="slack",
+            thread_id="thread",
+            content="do this once",
+            metadata={"message_id": "evt-123"},
+        )
+
+        first = manager.process_inbound(message)
+        duplicate = manager.process_inbound(message)
+
+        assert first.metadata.get("duplicate") is None
+        assert duplicate.metadata["duplicate"] is True
+        assert duplicate.content == ""
+        assert len(channel.sent) == 1
+        assert manager.channel_diagnostics("slack")["duplicate_count"] == 1
+
+    def test_failed_provider_event_can_be_retried(self, stack, agent_reg):
+        manager = ChannelManager(
+            stack=stack,
+            agent_registry=agent_reg,
+            default_agent_id="general",
+        )
+        channel = _FakeChannel("slack")
+        manager.register(channel)
+        message = InboundMessage(
+            channel_id="slack",
+            thread_id="thread",
+            content="retry this",
+            metadata={"message_id": "evt-retry"},
+        )
+
+        manager._plan_and_run = (  # type: ignore[method-assign]
+            lambda _agent, _intent: (_ for _ in ()).throw(RuntimeError("temporary"))
+        )
+        with pytest.raises(RuntimeError, match="temporary"):
+            manager.process_inbound(message)
+
+        manager._plan_and_run = (  # type: ignore[method-assign]
+            lambda _agent, _intent: "recovered"
+        )
+        retry = manager.process_inbound(message)
+
+        assert retry.metadata.get("duplicate") is None
+        assert retry.content == "recovered"
+        assert len(channel.sent) == 1
+
+    @pytest.mark.parametrize(
+        "metadata",
+        [
+            {"message_guid": "bb-1"},
+            {"message_reference_id": "discord-1"},
+            {"item_id": "simplex-1"},
+            {"message_sid": "sms-1"},
+        ],
+    )
+    def test_provider_specific_message_ids_are_used_for_deduplication(
+        self, metadata, stack, agent_reg
+    ):
+        message = InboundMessage(
+            channel_id="slack",
+            thread_id="thread",
+            sender_id="sender-a",
+            content="same event",
+            metadata=metadata,
+        )
+
+        key = ChannelManager._inbound_message_key(message)  # noqa: SLF001
+
+        assert key is not None
+        assert next(iter(metadata.values())) in key
+
+    def test_probe_does_not_report_false_green_when_adapter_has_no_probe(self, stack, agent_reg):
+        manager = ChannelManager(
+            stack=stack,
+            agent_registry=agent_reg,
+            default_agent_id="general",
+        )
+        manager.register(_NoProbeChannel("legacy"))
+
+        diagnostics = manager.probe_channel("legacy")
+
+        assert diagnostics["health_status"] == "unsupported"
+        assert diagnostics["capabilities"]["health_probe"] is False
 
     def test_conversation_id_stable_across_messages(
         self,
@@ -309,6 +572,67 @@ class TestManagerProcessInbound:
             )
         )
         assert out.metadata["agent_id"] == "coder"
+
+    def test_saved_channel_assignment_is_used_for_real_dispatch(
+        self,
+        stack,
+        agent_reg,
+    ):
+        agent_reg.register(make_coder_agent(_rt()))
+        manager = ChannelManager(
+            stack=stack,
+            agent_registry=agent_reg,
+            default_agent_id="general",
+        )
+        manager.register(_FakeChannel("slack"))
+        manager._channel_assignments["slack"] = "coder"  # noqa: SLF001
+        manager._plan_and_run = (  # type: ignore[method-assign]
+            lambda agent, _intent: f"handled by {agent.agent_id}"
+        )
+
+        out = manager.process_inbound(
+            InboundMessage(channel_id="slack", thread_id="T", content="help")
+        )
+
+        assert out.metadata["agent_id"] == "coder"
+        assert out.content == "handled by coder"
+
+    def test_saved_group_assignment_runs_members_and_returns_team_metadata(
+        self,
+        stack,
+        agent_reg,
+    ):
+        agent_reg.register(make_coder_agent(_rt()))
+        groups = AgentGroupRegistry()
+        groups.create(
+            AgentGroup(
+                group_id="delivery-team",
+                display_name="交付小队",
+                members=["general", "coder"],
+            )
+        )
+        manager = ChannelManager(
+            stack=stack,
+            agent_registry=agent_reg,
+            group_registry=groups,
+            default_agent_id="general",
+        )
+        manager.register(_FakeChannel("slack"))
+        manager._channel_group_assignments["slack"] = "delivery-team"  # noqa: SLF001
+        manager._plan_and_run = (  # type: ignore[method-assign]
+            lambda agent, _intent: f"{agent.agent_id} 已完成验证"
+        )
+
+        out = manager.process_inbound(
+            InboundMessage(channel_id="slack", thread_id="T", content="检查发布")
+        )
+
+        assert out.metadata["group_id"] == "delivery-team"
+        assert out.metadata["member_agent_ids"] == ["general", "coder"]
+        assert out.metadata["collaboration_spoke"] == 2
+        assert "交付小队 · 团队回复" in out.content
+        assert "general 已完成验证" in out.content
+        assert "coder 已完成验证" in out.content
 
     def test_metadata_unknown_agent_raises(
         self,

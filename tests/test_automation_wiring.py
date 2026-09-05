@@ -305,6 +305,44 @@ def test_browser_state_uses_current_higher_track_without_url(monkeypatch):
     assert fake.calls == [("state", {"max_items": 30})]
 
 
+def test_browser_get_prefers_live_browser_over_headless(monkeypatch):
+    from runtime.execution.suckers import browser_skills as bs
+
+    class _TextTrack(_FakeTrack):
+        def extract(self):
+            from runtime.execution.suckers.browser_backend import BrowserResult, Track
+
+            self.calls.append(("extract", {}))
+            return BrowserResult.from_track(
+                Track.ELECTRON,
+                {
+                    "ok": True,
+                    "url": "https://live-browser.test",
+                    "title": "Live browser",
+                    "text": "signed-in page body",
+                },
+            )
+
+    fake = _TextTrack()
+    monkeypatch.setattr(bs, "_higher_track_backends", lambda: [fake])
+    monkeypatch.setattr(bs, "_check_url_safe", lambda _url, _allow_private: None)
+    monkeypatch.setattr(
+        bs,
+        "sync_playwright",
+        lambda: (_ for _ in ()).throw(AssertionError("headless must not start")),
+    )
+
+    out = bs._browser_get(url="https://live-browser.test")
+
+    assert fake.calls == [
+        ("navigate", {"url": "https://live-browser.test"}),
+        ("extract", {}),
+    ]
+    assert out["track"] == "electron"
+    assert out["content"] == "signed-in page body"
+    assert out["length"] == len("signed-in page body")
+
+
 def test_browser_find_uses_higher_track_extract_without_url(monkeypatch):
     from runtime.execution.suckers import browser_skills as bs
 

@@ -33,7 +33,6 @@ export function RunDurationBadge({
           : phase === "waiting" || phase === "idle"
             ? t.publicThinkingStatus.waitingForModel
             : t.publicThinkingStatus.processing;
-  const elapsedSeconds = Math.floor((vitals?.elapsedMs ?? 0) / 1000);
   const elapsedLabel = formatStreamElapsed(vitals?.elapsedMs ?? 0);
   // Time-to-first-token: rendered once the first token has arrived, so the
   // user sees the model's response latency for this turn at a glance.
@@ -57,8 +56,6 @@ export function RunDurationBadge({
 
   return (
     <div
-      aria-live="polite"
-      aria-label={`${statusLabel} ${elapsedSeconds}s`}
       className={cn(
         "inline-flex shrink-0 items-center gap-1.5 text-xs",
         tone,
@@ -66,7 +63,6 @@ export function RunDurationBadge({
       )}
       data-testid="run-duration-badge"
       data-first-response-delayed={firstResponseDelayed ? "true" : "false"}
-      role="status"
     >
       <span aria-hidden="true" className={cn("size-1.5 rounded-full", dot)} />
       <span className="max-w-24 truncate">{statusLabel}</span>

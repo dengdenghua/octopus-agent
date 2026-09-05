@@ -372,9 +372,15 @@ def compose_runtime_soul(
         repo_root=repo_root,
     )
     stripped = _strip_long_term_memory_sections(base_soul)
-    if memory:
-        return f"{stripped}\n\n{memory}" if stripped else memory
-    return stripped
+    runtime_soul = f"{stripped}\n\n{memory}" if memory and stripped else memory or stripped
+    try:
+        from runtime.safety.evolution.runtime_deployment import (
+            default_runtime_selector,
+        )
+
+        return default_runtime_selector().apply_role(runtime_soul, agent_id)
+    except (ImportError, OSError, TypeError, ValueError):
+        return runtime_soul
 
 
 _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)

@@ -120,8 +120,7 @@ class RealtimeTrialRunner:
     approval_action: ApprovalAction = "decline"
     approval_responder: ApprovalResponder | None = None
     # Explicit engine selection is expressed as the server-registered agent
-    # identity.  A fresh eval thread then follows the exact production route:
-    # ``coder`` -> native ReAct, ``local_codex_cli`` -> Codex App Server.
+    # identity. A fresh eval thread then follows the production role route.
     agent_id: str | None = None
     model: str | None = None
     topology_id: str | None = None

@@ -28,10 +28,10 @@ from .provider import Provider, ProviderCapabilities
 
 
 class OctModelRouter(Provider, ModelRouter):
-    """走 oct 账号网关(api.octoapk.com)/v1/chat/completions 的模型路由。
+    """走 EchoAI 账号网关(api.echo-age.com)/v1/chat/completions 的模型路由。
 
     用 OctLink 里存的网关 JWT 做 ``Authorization: Bearer``,网关侧按 token 用量扣积分
-    → agent 的 LLM 用量计入统一积分池(会员 BYO 在网关侧免扣)。替代 MoliliModelRouter。
+    → agent 的 LLM 用量计入统一积分池（会员 BYO 在网关侧免扣）。
     """
 
     provider_name = "oct"
@@ -49,7 +49,7 @@ class OctModelRouter(Provider, ModelRouter):
         self,
         *,
         link_store: Any,
-        base_url: str = "https://api.octoapk.com",
+        base_url: str = "https://api.echo-age.com",
         default_model: str = "qwen3.5-flash",
         timeout_seconds: float = 120.0,
         http_client: Any = None,

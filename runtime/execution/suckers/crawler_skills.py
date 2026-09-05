@@ -680,6 +680,10 @@ def _resolve_output_path(
     sandbox_dir: str | None,
 ) -> tuple[Path, str | None]:
     target = Path(output_path) if output_path else _default_output_path(start_url)
+    if sandbox_dir is not None and not target.is_absolute():
+        from runtime.safety.auth.path_guard import normalize_scoped_relative_path
+
+        target = normalize_scoped_relative_path(target, sandbox_dir)
     verdict = check_path(target, sandbox_dir=sandbox_dir)
     if not verdict.allow:
         return target, verdict.reason

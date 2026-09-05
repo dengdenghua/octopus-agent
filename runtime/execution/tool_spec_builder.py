@@ -342,6 +342,7 @@ def build_anthropic_tool_specs(
     all_names = filter_surface_compatible_skills(
         all_names,
         user_context=user_context,
+        goal=goal,
     )
 
     mode = context_mode(user_context)

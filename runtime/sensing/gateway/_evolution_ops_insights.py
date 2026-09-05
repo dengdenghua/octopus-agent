@@ -60,6 +60,8 @@ def evolution_overview_payload(
     journal: Any,
     registry: Any,
     planner: Any,
+    *,
+    include_global_intelligence: bool = True,
 ) -> dict[str, Any]:
     skill_perf = _skill_performance_rows(journal, registry)
     used_skill_rates = [
@@ -72,7 +74,16 @@ def evolution_overview_payload(
     learned_counts = _learned_section_counts(planner)
     trajectory_rows = _trajectory_rows(journal)
     kg = _knowledge_graph_overview(journal)
-    intelligence = _intelligence_store_snapshot()
+    intelligence: dict[str, Any] = (
+        _intelligence_store_snapshot()
+        if include_global_intelligence
+        else {
+            "subscriptions": 0,
+            "enabled_subscriptions": 0,
+            "total_reports": 0,
+            "last_report_at": None,
+        }
+    )
 
     learning_events = (
         len(trajectory_rows)

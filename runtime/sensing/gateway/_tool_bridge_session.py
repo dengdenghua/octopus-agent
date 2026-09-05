@@ -14,6 +14,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from runtime.execution.tool_engine.session_metadata import (
+    project_tool_session_metadata,
+)
 from runtime.platform.models import ParsedIntent
 from runtime.sensing.model_router.models import ToolCall
 
@@ -22,104 +25,7 @@ _logger = logging.getLogger("octopus.agentic")
 
 def _session_metadata_from_intent(intent: ParsedIntent) -> dict[str, Any]:
     """Extract scope metadata that must survive agentic thread hops."""
-    user_context = intent.user_context or {}
-    metadata: dict[str, Any] = {}
-    nested = user_context.get("metadata")
-    if isinstance(nested, dict):
-        for key in (
-            "mode",
-            "team_id",
-            "extra_workspaces",
-            "workspace_path",
-            "workspace_scope",
-            "personal_workspace_path",
-            "personal_workspace_enabled",
-            "sandbox_mode",
-            "permission_mode",
-            "approval_policy",
-            "execution_environment",
-            "capability_mode",
-            "code_mode",
-            "agent_mode",
-            "personal_mode",
-            "personal_instructions",
-            "mode_preset",
-            "workflow_preset",
-            "skill_pack_profile",
-            "verification_policy",
-            "mode_contract",
-            "default_skill_packs",
-            "default_plugins",
-            "browser_regression_enabled",
-            "project_signals",
-            "runtime_surfaces",
-            "tool_surface",
-            "browser_operation_mode",
-            "chrome_operation_mode",
-            "browser_surface",
-            "browser_session_policy",
-            "browser_track_preference",
-            "browser_permission_policy",
-            "browser_evidence_policy",
-            "allowed_write_paths",
-            "sandbox_policy",
-        ):
-            value = nested.get(key)
-            if value is not None:
-                metadata[key] = value
-
-    for key in (
-        "mode",
-        "team_id",
-        "extra_workspaces",
-        "workspace_scope",
-        "personal_workspace_path",
-        "personal_workspace_enabled",
-        "attachment_read_roots",
-        "sandbox_mode",
-        "permission_mode",
-        "approval_policy",
-        "execution_environment",
-        "capability_mode",
-        "code_mode",
-        "agent_mode",
-        "personal_mode",
-        "personal_instructions",
-        "mode_preset",
-        "workflow_preset",
-        "skill_pack_profile",
-        "verification_policy",
-        "mode_contract",
-        "default_skill_packs",
-        "default_plugins",
-        "browser_regression_enabled",
-        "project_signals",
-        "runtime_surfaces",
-        "tool_surface",
-        "browser_operation_mode",
-        "chrome_operation_mode",
-        "browser_surface",
-        "browser_session_policy",
-        "browser_track_preference",
-        "browser_permission_policy",
-        "browser_evidence_policy",
-        "allowed_write_paths",
-        "sandbox_policy",
-    ):
-        value = user_context.get(key)
-        if value is not None:
-            metadata.setdefault(key, value)
-
-    workspace_path = user_context.get("workspace_path")
-    if isinstance(workspace_path, str) and workspace_path.strip():
-        workspace_path = workspace_path.strip()
-        metadata.setdefault("workspace_path", workspace_path)
-        extra_workspaces = metadata.get("extra_workspaces")
-        if not isinstance(extra_workspaces, list):
-            metadata["extra_workspaces"] = [workspace_path]
-        elif workspace_path not in extra_workspaces:
-            metadata["extra_workspaces"] = [workspace_path, *extra_workspaces]
-    return metadata
+    return project_tool_session_metadata(intent.user_context)
 
 
 def _browser_operation_guidance(user_context: dict[str, Any]) -> str:

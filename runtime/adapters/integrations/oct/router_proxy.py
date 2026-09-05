@@ -28,7 +28,7 @@ except ImportError:  # pragma: no cover
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
-from .client import OctClientError, get_auth, is_dead_token
+from .client import OctClientError, get_public, is_dead_token
 from .config import OctConfig
 from .links import OctLinkStore
 
@@ -77,9 +77,8 @@ def create_proxy_router(
         """公开模型列表(网关 GET /v1/models,无需鉴权)。"""
         _require_enabled()
         try:
-            return get_auth(
+            return get_public(
                 f"{base}/v1/models",
-                token="",
                 timeout=config.request_timeout_seconds,
                 http_client=http_client,
             )
@@ -94,7 +93,6 @@ def create_proxy_router(
         link = link_store.get(actor)
         if link is None:
             raise HTTPException(404, "no oct account linked · POST /api/auth/oct/email/login first")
-
         body = await request.json()
         stream = bool(body.get("stream"))
         url = f"{base}/v1/chat/completions"

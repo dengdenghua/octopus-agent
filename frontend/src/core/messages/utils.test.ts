@@ -14,6 +14,7 @@ import {
   hasSubagent,
   hasToolCalls,
   isClarificationToolMessage,
+  isLegacyInternalAgentError,
   isLikelyFinalAnswerContent,
   isSettledAssistantAnswer,
   isAssistantStopTerminalState,
@@ -21,6 +22,7 @@ import {
   parseUploadedFiles,
   stripInternalToolProtocol,
   sanitizeLegacyGuardDiagnostic,
+  sanitizeLegacyInternalAgentError,
   stripUploadedFilesTag,
 } from "./utils";
 
@@ -56,6 +58,18 @@ describe("legacy guard diagnostics", () => {
 
     expect(cleaned).toContain("尚未形成可交付结果");
     expect(cleaned).not.toContain("guard");
+  });
+});
+
+describe("legacy internal agent diagnostics", () => {
+  it("replaces planner protocol leaks with a user-facing failure", () => {
+    const leaked = "[planner error] LLM response lacks JSON: '稍后我再处理。'";
+
+    expect(isLegacyInternalAgentError(leaked)).toBe(true);
+    expect(sanitizeLegacyInternalAgentError(leaked)).toBe(
+      "⚠️ 该成员当时未能生成有效回复。",
+    );
+    expect(sanitizeLegacyInternalAgentError("正常回复")).toBe("正常回复");
   });
 });
 

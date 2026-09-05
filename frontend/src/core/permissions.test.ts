@@ -82,7 +82,7 @@ describe("permissionRuntimeConfig", () => {
     });
   });
 
-  it("maps the common-domains tier to networkAccess=false + egressAllowCommon", () => {
+  it("maps the common-domains tier unless full access overrides it", () => {
     expect(permissionRuntimeConfig("default", "common").sandboxPolicy).toEqual({
       type: "workspaceWrite",
       networkAccess: false,
@@ -92,8 +92,7 @@ describe("permissionRuntimeConfig", () => {
       permissionRuntimeConfig("bypassPermissions", "common").sandboxPolicy,
     ).toEqual({
       type: "dangerFullAccess",
-      networkAccess: false,
-      egressAllowCommon: true,
+      networkAccess: true,
     });
   });
 
@@ -103,9 +102,7 @@ describe("permissionRuntimeConfig", () => {
       networkAccess: false,
     });
     // Legacy boolean storage: true -> full, false -> deny.
-    expect(
-      permissionRuntimeConfig("default", false).sandboxPolicy,
-    ).toEqual({
+    expect(permissionRuntimeConfig("default", false).sandboxPolicy).toEqual({
       type: "workspaceWrite",
       networkAccess: false,
     });
@@ -113,16 +110,16 @@ describe("permissionRuntimeConfig", () => {
       permissionRuntimeConfig("bypassPermissions", false).sandboxPolicy,
     ).toEqual({
       type: "dangerFullAccess",
-      networkAccess: false,
+      networkAccess: true,
     });
   });
 
-  it("honors an explicit networkAccess opt-out even for full access", () => {
+  it("keeps full access inclusive when stale settings explicitly deny network", () => {
     expect(
       permissionRuntimeConfig("bypassPermissions", false).sandboxPolicy,
     ).toEqual({
       type: "dangerFullAccess",
-      networkAccess: false,
+      networkAccess: true,
     });
   });
 

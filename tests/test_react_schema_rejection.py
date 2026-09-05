@@ -12,9 +12,11 @@ from __future__ import annotations
 import pytest
 
 from runtime.core.cerebrum._react_execution_dispatch import (
+    _is_pre_execution_schema_rejection,
     _is_schema_rejection,
     _schema_repair_feedback,
 )
+from runtime.platform.models import ExecutionResult, Step, ToolCall
 
 
 @pytest.mark.parametrize(
@@ -71,3 +73,34 @@ def test_repair_feedback_closes_both_escape_hatches() -> None:
 
 def test_repair_feedback_names_the_failing_tool() -> None:
     assert "multi_edit_file" in _schema_repair_feedback("multi_edit_file")
+
+
+def _step_with_execution_source(source: str) -> Step:
+    call = ToolCall(caller="react_loop", sucker_id="edit_file", args={})
+    return Step(
+        step_id=1,
+        node_id="react:1",
+        action=call,
+        result=ExecutionResult(
+            call_id=call.call_id,
+            status="failed",
+            error_type="invalid_arguments",
+            output={"error": "missing path"},
+            execution_source=source,
+        ),
+    )
+
+
+def test_schema_retry_coaching_requires_handler_not_executed_provenance() -> None:
+    detail = '{"error": "missing path"}'
+
+    assert _is_pre_execution_schema_rejection(
+        _step_with_execution_source("handler_not_executed"),
+        detail,
+        "invalid_arguments",
+    )
+    assert not _is_pre_execution_schema_rejection(
+        _step_with_execution_source("registered_noncanonical"),
+        detail,
+        "invalid_arguments",
+    )

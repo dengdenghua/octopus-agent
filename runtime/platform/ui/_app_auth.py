@@ -24,7 +24,6 @@ _LEGACY_CONTROL_PLANE_PREFIXES = (
     "/api/android",
     "/api/ambient-suggestions",
     "/api/apps",
-    "/api/cli-team",
     "/api/computer",
     "/api/config",
     "/api/dag",
@@ -88,6 +87,40 @@ def _is_public_plugin_landing_request(method: str, path: str) -> bool:
     }
 
 
+def _is_trusted_local_paper_trading_request(method: str, path: str, app: Any) -> bool:
+    """Match the explicit paper-trading localhost exception, and nothing else.
+
+    The plugin publishes the app-state bit only after all three gates pass:
+    host auth is on, the serve process is local + loopback, and the operator
+    explicitly enabled ``trusted_single_user_local_proxy``.  Segment-aware
+    matching prevents lookalikes such as ``check-in-evil`` or ``page/child``
+    from inheriting the exception.
+    """
+
+    state = getattr(app, "state", None)
+    if not bool(
+        state is not None and getattr(state, "paper_trading_trusted_single_user_local_proxy", False)
+    ):
+        return False
+
+    normalized_method = method.upper()
+    root = "/api/plugins/paper-trading"
+    if normalized_method in {"GET", "HEAD"} and path in {
+        f"{root}/page",
+        f"{root}/watch",
+        f"{root}/watch.js",
+    }:
+        return True
+    if normalized_method in {"GET", "HEAD", "POST"} and _path_matches_prefix(
+        path,
+        f"{root}/check-in",
+    ):
+        return True
+    return normalized_method in {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"} and (
+        _path_matches_prefix(path, f"{root}/origin")
+    )
+
+
 def _is_oauth_callback_request(method: str, path: str) -> bool:
     # The MCP OAuth callback is reached by the *provider* redirecting the
     # user's browser, which carries no Authorization header — gating it
@@ -115,6 +148,8 @@ def _install_legacy_control_plane_auth(
             return await call_next(request)
         path = str(getattr(getattr(request, "url", None), "path", "") or "")
         if _is_public_plugin_asset_request(request.method, path):
+            return await call_next(request)
+        if _is_trusted_local_paper_trading_request(request.method, path, request.app):
             return await call_next(request)
         if _is_public_plugin_landing_request(request.method, path):
             return await call_next(request)

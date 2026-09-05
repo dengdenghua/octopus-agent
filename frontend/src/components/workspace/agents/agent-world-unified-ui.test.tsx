@@ -67,6 +67,10 @@ vi.mock("@/components/store/workbuddy-cloud-store-panel", () => ({
   ),
 }));
 
+vi.mock("@/components/workspace/a2a-agents-panel", () => ({
+  A2AAgentsPanel: () => <div data-testid="a2a-agents-panel" />,
+}));
+
 vi.mock("./agent-role-profile-dialog", () => ({
   AgentRoleProfileDialog: ({
     agent,
@@ -346,6 +350,10 @@ describe("HUB market shell", () => {
       section: "applications",
       applicationView: "installed",
     });
+    expect(resolveHubMarketRoute("?tab=plugins&view=remote")).toEqual({
+      section: "applications",
+      applicationView: "remote",
+    });
     expect(resolveHubMarketRoute("?tab=skills")).toEqual({
       section: "skills",
       applicationView: "all",
@@ -416,6 +424,24 @@ describe("HUB market shell", () => {
       ).toHaveBeenCalledTimes(1);
     });
     expect(agentWorldApiMocks.fetchRuntimePluginStatus).not.toHaveBeenCalled();
+  });
+
+  it("makes the A2A remote-agent control plane reachable from HUB", () => {
+    renderWithProviders(
+      <SidebarProvider>
+        <AgentWorldUnified />
+      </SidebarProvider>,
+      {
+        initialRoute: "/workspace/agents?surface=chat&tab=plugins&view=remote",
+        locale: "zh-CN",
+      },
+    );
+
+    expect(screen.getByRole("tab", { name: "远程 Agent" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByTestId("a2a-agents-panel")).toBeVisible();
   });
 
   it("shows role actions only on the AI member tab", async () => {

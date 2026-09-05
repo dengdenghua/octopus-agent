@@ -471,6 +471,69 @@ function getPlatformFields(t: Translations): Record<string, FieldDef[]> {
         required: true,
       },
     ],
+    irc: [
+      {
+        key: "server",
+        label: "IRC Server",
+        placeholder: "irc.libera.chat",
+        required: true,
+      },
+      {
+        key: "port",
+        label: "Port",
+        placeholder: "6697",
+        required: true,
+      },
+      {
+        key: "nickname",
+        label: "Nickname",
+        placeholder: "octopus-agent",
+        required: true,
+      },
+      {
+        key: "channels",
+        label: "Channels",
+        placeholder: "#octopus, #agents",
+        required: true,
+        hint: "Comma-separated IRC channels",
+      },
+      {
+        key: "password",
+        label: "Server Password",
+        placeholder: "Optional",
+        secret: true,
+        required: false,
+      },
+      {
+        key: "use_tls",
+        label: "TLS",
+        placeholder: "true",
+        required: false,
+        hint: "Enabled by default; enter false only for a trusted local server",
+      },
+    ],
+    twitch: [
+      {
+        key: "oauth_token",
+        label: "OAuth Token",
+        placeholder: "oauth:xxxxxxxxxxxxxxxx",
+        secret: true,
+        required: true,
+      },
+      {
+        key: "nickname",
+        label: "Bot Username",
+        placeholder: "octopusagent",
+        required: true,
+      },
+      {
+        key: "channels",
+        label: "Twitch Channels",
+        placeholder: "channel_one, channel_two",
+        required: true,
+        hint: "Comma-separated channel names",
+      },
+    ],
   };
 }
 

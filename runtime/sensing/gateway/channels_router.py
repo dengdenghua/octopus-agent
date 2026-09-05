@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import logging
@@ -94,6 +95,21 @@ class LocalChannelManager:
         if hasattr(channel, "bind_dispatcher"):
             channel.bind_dispatcher(self.process_inbound)
         self._channels[str(channel_id)] = channel
+
+    def unregister(self, channel_id: str) -> Any:
+        channel = self._channels.pop(channel_id, None)
+        if channel is not None and hasattr(channel, "stop"):
+            with contextlib.suppress(Exception):
+                channel.stop()
+        return channel
+
+    def replace(self, channel: Any) -> None:
+        channel_id = str(getattr(channel, "channel_id", ""))
+        old = self._channels.get(channel_id)
+        self.register(channel)
+        if old is not None and old is not channel and hasattr(old, "stop"):
+            with contextlib.suppress(Exception):
+                old.stop()
 
     def has(self, channel_id: str) -> bool:
         return channel_id in self._channels
@@ -199,8 +215,35 @@ def create_channels_router(
         registered_ids = set(manager.channel_ids())
         seen: set[str] = set()
         assignments = _assignments()
+        group_assignments = _group_assignments()
         pairings = _pairings(manager)
         out: list[dict[str, Any]] = []
+
+        def _operations(channel_id: str) -> dict[str, Any]:
+            diagnostic = getattr(manager, "channel_diagnostics", None)
+            if callable(diagnostic):
+                with contextlib.suppress(Exception):
+                    return dict(diagnostic(channel_id))
+            return {
+                "health_status": "unknown",
+                "last_checked_at": None,
+                "check_latency_ms": None,
+                "last_inbound_at": None,
+                "last_outbound_at": None,
+                "last_error_at": None,
+                "last_error": None,
+                "inbound_count": 0,
+                "outbound_count": 0,
+                "failure_count": 0,
+                "duplicate_count": 0,
+                "thread_count": 0,
+                "capabilities": {
+                    "edit": False,
+                    "typing": False,
+                    "reactions": False,
+                    "health_probe": False,
+                },
+            }
 
         for cid in manager.channel_ids():
             platform = _guess_platform(
@@ -218,7 +261,9 @@ def create_channels_router(
                     "description": meta["description"],
                     "help_url": meta["help_url"],
                     "metrics": pairings.metrics(cid),
+                    "operations": _operations(cid),
                     "assigned_agent_id": assignments.get(cid),
+                    "assigned_group_id": group_assignments.get(cid),
                 }
             )
             seen.add(platform)
@@ -236,13 +281,41 @@ def create_channels_router(
                     "description": meta["description"],
                     "help_url": meta["help_url"],
                     "metrics": _zero_metrics(),
+                    "operations": _operations(platform),
                     "assigned_agent_id": assignments.get(platform),
+                    "assigned_group_id": group_assignments.get(platform),
                 }
             )
             seen.add(platform)
 
         _ = registered_ids  # Implementation note.
         return out
+
+    @router.get("/api/channels/{channel_id}/diagnostics")
+    def get_channel_diagnostics(channel_id: str, request: Request) -> dict[str, Any]:
+        _auth(request)  # AUTH-OK: credential-free operational state
+        safe_channel_id = _normalize_channel_id(channel_id)
+        if safe_channel_id is None:
+            raise HTTPException(400, "invalid channel_id")
+        if not manager.has(safe_channel_id):
+            raise HTTPException(404, f"unknown channel: {channel_id}")
+        diagnostic = getattr(manager, "channel_diagnostics", None)
+        if not callable(diagnostic):
+            raise HTTPException(503, "channel diagnostics are unavailable")
+        return dict(diagnostic(safe_channel_id))
+
+    @router.post("/api/channels/{channel_id}/diagnostics/probe")
+    def probe_channel_health(channel_id: str, request: Request) -> dict[str, Any]:
+        _require_admin(request)  # Explicit probe can contact the configured provider.
+        safe_channel_id = _normalize_channel_id(channel_id)
+        if safe_channel_id is None:
+            raise HTTPException(400, "invalid channel_id")
+        if not manager.has(safe_channel_id):
+            raise HTTPException(404, f"unknown channel: {channel_id}")
+        probe = getattr(manager, "probe_channel", None)
+        if not callable(probe):
+            raise HTTPException(503, "channel health probes are unavailable")
+        return dict(probe(safe_channel_id))
 
     def _assignments() -> dict[str, str]:
         a = getattr(manager, "_channel_assignments", None)
@@ -255,6 +328,14 @@ def create_channels_router(
                 return _FALLBACK_ASSIGNMENTS
         return a
 
+    def _group_assignments() -> dict[str, str]:
+        assignments = getattr(manager, "_channel_group_assignments", None)
+        if assignments is None:
+            assignments = {}
+            with contextlib.suppress(AttributeError, TypeError):
+                manager._channel_group_assignments = assignments
+        return assignments
+
     @router.get("/api/channels/{channel_id}/assistant")
     def get_channel_assignment(
         channel_id: str,
@@ -264,7 +345,11 @@ def create_channels_router(
         safe_channel_id = _normalize_channel_id(channel_id)
         if safe_channel_id is None:
             raise HTTPException(400, "invalid channel_id")
-        return {"channel_id": safe_channel_id, "agent_id": _assignments().get(safe_channel_id)}
+        return {
+            "channel_id": safe_channel_id,
+            "agent_id": _assignments().get(safe_channel_id),
+            "group_id": _group_assignments().get(safe_channel_id),
+        }
 
     @router.post("/api/channels/{channel_id}/assistant")
     async def set_channel_assignment(
@@ -276,18 +361,37 @@ def create_channels_router(
             body = await request.json()
         except (json.JSONDecodeError, TypeError, ValueError) as e:
             raise HTTPException(400, f"body: {e}") from e
-        agent_id = (body or {}).get("agent_id")
+        if not isinstance(body, dict):
+            raise HTTPException(400, "body must be an object")
+        agent_id = body.get("agent_id")
+        group_id = body.get("group_id")
         safe_channel_id = _normalize_channel_id(channel_id)
-        safe_agent_id = _normalize_agent_id(agent_id)
         if safe_channel_id is None:
             raise HTTPException(400, "invalid channel_id")
-        if safe_agent_id is None:
+        supplied = int(agent_id is not None) + int(group_id is not None)
+        if supplied != 1:
+            raise HTTPException(400, "provide exactly one of agent_id or group_id")
+        safe_agent_id = _normalize_agent_id(agent_id) if agent_id is not None else None
+        safe_group_id = _normalize_agent_id(group_id) if group_id is not None else None
+        if agent_id is not None and safe_agent_id is None:
             raise HTTPException(400, "invalid agent_id")
-        _assignments()[safe_channel_id] = safe_agent_id
+        if group_id is not None and safe_group_id is None:
+            raise HTTPException(400, "invalid group_id")
+        if safe_group_id is not None:
+            registry = getattr(manager, "_group_registry", None)
+            if registry is not None and not registry.has(safe_group_id):
+                raise HTTPException(404, f"group not found: {safe_group_id}")
+            _group_assignments()[safe_channel_id] = safe_group_id
+            _assignments().pop(safe_channel_id, None)
+        else:
+            assert safe_agent_id is not None
+            _assignments()[safe_channel_id] = safe_agent_id
+            _group_assignments().pop(safe_channel_id, None)
         _save_state(manager, _state_file)
         return {
             "channel_id": safe_channel_id,
             "agent_id": safe_agent_id,
+            "group_id": safe_group_id,
             "ok": True,
         }
 
@@ -301,8 +405,15 @@ def create_channels_router(
         if safe_channel_id is None:
             raise HTTPException(400, "invalid channel_id")
         dropped = _assignments().pop(safe_channel_id, None)
+        dropped_group = _group_assignments().pop(safe_channel_id, None)
         _save_state(manager, _state_file)
-        return {"channel_id": safe_channel_id, "dropped": dropped, "ok": True}
+        return {
+            "channel_id": safe_channel_id,
+            "dropped": dropped if dropped is not None else dropped_group,
+            "dropped_agent_id": dropped,
+            "dropped_group_id": dropped_group,
+            "ok": True,
+        }
 
     #
     #
@@ -357,9 +468,21 @@ def create_channels_router(
             raise HTTPException(400, "invalid channel_id")
 
         if manager.has(safe_channel_id):
-            with contextlib.suppress(AttributeError):
-                manager._channels.pop(safe_channel_id, None)  # noqa: SLF001
-        manager.register(channel)
+            replace = getattr(manager, "replace", None)
+            if callable(replace):
+                try:
+                    await asyncio.to_thread(replace, channel)
+                except (ConnectionError, TimeoutError, OSError, RuntimeError) as e:
+                    raise HTTPException(502, f"channel connection failed: {e}") from e
+                channel = None
+            else:
+                with contextlib.suppress(AttributeError):
+                    manager._channels.pop(safe_channel_id, None)  # noqa: SLF001
+        if channel is not None:
+            try:
+                await asyncio.to_thread(manager.register, channel)
+            except (ConnectionError, TimeoutError, OSError, RuntimeError) as e:
+                raise HTTPException(502, f"channel connection failed: {e}") from e
 
         _credentials_on(manager)[safe_platform] = clean_body
         _save_credentials(manager, _creds_file)
@@ -388,7 +511,11 @@ def create_channels_router(
             for cid in list(manager.channel_ids()):
                 cls_name = type(manager.get(cid)).__name__
                 if _guess_platform(cid, cls_name) == safe_platform:
-                    manager._channels.pop(cid, None)  # noqa: SLF001
+                    unregister = getattr(manager, "unregister", None)
+                    if callable(unregister):
+                        unregister(cid)
+                    else:
+                        manager._channels.pop(cid, None)  # noqa: SLF001
         except (AttributeError, TypeError):
             pass
         _save_credentials(manager, _creds_file)
@@ -648,6 +775,14 @@ def create_channels_router(
             raise HTTPException(400, str(e)) from e
         except (ConnectionError, TimeoutError, OSError) as e:
             raise HTTPException(500, f"dispatch: {e}") from e
+
+        if out.metadata.get("duplicate"):
+            return {
+                "ok": True,
+                "dispatched": False,
+                "duplicate": True,
+                "conversation_id": out.metadata.get("conversation_id"),
+            }
 
         try:
             _pairings(manager).record(

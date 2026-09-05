@@ -217,6 +217,7 @@ export function useAgentWorkbenchI18n() {
       failed?: boolean;
       interrupted?: boolean;
       blocked?: boolean;
+      responded?: boolean;
     },
   ) {
     // The server can leave a stale pending phase in a replayed snapshot even
@@ -246,7 +247,9 @@ export function useAgentWorkbenchI18n() {
     }
     if (options?.settled) {
       return {
-        label: t.agentWorkbench.statusCompleted,
+        label: options.responded
+          ? t.message.statusResponded
+          : t.agentWorkbench.statusCompleted,
         className: agentRunBadgeClass("done"),
         dotClassName: agentRunDotClass("done"),
       };

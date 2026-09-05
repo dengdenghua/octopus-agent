@@ -215,6 +215,7 @@ def test_shell_job_uses_shell_runner(tmp_path: Path) -> None:
         now=NOW,
         shell_runner=recording_shell,
         prompt_runner=forbidden_prompt,
+        allow_cross_tenant=True,
     )
     assert result["fired"] == 1
     assert calls == ["df -h"]

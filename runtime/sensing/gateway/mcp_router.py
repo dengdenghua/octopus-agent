@@ -55,28 +55,28 @@ from runtime.sensing._fastapi_guard import require_fastapi
 # ═══════════════════════════════════════════════════════════
 #
 # Each entry gives the UI enough to spawn without the user typing
-# command / args. ``bridge: "molili"`` triggers the auto-fill LLM
-# env flow (see ``_resolve_molili_bridge_env``).
+# command / args. ``bridge: "oct"`` triggers the account-backed LLM
+# env flow (see ``_resolve_oct_bridge_env``).
 
 
 MCP_PRESETS: dict[str, dict[str, Any]] = {
     "page-agent": {
         # Alibaba Page Agent — real npm package is @page-agent/mcp
         # (verified https://github.com/alibaba/page-agent/tree/main/packages/mcp).
-        # One-click flow: ``bridge: "molili"`` auto-fills LLM_BASE_URL
-        # to our local /api/molili/openai/v1 proxy and forwards the
+        # One-click flow: ``bridge: "oct"`` auto-fills LLM_BASE_URL
+        # to our local /api/oct/openai/v1 proxy and forwards the
         # caller's bearer token as LLM_API_KEY. Explicit env in the
         # PUT body still wins if the user wants a custom LLM.
         "command": "npx",
         "args": ["-y", "@page-agent/mcp"],
         "env": {},
-        "bridge": "molili",
+        "bridge": "oct",
         # Trailing "_" separator — the bridge does raw concat.
         "name_prefix": "page_",
         "description": (
             "Page Agent (Alibaba) — browser GUI agent. MCP tools: "
             "execute_task / get_status / stop_task. Needs Chrome "
-            "extension + Molili-linked account (or explicit LLM env)."
+            "extension + Oct account (or explicit LLM env)."
         ),
     },
 }
@@ -224,11 +224,11 @@ def create_mcp_router(
 
     # ─── Helpers ────────────────────────────────────────────
 
-    def _resolve_molili_bridge_env(
+    def _resolve_oct_bridge_env(
         request: Any,
     ) -> dict[str, str]:
         """Auto-fill LLM_* env pointing the MCP server at our local
-        Molili proxy. Lets a user enable Page Agent in one click:
+        Oct proxy. Lets a user enable Page Agent in one click:
         we re-use their bearer token and the UI's base URL as the
         inner LLM target — no manual env wiring."""
         if request is None:
@@ -236,15 +236,14 @@ def create_mcp_router(
         auth = request.headers.get("authorization") or ""
         # Strip "Bearer " prefix; the MCP server will re-attach it.
         token = auth[7:] if auth.lower().startswith("bearer ") else auth
-        # Point at our local Molili proxy — same host:port the
+        # Point at our local Oct proxy — same host:port the
         # request came in on (respects uvicorn port + reverse
         # proxies that set host headers).
-        base = str(request.base_url).rstrip("/") + "/api/molili/openai/v1"
+        base = str(request.base_url).rstrip("/") + "/api/oct/openai/v1"
         env: dict[str, str] = {"LLM_BASE_URL": base}
         if token and token != "__guest__":
             env["LLM_API_KEY"] = token
-        # GLM-4.7 is a solid default from Molili's _KNOWN_MODELS.
-        env.setdefault("LLM_MODEL_NAME", "glm-4.7")
+        env.setdefault("LLM_MODEL_NAME", "qwen3.5-flash")
         return env
 
     def _register_runtime_mcp(
@@ -306,10 +305,10 @@ def create_mcp_router(
                 return {"ok": False, "error": "mcp SDK not installed (pip install mcp)"}
             command = entry.get("command") or preset.get("command")
             args = entry.get("args") or preset.get("args", [])
-            # env layers (later wins): preset → molili bridge → user env.
+            # env layers (later wins): preset → account bridge → user env.
             bridge_env: dict[str, str] = {}
-            if entry.get("bridge") == "molili" or preset.get("bridge") == "molili":
-                bridge_env = _resolve_molili_bridge_env(request)
+            if entry.get("bridge") == "oct" or preset.get("bridge") == "oct":
+                bridge_env = _resolve_oct_bridge_env(request)
             env = {
                 **preset.get("env", {}),
                 **bridge_env,
@@ -559,7 +558,21 @@ def create_mcp_router(
                 state=state,
                 code_challenge=challenge,
             )
-            return {"ok": True, "authorize_url": authorize_url}
+            # TongDaXin's standards metadata is valid, but its hosted consent
+            # page currently hands the result to a vendor desktop protocol
+            # instead of navigating to the registered loopback URI. The
+            # Octopus desktop OAuth popup bridges that protocol; ordinary web
+            # browsers cannot safely intercept it.
+            desktop_callback_required = endpoints.authorize_url.startswith(
+                "https://auth.tdx.com.cn/tdx-oauth/",
+            )
+            return {
+                "ok": True,
+                "authorize_url": authorize_url,
+                "callback_transport": (
+                    "desktop-deep-link" if desktop_callback_required else "standard"
+                ),
+            }
 
         # 2) 服务商直连 OAuth App(GitHub / GitLab 等 WorkBuddy server-side 连接器):
         #    用户在自己账号下注册 OAuth App(client_id/secret 加密存本地),授权页
@@ -637,9 +650,7 @@ window.close();
 </script>
 </body></html>""")
 
-        if error:
-            return _page(f"Authorization failed: {error}", ok=False)
-        if not code or not state:
+        if not state:
             return _page("Missing code/state in callback.", ok=False)
 
         from runtime.adapters.mcp_client import oauth
@@ -651,6 +662,13 @@ window.close();
                 "Invalid or expired authorization request — please retry.",
                 ok=False,
             )
+        # Provider errors are still callbacks for a specific authorization
+        # attempt. Consume the pending state before showing the failure so a
+        # captured/deep-linked cancellation cannot be replayed later.
+        if error:
+            return _page(f"Authorization failed: {error}", ok=False)
+        if not code:
+            return _page("Missing code/state in callback.", ok=False)
         try:
             token_response = oauth.exchange_code(
                 token_url=pending.token_url,

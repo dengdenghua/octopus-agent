@@ -37,7 +37,8 @@ from runtime.protocol import (
     Notification,
     decode_message,
 )
-from runtime.safety.auth.websocket import accepted_auth_subprotocol, websocket_auth_token
+from runtime.safety.auth.principal import SESSION_COOKIE_NAME
+from runtime.safety.auth.websocket import accepted_auth_subprotocol, websocket_bearer_token
 from runtime.sensing.gateway._realtime_gateway_approval import SharedTurnInterrupts
 from runtime.sensing.gateway._realtime_gateway_connection import RpcConnection
 from runtime.sensing.gateway._realtime_gateway_types import _ApprovalError, _RpcError
@@ -93,12 +94,11 @@ class _RealtimeGatewaySessionMixin:
 
         Mirrors ``_resolve_actor`` (openai_gateway) but for WS.
         Token sources, in order of preference:
-          1. ``Authorization: Bearer <token>`` header (native clients)
+          1. ``Authorization: Bearer <token>`` header (some proxies pass it)
           2. ``Sec-WebSocket-Protocol`` subprotocol value (browser-safe,
              base64url-encoded by current clients)
-
-        Query-string credentials are intentionally rejected because URLs are
-        commonly retained in access/proxy logs and browser history.
+          3. ``?token=...`` query parameter
+          4. The durable ``HttpOnly`` browser session cookie
 
         Returns ``actor_id`` on success, ``None`` when ``require_auth`` is
         false and no credentials were presented. Raises ``_RpcError`` on
@@ -112,7 +112,22 @@ class _RealtimeGatewaySessionMixin:
                 )
             return None
 
-        token = websocket_auth_token(ws)
+        token: str | None = None
+        try:
+            auth_header = ws.headers.get("authorization") or ""
+        except Exception:  # noqa: BLE001
+            auth_header = ""
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header[7:].strip()
+
+        if token is None:
+            token = websocket_bearer_token(ws)
+
+        if token is None:
+            try:
+                token = str(ws.cookies.get(SESSION_COOKIE_NAME) or "").strip()
+            except Exception:  # noqa: BLE001
+                token = None
 
         if not token:
             if self._require_auth:
@@ -151,7 +166,8 @@ class _RealtimeGatewaySessionMixin:
         offer a marker plus a token (parsed by ``_resolve_ws_actor``). RFC
         6455 requires the server to select one of the offered protocols.
         Only the non-secret marker is echoed; the token value itself is
-        never selected. Native clients using header auth get no subprotocol.
+        never selected. Clients that offer nothing (legacy ``?token=`` or
+        header auth) get the old behavior: no subprotocol.
         """
         return accepted_auth_subprotocol(ws)
 
@@ -424,6 +440,18 @@ class _RealtimeGatewaySessionMixin:
         thread_tenant_id: str | None = None,
     ) -> dict[str, Any]:
         cleaned = dict(params)
+        # Provider UIs use `off`/`none` to mean "do not request reasoning".
+        # The public TurnParams protocol accepts only concrete effort tiers;
+        # older clients and retried drafts must therefore omit the top-level
+        # field instead of failing the whole task before it reaches the model.
+        # The same preference may remain in metadata.context for provider-
+        # specific routing, where it is normalized independently.
+        if str(cleaned.get("effort") or "").strip().casefold() in {
+            "off",
+            "none",
+            "disabled",
+        }:
+            cleaned.pop("effort", None)
         if cleaned.get("approvalPolicy") == "never" and not self._allow_client_approval_bypass:
             cleaned["approvalPolicy"] = "on-request"
         if conn.actor_id is not None:

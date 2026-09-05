@@ -1,11 +1,22 @@
 from __future__ import annotations
 
+import json
+import logging
+import os
 import threading
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 
 from runtime.platform.models import now_utc
+
+logger = logging.getLogger(__name__)
+
+_GROUP_STORE_VERSION = 1
+_MAX_GROUPS = 512
+_MAX_MEMBERS_PER_GROUP = 512
+_MAX_GROUP_STORE_BYTES = 2 * 1024 * 1024
 
 
 @dataclass
@@ -23,9 +34,90 @@ class AgentGroupNotFound(KeyError):
 
 
 class AgentGroupRegistry:
-    def __init__(self) -> None:
+    def __init__(self, *, state_path: str | Path | None = None) -> None:
         self._groups: dict[str, AgentGroup] = {}
         self._lock = threading.RLock()
+        self._state_path = Path(state_path) if state_path is not None else None
+        self._load()
+
+    def _load(self) -> None:
+        path = self._state_path
+        if path is None or not path.is_file():
+            return
+        try:
+            if path.stat().st_size > _MAX_GROUP_STORE_BYTES:
+                raise ValueError("group state file is too large")
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict) or payload.get("version") != _GROUP_STORE_VERSION:
+                raise ValueError("unsupported group state schema")
+            rows = payload.get("groups")
+            if not isinstance(rows, list):
+                raise ValueError("groups must be a list")
+            loaded: dict[str, AgentGroup] = {}
+            for raw in rows[:_MAX_GROUPS]:
+                if not isinstance(raw, dict):
+                    continue
+                group_id = str(raw.get("group_id") or "").strip()
+                if not group_id or len(group_id) > 160:
+                    continue
+                raw_members = raw.get("members")
+                members = (
+                    [
+                        str(member).strip()
+                        for member in raw_members[:_MAX_MEMBERS_PER_GROUP]
+                        if isinstance(member, str) and member.strip()
+                    ]
+                    if isinstance(raw_members, list)
+                    else []
+                )
+                try:
+                    created_at = datetime.fromisoformat(str(raw.get("created_at") or ""))
+                except ValueError:
+                    created_at = now_utc()
+                try:
+                    updated_at = datetime.fromisoformat(str(raw.get("updated_at") or ""))
+                except ValueError:
+                    updated_at = created_at
+                loaded[group_id] = AgentGroup(
+                    group_id=group_id,
+                    display_name=str(raw.get("display_name") or "")[:240],
+                    description=str(raw.get("description") or "")[:2000],
+                    members=list(dict.fromkeys(members)),
+                    created_at=created_at,
+                    updated_at=updated_at,
+                )
+            self._groups = loaded
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            logger.warning("agent group state load failed: %s", exc)
+
+    def _persist_locked(self) -> None:
+        path = self._state_path
+        if path is None:
+            return
+        payload = {
+            "version": _GROUP_STORE_VERSION,
+            "groups": [
+                {
+                    "group_id": group.group_id,
+                    "display_name": group.display_name,
+                    "description": group.description,
+                    "members": list(group.members),
+                    "created_at": group.created_at.isoformat(),
+                    "updated_at": group.updated_at.isoformat(),
+                }
+                for group in sorted(self._groups.values(), key=lambda item: item.group_id)
+            ],
+        }
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_suffix(path.suffix + ".tmp")
+            temporary.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            os.replace(temporary, path)
+        except OSError as exc:
+            logger.warning("agent group state save failed: %s", exc)
 
     # ─── CRUD ────────────────────────────────────────
 
@@ -44,6 +136,7 @@ class AgentGroupRegistry:
                 created_at=group.created_at,
                 updated_at=group.updated_at,
             )
+            self._persist_locked()
 
     def update(
         self,
@@ -65,11 +158,15 @@ class AgentGroupRegistry:
                 updated_at=now_utc(),
             )
             self._groups[group_id] = new
+            self._persist_locked()
             return new
 
     def remove(self, group_id: str) -> bool:
         with self._lock:
-            return self._groups.pop(group_id, None) is not None
+            removed = self._groups.pop(group_id, None) is not None
+            if removed:
+                self._persist_locked()
+            return removed
 
     def get(self, group_id: str) -> AgentGroup:
         with self._lock:
@@ -111,6 +208,7 @@ class AgentGroupRegistry:
                 created_at=g.created_at,
                 updated_at=now_utc(),
             )
+            self._persist_locked()
             return True
 
     def remove_member(self, group_id: str, agent_id: str) -> bool:
@@ -129,6 +227,7 @@ class AgentGroupRegistry:
                 created_at=g.created_at,
                 updated_at=now_utc(),
             )
+            self._persist_locked()
             return True
 
     def groups_for_agent(self, agent_id: str) -> list[str]:

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import time
+from uuid import uuid4
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from runtime.core.cerebrum.pause_control import PauseController
 from runtime.platform.process.task_supervisor import TaskRunStatus, TaskSupervisor
+from runtime.protocol import JsonRpcErrorCode
 from runtime.safety.auth.identity import Identity, IdentityStore
+from runtime.sensing.gateway._realtime_gateway_types import _RpcError
 from runtime.sensing.gateway.task_runs_router import create_task_runs_router
 
 
@@ -171,6 +175,63 @@ def test_task_runs_router_recovery_queue_filters_and_isolates_owner(tmp_path):
     assert [item["task_id"] for item in bob_queue.json()["items"]] == ["task-bob-failed"]
     assert bob_queue.json()["items"][0]["recommended_action"] == "resume_from_checkpoint"
     assert bob_queue.json()["items"][0]["operation"] == "resume_from_checkpoint"
+
+
+def test_task_runs_router_recovers_persisted_queue_read_only_after_restart(tmp_path):
+    path = tmp_path / "task_runs.json"
+    before_power_loss = TaskSupervisor.from_path(
+        path,
+        holder_id="worker-before-power-loss",
+        lease_ttl_seconds=30,
+    )
+    task_id = "task-persisted-across-cold-boot"
+    before_power_loss.start_task(
+        task_id=task_id,
+        kind="realtime_objective",
+        owner_id="local:admin",
+        thread_id="thread-persisted-across-cold-boot",
+        title="继续断电前的任务",
+    )
+
+    def _checkpoint_then_power_loss(record):
+        assert record.lease is not None
+        return record.model_copy(
+            update={
+                "latest_checkpoint_id": 88,
+                "lease": record.lease.model_copy(update={"expires_at": time.time() - 1}),
+            },
+            deep=True,
+        )
+
+    before_power_loss.store.mutate(task_id, _checkpoint_then_power_loss)
+    persisted_before_read = path.read_bytes()
+
+    after_cold_boot = TaskSupervisor.from_path(
+        path,
+        holder_id="worker-after-cold-boot",
+        lease_ttl_seconds=30,
+    )
+    app = FastAPI()
+    app.include_router(create_task_runs_router(supervisor=after_cold_boot))
+
+    response = TestClient(app).get(
+        "/api/task-runs/recovery-queue",
+        params={"limit": 200},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["schema"] == "octopus.task_recovery_queue.v1"
+    assert body["count"] == 1
+    assert body["limit"] == 200
+    assert body["items"][0]["task_id"] == task_id
+    assert body["items"][0]["recommended_action"] == "takeover_and_resume"
+    assert body["items"][0]["checkpoint_id"] == 88
+    assert body["items"][0]["steps"] == [
+        "takeover_task",
+        "resume_from_checkpoint",
+    ]
+    assert path.read_bytes() == persisted_before_read
 
 
 def test_task_runs_router_list_total_counts_filtered_rows_not_page_size(tmp_path):
@@ -562,3 +623,250 @@ def test_task_runs_router_surfaces_restart_audit_and_recovery_health(tmp_path):
     body = detail.json()
     assert body["task_run"]["metadata"]["restart_events"][-1]["previous_status"] == "failed"
     assert body["lease_health"]["state"] == "ok"
+
+
+class _FakeRecoveryGateway:
+    def __init__(self, *, error: Exception | None = None) -> None:
+        self._runtime = object()
+        self._connections: set[object] = set()
+        self.error = error
+        self.calls: list[tuple[dict, object]] = []
+        self.unwatched: list[str] = []
+
+    async def _invoke_turn_start(self, params, connection):
+        self.calls.append((params, connection))
+        connection.watched_threads.add(params["threadId"])
+        if self.error is not None:
+            raise self.error
+        turn = {"id": "trn_recovery_1", "status": "inProgress"}
+        await connection.notify(
+            "turn/started",
+            {"threadId": params["threadId"], "turn": turn, "eventId": "evt-1"},
+        )
+        return {"turn": {**turn, "status": "completed"}}
+
+    def _unwatch_thread(self, thread_id: str) -> None:
+        self.unwatched.append(thread_id)
+
+
+def _install_resume_checkpoint(monkeypatch, value):
+    from runtime.sensing.gateway import _realtime_turn_lifecycle_resume as resume_module
+
+    monkeypatch.setattr(
+        resume_module,
+        "_resume_checkpoint_metadata",
+        lambda _runtime, _task_id: value,
+    )
+
+
+def test_task_runs_router_takeover_then_starts_real_checkpoint_resume(
+    tmp_path,
+    monkeypatch,
+):
+    path = tmp_path / "task_runs.json"
+    old_worker = TaskSupervisor.from_path(path, holder_id="old-worker", lease_ttl_seconds=30)
+    operator = TaskSupervisor.from_path(path, holder_id="operator", lease_ttl_seconds=30)
+    task_id = str(uuid4())
+    thread_id = "thread-recovery"
+    old_worker.start_task(
+        task_id=task_id,
+        kind="realtime_objective",
+        thread_id=thread_id,
+        metadata={"agent_id": "default"},
+    )
+
+    def _expire(record):
+        assert record.lease is not None
+        return record.model_copy(
+            update={
+                "latest_checkpoint_id": 41,
+                "lease": record.lease.model_copy(update={"expires_at": time.time() - 1}),
+            },
+            deep=True,
+        )
+
+    old_worker.store.mutate(task_id, _expire)
+    _install_resume_checkpoint(
+        monkeypatch,
+        {"checkpoint_id": 41, "iteration": 7, "phase": "verify", "working_set": []},
+    )
+    pause_controller = PauseController(store_path=None, autoload=False)
+    gateway = _FakeRecoveryGateway()
+    app = FastAPI()
+    app.state.realtime_gateway = gateway
+    app.state.pause_controller = pause_controller
+    app.include_router(create_task_runs_router(supervisor=operator))
+    client = TestClient(app)
+
+    takeover_required = client.post(
+        f"/api/task-runs/{task_id}/resume-execution",
+        json={"requestId": "recovery-request-1"},
+    )
+    takeover = client.post(
+        f"/api/task-runs/{task_id}/takeover",
+        json={"reason": "old worker disappeared"},
+    )
+    resumed = client.post(
+        f"/api/task-runs/{task_id}/resume-execution",
+        json={"requestId": "recovery-request-1", "reason": "continue from checkpoint"},
+    )
+
+    assert takeover_required.status_code == 409
+    assert takeover_required.json()["detail"] == (
+        "task lease must be taken over before execution can resume"
+    )
+    assert takeover.status_code == 200
+    assert resumed.status_code == 202
+    body = resumed.json()
+    assert body["schema"] == "octopus.task_run_resume_execution.v1"
+    assert body["accepted"] is True
+    assert body["state"] == "turn_started"
+    assert body["replayed"] is False
+    assert body["task_id"] == task_id
+    assert body["thread_id"] == thread_id
+    assert body["turn_id"] == "trn_recovery_1"
+    assert body["checkpoint"]["checkpoint_id"] == 41
+    assert body["request_id"] == "recovery-request-1"
+    assert body["user_item_id"].startswith("itm_resume_")
+    # The trigger remains paused until the real ReAct loop emits
+    # react_started and reclaims this exact objective id.
+    assert body["task_run"]["status"] == "paused"
+    assert body["task_run"]["metadata"]["resume_execution_state"] == "turn_started"
+    assert pause_controller.consume_pending_resume(thread_id) == task_id
+    assert pause_controller.consume_grant(task_id)["extra_iterations"] == 15
+
+    assert len(gateway.calls) == 1
+    params, connection = gateway.calls[0]
+    assert params["threadId"] == thread_id
+    assert params["input"] == [{"type": "text", "text": "继续"}]
+    assert params["approvalPolicy"] == "on-request"
+    assert params["userItemId"] == body["user_item_id"]
+    assert connection._closed is True
+    assert gateway.unwatched == [thread_id]
+
+
+def test_task_runs_router_resume_requires_actual_runtime_checkpoint(tmp_path, monkeypatch):
+    supervisor = TaskSupervisor.from_path(tmp_path / "task_runs.json", holder_id="operator")
+    task_id = str(uuid4())
+    supervisor.start_task(task_id=task_id, thread_id="thread-no-checkpoint")
+    supervisor.transition(task_id, TaskRunStatus.PAUSED, checkpoint_id="projection-only")
+    _install_resume_checkpoint(monkeypatch, None)
+    gateway = _FakeRecoveryGateway()
+    app = FastAPI()
+    app.state.realtime_gateway = gateway
+    app.state.pause_controller = PauseController(store_path=None, autoload=False)
+    app.include_router(create_task_runs_router(supervisor=supervisor))
+    client = TestClient(app)
+
+    response = client.post(f"/api/task-runs/{task_id}/resume-execution", json={})
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "no durable ReAct checkpoint is available for this task"
+    assert gateway.calls == []
+
+
+def test_task_runs_router_resume_never_bypasses_waiting_approval(tmp_path, monkeypatch):
+    supervisor = TaskSupervisor.from_path(tmp_path / "task_runs.json", holder_id="operator")
+    task_id = str(uuid4())
+    supervisor.start_task(
+        task_id=task_id,
+        thread_id="thread-approval",
+        metadata={"approval_required": True},
+    )
+    supervisor.transition(
+        task_id,
+        TaskRunStatus.WAITING_APPROVAL,
+        checkpoint_id=9,
+    )
+    _install_resume_checkpoint(
+        monkeypatch,
+        {"checkpoint_id": 9, "iteration": 2, "phase": "execute", "working_set": []},
+    )
+    gateway = _FakeRecoveryGateway()
+    app = FastAPI()
+    app.state.realtime_gateway = gateway
+    app.state.pause_controller = PauseController(store_path=None, autoload=False)
+    app.include_router(create_task_runs_router(supervisor=supervisor))
+    client = TestClient(app)
+
+    response = client.post(f"/api/task-runs/{task_id}/resume-execution", json={})
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "task is waiting for its original approval decision"
+    assert gateway.calls == []
+
+
+def test_task_runs_router_resume_maps_realtime_claim_conflict_and_stays_paused(
+    tmp_path,
+    monkeypatch,
+):
+    supervisor = TaskSupervisor.from_path(tmp_path / "task_runs.json", holder_id="operator")
+    task_id = str(uuid4())
+    supervisor.start_task(task_id=task_id, thread_id="thread-busy")
+    supervisor.transition(task_id, TaskRunStatus.PAUSED, checkpoint_id=12)
+    _install_resume_checkpoint(
+        monkeypatch,
+        {"checkpoint_id": 12, "iteration": 3, "phase": "execute", "working_set": []},
+    )
+    gateway = _FakeRecoveryGateway(
+        error=_RpcError(JsonRpcErrorCode.SERVER_BUSY, "thread already has an active turn")
+    )
+    app = FastAPI()
+    app.state.realtime_gateway = gateway
+    app.state.pause_controller = PauseController(store_path=None, autoload=False)
+    app.include_router(create_task_runs_router(supervisor=supervisor))
+    client = TestClient(app)
+
+    response = client.post(f"/api/task-runs/{task_id}/resume-execution", json={})
+    detail = client.get(f"/api/task-runs/{task_id}")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Agent could not schedule the recovery turn"
+    assert detail.status_code == 200
+    assert detail.json()["task_run"]["status"] == "paused"
+    assert detail.json()["task_run"]["metadata"]["resume_execution_state"] == "schedule_failed"
+    assert (
+        "thread already has an active turn"
+        in detail.json()["task_run"]["metadata"]["resume_execution_error"]
+    )
+
+
+def test_task_runs_router_terminal_recovery_is_marked_and_deduplicated(
+    tmp_path,
+    monkeypatch,
+):
+    supervisor = TaskSupervisor.from_path(tmp_path / "task_runs.json", holder_id="operator")
+    task_id = str(uuid4())
+    supervisor.start_task(task_id=task_id, thread_id="thread-terminal-recovery")
+    supervisor.transition(
+        task_id,
+        TaskRunStatus.FAILED,
+        reason="worker crashed",
+        checkpoint_id=21,
+    )
+    _install_resume_checkpoint(
+        monkeypatch,
+        {"checkpoint_id": 21, "iteration": 5, "phase": "execute", "working_set": []},
+    )
+    gateway = _FakeRecoveryGateway()
+    app = FastAPI()
+    app.state.realtime_gateway = gateway
+    app.state.pause_controller = PauseController(store_path=None, autoload=False)
+    app.include_router(create_task_runs_router(supervisor=supervisor))
+    client = TestClient(app)
+
+    first = client.post(
+        f"/api/task-runs/{task_id}/resume-execution",
+        json={"requestId": "terminal-recovery-1"},
+    )
+    duplicate = client.post(
+        f"/api/task-runs/{task_id}/resume-execution",
+        json={"requestId": "terminal-recovery-1"},
+    )
+
+    assert first.status_code == 202
+    assert first.json()["task_run"]["status"] == "failed"
+    assert first.json()["task_run"]["metadata"]["resume_execution_state"] == "turn_started"
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"] == "task recovery is already queued or running"
+    assert len(gateway.calls) == 1

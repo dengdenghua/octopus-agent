@@ -1,22 +1,25 @@
-import type { AIMessage, Message } from "@/core/api/types";
+import type { AIMessage, Message, ToolCall } from "@/core/api/types";
 import type { BaseStream } from "@/core/api/use-stream-types";
 import type { ComponentProps, ReactNode } from "react";
 import {
   AlertTriangleIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  Loader2Icon,
   XCircleIcon,
 } from "lucide-react";
 import {
   Fragment,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore,
   memo,
 } from "react";
+import { toast } from "sonner";
 
 import {
   Conversation,
@@ -66,6 +69,10 @@ import {
 } from "../agent-run-status";
 
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
+import {
+  MemberProfilePopover,
+  summarizeAgentCapabilities,
+} from "@/components/workspace/member-profile-popover";
 
 import { AgentAvatar } from "./agent-message-header";
 import { ClarificationChoiceCard } from "./clarification-choice-card";
@@ -74,6 +81,7 @@ import { extractClarificationQuestionnaire } from "../clarification-questionnair
 import { hasVisibleMessageGroupContent, MessageGroup } from "./message-group";
 import {
   MessageListItem,
+  messageClipboardText,
   type MessageListProjectActions,
   type ShadowReviewContext,
 } from "./message-list-item";
@@ -98,6 +106,26 @@ export const MESSAGE_LIST_DEFAULT_PADDING_BOTTOM = 160;
 export const MESSAGE_LIST_FOLLOWUPS_EXTRA_PADDING_BOTTOM = 80;
 export const MESSAGE_LIST_TIMEOUT_WARNING_MS = 300_000;
 type SubtaskUpdate = Partial<Subtask> & { id: string };
+
+/**
+ * Return task-call ids that have not been rendered in this subagent lane.
+ * Replayed/streaming AI frames can repeat a call id; the live task card owns
+ * the state for that id, so a second card is always a duplicate presentation.
+ */
+export function takeUnseenTaskIds(
+  toolCalls: readonly ToolCall[] | undefined,
+  seen: Set<string>,
+): string[] {
+  const ids: string[] = [];
+  for (const toolCall of toolCalls ?? []) {
+    const id = toolCall.name === "task" ? toolCall.id?.trim() : "";
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
 export interface TurnMarker {
   key: string;
   kind: "dot" | "phase";
@@ -122,6 +150,9 @@ interface MessageListAgentRosterEntry {
   icon?: string | null;
   name?: string | null;
   role?: MessageListAgentRole | null;
+  description?: string | null;
+  model?: string | null;
+  toolGroups?: string[] | null;
 }
 
 interface AgentIdentity {
@@ -130,6 +161,9 @@ interface AgentIdentity {
   id?: string;
   name?: string;
   role?: string;
+  description?: string;
+  model?: string;
+  toolGroups?: string[];
 }
 
 const EMPTY_AGENT_ROSTER: MessageListAgentRosterEntry[] = [];
@@ -172,6 +206,18 @@ export function HistoricalTurnBoundary({
   virtualize: boolean;
 }) {
   const nodeRef = useRef<HTMLDivElement | null>(null);
+  const onNodeRef = useRef(onNode);
+  useLayoutEffect(() => {
+    onNodeRef.current = onNode;
+  }, [onNode]);
+  // MessageList renders once per streamed frame. Keeping the callback ref
+  // stable prevents React from detaching and reattaching every historical
+  // turn's unchanged DOM node on each frame (two registry writes per turn).
+  // The latest owner callback is still used for the real unmount.
+  const setNodeRef = useCallback((node: HTMLDivElement | null) => {
+    nodeRef.current = node;
+    onNodeRef.current?.(node);
+  }, []);
   const [measuredHeight, setMeasuredHeight] = useState(
     () => historicalTurnHeightCache.get(cacheKey) ?? null,
   );
@@ -229,10 +275,7 @@ export function HistoricalTurnBoundary({
   return (
     <div
       {...props}
-      ref={(node) => {
-        nodeRef.current = node;
-        onNode?.(node);
-      }}
+      ref={setNodeRef}
       className={className}
       data-turn-mounted={mounted ? "true" : "false"}
       style={
@@ -944,6 +987,7 @@ const MemoizedGroup = memo(
     showAssistantAvatar,
     subagentAgents,
     subagentEvents,
+    subagentBindings,
     subagentMission,
     subagentSettled,
     subagentTurnIndex,
@@ -964,13 +1008,17 @@ const MemoizedGroup = memo(
     showAssistantAvatar: boolean;
     subagentAgents?: InlineSubagentInfo[];
     subagentEvents?: LiveToolEvent[];
+    subagentBindings?: Map<
+      string,
+      { agent: InlineSubagentInfo; events: LiveToolEvent[] }
+    >;
     subagentMission?: string;
     subagentSettled?: boolean;
     subagentTurnIndex?: number;
     showSubagentCluster: boolean;
     renderGroupContent: (
       group: CoreMessageGroup,
-      beforeAssistantContent?: ReactNode,
+      assistantHeaderMeta?: (messageId?: string) => ReactNode,
       enableClarificationActions?: boolean,
       keepOpen?: boolean,
       deferOutputs?: boolean,
@@ -983,6 +1031,36 @@ const MemoizedGroup = memo(
     ) => ReactNode;
     groupTurnRenderInfo: GroupTurnRenderInfo;
   }) {
+    const hasPairedBindings = Boolean(subagentBindings?.size);
+    const pairedStatusControl = hasPairedBindings
+      ? (messageId?: string) => {
+          if (!messageId) return undefined;
+          const binding = subagentBindings?.get(messageId);
+          return binding ? (
+            <InlineSubagentCards
+              agents={[binding.agent]}
+              events={binding.events}
+              mission={subagentMission}
+              settled={subagentSettled}
+              turnIndex={subagentTurnIndex}
+              variant="paired"
+            />
+          ) : undefined;
+        }
+      : undefined;
+    const renderedGroup = renderGroupContent(
+      group,
+      pairedStatusControl,
+      enableClarificationActions,
+      keepGroupOpen,
+      deferGroupOutputs,
+      groupAuditNotice,
+      groupFailure,
+      showAssistantAvatar,
+      undefined,
+      Boolean(subagentAgents?.length || subagentEvents?.length),
+      groupTurnRenderInfo,
+    );
     return (
       <div
         data-turn-key={group.type === "human" ? groupKey : undefined}
@@ -995,27 +1073,22 @@ const MemoizedGroup = memo(
             "-mt-2",
         )}
       >
-        {renderGroupContent(
-          group,
-          undefined,
-          enableClarificationActions,
-          keepGroupOpen,
-          deferGroupOutputs,
-          groupAuditNotice,
-          groupFailure,
-          showAssistantAvatar,
-          showSubagentCluster ? (
-            <InlineSubagentCards
-              agents={subagentAgents}
-              events={subagentEvents}
-              mission={subagentMission}
-              settled={subagentSettled}
-              turnIndex={subagentTurnIndex}
-              className="mb-2"
-            />
-          ) : undefined,
-          Boolean(subagentAgents?.length || subagentEvents?.length),
-          groupTurnRenderInfo,
+        {hasPairedBindings ? (
+          renderedGroup
+        ) : (
+          <>
+            {showSubagentCluster ? (
+              <InlineSubagentCards
+                agents={subagentAgents}
+                events={subagentEvents}
+                mission={subagentMission}
+                settled={subagentSettled}
+                turnIndex={subagentTurnIndex}
+                className="mb-1 ml-11"
+              />
+            ) : null}
+            {renderedGroup}
+          </>
         )}
       </div>
     );
@@ -1035,6 +1108,7 @@ const MemoizedGroup = memo(
     prev.showAssistantAvatar === next.showAssistantAvatar &&
     prev.subagentAgents === next.subagentAgents &&
     prev.subagentEvents === next.subagentEvents &&
+    prev.subagentBindings === next.subagentBindings &&
     prev.subagentMission === next.subagentMission &&
     prev.subagentSettled === next.subagentSettled &&
     prev.subagentTurnIndex === next.subagentTurnIndex &&
@@ -1079,6 +1153,9 @@ export function MessageList({
   onSendFollowUp,
   onRetryTask,
   onAuthorizeNetwork,
+  authorizingNetworkTier = null,
+  onStop,
+  isStopping = false,
   projectMessageActions,
   timelineEntries = [],
   allowThreadFork = true,
@@ -1117,9 +1194,13 @@ export function MessageList({
   onSendFollowUp?: (prompt: string) => void;
   /** Retry a failed task while preserving its conversation context. */
   onRetryTask?: (prompt: string) => void;
+  /** Use the page-level stop controller so every stop entry point shares state. */
+  onStop?: () => void | Promise<void>;
+  isStopping?: boolean;
   /** Callback when the user authorizes network access from the
    *  environment-blocked banner ("common domains" or "full"). */
   onAuthorizeNetwork?: (tier: "common" | "full") => void;
+  authorizingNetworkTier?: "common" | "full" | null;
   /** Quick actions shown on human bubbles in a bound project group. */
   projectMessageActions?: MessageListProjectActions;
   /** Prevent a legacy non-persona owner from being copied into a new thread. */
@@ -1156,40 +1237,104 @@ export function MessageList({
     combinedAgentRoster.length === 1 ? combinedAgentRoster[0] : undefined;
 
   const messages = thread.messages;
+  const showConversationActivity = thread.isLoading && !thread.error;
+  // Message objects are immutable and reference-stable for untouched realtime
+  // items. Build the positional lookup once per projected messages array so
+  // rendering N rows does not call Array#indexOf N times.
+  const messageIndexByReference = useMemo(() => {
+    const indexes = new Map<Message, number>();
+    for (let index = 0; index < messages.length; index += 1) {
+      const message = messages[index]!;
+      // Preserve Array#indexOf semantics if a legacy projection happens to
+      // repeat the same Message object.
+      if (!indexes.has(message)) indexes.set(message, index);
+    }
+    return indexes;
+  }, [messages]);
+  const latestOutboundDeliveryFailed = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message?.type !== "human") continue;
+      return message.additional_kwargs?.delivery_state === "failed";
+    }
+    return false;
+  }, [messages]);
 
-  const shadowReviewForMessage = useCallback(
-    (message: Message): ShadowReviewContext | undefined => {
-      if (message.type !== "ai") return undefined;
-      const index = messages.indexOf(message);
-      let goal = "";
-      for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
-        const candidate = messages[cursor];
-        if (candidate?.type === "human") {
-          goal = extractTextFromMessage(candidate).trim();
-          break;
-        }
-      }
-      const primaryOutput = extractTextFromMessage(message).trim();
-      if (!goal || !primaryOutput) return undefined;
-      const metadata = message.additional_kwargs as
-        | Record<string, unknown>
-        | undefined;
-      const metadataEngine = metadata?.execution_engine;
-      const primaryEngine =
-        metadataEngine === "codex" || metadataEngine === "octopus"
-          ? metadataEngine
-          : currentAgent?.execution_engine || "octopus";
-      return {
-        goal,
-        primaryEngine,
-        primaryOutput,
-        threadId,
-        messageId: String(message.id ?? `${threadId}:${index}`),
-        workspacePath: project,
-      };
-    },
-    [currentAgent?.execution_engine, messages, project, threadId],
+  const lastMessage = messages[messages.length - 1];
+  const lastMessageIsLoading = Boolean(
+    thread.isLoading &&
+    lastMessage &&
+    lastMessage.id === thread.streamingMessage?.id,
   );
+  // Keep this eligibility check aligned with MessageListItem's assistant
+  // action bar. Shadow review only appears there, so parsing every historical
+  // answer into a context on each streamed frame is pure wasted work.
+  const shadowReviewMessage = useMemo(() => {
+    if (!lastMessage || lastMessage.type !== "ai" || lastMessageIsLoading) {
+      return null;
+    }
+    const metadata = lastMessage.additional_kwargs as
+      | Record<string, unknown>
+      | undefined;
+    if (
+      metadata?.message_kind === "commentary" ||
+      metadata?.public_progress === true ||
+      metadata?.response_state === "interrupted" ||
+      metadata?.response_state === "failed" ||
+      metadata?.run_status === "streaming"
+    ) {
+      return null;
+    }
+    return messageClipboardText(lastMessage).length > 0 ? lastMessage : null;
+  }, [lastMessage, lastMessageIsLoading]);
+  const shadowReviewGoalMessage = useMemo(() => {
+    if (!shadowReviewMessage) return null;
+    const messageIndex = messageIndexByReference.get(shadowReviewMessage);
+    if (messageIndex === undefined) return null;
+    for (let cursor = messageIndex - 1; cursor >= 0; cursor -= 1) {
+      const candidate = messages[cursor];
+      if (candidate?.type === "human") return candidate;
+    }
+    return null;
+  }, [messageIndexByReference, messages, shadowReviewMessage]);
+  const shadowReviewMessageIndex = shadowReviewMessage
+    ? messageIndexByReference.get(shadowReviewMessage)
+    : undefined;
+  const actionableShadowReview = useMemo<
+    ShadowReviewContext | undefined
+  >(() => {
+    if (!shadowReviewMessage || !shadowReviewGoalMessage) return undefined;
+    const goal = extractTextFromMessage(shadowReviewGoalMessage).trim();
+    const primaryOutput = extractTextFromMessage(shadowReviewMessage).trim();
+    if (!goal || !primaryOutput) return undefined;
+    const metadata = shadowReviewMessage.additional_kwargs as
+      | Record<string, unknown>
+      | undefined;
+    const metadataEngine = metadata?.execution_engine;
+    const primaryEngine =
+      metadataEngine === "codex" || metadataEngine === "octopus"
+        ? metadataEngine
+        : currentAgent?.execution_engine || "octopus";
+    return {
+      goal,
+      primaryEngine,
+      primaryOutput,
+      threadId,
+      messageId: String(
+        shadowReviewMessage.id ??
+          `${threadId}:${shadowReviewMessageIndex ?? messages.length - 1}`,
+      ),
+      workspacePath: project,
+    };
+  }, [
+    currentAgent?.execution_engine,
+    messages.length,
+    project,
+    shadowReviewGoalMessage,
+    shadowReviewMessage,
+    shadowReviewMessageIndex,
+    threadId,
+  ]);
   const hasTimelineContent = messages.length > 0 || timelineEntries.length > 0;
 
   // Structural fingerprint: changes when the message list topology changes
@@ -1549,6 +1694,7 @@ export function MessageList({
     if (!latestGroup || latestGroup.type !== "assistant") return false;
     const turnMessages = turnMessagesForGroup(groupedMessages, latestGroup);
     return (
+      Boolean(structuredFailureFromMessages(turnMessages)) ||
       !hasVisibleAssistantText(latestGroup) ||
       hasMessageOutputSummary(turnMessages)
     );
@@ -1648,9 +1794,24 @@ export function MessageList({
           threadDisplayName,
         ) ?? soleRosterEntry;
       const rosterAgentId = agentIdForRosterEntry(rosterMatch);
+      const rosterDisplayName = displayNameForRosterEntry(rosterMatch);
+      // Older group-fanout messages persisted the runtime id in the
+      // display-name field (for example "coder" or "desktop_operator").
+      // When that value resolves to a roster member, the roster's persona
+      // label is authoritative for presentation while the stored id remains
+      // untouched for replay/audit.
+      const explicitDisplayIsRuntimeId = Boolean(
+        rosterMatch &&
+        explicitDisplayName &&
+        [rosterMatch.name, rosterMatch.agent_id].some(
+          (value) => identityKey(value) === identityKey(explicitDisplayName),
+        ),
+      );
       const name =
-        explicitDisplayName ??
-        displayNameForRosterEntry(rosterMatch) ??
+        (explicitDisplayIsRuntimeId
+          ? rosterDisplayName
+          : explicitDisplayName) ??
+        rosterDisplayName ??
         currentAgent?.display_name ??
         currentAgent?.name ??
         threadDisplayName;
@@ -1666,6 +1827,14 @@ export function MessageList({
         cleanIdentityText(rosterMatch?.icon) ??
         cleanIdentityText(currentAgent?.icon);
       const role = cleanIdentityText(rosterMatch?.role);
+      const description = cleanIdentityText(rosterMatch?.description);
+      const model = cleanIdentityText(rosterMatch?.model);
+      const toolGroups = Array.isArray(rosterMatch?.toolGroups)
+        ? rosterMatch.toolGroups.filter(
+            (tool): tool is string =>
+              typeof tool === "string" && Boolean(tool.trim()),
+          )
+        : undefined;
 
       return {
         avatar,
@@ -1673,6 +1842,9 @@ export function MessageList({
         id: rosterAgentId ?? currentAgent?.name ?? explicitAgentId,
         name,
         role,
+        description,
+        model,
+        toolGroups,
       };
     },
     [agentRosterMap, currentAgent, soleRosterEntry, thread.values, threadId],
@@ -1856,7 +2028,11 @@ export function MessageList({
     agentAvatar,
     agentIcon,
     agentRole,
+    agentDescription,
+    agentModel,
+    agentToolGroups,
     replyTo,
+    headerMeta,
     children,
   }: {
     key: string;
@@ -1865,28 +2041,56 @@ export function MessageList({
     agentAvatar?: string;
     agentIcon?: string | null;
     agentRole?: string;
+    agentDescription?: string;
+    agentModel?: string;
+    agentToolGroups?: string[];
     /** ③ @因果链：本气泡回应/反驳的成员名，显示"回应 @谁"。 */
     replyTo?: string;
+    /** Compact execution state; detailed task/event streams live in workbench. */
+    headerMeta?: ReactNode;
     children: ReactNode;
   }) => {
     const displayName = agentName || t.message.assistant;
+    const capabilitySummary = summarizeAgentCapabilities(agentToolGroups);
     // In a team room, label each agent's message with its name (and 队长
     // badge) so the thread reads like a group chat — you can see who's
     // speaking, not just an anonymous avatar.
     const isTeam = showSenderName;
     return (
       <div key={key} className="flex w-full items-start gap-3">
-        <AgentAvatar
-          agentDisplayName={displayName}
-          avatarUrl={
-            agentAvatar ? withAgentAvatarVersion(agentAvatar) : agentAvatar
+        <MemberProfilePopover
+          name={displayName}
+          roleLabel={agentRole === "tl" ? "队长" : "协作成员"}
+          presenceLabel="参与对话"
+          summary={agentDescription || "正在参与当前协作。"}
+          details={[
+            ...(agentModel ? [{ label: "模型", value: agentModel }] : []),
+            ...(capabilitySummary
+              ? [{ label: "擅长", value: capabilitySummary }]
+              : []),
+          ]}
+          trigger={
+            <button
+              type="button"
+              className="mt-1 shrink-0 rounded-md outline-none transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={`${displayName} · 查看成员信息`}
+            >
+              <AgentAvatar
+                agentDisplayName={displayName}
+                avatarUrl={
+                  agentAvatar
+                    ? withAgentAvatarVersion(agentAvatar)
+                    : agentAvatar
+                }
+                icon={agentIcon}
+                className="size-8 rounded-md"
+              />
+            </button>
           }
-          icon={agentIcon}
-          className="mt-1 size-8 rounded-md"
         />
         <div className="min-w-0 flex-1">
           {isTeam && agentName && (
-            <div className="mb-0.5 flex items-center gap-1.5">
+            <div className="mb-0.5 flex w-full items-center gap-1.5">
               <span className="text-sm font-semibold text-foreground">
                 {displayName}
               </span>
@@ -1903,6 +2107,11 @@ export function MessageList({
                   ↪ 回应 @{replyTo}
                 </span>
               )}
+              {headerMeta ? (
+                <span className="ml-auto flex shrink-0 items-center">
+                  {headerMeta}
+                </span>
+              ) : null}
             </div>
           )}
           <ExecutionEngineBadge engine={executionEngine} />
@@ -1920,6 +2129,7 @@ export function MessageList({
     afterContent?: ReactNode,
   ) => {
     const key = `${keyPrefix}/${msg.id}`;
+    const messageIndex = messageIndexByReference.get(msg);
     return (
       <div key={key}>
         {beforeContent}
@@ -1934,10 +2144,12 @@ export function MessageList({
             !thread.isLoading && messages[messages.length - 1] === msg
           }
           isLastMessage={messages[messages.length - 1] === msg}
-          messageIndex={messages.indexOf(msg)}
+          messageIndex={messageIndex}
           afterContent={afterContent}
           projectMessageActions={projectMessageActions}
-          shadowReview={shadowReviewForMessage(msg)}
+          shadowReview={
+            msg === shadowReviewMessage ? actionableShadowReview : undefined
+          }
           allowThreadFork={allowThreadFork}
         />
       </div>
@@ -1950,8 +2162,10 @@ export function MessageList({
     beforeContent?: ReactNode,
     suppressReasoningPanel = false,
     afterContent?: ReactNode,
+    headerMeta?: ReactNode,
   ) => {
     const key = `${keyPrefix}/${msg.id}`;
+    const messageIndex = messageIndexByReference.get(msg);
     const content = (
       <>
         {beforeContent}
@@ -1966,10 +2180,12 @@ export function MessageList({
             !thread.isLoading && messages[messages.length - 1] === msg
           }
           isLastMessage={messages[messages.length - 1] === msg}
-          messageIndex={messages.indexOf(msg)}
+          messageIndex={messageIndex}
           afterContent={afterContent}
           projectMessageActions={projectMessageActions}
-          shadowReview={shadowReviewForMessage(msg)}
+          shadowReview={
+            msg === shadowReviewMessage ? actionableShadowReview : undefined
+          }
           allowThreadFork={allowThreadFork}
         />
       </>
@@ -1977,7 +2193,8 @@ export function MessageList({
     if (msg.type !== "ai") {
       return <div key={key}>{content}</div>;
     }
-    const { name, avatar, icon, role } = resolveAgentIdentity(msg);
+    const { name, avatar, icon, role, description, model, toolGroups } =
+      resolveAgentIdentity(msg);
     return renderAssistantFrame({
       key,
       executionEngine: msg.additional_kwargs?.execution_engine,
@@ -1985,6 +2202,10 @@ export function MessageList({
       agentAvatar: avatar,
       agentIcon: icon,
       agentRole: role,
+      agentDescription: description,
+      agentModel: model,
+      agentToolGroups: toolGroups,
+      headerMeta,
       replyTo:
         typeof msg.additional_kwargs?.reply_to === "string"
           ? (msg.additional_kwargs.reply_to as string)
@@ -2010,6 +2231,9 @@ export function MessageList({
       avatar: agentAvatar,
       icon: agentIcon,
       role: agentRole,
+      description: agentDescription,
+      model: agentModel,
+      toolGroups: agentToolGroups,
     } = resolveAgentIdentity(aiMessage);
     const content = (
       <>
@@ -2041,6 +2265,9 @@ export function MessageList({
       agentAvatar,
       agentIcon,
       agentRole,
+      agentDescription,
+      agentModel,
+      agentToolGroups,
       replyTo:
         typeof aiMessage?.additional_kwargs?.reply_to === "string"
           ? (aiMessage.additional_kwargs.reply_to as string)
@@ -2051,7 +2278,7 @@ export function MessageList({
 
   const renderGroupContent = (
     group: (typeof groupedMessages)[number],
-    beforeAssistantContent?: ReactNode,
+    assistantHeaderMeta?: (messageId?: string) => ReactNode,
     enableClarificationActions = false,
     keepOpen = false,
     deferOutputs = false,
@@ -2106,6 +2333,9 @@ export function MessageList({
             threadId={threadId}
             onOpenArtifact={onOpenArtifact}
             onRetryTask={onRetryTask}
+            onAuthorizeNetwork={onAuthorizeNetwork}
+            authorizingNetworkTier={authorizingNetworkTier}
+            isRetrying={showConversationActivity}
             failure={failure}
           />
         ) : isProcessChangeGroup ? (
@@ -2115,31 +2345,31 @@ export function MessageList({
             threadId={threadId}
             onOpenArtifact={onOpenArtifact}
             onRetryTask={onRetryTask}
+            onAuthorizeNetwork={onAuthorizeNetwork}
+            authorizingNetworkTier={authorizingNetworkTier}
+            isRetrying={showConversationActivity}
             presentation="process"
           />
         ) : null;
       const outputHostMessage = outputSummary
         ? [...group.messages].reverse().find((message) => message.type === "ai")
         : undefined;
-      let injectedBeforeContent = false;
       const renderedMessages = group.messages.map((msg) => {
-        const beforeContent =
-          beforeAssistantContent && msg.type === "ai" && !injectedBeforeContent
-            ? beforeAssistantContent
-            : undefined;
-        if (beforeContent) injectedBeforeContent = true;
+        const headerMeta =
+          msg.type === "ai" ? assistantHeaderMeta?.(msg.id) : undefined;
         return showAssistantAvatar || msg.type !== "ai"
           ? renderMessageWithHeader(
               msg,
               group.id,
-              beforeContent,
+              undefined,
               turnHasProcessingLane,
               msg === outputHostMessage ? outputSummary : undefined,
+              headerMeta,
             )
           : renderMessageContent(
               msg,
               group.id,
-              beforeContent,
+              undefined,
               turnHasProcessingLane,
               msg === outputHostMessage ? outputSummary : undefined,
             );
@@ -2217,6 +2447,8 @@ export function MessageList({
         }
       }
       const results: React.ReactNode[] = [];
+      const renderedTaskIds = new Set<string>();
+      let renderedTaskCount = false;
       for (const message of group.messages.filter((m) => m.type === "ai")) {
         if (hasReasoning(message)) {
           results.push(
@@ -2231,20 +2463,25 @@ export function MessageList({
             />,
           );
         }
-        results.push(
-          <div
-            key={"subtask-count-" + message.id}
-            className="text-muted-foreground font-normal pt-2 text-sm"
-          >
-            {t.subagents.executing(taskIds.size)}
-          </div>,
+        // A streamed/replayed delegation can arrive as several AI messages
+        // carrying the same task tool call. The SubtaskCard is already live
+        // by task id, so mounting it once prevents duplicate reports while
+        // preserving later status updates through its own subscription.
+        if (!renderedTaskCount && taskIds.size > 0) {
+          renderedTaskCount = true;
+          results.push(
+            <div
+              key="subtask-count"
+              className="text-muted-foreground font-normal pt-2 text-sm"
+            >
+              {t.subagents.executing(taskIds.size)}
+            </div>,
+          );
+        }
+        const validTaskIds = takeUnseenTaskIds(
+          (message as AIMessage).tool_calls,
+          renderedTaskIds,
         );
-        const validTaskIds = ((message as AIMessage).tool_calls ?? []).reduce<
-          string[]
-        >((ids, toolCall) => {
-          if (toolCall.name === "task" && toolCall.id) ids.push(toolCall.id);
-          return ids;
-        }, []);
         if (validTaskIds.length > 1) {
           results.push(
             <ParallelSubtasksGrid
@@ -2390,6 +2627,12 @@ export function MessageList({
         settled: boolean;
         firstProcessingIndex: number;
         hasCluster: boolean;
+        agentsByGroupIndex: Map<number, InlineSubagentInfo[]>;
+        eventsByGroupIndex: Map<number, LiveToolEvent[]>;
+        bindingsByGroupIndex: Map<
+          number,
+          Map<string, { agent: InlineSubagentInfo; events: LiveToolEvent[] }>
+        >;
       }
     >();
     // Historical events are immutable for this render. Index them once
@@ -2406,7 +2649,25 @@ export function MessageList({
       const turn = messageTurns[turnIndex]!;
       const turnMessages =
         groupTurnRenderInfo.get(turn.groupIndexes[0]!)?.turnMessages ?? [];
-      const agents = deriveSubagentsFromMessages(turnMessages);
+      const agents = deriveSubagentsFromMessages(turnMessages).map((agent) => {
+        const rosterEntry = findRosterEntry(
+          agentRosterMap,
+          agent.id,
+          agent.name,
+          agent.role,
+        );
+        if (!rosterEntry) return agent;
+        const rosterName = displayNameForRosterEntry(rosterEntry);
+        const rosterAgentId = agentIdForRosterEntry(rosterEntry);
+        return {
+          ...agent,
+          name: rosterName ?? agent.name,
+          avatar:
+            cleanIdentityText(rosterEntry.avatar_url) ??
+            agent.avatar ??
+            fallbackAgentAvatarUrl(rosterAgentId),
+        };
+      });
       const mission = deriveSubagentMissionFromMessages(turnMessages);
       const isLatestTurn = turnIndex === messageTurns.length - 1;
       const sourceEvents = isLatestTurn
@@ -2429,6 +2690,70 @@ export function MessageList({
         turn.groupIndexes.find(
           (index) => groupedMessages[index]?.type === "assistant:processing",
         ) ?? -1;
+      const agentsByGroupIndex = new Map<number, InlineSubagentInfo[]>();
+      const eventsByGroupIndex = new Map<number, LiveToolEvent[]>();
+      const bindingsByGroupIndex = new Map<
+        number,
+        Map<string, { agent: InlineSubagentInfo; events: LiveToolEvent[] }>
+      >();
+      const claimedAgentIds = new Set<string>();
+
+      // Bind each member state to the exact answer message authored by that
+      // stable agent id. One assistant group can contain adjacent replies from
+      // several members, so group-level identity is not precise enough here.
+      for (const groupIndex of turn.groupIndexes) {
+        const group = groupedMessages[groupIndex];
+        if (group?.type !== "assistant") continue;
+        const bindings = new Map<
+          string,
+          { agent: InlineSubagentInfo; events: LiveToolEvent[] }
+        >();
+        for (const message of group.messages) {
+          if (message.type !== "ai" || !message.id) continue;
+          const speaker = resolveAgentIdentity(message);
+          const speakerKeys = new Set(
+            [speaker.id, speaker.name]
+              .map(identityKey)
+              .filter((value): value is string => Boolean(value)),
+          );
+          const agent = agents.find((candidate) => {
+            if (claimedAgentIds.has(candidate.id)) return false;
+            return [candidate.id, candidate.name].some((value) => {
+              const key = identityKey(value);
+              return Boolean(key && speakerKeys.has(key));
+            });
+          });
+          if (!agent) continue;
+          claimedAgentIds.add(agent.id);
+          const aliases = new Set(
+            [agent.id, agent.name]
+              .map(identityKey)
+              .filter((value): value is string => Boolean(value)),
+          );
+          const matchingEvents = events.filter((event) =>
+            [event.agentId, event.agentName, event.subagentCodename].some(
+              (value) => {
+                const key = identityKey(value);
+                return Boolean(key && aliases.has(key));
+              },
+            ),
+          );
+          bindings.set(message.id, { agent, events: matchingEvents });
+        }
+        if (bindings.size > 0) {
+          bindingsByGroupIndex.set(groupIndex, bindings);
+        }
+      }
+
+      // A member that never emitted any answer still needs an observable
+      // failure/running card. Keep those unmatched lanes at the process slot.
+      const unmatchedAgents = agents.filter(
+        (agent) => !claimedAgentIds.has(agent.id),
+      );
+      if (firstProcessingIndex >= 0 && unmatchedAgents.length > 0) {
+        agentsByGroupIndex.set(firstProcessingIndex, unmatchedAgents);
+        eventsByGroupIndex.set(firstProcessingIndex, events);
+      }
       info.set(turn.key, {
         agents,
         events,
@@ -2436,16 +2761,21 @@ export function MessageList({
         settled: !isLatestTurn,
         firstProcessingIndex,
         hasCluster: agents.length > 0 || events.length > 0,
+        agentsByGroupIndex,
+        eventsByGroupIndex,
+        bindingsByGroupIndex,
       });
     }
     return info;
   }, [
     allToolEvents,
+    agentRosterMap,
     groupTurnRenderInfo,
     groupedMessages,
     lastTurnToolEvents,
     liveToolEvents,
     messageTurns,
+    resolveAgentIdentity,
   ]);
 
   if (thread.isThreadLoading && messages.length === 0) {
@@ -2455,7 +2785,6 @@ export function MessageList({
   // A terminal/send error and an active pulse must never be visible at the
   // same time. If the transport still reports loading while an error is
   // already authoritative, prefer the recoverable error receipt.
-  const showConversationActivity = thread.isLoading && !thread.error;
   const showEmptyPendingAssistantFrame =
     messageTurns.length === 0 &&
     showConversationActivity &&
@@ -2472,11 +2801,25 @@ export function MessageList({
         className,
       )}
       data-message-scroll-root="true"
-      role="log"
+      role="presentation"
     >
+      {/* Keep the live status outside the busy log: aria-busy intentionally
+          defers streamed message additions, but reconnect/slow/finished status
+          changes must remain immediately available to assistive technology. */}
+      <PublicThinkingStatus
+        isLoading={showConversationActivity}
+        liveToolEvents={liveToolEvents ?? []}
+        hasStreamingMessage={hasStreamingAnswer}
+        vitals={streamVitals}
+        renderVisual={false}
+      />
       <ConversationContent
         scrollClassName={TURN_SCROLL_VIEWPORT_CLASS}
         data-density={showSenderName ? "compact" : "comfortable"}
+        role="log"
+        aria-label={t.conversation.messageLog}
+        aria-busy={showConversationActivity}
+        aria-relevant="additions"
         className={cn(
           "mx-auto w-full max-w-(--container-width-md) px-4 pt-2 pb-0",
           // A work-group timeline contains sender labels, short human turns,
@@ -2503,6 +2846,7 @@ export function MessageList({
                 hasStreamingMessage={hasStreamingAnswer}
                 vitals={streamVitals}
                 className="ml-0"
+                renderAnnouncement={false}
               />
             ),
           })}
@@ -2535,6 +2879,39 @@ export function MessageList({
             ? resolveAgentIdentity()
             : null;
 
+          // Avatar continuity must follow what the user can actually see.
+          // Team execution groups are projected into the right workbench and
+          // omitted from chat; counting one of those hidden groups used to
+          // suppress the first visible member avatar after a reload. Empty
+          // groups have the same problem. Build the speaker sequence from
+          // visible conversation rows only, starting a new main-avatar frame
+          // whenever the speaking member changes.
+          const hiddenTeamExecutionIndexes = new Set<number>();
+          const hasVisibleAssistantPredecessor = new Set<number>();
+          let sawVisibleAssistantGroup = false;
+          for (const groupIndex of turn.groupIndexes) {
+            const group = groupedMessages[groupIndex]!;
+            const hideTeamExecutionProjection = Boolean(
+              showSenderName &&
+              subagentRenderInfo?.hasCluster &&
+              group.type === "assistant:processing",
+            );
+            if (hideTeamExecutionProjection) {
+              hiddenTeamExecutionIndexes.add(groupIndex);
+              continue;
+            }
+            if (
+              group.type !== "assistant" &&
+              group.type !== "assistant:processing"
+            ) {
+              continue;
+            }
+            if (sawVisibleAssistantGroup) {
+              hasVisibleAssistantPredecessor.add(groupIndex);
+            }
+            sawVisibleAssistantGroup = true;
+          }
+
           const virtualizeHistoricalTurn =
             !isLatestTurn &&
             messageTurns.length > HISTORY_TURN_KEEP_MOUNTED * 2 &&
@@ -2566,6 +2943,27 @@ export function MessageList({
               {turn.groupIndexes.map((index) => {
                 const group = groupedMessages[index]!;
                 const groupKey = `${group.type}:${group.id ?? `idx-${index}`}`;
+                // A team room has exactly one owner for execution state: the
+                // right-hand workbench. `groupMessages` may create a process
+                // group and a terminal answer from the same tool-carrying
+                // message, so the whole process group stays out of chat.
+                const hideTeamExecutionProjection =
+                  hiddenTeamExecutionIndexes.has(index);
+                if (hideTeamExecutionProjection) {
+                  // Team rooms already project every member's live state and
+                  // output into the right-hand execution workbench. Keeping
+                  // the legacy inline "Agent 集群" card in the chat duplicates
+                  // that surface and pushes the actual replies out of view.
+                  return (
+                    <Fragment key={groupKey}>
+                      {timelineEntrySlots[index]?.map((entry) => (
+                        <Fragment key={`timeline:${entry.id}`}>
+                          {entry.content}
+                        </Fragment>
+                      ))}
+                    </Fragment>
+                  );
+                }
                 const isLatestGroup = index === groupedMessages.length - 1;
                 const groupHasStreamingMessage =
                   thread.streamingMessage != null &&
@@ -2586,6 +2984,12 @@ export function MessageList({
                     ? verificationAuditNotice
                     : null;
                 const groupInfo = groupTurnRenderInfo.get(index)!;
+                const boundSubagentAgents =
+                  subagentRenderInfo?.agentsByGroupIndex.get(index);
+                const boundSubagentEvents =
+                  subagentRenderInfo?.eventsByGroupIndex.get(index);
+                const boundSubagentBindings =
+                  subagentRenderInfo?.bindingsByGroupIndex.get(index);
                 const groupTurnMessages =
                   group.type === "assistant"
                     ? groupInfo.turnMessages
@@ -2640,6 +3044,7 @@ export function MessageList({
                 const previousAssistantIdentity =
                   groupInfo.previousAssistantIdentity;
                 const showAssistantAvatar =
+                  !hasVisibleAssistantPredecessor.has(index) ||
                   groupInfo.previousAssistantGroupCount === 0 ||
                   (assistantIdentity !== null &&
                     previousAssistantIdentity !== undefined &&
@@ -2667,15 +3072,28 @@ export function MessageList({
                       groupAuditNotice={groupAuditNotice}
                       renderGroupContent={renderGroupContent}
                       showAssistantAvatar={showAssistantAvatar}
-                      subagentAgents={subagentRenderInfo?.agents}
-                      subagentEvents={subagentRenderInfo?.events}
+                      // Fresh empty arrays would fail MemoizedGroup's reference
+                      // comparator on every streamed frame and reopen every
+                      // otherwise-settled historical group.
+                      subagentAgents={
+                        boundSubagentAgents?.length
+                          ? boundSubagentAgents
+                          : undefined
+                      }
+                      subagentEvents={
+                        boundSubagentEvents?.length
+                          ? boundSubagentEvents
+                          : undefined
+                      }
+                      subagentBindings={boundSubagentBindings}
                       subagentMission={subagentRenderInfo?.mission}
                       subagentSettled={subagentRenderInfo?.settled}
                       subagentTurnIndex={turnIndex}
-                      showSubagentCluster={
-                        Boolean(subagentRenderInfo?.hasCluster) &&
-                        index === subagentRenderInfo?.firstProcessingIndex
-                      }
+                      showSubagentCluster={Boolean(
+                        boundSubagentAgents?.length ||
+                        boundSubagentEvents?.length ||
+                        boundSubagentBindings?.size,
+                      )}
                       groupTurnRenderInfo={groupInfo}
                     />
                   </Fragment>
@@ -2696,6 +3114,7 @@ export function MessageList({
                         hasStreamingMessage={hasStreamingAnswer}
                         vitals={streamVitals}
                         className="ml-0"
+                        renderAnnouncement={false}
                       />
                     ),
                   })
@@ -2710,6 +3129,7 @@ export function MessageList({
                       hasStreamingMessage={hasStreamingAnswer}
                       vitals={streamVitals}
                       className="ml-0"
+                      renderAnnouncement={false}
                     />
                   </div>
                 ))}
@@ -2774,15 +3194,37 @@ export function MessageList({
                       <button
                         type="button"
                         onClick={() => onAuthorizeNetwork("common")}
-                        className="rounded-md border border-warning/80 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/20 dark:border-warning/60 dark:hover:bg-warning/70"
+                        disabled={
+                          authorizingNetworkTier !== null ||
+                          showConversationActivity
+                        }
+                        aria-busy={authorizingNetworkTier === "common"}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-warning/80 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/20 disabled:cursor-wait disabled:opacity-70 dark:border-warning/60 dark:hover:bg-warning/70"
                       >
+                        {authorizingNetworkTier === "common" ? (
+                          <Loader2Icon
+                            className="size-3 animate-spin"
+                            aria-hidden="true"
+                          />
+                        ) : null}
                         {t.streaming.environmentBlockedAuthorizeCommon}
                       </button>
                       <button
                         type="button"
                         onClick={() => onAuthorizeNetwork("full")}
-                        className="rounded-md border border-warning/40 px-2.5 py-1 text-xs font-medium text-warning/90 transition-colors hover:bg-warning/10 dark:border-warning/50"
+                        disabled={
+                          authorizingNetworkTier !== null ||
+                          showConversationActivity
+                        }
+                        aria-busy={authorizingNetworkTier === "full"}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-warning/40 px-2.5 py-1 text-xs font-medium text-warning/90 transition-colors hover:bg-warning/10 disabled:cursor-wait disabled:opacity-70 dark:border-warning/50"
                       >
+                        {authorizingNetworkTier === "full" ? (
+                          <Loader2Icon
+                            className="size-3 animate-spin"
+                            aria-hidden="true"
+                          />
+                        ) : null}
                         {t.streaming.environmentBlockedAuthorizeFull}
                       </button>
                     </div>
@@ -2799,27 +3241,57 @@ export function MessageList({
                     </button>
                     {failureReceipt.kind === "rate-limit" &&
                       fallbackRetryPrompt &&
-                      onRetryTask && (
+                      onRetryTask &&
+                      !latestOutboundDeliveryFailed && (
                         <button
                           type="button"
                           onClick={() => onRetryTask(fallbackRetryPrompt)}
-                          className="rounded-md border border-warning/40 px-2.5 py-1 text-xs font-medium text-warning/90 transition-colors hover:bg-warning/10 dark:border-warning/50"
+                          disabled={showConversationActivity}
+                          aria-busy={showConversationActivity}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-warning/40 px-2.5 py-1 text-xs font-medium text-warning/90 transition-colors hover:bg-warning/10 disabled:cursor-wait disabled:opacity-70 dark:border-warning/50"
                         >
-                          {t.message.retryTask}
+                          {showConversationActivity ? (
+                            <Loader2Icon
+                              className="size-3 animate-spin"
+                              aria-hidden="true"
+                            />
+                          ) : null}
+                          {showConversationActivity
+                            ? t.message.retryingTask
+                            : t.message.retryTask}
                         </button>
                       )}
                   </div>
                 )}
-                {failureReceipt?.kind === "capability" &&
+                {(failureReceipt?.kind === "capability" ||
+                  failureReceipt?.kind === "network" ||
+                  failureReceipt?.kind === "error") &&
                   fallbackRetryPrompt &&
-                  onRetryTask && (
+                  onRetryTask &&
+                  !latestOutboundDeliveryFailed && (
                     <div className="mt-2">
                       <button
                         type="button"
                         onClick={() => onRetryTask(fallbackRetryPrompt)}
-                        className="rounded-md border border-warning/80 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/20 dark:border-warning/60"
+                        disabled={showConversationActivity}
+                        aria-busy={showConversationActivity}
+                        title={t.message.retryTaskHint}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-wait disabled:opacity-70",
+                          isWarningFailure
+                            ? "border-warning/80 bg-warning/10 text-warning hover:bg-warning/20 dark:border-warning/60"
+                            : "border-destructive/40 bg-destructive/8 text-destructive hover:border-destructive/55 hover:bg-destructive/15 dark:border-destructive/50",
+                        )}
                       >
-                        {t.message.retryTask}
+                        {showConversationActivity ? (
+                          <Loader2Icon
+                            className="size-3 animate-spin"
+                            aria-hidden="true"
+                          />
+                        ) : null}
+                        {showConversationActivity
+                          ? t.message.retryingTask
+                          : t.message.retryTask}
                       </button>
                     </div>
                   )}
@@ -2872,17 +3344,33 @@ export function MessageList({
       </ConversationScrollButton>
 
       {showTimeoutWarning && !thread.error && (
-        <div className="absolute top-4 left-[50%] z-10 -translate-x-1/2 flex items-center gap-3 rounded-lg border border-warning/70 bg-warning/5 px-4 py-2 text-xs text-warning shadow-[var(--shadow-xs)] dark:border-warning/50">
+        <div
+          role="status"
+          aria-live="polite"
+          className="absolute top-4 left-[50%] z-10 -translate-x-1/2 flex items-center gap-3 rounded-lg border border-warning/70 bg-warning/5 px-4 py-2 text-xs text-warning shadow-[var(--shadow-xs)] dark:border-warning/50"
+        >
           <AlertTriangleIcon className="size-4 shrink-0 text-warning" />
           <span>
             {t.message.timeoutWarning(Math.floor(loadingAgeMs / 1000))}
           </span>
           <button
             type="button"
-            onClick={() => void thread.stop()}
-            className="rounded-md border border-warning/80 px-2 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/10 dark:border-warning/60 dark:hover:bg-warning/70"
+            disabled={isStopping}
+            aria-busy={isStopping}
+            onClick={() => {
+              // The main page supplies its unified interrupt + durable-pause
+              // controller. Standalone MessageList consumers fall back to the
+              // stream stop method and still surface a rejected interrupt.
+              void Promise.resolve()
+                .then(onStop ?? thread.stop)
+                .catch(() => toast.error(t.chatPage.stopFailed));
+            }}
+            className="inline-flex items-center gap-1.5 rounded-md border border-warning/80 px-2 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/10 disabled:cursor-wait disabled:opacity-70 dark:border-warning/60 dark:hover:bg-warning/70"
           >
-            {t.common.stop}
+            {isStopping ? (
+              <Loader2Icon className="size-3 animate-spin" aria-hidden="true" />
+            ) : null}
+            {isStopping ? t.chatInputBox.stopping : t.common.stop}
           </button>
         </div>
       )}

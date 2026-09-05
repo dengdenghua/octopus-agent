@@ -6,6 +6,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from runtime.safety.auth import Identity, IdentityStore
 from runtime.sensing.gateway.agent_modes_router import create_agent_modes_router
 
 
@@ -15,12 +16,12 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
-def test_list_agent_modes_exposes_builder_coder_architect() -> None:
+def test_list_agent_modes_exposes_only_general_and_design() -> None:
     res = _client().get("/api/agent-modes")
 
     assert res.status_code == 200
     names = {item["name"] for item in res.json()["modes"]}
-    assert {"builder", "coder", "architect"}.issubset(names)
+    assert names == {"develop", "uxui"}
 
 
 def test_detect_empty_workspace_recommends_builder(tmp_path: Path) -> None:
@@ -113,12 +114,71 @@ def test_detect_rejects_relative_workspace_path() -> None:
     assert res.status_code == 400
 
 
+def test_authenticated_loopback_user_can_detect_their_selected_project(
+    tmp_path: Path,
+) -> None:
+    identities = IdentityStore()
+    identities.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    app = FastAPI()
+    app.include_router(
+        create_agent_modes_router(
+            identity_store=identities,
+            require_auth=True,
+            allow_local_workspace_access=True,
+        )
+    )
+    client = TestClient(app)
+
+    response = client.get(
+        "/api/agent-modes/detect",
+        headers={"Authorization": "Bearer sk-alice"},
+        params={"workspace_path": str(tmp_path)},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["signals"]["workspace_path"] == str(tmp_path)
+
+
+def test_authenticated_shared_user_still_needs_operator_for_host_path_scan(
+    tmp_path: Path,
+) -> None:
+    identities = IdentityStore()
+    identities.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    app = FastAPI()
+    app.include_router(
+        create_agent_modes_router(
+            identity_store=identities,
+            require_auth=True,
+            allow_local_workspace_access=False,
+        )
+    )
+    client = TestClient(app)
+
+    response = client.get(
+        "/api/agent-modes/detect",
+        headers={"Authorization": "Bearer sk-alice"},
+        params={"workspace_path": str(tmp_path)},
+    )
+
+    assert response.status_code == 403
+
+
 @pytest.mark.parametrize(
-    "mode",
-    ["develop", "audit", "uxui", "builder", "coder", "architect"],
+    ("mode", "expected"),
+    [
+        ("develop", "develop"),
+        ("general", "develop"),
+        ("audit", "develop"),
+        ("builder", "develop"),
+        ("coder", "develop"),
+        ("architect", "develop"),
+        ("uxui", "uxui"),
+        ("design", "uxui"),
+    ],
 )
 def test_set_current_mode_accepts_task_strategies_and_legacy_project_kinds(
     mode: str,
+    expected: str,
 ) -> None:
     res = _client().put(
         "/api/agent-modes/current",
@@ -126,7 +186,7 @@ def test_set_current_mode_accepts_task_strategies_and_legacy_project_kinds(
     )
 
     assert res.status_code == 200
-    assert res.json() == {"ok": True, "mode": mode, "session_id": "session-1"}
+    assert res.json() == {"ok": True, "mode": expected, "session_id": "session-1"}
 
 
 def test_set_current_mode_rejects_unknown_mode_with_supported_names() -> None:
@@ -136,5 +196,5 @@ def test_set_current_mode_rejects_unknown_mode_with_supported_names() -> None:
     )
 
     assert res.status_code == 400
-    assert "develop/audit/uxui" in res.json()["detail"]
-    assert "builder/coder/architect" in res.json()["detail"]
+    assert "develop/uxui" in res.json()["detail"]
+    assert "legacy aliases" in res.json()["detail"]

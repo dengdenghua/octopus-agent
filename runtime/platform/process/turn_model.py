@@ -7,7 +7,7 @@ Why this exists
 Over the project's life the frontend has shipped model selection in at
 least four different body locations, and each time a new code path
 forgets to check the latest one. We just burned three rounds debugging
-"the UI picked claude-mirror but the planner went to Molili" because
+"the UI picked claude-mirror but the planner used a different fallback" because
 the field it looked at was empty even though one of the *other* known
 fields had the value.
 

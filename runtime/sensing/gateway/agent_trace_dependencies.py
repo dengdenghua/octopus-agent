@@ -103,9 +103,7 @@ def _get_promotion_applier(
         proposal_ledger=ProposalLedger(
             tenant_scoped_path(proposal_ledger_path or app_paths().proposal_ledger_path, scope)
         ),
-        audit_path=tenant_scoped_path(
-            promotion_audit_path or app_paths().promotion_audit_path, scope
-        ),
+        audit_path=promotion_audit_path or app_paths().promotion_audit_path,
         scope=scope,
     )
 

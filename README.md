@@ -41,8 +41,9 @@ pnpm dev
 2. [Quickstart](QUICKSTART.md)
 3. [Concepts](docs/CONCEPTS.md)
 4. [Architecture](docs/guide/architecture.md)
-5. [Main Path Audit](docs/archive/main-path-audit.md)
-6. [Self-Evolution Minimum Loop](docs/archive/react-self-evolution.md)
+5. [Office、PDF 与 HTML 产物协作](docs/guide/office-and-html-artifacts.md)
+6. [Main Path Audit](docs/archive/main-path-audit.md)
+7. [Self-Evolution Minimum Loop](docs/archive/react-self-evolution.md)
 
 ## 当前结构
 

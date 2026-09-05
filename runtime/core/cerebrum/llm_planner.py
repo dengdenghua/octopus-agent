@@ -368,53 +368,72 @@ class LLMPlanner:
                 load_global,
             )
 
-            _global_section = load_global()
-            if _global_section:
-                base_prompt = base_prompt + "\n\n" + _global_section
-            # Per-recipe lookup · key on BASE recipe (no addendum).
             _base_recipe_id = self.recipe_hash()
-            # Multi-variant lookup FIRST · when a manifest exists for
-            # this recipe, we A/B-split traffic across variants by
-            # ``hash(conversation_id) % total_weight``. Sticky per
-            # conversation so a thread's prompt doesn't flip
-            # mid-turn. When no manifest exists, fall back to the
-            # single-file per-recipe addendum (legacy behaviour).
+            _conv_id = (
+                intent.user_context.get("conversation_id")
+                if isinstance(intent.user_context, dict)
+                else None
+            )
+            # The governed candidate registry is authoritative. Legacy GEPA
+            # addenda remain a compatibility fallback until their records are
+            # migrated into the typed lifecycle.
+            _candidate_global_id = None
+            _candidate_global_content = ""
+            _candidate_recipe_id = None
+            _candidate_recipe_content = ""
             try:
-                from runtime.safety.recovery.gepa_variants import (
-                    select_variant,
+                from runtime.safety.evolution.runtime_deployment import (
+                    default_runtime_selector,
                 )
 
-                _conv_id = (
-                    intent.user_context.get("conversation_id")
-                    if isinstance(intent.user_context, dict)
-                    else None
+                _candidate_selector = default_runtime_selector()
+                _candidate_global_id, _candidate_global_content = (
+                    _candidate_selector.prompt_addendum(
+                        "planner.prompt:__global__",
+                        routing_key=_conv_id,
+                    )
                 )
-                _variant_id, _variant_content = select_variant(
-                    _base_recipe_id,
-                    _conv_id,
+                _candidate_recipe_id, _candidate_recipe_content = (
+                    _candidate_selector.prompt_addendum(
+                        f"planner.prompt:{_base_recipe_id}",
+                        routing_key=_conv_id,
+                    )
                 )
             except (OSError, ImportError, ValueError):
-                _variant_id, _variant_content = None, ""
-            if _variant_id is not None:
-                # Multi-variant mode is active for this recipe.
-                # Empty content == we picked the control-group
-                # ("no addendum") branch · don't append anything.
-                if _variant_content:
-                    base_prompt = base_prompt + "\n\n" + _variant_content
-                # Stash the chosen variant on the planner instance
-                # so downstream consumers (trajectory recorder /
-                # synthesize_reply) can attribute outcomes to the
-                # variant. None vs ""  vs "<vid>" distinguishes:
-                #   None → no manifest, single-file path
-                #   ""   → manifest present, control branch picked
-                #   "vA" → variant vA picked
-                self._last_chosen_variant = _variant_id
+                pass
+
+            _global_section = _candidate_global_content or load_global()
+            if _global_section:
+                base_prompt = base_prompt + "\n\n" + _global_section
+
+            if _candidate_recipe_id is not None:
+                if _candidate_recipe_content:
+                    base_prompt = base_prompt + "\n\n" + _candidate_recipe_content
+                self._last_chosen_variant = f"candidate:{_candidate_recipe_id}"
             else:
-                # No manifest · fall back to single-file addendum.
-                _recipe_section = load_for_recipe(_base_recipe_id)
-                if _recipe_section:
-                    base_prompt = base_prompt + "\n\n" + _recipe_section
-                self._last_chosen_variant = None
+                # Multi-variant lookup FIRST · when a manifest exists for
+                # this recipe, A/B-split traffic with a sticky conversation
+                # bucket. Otherwise fall back to the single-file addendum.
+                try:
+                    from runtime.safety.recovery.gepa_variants import (
+                        select_variant,
+                    )
+
+                    _variant_id, _variant_content = select_variant(
+                        _base_recipe_id,
+                        _conv_id,
+                    )
+                except (OSError, ImportError, ValueError):
+                    _variant_id, _variant_content = None, ""
+                if _variant_id is not None:
+                    if _variant_content:
+                        base_prompt = base_prompt + "\n\n" + _variant_content
+                    self._last_chosen_variant = _variant_id
+                else:
+                    _recipe_section = load_for_recipe(_base_recipe_id)
+                    if _recipe_section:
+                        base_prompt = base_prompt + "\n\n" + _recipe_section
+                    self._last_chosen_variant = None
         except (OSError, ImportError, ValueError) as exc:
             _logger.debug("recipe/variant load skipped: %s", exc)
         kg_section = self._render_kg_section()
@@ -427,11 +446,15 @@ class LLMPlanner:
         if recipe_warning:
             base_prompt = base_prompt + "\n\n" + recipe_warning
 
+        from runtime.safety.recovery.tenant_scope import trusted_scope_from_user_context
+
+        memory_scope = trusted_scope_from_user_context(intent.user_context)
         packet = self.composer.compose(
             task_info=intent,
             system_prompt=base_prompt,
             budget_tokens=8_000,  # Implementation note.
             relevant_skills=allowed_skills,
+            scope=memory_scope,
         )
 
         system_parts = [s.content for s in packet.segments if s.bucket == "system"]

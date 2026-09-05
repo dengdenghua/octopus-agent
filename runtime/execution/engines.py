@@ -57,13 +57,16 @@ def select_execution_route(
     reflection_fast_path: bool = False,
     requested_engine: EngineId | None = None,
     coding_task: bool = False,
+    coordinated: bool = False,
 ) -> ExecutionRoute:
     """Resolve host-validated signals without an additional model call.
 
     Project/team orchestration takes precedence over a roster member's engine.
     Individual members retain their own engine binding when dispatched.
     """
-    if requested_engine is EngineId.CODEX and (project_command or group_fanout or topology_id):
+    if requested_engine is EngineId.CODEX and (
+        project_command or group_fanout or topology_id or coordinated
+    ):
         raise EngineSelectionError(
             "Codex cannot own project or team orchestration. Select Auto or Octopus; "
             "individual coding tasks can use Codex.",
@@ -76,6 +79,8 @@ def select_execution_route(
         return ExecutionRoute(EngineId.OCTOPUS, "group_fanout", "explicit_group")
     if topology_id:
         return ExecutionRoute(EngineId.OCTOPUS, "swarm_mesh", "explicit_topology")
+    if coordinated:
+        return ExecutionRoute(EngineId.OCTOPUS, "react", "team_coordinator")
     if requested_engine is EngineId.CODEX:
         return ExecutionRoute(EngineId.CODEX, "codex_app_server", "explicit_engine")
     if requested_engine is EngineId.OCTOPUS:

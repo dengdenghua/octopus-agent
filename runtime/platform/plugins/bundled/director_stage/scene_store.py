@@ -88,6 +88,12 @@ def new_scene(scene_id: str) -> dict[str, Any]:
             "rotation": [0, 0, 0],
             "skyColor": "#dce6f2",
             "background": "studio",
+            "backgroundMode": "panorama",
+            "backgroundImage": None,
+            "backgroundImageName": None,
+            "horizontalRotation": 0,
+            "sphereRadius": 90,
+            "showRoleLabels": True,
         },
         "entities": [
             {
@@ -432,6 +438,23 @@ def _apply(scene: dict[str, Any], operation: dict[str, Any]) -> dict[str, Any]:
         for key in ("showGround", "groundOpacity", "groundHeight"):
             if key in operation:
                 target[key] = operation[key]
+        if "backgroundImage" in operation:
+            image = operation["backgroundImage"]
+            if image is not None:
+                image = str(image)
+                if not image.startswith("data:image/") or len(image) > 4_000_000:
+                    raise ValueError("backgroundImage must be a data image under 4 MB")
+            target["backgroundImage"] = image
+        if "backgroundImageName" in operation:
+            target["backgroundImageName"] = str(operation["backgroundImageName"] or "")[:120]
+        if "horizontalRotation" in operation:
+            target["horizontalRotation"] = max(
+                -180.0, min(180.0, float(operation["horizontalRotation"]))
+            )
+        if "sphereRadius" in operation:
+            target["sphereRadius"] = max(30.0, min(180.0, float(operation["sphereRadius"])))
+        if "showRoleLabels" in operation:
+            target["showRoleLabels"] = bool(operation["showRoleLabels"])
         return {"sceneId": scene["id"]}
     if kind == "add_camera_path":
         camera = _find(entities, operation["cameraId"])

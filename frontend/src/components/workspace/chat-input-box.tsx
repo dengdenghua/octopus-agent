@@ -15,18 +15,14 @@ import type {
   ResearchSourceKind,
 } from "@/core/research/api";
 import type { ReasoningEffort } from "@/core/threads";
+import type { ThreadConnectionPhase } from "@/core/realtime";
 import type { UploadedFileInfo } from "@/core/uploads";
 import type { ReasoningMode } from "./reasoning-mode";
 import {
   ModeSelector,
   type AgentModeName,
-  type AuditIntensity,
   type DetectResponse,
 } from "./mode-selector";
-import {
-  PersonalModeSelector,
-  type PersonalMode,
-} from "./personal-mode-selector";
 import { WorkDirSelector } from "./workdir-selector";
 
 import { ChatComposer } from "./chat-input-box/ChatComposer";
@@ -44,6 +40,12 @@ import type { AutomationTarget } from "@/core/computer/api";
 export interface ChatInputBoxProps {
   status?: ChatStatus;
   disabled?: boolean;
+  /** Thread mutations are safe only after the socket has reopened and the
+   * server-owned history has been reconciled. Draft editing remains available
+   * while this is false. */
+  readyForMutations?: boolean;
+  connectionPhase?: ThreadConnectionPhase;
+  onRetryConnection?: () => void | Promise<void>;
   model?: string;
   modelName?: string;
   mode?: ReasoningMode;
@@ -77,6 +79,10 @@ export interface ChatInputBoxProps {
    * doesn't need a folder); pass true for code-flavored conversations
    * that read/edit local files. */
   showWorkDirSelector?: boolean;
+  /** Show the shared General / Design mode selector independently from the
+   * workdir picker. Embedded Design Canvas chats need the mode control while
+   * intentionally hiding local-folder controls. */
+  showModeSelector?: boolean;
   onWorkDirChange?: (dir: string) => void;
   lockWorkDirToThread?: boolean;
   onOpenWorkDirInNewTask?: (dir: string) => void;
@@ -96,10 +102,6 @@ export interface ChatInputBoxProps {
   permissionMode?: PermissionMode;
   codeModeUnlocked?: boolean;
   projectAgentMode?: AgentModeName;
-  auditIntensity?: AuditIntensity;
-  /** Personal-space work mode (general/build/research). Surfaced only when no
-   * project dir is bound; the parent threads it into the turn as personal_mode. */
-  personalMode?: PersonalMode;
   projectDetection?: DetectResponse | null;
   reasoningEffort?: ReasoningEffort;
   /** Use the shared server-owned model profile control. This is intentionally
@@ -113,8 +115,9 @@ export interface ChatInputBoxProps {
   executionEngineControl?: ReactNode;
   onPermissionModeChange?: (mode: PermissionMode) => void;
   onProjectAgentModeChange?: (mode: AgentModeName) => void;
-  onAuditIntensityChange?: (intensity: AuditIntensity) => void;
-  onPersonalModeChange?: (mode: PersonalMode) => void;
+  /** User-only companion to onProjectAgentModeChange. It fires after the
+   * selection is saved and excludes hydration/auto-detection updates. */
+  onProjectAgentModeUserChange?: (mode: AgentModeName) => void;
   /** Notify when the user manually overrides the project work mode (or when
    * the override is cleared). Intent-based auto-switching respects this. */
   onManualOverrideChange?: (isManual: boolean) => void;
@@ -141,8 +144,10 @@ export interface ChatInputBoxProps {
     files?: File[];
     /** Server-side info for attachments already uploaded on attach. */
     uploaded?: UploadedFileInfo[];
-  }) => void;
-  onStop?: () => void;
+  }) => void | boolean;
+  onStop?: () => void | Promise<void>;
+  /** Prevent repeated stop requests while the server acknowledges one. */
+  isStopping?: boolean;
   /** True while attachments are being uploaded to the backend. Surfaces
    * a progress hint on the composer so the user knows the send is not
    * finished yet. */
@@ -171,12 +176,9 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
     permissionMode,
     mode = "react",
     projectAgentMode = "develop",
-    auditIntensity = "standard",
     codeModeUnlocked = false,
-    personalMode = "general",
     onProjectAgentModeChange,
-    onAuditIntensityChange,
-    onPersonalModeChange,
+    onProjectAgentModeUserChange,
     onProjectDetectionChange,
     onManualOverrideChange,
     modeIntentSuggestion,
@@ -220,50 +222,24 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
   // one. When the parent opts into the picker (``showWorkDirSelector``), show it
   // so picking a folder is the entry point into a project/code workflow.
   const showWorkDirSegment = isProjectMode || hasWorkDir || showWorkDirSelector;
-  const showModeSegment = isProjectMode;
+  // Personal and project workspaces share the same two work modes. A folder
+  // changes scope only; it must not replace the mode selector with another
+  // vocabulary or another backend contract.
+  const showModeSegment = props.showModeSelector ?? showWorkDirSelector;
   // Read-only is no longer a standalone chip — it folds into a 🔒 lock badge on
   // the mode chip (passed to ModeSelector as readOnlyHint). "项目写入" is the
   // expected default and needs no indicator; only read-only is surfaced.
   const projectReadOnlyHint = `${t.chatInputBox.projectStatusTitle}: ${t.chatInputBox.projectStatusDescLocked}`;
-  // Personal-space work mode (general/build/research) shows only when no project
-  // dir is bound — the project ModeSelector takes over once a folder is picked.
-  const showPersonalModeSegment = !hasWorkDir && !isProjectMode;
-  const visiblePersonalMode =
-    isGroupConversation &&
-    (groupTaskStrategy === "build" || groupTaskStrategy === "research")
-      ? groupTaskStrategy
-      : personalMode;
   const visibleProjectMode =
-    isGroupConversation &&
-    (groupTaskStrategy === "develop" ||
-      groupTaskStrategy === "audit" ||
-      groupTaskStrategy === "uxui")
-      ? groupTaskStrategy
+    isGroupConversation && groupTaskStrategy === "uxui"
+      ? "uxui"
       : projectAgentMode;
-  const groupPersonalModeLabels = isGroupConversation
-    ? {
-        general: t.chatInputBox.groupTaskAuto,
-        build: t.chatInputBox.groupTaskBuild,
-        research: t.chatInputBox.groupTaskResearch,
-      }
-    : undefined;
   const groupProjectModeLabels = isGroupConversation
     ? {
-        develop: t.chatInputBox.groupTaskDevelop,
-        audit: t.chatInputBox.groupTaskAudit,
-        uxui: t.chatInputBox.groupTaskUxui,
+        develop: t.modes.develop,
+        uxui: t.modes.uxui,
       }
     : undefined;
-  const changePersonalMode = useCallback(
-    (next: PersonalMode) => {
-      if (isGroupConversation && onGroupTaskStrategyChange) {
-        onGroupTaskStrategyChange(next === "general" ? "auto" : next);
-        return;
-      }
-      onPersonalModeChange?.(next);
-    },
-    [isGroupConversation, onGroupTaskStrategyChange, onPersonalModeChange],
-  );
   const changeProjectMode = useCallback(
     (next: AgentModeName) => {
       if (isGroupConversation && onGroupTaskStrategyChange) {
@@ -279,7 +255,6 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
     (showAgentSegment ? 1 : 0) +
     (showWorkDirSegment ? 1 : 0) +
     (showModeSegment ? 1 : 0) +
-    (showPersonalModeSegment ? 1 : 0) +
     (statusTrailing ? 1 : 0);
   const showStatusStrip = statusSegmentCount > 0;
 
@@ -294,7 +269,7 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
         />
       ) : null}
       <ChatComposer {...props} />
-      {showWorkDirSelector && showStatusStrip && (
+      {showStatusStrip && (
         <div
           data-testid="chat-status-strip"
           className="flex min-h-8 items-center gap-2 overflow-x-auto px-2 pt-1 text-xs text-muted-foreground [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -339,44 +314,29 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
                   variant="muted"
                   chromeless
                 />
-                {showModeSegment && (
-                  <>
-                    <span
-                      className="h-3 w-px shrink-0 bg-border/35"
-                      aria-hidden="true"
-                    />
-                    <ModeSelector
-                      workDir={workDir ?? ""}
-                      sessionId={threadId ?? "new"}
-                      mode={visibleProjectMode}
-                      labelOverrides={groupProjectModeLabels}
-                      auditIntensity={auditIntensity}
-                      codeModeUnlocked={codeModeUnlocked}
-                      readOnlyHint={projectReadOnlyHint}
-                      chromeless
-                      permissionLabel={permissionLabel}
-                      onModeChange={changeProjectMode}
-                      onAuditIntensityChange={onAuditIntensityChange}
-                      onDetectionChange={onProjectDetectionChange}
-                      onManualOverrideChange={onManualOverrideChange}
-                    />
-                  </>
-                )}
               </>
             ) : null}
-            {showPersonalModeSegment ? (
+            {showModeSegment ? (
               <>
-                {(showAgentSegment || showWorkDirSegment) && (
+                {showWorkDirSegment ? (
                   <span
                     className="h-3 w-px shrink-0 bg-border/35"
                     aria-hidden="true"
                   />
-                )}
-                <PersonalModeSelector
-                  mode={visiblePersonalMode}
-                  labelOverrides={groupPersonalModeLabels}
+                ) : null}
+                <ModeSelector
+                  workDir={workDir ?? ""}
+                  sessionId={threadId ?? "new"}
+                  mode={visibleProjectMode}
+                  labelOverrides={groupProjectModeLabels}
+                  codeModeUnlocked={codeModeUnlocked}
+                  readOnlyHint={projectReadOnlyHint}
                   chromeless
-                  onModeChange={changePersonalMode}
+                  permissionLabel={permissionLabel}
+                  onModeChange={changeProjectMode}
+                  onUserModeChange={onProjectAgentModeUserChange}
+                  onDetectionChange={onProjectDetectionChange}
+                  onManualOverrideChange={onManualOverrideChange}
                 />
               </>
             ) : null}
@@ -384,7 +344,7 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
               <>
                 {(showAgentSegment ||
                   showWorkDirSegment ||
-                  showPersonalModeSegment) && (
+                  showModeSegment) && (
                   <span
                     className="h-3 w-px shrink-0 bg-border/35"
                     aria-hidden="true"

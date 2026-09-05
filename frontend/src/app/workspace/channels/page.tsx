@@ -6,8 +6,10 @@ import {
   ChevronRightIcon,
   MessageCircleIcon,
   PlusIcon,
+  RefreshCwIcon,
   SearchIcon,
   SettingsIcon,
+  UsersIcon,
   XIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -54,13 +56,42 @@ type ChannelRow = {
     group_count: number;
     pending_count: number;
   };
+  operations: {
+    health_status: "unknown" | "healthy" | "degraded" | "unsupported";
+    last_checked_at?: string | null;
+    check_latency_ms?: number | null;
+    last_inbound_at?: string | null;
+    last_outbound_at?: string | null;
+    last_error_at?: string | null;
+    last_error?: string | null;
+    inbound_count: number;
+    outbound_count: number;
+    failure_count: number;
+    duplicate_count: number;
+    thread_count: number;
+    capabilities: {
+      edit: boolean;
+      typing: boolean;
+      reactions: boolean;
+      health_probe: boolean;
+    };
+  };
   assigned_agent_id?: string | null;
+  assigned_group_id?: string | null;
 };
 
 type AgentLite = {
   id: string;
+  name?: string;
   display_name?: string;
   avatar_url?: string | null;
+};
+
+type GroupLite = {
+  group_id: string;
+  display_name?: string;
+  description?: string;
+  members: string[];
 };
 
 type ChannelFilter = "all" | "connected" | "unlinked";
@@ -91,6 +122,8 @@ const PLATFORM_COLORS: Record<string, string> = {
   simplex: "bg-[#f76b1c] text-white",
   open_webui: "bg-[#8b5cf6] text-white",
   yuanbao: "bg-[#006eff] text-white",
+  irc: "bg-[#2563eb] text-white",
+  twitch: "bg-[#9146ff] text-white",
   other: "bg-muted/70 text-muted-foreground",
 };
 
@@ -120,6 +153,8 @@ const PLATFORM_ICONS: Record<string, string> = {
   simplex: "🔐",
   open_webui: "🌐",
   yuanbao: "💎",
+  irc: "⌁",
+  twitch: "🟣",
   other: "•",
 };
 
@@ -141,6 +176,8 @@ const PLATFORM_CATEGORY_MAP: Record<string, string> = {
   mattermost: "im",
   simplex: "im",
   line: "im",
+  irc: "im",
+  twitch: "im",
   wechat: "china",
   feishu: "china",
   dingtalk: "china",
@@ -165,24 +202,28 @@ export default function ChannelsPage() {
   const { confirm, confirmDialog } = useConfirmDialog();
   const [rows, setRows] = useState<ChannelRow[]>([]);
   const [agents, setAgents] = useState<AgentLite[]>([]);
+  const [groups, setGroups] = useState<GroupLite[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ChannelFilter>("all");
+  const [assignQuery, setAssignQuery] = useState("");
   /* Implementation note. */
   const [assigningId, setAssigningId] = useState<string | null>(null);
   /* Implementation note. */
   const [credPlatform, setCredPlatform] = useState<string | null>(null);
   /* Implementation note. */
   const [pairingsForId, setPairingsForId] = useState<string | null>(null);
+  const [probingId, setProbingId] = useState<string | null>(null);
 
   // Implementation note.
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [chRes, agRes] = await Promise.all([
+      const [chRes, agRes, groupRes] = await Promise.all([
         fetch(`${getBackendBaseURL()}/api/channels`),
         fetch(`${getBackendBaseURL()}/api/agents`),
+        fetch(`${getBackendBaseURL()}/api/groups`),
       ]);
       if (!chRes.ok)
         throw new Error(`Failed to load channels: ${chRes.status}`);
@@ -190,7 +231,14 @@ export default function ChannelsPage() {
       setRows(ch);
       if (agRes.ok) {
         const ag = (await agRes.json()) as AgentLite[];
-        setAgents(ag);
+        setAgents(
+          ag
+            .map((agent) => ({ ...agent, id: agent.id || agent.name || "" }))
+            .filter((agent) => agent.id),
+        );
+      }
+      if (groupRes.ok) {
+        setGroups((await groupRes.json()) as GroupLite[]);
       }
       setError(null);
     } catch (e) {
@@ -213,6 +261,30 @@ export default function ChannelsPage() {
   }, []);
 
   const assignRow = rows.find((r) => r.channel_id === assigningId);
+  const normalizedAssignQuery = assignQuery.trim().toLowerCase();
+  const assignableAgents = normalizedAssignQuery
+    ? agents.filter((agent) =>
+        [agent.id, agent.display_name]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedAssignQuery),
+      )
+    : agents;
+  const assignableGroups = normalizedAssignQuery
+    ? groups.filter((group) =>
+        [
+          group.group_id,
+          group.display_name,
+          group.description,
+          ...group.members,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedAssignQuery),
+      )
+    : groups;
 
   async function assignAgent(channelId: string, agentId: string) {
     try {
@@ -233,6 +305,30 @@ export default function ChannelsPage() {
       await loadAll();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t.channels.toastBindFailed);
+    }
+  }
+
+  async function assignGroup(channelId: string, groupId: string) {
+    try {
+      const response = await fetch(
+        `${getBackendBaseURL()}/api/channels/${channelId}/assistant`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ group_id: groupId }),
+        },
+      );
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(detail || response.statusText);
+      }
+      toast.success(t.channels.toastTeamBound);
+      setAssigningId(null);
+      await loadAll();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t.channels.toastBindFailed,
+      );
     }
   }
 
@@ -260,6 +356,37 @@ export default function ChannelsPage() {
     }
   }
 
+  async function probeChannel(channelId: string) {
+    setProbingId(channelId);
+    try {
+      const response = await fetch(
+        `${getBackendBaseURL()}/api/channels/${channelId}/diagnostics/probe`,
+        { method: "POST" },
+      );
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(detail || response.statusText);
+      }
+      const operations = (await response.json()) as ChannelRow["operations"];
+      setRows((current) =>
+        current.map((row) =>
+          row.channel_id === channelId ? { ...row, operations } : row,
+        ),
+      );
+      if (operations.health_status === "healthy") {
+        toast.success(t.channels.healthCheckPassed);
+      } else {
+        toast.error(operations.last_error || t.channels.healthCheckFailed);
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t.channels.healthCheckFailed,
+      );
+    } finally {
+      setProbingId(null);
+    }
+  }
+
   const connectedCount = useMemo(
     () => rows.filter((r) => r.connected).length,
     [rows],
@@ -271,6 +398,9 @@ export default function ChannelsPage() {
       if (filter === "unlinked" && row.connected) return false;
       if (!term) return true;
       const assignedAgent = agents.find((a) => a.id === row.assigned_agent_id);
+      const assignedGroup = groups.find(
+        (group) => group.group_id === row.assigned_group_id,
+      );
       return [
         row.display_name,
         row.description,
@@ -279,12 +409,14 @@ export default function ChannelsPage() {
         row.channel_id,
         row.assigned_agent_id ?? "",
         assignedAgent?.display_name ?? "",
+        row.assigned_group_id ?? "",
+        assignedGroup?.display_name ?? "",
       ]
         .join(" ")
         .toLowerCase()
         .includes(term);
     });
-  }, [agents, filter, query, rows]);
+  }, [agents, filter, groups, query, rows]);
 
   const channelSections = useMemo(() => {
     const grouped: Record<string, ChannelRow[]> = {};
@@ -472,6 +604,7 @@ export default function ChannelsPage() {
                           key={row.channel_id || `${row.platform}-${index}`}
                           row={row}
                           agents={agents}
+                          groups={groups}
                           onRequestAssign={() => setAssigningId(row.channel_id)}
                           onRequestCredential={() =>
                             setCredPlatform(row.platform)
@@ -479,6 +612,10 @@ export default function ChannelsPage() {
                           onRequestPairings={() =>
                             setPairingsForId(row.channel_id)
                           }
+                          onRequestHealthCheck={() =>
+                            void probeChannel(row.channel_id)
+                          }
+                          probing={probingId === row.channel_id}
                         />
                       ))}
                     </div>
@@ -527,7 +664,12 @@ export default function ChannelsPage() {
       {/* Implementation note. */}
       <Dialog
         open={!!assigningId}
-        onOpenChange={(open) => !open && setAssigningId(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAssigningId(null);
+            setAssignQuery("");
+          }
+        }}
       >
         <DialogContent className="max-w-md max-h-[70vh] overflow-hidden flex flex-col">
           <DialogHeader>
@@ -540,65 +682,144 @@ export default function ChannelsPage() {
             </DialogDescription>
           </DialogHeader>
 
+          <div className="relative mt-1">
+            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={assignQuery}
+              onChange={(event) => setAssignQuery(event.target.value)}
+              placeholder={t.channels.searchRespondersPlaceholder}
+              className="h-9 pl-9"
+            />
+          </div>
+
           <div className="overflow-y-auto flex-1 mt-2">
-            {agents.length === 0 ? (
+            {agents.length === 0 && groups.length === 0 ? (
               <Empty className="min-h-[180px] rounded-lg px-4 py-8">
                 <EmptyHeader>
                   <EmptyTitle>{t.channels.noAgentsAvailable}</EmptyTitle>
                 </EmptyHeader>
               </Empty>
+            ) : assignableAgents.length === 0 &&
+              assignableGroups.length === 0 ? (
+              <Empty className="min-h-[160px] rounded-lg px-4 py-8">
+                <EmptyHeader>
+                  <EmptyTitle>{t.channels.noSearchResults}</EmptyTitle>
+                  <EmptyDescription>
+                    {t.channels.noSearchResultsDescription}
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             ) : (
-              <ul className="space-y-1">
-                {agents.map((a, index) => {
-                  const isCurrent = assignRow?.assigned_agent_id === a.id;
-                  const agentKey =
-                    a.id?.trim() || `${a.display_name ?? "agent"}-${index}`;
-                  return (
-                    <li key={agentKey}>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          assigningId && void assignAgent(assigningId, a.id)
-                        }
-                        className={cn(
-                          "w-full flex items-center gap-3 rounded-lg border border-border-subtle",
-                          "bg-background px-3 py-2 text-left transition-colors",
-                          "hover:bg-muted/40 hover:border-border-strong",
-                          isCurrent &&
-                            "border-primary/40 bg-primary/5 hover:border-primary/60",
-                        )}
-                      >
-                        {a.avatar_url ? (
-                          <img
-                            src={a.avatar_url}
-                            alt=""
-                            className="size-8 rounded-md object-cover"
-                          />
-                        ) : (
-                          <div className="flex size-8 items-center justify-center rounded-md bg-muted text-xs font-medium text-muted-foreground">
-                            {(a.display_name ?? a.id).charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-medium truncate">
-                            {a.display_name || a.id}
-                          </div>
-                          <div className="text-xs text-muted-foreground truncate">
-                            {a.id}
-                          </div>
-                        </div>
-                        {isCurrent && (
-                          <CheckIcon className="size-4 text-primary shrink-0" />
-                        )}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+              <div className="space-y-4">
+                {assignableGroups.length > 0 && (
+                  <section>
+                    <div className="mb-2 flex items-center gap-2 px-1 text-xs font-medium text-muted-foreground">
+                      <UsersIcon className="size-3.5" />
+                      {t.channels.aiTeams}
+                    </div>
+                    <ul className="space-y-1">
+                      {assignableGroups.map((group) => {
+                        const isCurrent =
+                          assignRow?.assigned_group_id === group.group_id;
+                        return (
+                          <li key={group.group_id}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                assigningId &&
+                                void assignGroup(assigningId, group.group_id)
+                              }
+                              className={cn(
+                                "flex w-full items-center gap-3 rounded-lg border border-border-subtle",
+                                "bg-background px-3 py-2 text-left transition-colors",
+                                "hover:border-border-strong hover:bg-muted/40",
+                                isCurrent && "border-primary/40 bg-primary/5",
+                              )}
+                            >
+                              <div className="flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+                                <UsersIcon className="size-4" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-medium">
+                                  {group.display_name || group.group_id}
+                                </div>
+                                <div className="truncate text-xs text-muted-foreground">
+                                  {t.channels.teamMembers(group.members.length)}
+                                </div>
+                              </div>
+                              {isCurrent && (
+                                <CheckIcon className="size-4 shrink-0 text-primary" />
+                              )}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                )}
+                {assignableAgents.length > 0 && (
+                  <section>
+                    <div className="mb-2 px-1 text-xs font-medium text-muted-foreground">
+                      {t.channels.singleAgents}
+                    </div>
+                    <ul className="space-y-1">
+                      {assignableAgents.map((a, index) => {
+                        const isCurrent = assignRow?.assigned_agent_id === a.id;
+                        const agentKey =
+                          a.id?.trim() ||
+                          `${a.display_name ?? "agent"}-${index}`;
+                        return (
+                          <li key={agentKey}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                assigningId &&
+                                void assignAgent(assigningId, a.id)
+                              }
+                              className={cn(
+                                "w-full flex items-center gap-3 rounded-lg border border-border-subtle",
+                                "bg-background px-3 py-2 text-left transition-colors",
+                                "hover:bg-muted/40 hover:border-border-strong",
+                                isCurrent &&
+                                  "border-primary/40 bg-primary/5 hover:border-primary/60",
+                              )}
+                            >
+                              {a.avatar_url ? (
+                                <img
+                                  src={a.avatar_url}
+                                  alt=""
+                                  className="size-8 rounded-md object-cover"
+                                />
+                              ) : (
+                                <div className="flex size-8 items-center justify-center rounded-md bg-muted text-xs font-medium text-muted-foreground">
+                                  {(a.display_name ?? a.id)
+                                    .charAt(0)
+                                    .toUpperCase()}
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="text-sm font-medium truncate">
+                                  {a.display_name || a.id}
+                                </div>
+                                <div className="text-xs text-muted-foreground truncate">
+                                  {a.id}
+                                </div>
+                              </div>
+                              {isCurrent && (
+                                <CheckIcon className="size-4 text-primary shrink-0" />
+                              )}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                )}
+              </div>
             )}
           </div>
 
-          {assignRow?.assigned_agent_id && (
+          {(assignRow?.assigned_agent_id || assignRow?.assigned_group_id) && (
             <div className="mt-3 pt-3 border-t border-border-subtle">
               <Button
                 variant="ghost"
@@ -623,15 +844,21 @@ export default function ChannelsPage() {
 function ChannelCard({
   row,
   agents,
+  groups,
   onRequestAssign,
   onRequestCredential,
   onRequestPairings,
+  onRequestHealthCheck,
+  probing,
 }: {
   row: ChannelRow;
   agents: AgentLite[];
+  groups: GroupLite[];
   onRequestAssign: () => void;
   onRequestCredential: () => void;
   onRequestPairings: () => void;
+  onRequestHealthCheck: () => void;
+  probing: boolean;
 }) {
   const { t } = useI18n();
   const colorCls = row.connected
@@ -639,6 +866,10 @@ function ChannelCard({
     : "bg-muted/70 text-muted-foreground";
   const icon = PLATFORM_ICONS[row.platform] ?? "•";
   const assignedAgent = agents.find((a) => a.id === row.assigned_agent_id);
+  const assignedGroup = groups.find(
+    (group) => group.group_id === row.assigned_group_id,
+  );
+  const hasAssignment = Boolean(row.assigned_agent_id || row.assigned_group_id);
 
   return (
     <div
@@ -716,9 +947,64 @@ function ChannelCard({
         />
       </div>
 
+      {row.connected && (
+        <div className="mt-3 rounded-lg border border-border-subtle bg-muted/15 px-3 py-2">
+          <div className="flex items-center gap-2 text-xs">
+            <span
+              className={cn(
+                "size-2 shrink-0 rounded-full",
+                row.operations.health_status === "healthy" && "bg-success",
+                row.operations.health_status === "degraded" && "bg-destructive",
+                row.operations.health_status === "unsupported" &&
+                  "bg-muted-foreground/35",
+                row.operations.health_status === "unknown" &&
+                  "bg-muted-foreground/35",
+              )}
+            />
+            <span className="font-medium">
+              {row.operations.health_status === "healthy"
+                ? t.channels.healthHealthy
+                : row.operations.health_status === "degraded"
+                  ? t.channels.healthDegraded
+                  : row.operations.health_status === "unsupported"
+                    ? t.channels.healthUnsupported
+                    : t.channels.healthUnknown}
+            </span>
+            <span className="text-muted-foreground">
+              {t.channels.activeThreads(row.operations.thread_count)}
+              {row.operations.duplicate_count > 0 &&
+                ` · ${t.channels.duplicatesBlocked(row.operations.duplicate_count)}`}
+              {row.operations.check_latency_ms != null &&
+                ` · ${row.operations.check_latency_ms} ms`}
+            </span>
+            <button
+              type="button"
+              onClick={onRequestHealthCheck}
+              disabled={probing}
+              className="ml-auto inline-flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+              title={t.channels.runHealthCheck}
+            >
+              <RefreshCwIcon
+                className={cn("size-3.5", probing && "animate-spin")}
+              />
+              {probing ? t.channels.healthChecking : t.channels.runHealthCheck}
+            </button>
+          </div>
+          {row.operations.last_error &&
+            row.operations.health_status === "degraded" && (
+              <div
+                className="mt-1 truncate pl-4 text-xs text-destructive/85"
+                title={row.operations.last_error}
+              >
+                {row.operations.last_error}
+              </div>
+            )}
+        </div>
+      )}
+
       {/* Implementation note. */}
       <div className="mt-3">
-        {row.assigned_agent_id ? (
+        {hasAssignment ? (
           <button
             type="button"
             onClick={onRequestAssign}
@@ -730,7 +1016,11 @@ function ChannelCard({
             title={t.channels.clickToChangeAgent}
           >
             <div className="flex items-center gap-2">
-              {assignedAgent?.avatar_url ? (
+              {row.assigned_group_id ? (
+                <div className="flex size-6 items-center justify-center rounded-md bg-primary/15 text-primary">
+                  <UsersIcon className="size-3.5" />
+                </div>
+              ) : assignedAgent?.avatar_url ? (
                 <img
                   src={assignedAgent.avatar_url}
                   alt=""
@@ -738,17 +1028,22 @@ function ChannelCard({
                 />
               ) : (
                 <div className="flex size-6 items-center justify-center rounded-md bg-primary/15 text-xs font-medium text-primary">
-                  {(assignedAgent?.display_name ?? row.assigned_agent_id)
+                  {(assignedAgent?.display_name ?? row.assigned_agent_id ?? "?")
                     .charAt(0)
                     .toUpperCase()}
                 </div>
               )}
               <div>
                 <div className="text-xs font-medium">
-                  {assignedAgent?.display_name ?? row.assigned_agent_id}
+                  {assignedGroup?.display_name ??
+                    row.assigned_group_id ??
+                    assignedAgent?.display_name ??
+                    row.assigned_agent_id}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {t.channels.handlingMessages}
+                  {row.assigned_group_id
+                    ? t.channels.handlingMessagesAsTeam
+                    : t.channels.handlingMessages}
                 </div>
               </div>
             </div>

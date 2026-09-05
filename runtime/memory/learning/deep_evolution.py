@@ -22,14 +22,14 @@ Two tiers built on top of the zero-cost ``turn_scoring`` heuristic:
             2. LLM proposes K candidate SOUL changes
             3. LLM-as-judge scores each candidate's predicted
                impact against held-out trajectories
-            4. pick winner (and dry-run preview OR commit)
+            4. pick winner (and dry-run preview OR register candidate)
             5. iterate up to ``max_rounds``
 
         Gated by ``dry_run`` (default True): the agent / user sees
         the full proposed plan + reasoning WITHOUT mutation. Set
-        ``dry_run=False`` to actually apply via update_soul. Always
-        snapshots SOUL.md beforehand so revert_soul can roll back
-        any commit.
+        ``dry_run=False`` to register a typed candidate. The candidate
+        must then pass structured shadow review and staged canary before
+        deployment; the model loop no longer edits SOUL.md directly.
 
 Why these live here (not in suckers/)
 -------------------------------------
@@ -46,15 +46,37 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 from typing import Any
 
+from runtime.memory.learning.turn_scoring import is_safe_agent_id
 from runtime.platform.budget.usage_pricing import price
 from runtime.platform.llm_infra.llm_caller import LLMCaller
+from runtime.platform.process.paths import app_paths
 from runtime.platform.process.service_provider import get_provider
+from runtime.safety.auth.scope import TenantScope, tenant_scoped_path
+from runtime.safety.evolution.candidate_registry import (
+    CandidateRegistry,
+    CandidateRegistryError,
+    CandidateStatus,
+    EvolutionCandidate,
+)
+from runtime.safety.recovery.evolution_constraints import EvolutionConstraintValidator
 
 _LOG = logging.getLogger("octopus.deep_evolution")
 
 _EVOLVE_CALLER = LLMCaller("evolve_router", "evolve_default_model")
+
+
+def _agent_soul_path(agent_id: str) -> Path:
+    if not is_safe_agent_id(agent_id):
+        raise ValueError("unsafe agent id for deep evolution")
+    # Agent presets are deployment assets. ``resources_root`` (via the
+    # loader) also works in packaged/container deployments where cwd/project
+    # data and bundled agents live in different roots.
+    from runtime.execution.agents.loader import default_agents_root
+
+    return default_agents_root() / agent_id / "agent-core" / "SOUL.md"
 
 
 def set_evolve_router(router: Any, *, default_model: str | None = None) -> None:
@@ -111,6 +133,81 @@ def _build_holdout_runner(*, model: str | None = None):
     return _runner
 
 
+def _record_deep_evolve_candidate(
+    *,
+    agent_id: str,
+    candidate: dict[str, Any],
+    judgment: dict[str, Any],
+    holdout_passed: bool,
+    source_failures: list[str],
+    registry_path: Any = None,
+    scope: TenantScope | None = None,
+) -> EvolutionCandidate:
+    if not is_safe_agent_id(agent_id):
+        raise ValueError("unsafe agent id for deep evolution candidate")
+    lesson = str(candidate.get("lesson") or "").strip()
+    kind = str(candidate.get("kind") or "").strip()
+    safety_results = EvolutionConstraintValidator().validate_prompt(lesson or kind)
+    safety_passed = bool(safety_results) and all(item.passed for item in safety_results)
+    if scope is not None and scope.allow_cross_tenant:
+        raise ValueError("cross-tenant deep evolution cannot materialize a candidate")
+    base_registry_path = registry_path or app_paths().evolution_candidates_path
+    effective_registry_path = (
+        tenant_scoped_path(base_registry_path, scope) if scope is not None else base_registry_path
+    )
+    registry = CandidateRegistry(effective_registry_path, tenant_scope=scope)
+    patch = (
+        {"op": "append_lesson", "value": lesson, "tag": candidate.get("tag")}
+        if kind == "add_lesson"
+        else {"op": "revert", "steps_back": int(candidate.get("revert_steps") or 1)}
+    )
+    evolution_candidate = registry.propose(
+        gene_type="role",
+        scope=f"agent.{agent_id}.soul",
+        patch=patch,
+        proposer="deep_evolve",
+        lineage_id=f"deep_evolve:{agent_id}",
+        role_id=agent_id,
+        task_domain="self_evolution",
+        risk_level=str(candidate.get("risk") or "medium"),
+        source_failures=source_failures,
+        metadata={
+            "deep_evolve_candidate_id": candidate.get("id"),
+            "predicted_impact": candidate.get("predicted_impact"),
+            "judgment": judgment,
+        },
+    )
+    gates = {
+        "independent_judgment": judgment.get("verdict") == "apply",
+        "safety_constraints": safety_passed,
+        "sealed_holdout": bool(holdout_passed),
+        # Runtime rollout deliberately supports append/replace overlays only.
+        # A historical revert changes durable files and remains a manual,
+        # explicitly approved recovery action.
+        "runtime_patch_supported": kind == "add_lesson" and bool(lesson),
+    }
+    delta = judgment.get("predicted_avg_score_delta")
+    metrics = {
+        "predicted_avg_score_delta": float(delta) if isinstance(delta, (int, float)) else 0.0
+    }
+    evolution_candidate = registry.record_evidence(
+        evolution_candidate.candidate_id,
+        hard_gate_results=gates,
+        metric_vector=metrics,
+        metadata={
+            "awaiting_gates": [name for name, passed in gates.items() if not passed],
+            "next_stage": "structured_shadow" if all(gates.values()) else "validation",
+        },
+    )
+    if evolution_candidate.status == CandidateStatus.PROPOSED and all(gates.values()):
+        evolution_candidate = registry.transition(
+            evolution_candidate.candidate_id,
+            CandidateStatus.VALIDATED,
+            metadata={"next_stage": "structured_shadow"},
+        )
+    return evolution_candidate
+
+
 # ═══════════════════════════════════════════════════════════
 # B2 · deep_reflect
 # ═══════════════════════════════════════════════════════════
@@ -139,6 +236,7 @@ def deep_reflect(
     agent_id: str,
     window: int = 20,
     model: str | None = None,
+    scope: TenantScope | None = None,
 ) -> dict[str, Any]:
     """LLM-judged review of recent turns. Cheap (single LLM call).
 
@@ -151,13 +249,13 @@ def deep_reflect(
     plus a ``meta`` dict with cost info + raw model output for
     audit. On router-not-wired returns ``{ok: False, error}``.
     """
+    if not is_safe_agent_id(agent_id):
+        return {"ok": False, "error": "unsafe_agent_id"}
     if get_provider().get("evolve_router") is None:
         return {
             "ok": False,
             "error": "deep_reflect router not configured · call set_evolve_router(router) at boot",
         }
-    from pathlib import Path
-
     from runtime.memory.learning.turn_scoring import (
         analyze_soul_impact as _analyze,
     )
@@ -165,7 +263,7 @@ def deep_reflect(
         read_recent_scores,
     )
 
-    scores = read_recent_scores(agent_id, limit=window)
+    scores = read_recent_scores(agent_id, limit=window, scope=scope)
     if not scores:
         return {
             "ok": True,
@@ -183,11 +281,10 @@ def deep_reflect(
         }
 
     # Read SOUL.md (best-effort)
-    project_root = Path(__file__).resolve().parents[2]
-    soul_path = project_root / "agents" / agent_id / "agent-core" / "SOUL.md"
+    soul_path = _agent_soul_path(agent_id)
     soul_content = soul_path.read_text(encoding="utf-8") if soul_path.exists() else "(no SOUL.md)"
 
-    heuristic = _analyze(agent_id, window=window)
+    heuristic = _analyze(agent_id, window=window, scope=scope)
 
     # Compose the user message · concise table of recent scores +
     # current SOUL + heuristic snapshot.
@@ -286,6 +383,9 @@ def deep_evolve(
     max_rounds: int = 1,
     dry_run: bool = True,
     model: str | None = None,
+    legacy_direct_apply: bool = False,
+    candidate_registry_path: Any = None,
+    scope: TenantScope | None = None,
 ) -> dict[str, Any]:
     """MiniMax-style autonomous self-improvement loop. EXPENSIVE.
 
@@ -294,9 +394,8 @@ def deep_evolve(
         2. Propose K=``candidates_per_round`` candidate changes.
         3. Judge each candidate against the same recent turns.
         4. Pick the highest-confidence ``apply`` verdict.
-        5. If ``dry_run=False``, actually mutate SOUL.md (via the
-           same `update_soul` / `revert_soul` handlers, which
-           snapshot for safety).
+        5. If ``dry_run=False``, materialize a typed candidate for
+           structured shadow review and candidate-scoped canary.
 
     Returns full audit trail · including all proposals, judgments,
     and applied actions. On router-not-wired returns clean error.
@@ -304,14 +403,34 @@ def deep_evolve(
     Token cost (rough): ``window * 50 + candidates_per_round *
     1500`` per round, so ``max_rounds=1`` ~ 5K tokens, ``max_rounds=5``
     ~25K tokens. Default 1 round to keep cost bounded.
+
+    ``legacy_direct_apply`` remains in the signature only for source
+    compatibility with older embedders. Direct SOUL mutation bypasses sealed
+    validation, shadow review, canary receipts, and durable rollback lineage,
+    so it is permanently fail-closed.
     """
+    if legacy_direct_apply:
+        return {
+            "ok": False,
+            "error": "legacy_direct_apply_disabled",
+            "reason": "direct self-modification must use the governed candidate pipeline",
+            "applied": [],
+            "candidates": [],
+            "dry_run": bool(dry_run),
+        }
+    if not is_safe_agent_id(agent_id):
+        return {"ok": False, "error": "unsafe_agent_id"}
+    if scope is not None and scope.allow_cross_tenant:
+        return {
+            "ok": False,
+            "error": "cross_tenant_evolution_forbidden",
+            "reason": "aggregate tenant evidence cannot authorize one candidate mutation",
+        }
     if get_provider().get("evolve_router") is None:
         return {
             "ok": False,
             "error": "deep_evolve router not configured",
         }
-    from pathlib import Path
-
     from runtime.memory.learning.turn_scoring import (
         analyze_soul_impact as _analyze,
     )
@@ -319,16 +438,16 @@ def deep_evolve(
         read_recent_scores,
     )
 
-    project_root = Path(__file__).resolve().parents[2]
-    soul_path = project_root / "agents" / agent_id / "agent-core" / "SOUL.md"
+    soul_path = _agent_soul_path(agent_id)
     audit: list[dict[str, Any]] = []
     total_in = 0
     total_out = 0
     cost_model: str | None = None  # 实际所用模型,供按模型估算成本(非硬编码 Haiku)
     applied: list[dict[str, Any]] = []
+    materialized_candidates: list[dict[str, Any]] = []
 
     for round_i in range(max(1, int(max_rounds))):
-        scores = read_recent_scores(agent_id, limit=window)
+        scores = read_recent_scores(agent_id, limit=window, scope=scope)
         if not scores:
             audit.append(
                 {
@@ -340,7 +459,7 @@ def deep_evolve(
         soul_content = (
             soul_path.read_text(encoding="utf-8") if soul_path.exists() else "(no SOUL.md)"
         )
-        heuristic = _analyze(agent_id, window=window)
+        heuristic = _analyze(agent_id, window=window, scope=scope)
 
         score_rows = "\n".join(
             f"  - {s.ts} · score={s.score} · reason={s.reason} · "
@@ -440,6 +559,7 @@ def deep_evolve(
         if winner and not dry_run:
             cand = winner["candidate"]
             kind = cand.get("kind")
+            holdout_passed = kind == "revert"
             # ── Pre-flight holdout gate ─────────────────────────
             # Only meaningful for ``add_lesson`` (which mutates the
             # SOUL by appending a line). ``revert`` walks the journal
@@ -456,7 +576,7 @@ def deep_evolve(
                         gate as _holdout_gate,
                     )
 
-                    entries = load_holdout(agent_id)
+                    entries = load_holdout(agent_id, scope=scope)
                     if entries:
                         lesson_line = str(cand.get("lesson") or "").strip()
                         proposed_soul = (
@@ -494,44 +614,42 @@ def deep_evolve(
                             }
                             audit.append(round_record)
                             continue
+                        holdout_passed = True
                 except (ImportError, OSError) as _exc:
                     _LOG.debug("holdout gate skipped: %s", _exc)
             try:
-                from runtime.execution.suckers.memory_skills import (
-                    _revert_soul,
-                    _update_soul,
+                judgment = dict(winner.get("judgment") or {})
+                evolution_candidate = _record_deep_evolve_candidate(
+                    agent_id=agent_id,
+                    candidate=dict(cand),
+                    judgment=judgment,
+                    holdout_passed=holdout_passed,
+                    source_failures=list(dict.fromkeys(str(score.reason) for score in scores)),
+                    registry_path=candidate_registry_path,
+                    scope=scope,
                 )
-
-                if kind == "add_lesson":
-                    res = _update_soul(
-                        lesson=str(cand.get("lesson") or ""),
-                        tag=f"deep-evolve · {cand.get('tag') or ''}",
-                    )
-                    round_record["applied"] = {"kind": "add_lesson", "result": res}
-                    applied.append(round_record["applied"])
-                    try:
-                        from runtime.safety.evolution.proposal_ledger import ProposalLedger
-
-                        _ledger = ProposalLedger()
-                        _ledger.propose(
-                            kind="deep_evolve_add_lesson",
-                            description=str(cand.get("lesson") or ""),
-                            proposer="deep_evolve",
-                            fitness_before=None,
-                        )
-                    except Exception as _exc:
-                        _LOG.debug("evolution ledger record failed: %s", _exc)
-                elif kind == "revert":
-                    res = _revert_soul(
-                        steps_back=int(cand.get("revert_steps", 1) or 1),
-                        reason=f"deep-evolve · {cand.get('predicted_impact', '')}"[:60],
-                    )
-                    round_record["applied"] = {"kind": "revert", "result": res}
-                    applied.append(round_record["applied"])
-            except (ImportError, TypeError, ValueError) as exc:
+                candidate_wire = evolution_candidate.to_wire()
+                round_record["candidate"] = candidate_wire
+                materialized_candidates.append(candidate_wire)
+            except (CandidateRegistryError, OSError, TypeError, ValueError) as exc:
                 round_record["applied"] = {
-                    "error": f"apply failed: {type(exc).__name__}: {exc}",
+                    "ok": False,
+                    "applied": False,
+                    "error": f"candidate registration failed: {type(exc).__name__}: {exc}",
                 }
+                audit.append(round_record)
+                continue
+
+            round_record["applied"] = {
+                "ok": True,
+                "applied": False,
+                "routed_to_candidate": True,
+                "candidate_id": evolution_candidate.candidate_id,
+                "candidate_status": evolution_candidate.status.value,
+                "next_stage": evolution_candidate.metadata.get("next_stage"),
+            }
+            audit.append(round_record)
+            continue
 
         audit.append(round_record)
 
@@ -540,6 +658,7 @@ def deep_evolve(
         "rounds_run": len(audit),
         "audit": audit,
         "applied": applied,
+        "candidates": materialized_candidates,
         "dry_run": dry_run,
         "cost": {
             "input_tokens": total_in,

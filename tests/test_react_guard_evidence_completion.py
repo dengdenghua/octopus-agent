@@ -542,6 +542,15 @@ def test_incomplete_final_answer_rejects_promised_synthesis() -> None:
     assert _incomplete_final_answer_guard("马上综合给出：") is not None
 
 
+def test_incomplete_final_answer_rejects_interrupted_continuation_status() -> None:
+    assert (
+        _incomplete_final_answer_guard(
+            "审计继续 — 上轮调用中断，已保留现有结果，继续完成剩余核验。"
+        )
+        is not None
+    )
+
+
 def test_incomplete_final_answer_accepts_delivered_synthesis_tail() -> None:
     """A promise that actually carries a delivered body/numbers must keep
     passing — the guard targets body-less promises, not finished outputs."""

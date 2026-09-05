@@ -1,4 +1,4 @@
-"""Tests for DSH P2 API endpoints in thread_state_router."""
+"""Tests for Octopus Native Session API v2 endpoints."""
 
 from __future__ import annotations
 

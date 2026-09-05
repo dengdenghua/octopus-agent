@@ -3,12 +3,32 @@
 from __future__ import annotations
 
 import os
+import secrets
 from pathlib import Path
 
 from fastapi import FastAPI
 
 from .accounts import AccountAuth, AccountStore, create_account_router
 from .router import create_cloud_edge_router
+from .store import (
+    DEFAULT_SHARE_MAX_PER_OWNER,
+    DEFAULT_SHARE_MAX_SNAPSHOT_BYTES,
+    DEFAULT_SHARE_MAX_TOTAL_BYTES,
+    DEFAULT_SHARE_TTL_SECONDS,
+)
+
+
+def _env_positive_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} must be a positive integer") from exc
+    if value <= 0:
+        raise RuntimeError(f"{name} must be a positive integer")
+    return value
 
 
 def create_cloud_edge_app(
@@ -19,6 +39,12 @@ def create_cloud_edge_app(
     registration_code: str,
     owner_id: str = "admin",
     tenant_id: str = "default",
+    public_share_base_url: str | None = None,
+    share_ttl_seconds: int = DEFAULT_SHARE_TTL_SECONDS,
+    share_max_per_owner: int = DEFAULT_SHARE_MAX_PER_OWNER,
+    share_max_snapshot_bytes: int = DEFAULT_SHARE_MAX_SNAPSHOT_BYTES,
+    share_max_total_bytes: int = DEFAULT_SHARE_MAX_TOTAL_BYTES,
+    share_relay_key: str | None = None,
 ) -> FastAPI:
     if len(token_secret) < 32:
         raise RuntimeError("OCTOPUS_CLOUD_EDGE_TOKEN_SECRET must contain at least 32 characters")
@@ -26,6 +52,14 @@ def create_cloud_edge_app(
         raise RuntimeError("OCTOPUS_CLOUD_EDGE_ADMIN_KEY must contain at least 32 characters")
     if token_secret == admin_key:
         raise RuntimeError("device token secret and admin key must be independent")
+    clean_relay_key = str(share_relay_key or "").strip()
+    if clean_relay_key and len(clean_relay_key) < 32:
+        raise RuntimeError("OCTOPUS_CLOUD_SHARE_RELAY_KEY must contain at least 32 characters")
+    if clean_relay_key and (
+        secrets.compare_digest(clean_relay_key, token_secret)
+        or secrets.compare_digest(clean_relay_key, admin_key)
+    ):
+        raise RuntimeError("share relay key must be independent from other service secrets")
     if len(registration_code) < 12:
         raise RuntimeError("OCTOPUS_CLOUD_REGISTRATION_CODE must contain at least 12 characters")
     clean_owner = owner_id.strip()
@@ -55,6 +89,14 @@ def create_cloud_edge_app(
             require_auth=True,
             principal_resolver=auth.principal,
             operator_resolver=auth.operator,
+            public_share_base_url=public_share_base_url,
+            share_ttl_seconds=share_ttl_seconds,
+            share_max_per_owner=share_max_per_owner,
+            share_max_snapshot_bytes=share_max_snapshot_bytes,
+            share_max_total_bytes=share_max_total_bytes,
+            share_relay_key=clean_relay_key,
+            share_relay_tenant_id=clean_tenant,
+            share_relay_owner_id=clean_owner,
         )
     )
 
@@ -77,6 +119,21 @@ def create_cloud_edge_app_from_env() -> FastAPI:
         registration_code=os.environ.get("OCTOPUS_CLOUD_REGISTRATION_CODE", ""),
         owner_id=os.environ.get("OCTOPUS_CLOUD_EDGE_OWNER_ID", "admin"),
         tenant_id=os.environ.get("OCTOPUS_CLOUD_EDGE_TENANT_ID", "default"),
+        public_share_base_url=os.environ.get("OCTOPUS_PUBLIC_SHARE_BASE_URL"),
+        share_ttl_seconds=_env_positive_int(
+            "OCTOPUS_CLOUD_EDGE_SHARE_TTL_SECONDS", DEFAULT_SHARE_TTL_SECONDS
+        ),
+        share_max_per_owner=_env_positive_int(
+            "OCTOPUS_CLOUD_EDGE_SHARE_MAX_PER_OWNER", DEFAULT_SHARE_MAX_PER_OWNER
+        ),
+        share_max_snapshot_bytes=_env_positive_int(
+            "OCTOPUS_CLOUD_EDGE_SHARE_MAX_SNAPSHOT_BYTES",
+            DEFAULT_SHARE_MAX_SNAPSHOT_BYTES,
+        ),
+        share_max_total_bytes=_env_positive_int(
+            "OCTOPUS_CLOUD_EDGE_SHARE_MAX_TOTAL_BYTES", DEFAULT_SHARE_MAX_TOTAL_BYTES
+        ),
+        share_relay_key=os.environ.get("OCTOPUS_CLOUD_SHARE_RELAY_KEY"),
     )
 
 

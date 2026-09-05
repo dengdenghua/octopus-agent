@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import time
 from typing import TYPE_CHECKING, Any, cast
 
+from runtime.execution.agents.group_fanout import is_group_presence_query
 from runtime.execution.tool_engine.session_reference_uri import (
     SUPPORTED_SESSION_REFERENCE_SCHEMES,
 )
 from runtime.platform.models.primitives import now_utc
 from runtime.protocol import (
+    AgentMessageItem,
     ErrorItem,
     ItemStatus,
     ServerMethod,
@@ -28,6 +31,9 @@ from runtime.sensing.gateway._realtime_turn_lifecycle_helpers import (
     _inject_cowork_turn_plan,
     _persist_cowork_user_message,
     _resolve_cowork_responder_agent,
+    _start_cowork_orchestration_run,
+    _turn_has_cowork_coordination_evidence,
+    _turn_has_cowork_delivery_evidence,
     _turn_has_observable_output,
 )
 from runtime.sensing.gateway._realtime_turn_lifecycle_resume import (
@@ -116,6 +122,25 @@ _AGENT_VERIFY_ROUND_LIMIT = 1
 _UNPAIRED_ITEM_MARKERS = frozenset({"__subagent_spawned__"})
 
 
+async def _notify_terminal(
+    emitter: EventEmitter,
+    method: ServerMethod,
+    params: dict[str, Any],
+) -> None:
+    """Send a terminal event through the emitter's convergence path.
+
+    Detached resident turns expose ``notify_terminal`` so an exception or
+    cancellation reaches sibling tabs while the owner is still alive.  The
+    fallback preserves the public EventEmitter contract for standalone
+    runtimes that only implement ``notify``.
+    """
+    terminal = getattr(emitter, "notify_terminal", None)
+    if callable(terminal):
+        await terminal(method, params)
+    else:
+        await emitter.notify(method, params)
+
+
 def _item_outlives_turn(item: Any) -> bool:
     """True when this item is *meant* to still be running at turn end.
 
@@ -198,6 +223,21 @@ def _close_turn(
         with contextlib.suppress(Exception):
             log.item_completed(thread_id, turn.id, item)
     log.turn_completed(thread_id, turn.id, turn.status, error)
+
+    # Codex owns its inner loop, so it cannot use the native tool bridge's
+    # per-round scoring hook. Record the same coarse quality signal at the
+    # shared lifecycle boundary instead. Keeping this here (rather than in
+    # the Codex adapter) also guarantees one score for a turn that receives a
+    # late steering continuation or is closed through an interrupt path.
+    if str(getattr(turn, "execution_engine", "") or "").strip().lower() == "codex":
+        try:
+            from runtime.sensing.gateway._tool_bridge_scoring import (
+                _record_codex_turn_score_safe,
+            )
+
+            _record_codex_turn_score_safe(turn=turn)
+        except Exception:  # noqa: BLE001 — learning must never block closure
+            _logger.debug("codex lifecycle score skipped", exc_info=True)
 
     # dsh ``Stop``: fired when a full agent turn completes, successfully or
     # not (notification-type hook — post-hoc audit / metrics). Every path
@@ -887,13 +927,27 @@ async def _start_turn(
                 intent=intent,
             )
         explicit_project_command = _is_project_os_command(text)
-        if (intent.user_context or {}).get(
-            "cowork_waiting_for_mention"
-        ) and not explicit_project_command:
+        _planned_team_pattern = (intent.user_context or {}).get("team_pattern")
+        _planned_pattern_execution = (
+            str(_planned_team_pattern.get("execution") or "").strip()
+            if isinstance(_planned_team_pattern, dict)
+            else ""
+        )
+        if (
+            (intent.user_context or {}).get("cowork_waiting_for_mention")
+            and not explicit_project_command
+            and _planned_pattern_execution
+            not in {
+                "fanout",
+                "presence",
+                "orchestrated",
+            }
+        ):
             # A durable chat room accepts ordinary human conversation without
             # manufacturing an assistant response.  Close this as a successful
-            # user-only turn before approval/model routing; the canonical room
-            # mirror above keeps Project actions and reconnect replay available.
+            # user-only turn before approval/model routing. Explicit natural
+            # group work requests and presence checks are selected by the
+            # server-owned team pattern and therefore continue to dispatch.
             runtime._set_turn_steering_accepting(turn, False)
             turn.status = TurnStatus.COMPLETED
             turn.outcome_reason = "cowork_waiting_for_mention"
@@ -966,6 +1020,14 @@ async def _start_turn(
             runtime._snapshot_to_thread_store(thread_id, log, intent)
             return turn
 
+        _start_cowork_orchestration_run(
+            runtime,
+            thread_id=thread_id,
+            turn=turn,
+            intent=intent,
+            text=text,
+        )
+
         # ── PHASE 5 · execution dispatch (topology/fast/react) ─────
         loop = asyncio.get_running_loop()
         gateway_provider = GatewayApprovalProvider(
@@ -997,6 +1059,19 @@ async def _start_turn(
 
         try:
             topology_id = getattr(validated, "topology_id", None)
+            _cowork_context = intent.user_context or {}
+            _team_pattern = _cowork_context.get("team_pattern")
+            _team_pattern_execution = (
+                str(_team_pattern.get("execution") or "").strip()
+                if isinstance(_team_pattern, dict)
+                else ""
+            )
+            # The declarative team pattern is authoritative. A focused reply
+            # must not inherit a stale cluster topology, while an orchestrated
+            # task must not be forced back into the legacy bubble fan-out by
+            # serve_mesh/cowork_is_multi compatibility flags.
+            if _team_pattern_execution == "focused":
+                topology_id = None
             # Mode-level guard: single-agent modes MUST NOT route
             # through ``_drive_team_topology`` even if a leftover
             # ``topology_id`` slipped through (e.g. settings
@@ -1047,13 +1122,27 @@ async def _start_turn(
                     },
                 )
 
-            group_fanout = str(
-                (intent.user_context or {}).get("serve_mesh") or ""
-            ).strip() == "1" or (
-                bool((intent.user_context or {}).get("cowork_is_multi"))
-                and len((intent.user_context or {}).get("cowork_responders") or []) > 1
+            group_presence = bool(_cowork_context.get("cowork_group")) and (
+                _team_pattern_execution == "presence" or is_group_presence_query(text)
             )
-            orchestrated = explicit_project_command or group_fanout or bool(topology_id)
+            group_fanout = (
+                group_presence
+                or _team_pattern_execution == "fanout"
+                or (
+                    not _team_pattern_execution
+                    and (
+                        str(_cowork_context.get("serve_mesh") or "").strip() == "1"
+                        or (
+                            bool(_cowork_context.get("cowork_is_multi"))
+                            and len(_cowork_context.get("cowork_responders") or []) > 1
+                        )
+                    )
+                )
+            )
+            coordinated = _team_pattern_execution == "orchestrated"
+            orchestrated = (
+                explicit_project_command or group_fanout or bool(topology_id) or coordinated
+            )
             capabilities = getattr(agent, "capabilities", None)
             codex_partner = (
                 not orchestrated
@@ -1083,6 +1172,7 @@ async def _start_turn(
                 topology_id=topology_id,
                 codex_partner=codex_partner,
                 reflection_fast_path=reflection,
+                coordinated=coordinated,
             )
             # The explicit model still governs every member of an orchestrated
             # topology. Engine selection does not change model ownership.
@@ -1182,6 +1272,108 @@ async def _start_turn(
                 TurnExecutionRequest(steering_intent, correction, validated.model),
                 phase=ExecutionPhase.STEERING,
             )
+
+        # A coordinated deliverable is not complete merely because the TL
+        # wrote a confident answer. Require server-observed delegation. Give
+        # the coordinator one bounded repair round so an omitted tool call can
+        # be corrected without making the user repeat the request.
+        if (
+            _team_pattern_execution == "orchestrated"
+            and turn.status
+            not in {
+                TurnStatus.PAUSED,
+                TurnStatus.CANCELLED,
+                TurnStatus.INTERRUPTED,
+                TurnStatus.FAILED,
+            }
+            and not _turn_has_cowork_delivery_evidence(turn)
+        ):
+            has_coordination = _turn_has_cowork_coordination_evidence(turn)
+            repair_reason = (
+                "missing_coordinator_synthesis"
+                if has_coordination
+                else "missing_delegation_evidence"
+            )
+            # The repair pass receives a synthetic instruction. Bind it to the
+            # current turn explicitly because its frozen conversation snapshot
+            # may end at an older unfinished task. Without this objective
+            # anchor, a valid new request can accidentally resume that old task
+            # during orchestration repair.
+            repair_objective = json.dumps(str(text or "").strip(), ensure_ascii=False)
+            repair_prompt = (
+                "协调执行验收未通过：成员调用已有记录，但缺少队长在成员结果之后的统一结论。"
+                "请核验已有成员结果并立即给出最终综合交付，不要再次重复分派。"
+                f"本轮唯一目标（JSON 字符串）是：{repair_objective}。"
+                "只围绕这个目标修复，不得恢复其他历史任务。"
+                if has_coordination
+                else (
+                    "协调执行验收未通过：本轮只有计划或文字结论，没有服务端可核验的成员调用记录。"
+                    "请现在实际调用合适的成员代理完成拆分任务，核验成员结果后再统一交付；"
+                    "不要只声称‘已分派’或重复计划。"
+                    f"本轮唯一目标（JSON 字符串）是：{repair_objective}。"
+                    "只围绕这个目标修复，不得恢复其他历史任务。"
+                )
+            )
+            repair_context = dict(intent.user_context or {})
+            repair_context["cowork_orchestration_repair"] = {
+                "attempt": 1,
+                "max_attempts": 1,
+                "reason": repair_reason,
+            }
+            repair_notice = AgentMessageItem(
+                text=(
+                    "成员结果已经返回，但缺少队长综合，正在自动补齐最终交付。"
+                    if has_coordination
+                    else "首次交付缺少真实成员执行记录，正在自动重新分派并验收。"
+                ),
+                message_kind="commentary",
+            )
+            turn.items.append(repair_notice)
+            await runtime._emit_item_started(turn, log, emitter, repair_notice)
+            repair_notice.status = ItemStatus.COMPLETED
+            await runtime._emit_item_completed(turn, log, emitter, repair_notice)
+            repair_intent = intent.model_copy(
+                update={
+                    "raw": repair_prompt,
+                    "normalized_goal": repair_prompt,
+                    "user_context": repair_context,
+                }
+            )
+            turn_driver = execution.route.driver_for(ExecutionPhase.REPAIR)
+            await execution.execute(
+                TurnExecutionRequest(repair_intent, repair_prompt, validated.model),
+                phase=ExecutionPhase.REPAIR,
+            )
+            if turn.status not in {
+                TurnStatus.PAUSED,
+                TurnStatus.CANCELLED,
+                TurnStatus.INTERRUPTED,
+                TurnStatus.FAILED,
+            } and not _turn_has_cowork_delivery_evidence(turn):
+                err = ErrorItem(
+                    message=(
+                        "协调执行缺少成员调用或队长最终综合，已停止将不完整交付误报为任务完成。"
+                        "该任务可继续恢复。"
+                    ),
+                    error_info={
+                        "code": "coordination_delivery_incomplete",
+                        "reason": repair_reason,
+                        "repair_attempts": 1,
+                        "recoverable": True,
+                    },
+                )
+                turn.items.append(err)
+                await runtime._emit_item_started(turn, log, emitter, err)
+                await runtime._emit_item_completed(turn, log, emitter, err)
+                turn.status = TurnStatus.INTERRUPTED
+                turn.outcome_reason = "coordination_delivery_incomplete"
+                log.turn_updated(
+                    thread_id,
+                    turn.id,
+                    objective_id=turn.objective_id,
+                    task_id=turn.task_id,
+                    outcome_reason=turn.outcome_reason,
+                )
 
         # ── PHASE 6 · status finalization + snapshot ───────────────
         if turn.status in {
@@ -1651,7 +1843,8 @@ async def _start_turn(
         # The connection is usually already dead here; send failures
         # must not mask the cancellation. Notify the current connection.
         with contextlib.suppress(Exception):
-            await emitter.notify(
+            await _notify_terminal(
+                emitter,
                 ServerMethod.TURN_INTERRUPTED,
                 {
                     "threadId": thread_id,
@@ -1660,19 +1853,14 @@ async def _start_turn(
                 },
             )
         with contextlib.suppress(Exception):
-            await emitter.notify(
+            await _notify_terminal(
+                emitter,
                 ServerMethod.TURN_COMPLETED,
                 {
                     "threadId": thread_id,
                     "turn": turn.model_dump(by_alias=True, mode="json"),
                 },
             )
-        # TODO(P1): Fan out terminal events to sibling connections (same
-        # thread_id) matching the normal completion path in
-        # realtime_gateway.py:716-720. Without this, sibling tabs see the turn
-        # stuck in inProgress until their next thread/resume. Requires passing
-        # the gateway instance to _start_turn() or adding a broadcast callback
-        # to EventEmitter protocol.
         raise
     except Exception as exc:
         # Failures between turn/started and the driver try (intent
@@ -1704,7 +1892,8 @@ async def _start_turn(
         with contextlib.suppress(Exception):
             runtime._snapshot_to_thread_store(thread_id, log, intent)
         with contextlib.suppress(Exception):
-            await emitter.notify(
+            await _notify_terminal(
+                emitter,
                 ServerMethod.TURN_COMPLETED,
                 {
                     "threadId": thread_id,

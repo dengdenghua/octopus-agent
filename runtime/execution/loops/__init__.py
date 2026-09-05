@@ -1,3 +1,4 @@
+from .errors import SafeRepairableAttemptError
 from .models import (
     CancelLoopRunRequest,
     CreateLoopRunRequest,
@@ -60,6 +61,7 @@ __all__ = [
     "LoopRunRuntimeStateResponse",
     "LoopRunsOverviewResponse",
     "RestartLoopRunRequest",
+    "SafeRepairableAttemptError",
     "LoopRunStatus",
     "LoopRunStore",
     "LoopVerifierRegistry",

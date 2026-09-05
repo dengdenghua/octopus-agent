@@ -17,7 +17,12 @@ def _headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _secured_client(tmp_path: Path, monkeypatch: Any) -> tuple[TestClient, dict[str, str]]:
+def _secured_client(
+    tmp_path: Path,
+    monkeypatch: Any,
+    *,
+    allow_local_user_plugin_lifecycle: bool = False,
+) -> tuple[TestClient, dict[str, str]]:
     agents_root = tmp_path / "agents"
     resources = tmp_path / "resources"
     monkeypatch.setattr(agent_world_router, "_INSTALL_STATE", tmp_path / "installed.json")
@@ -36,22 +41,6 @@ def _secured_client(tmp_path: Path, monkeypatch: Any) -> tuple[TestClient, dict[
         return target
 
     monkeypatch.setattr(agent_world_router, "_install_template_agent", _install_local)
-
-    class _Result:
-        def __init__(self, kind: str) -> None:
-            self.kind = kind
-
-        def to_dict(self) -> dict[str, Any]:
-            return {"ok": True, "kind": self.kind}
-
-    import runtime.execution.misc.agent_packs as agent_packs
-
-    monkeypatch.setattr(agent_packs, "scan_agent_pack", lambda _path: _Result("preview"))
-    monkeypatch.setattr(
-        agent_packs,
-        "import_agent_from_pack",
-        lambda *_a, **_k: _Result("import"),
-    )
 
     import runtime.platform.plugins.cloud_catalog as cloud_catalog
     import runtime.platform.plugins.cloud_expert_store as cloud_expert_store
@@ -90,6 +79,7 @@ def _secured_client(tmp_path: Path, monkeypatch: Any) -> tuple[TestClient, dict[
         create_agent_world_router(
             identity_store=identities,
             require_auth=True,
+            allow_local_user_plugin_lifecycle=allow_local_user_plugin_lifecycle,
         )
     )
     return TestClient(app), {
@@ -120,12 +110,6 @@ def test_agent_world_shared_content_mutations_reject_non_admin(
     requests = (
         ("POST", "/api/agent-market/store/demo/install", {}),
         ("DELETE", "/api/agent-market/store/demo/install", {}),
-        ("GET", "/api/agent-market/packs/preview", {"params": {"path": "/tmp/pack"}}),
-        (
-            "POST",
-            "/api/agent-market/packs/import-agent",
-            {"json": {"path": "/tmp/pack", "agent_name": "demo"}},
-        ),
         ("POST", "/api/agent-market/cloud/store/demo/install", {}),
         ("POST", "/api/agent-market/cloud/skills/demo/install", {}),
         ("POST", "/api/agent-market/cloud/plugins/demo-plugin/install", {}),
@@ -142,7 +126,7 @@ def test_agent_world_shared_content_mutations_reject_non_admin(
         assert response.status_code == 403, path
 
 
-def test_agent_world_admin_can_install_import_and_uninstall_shared_content(
+def test_agent_world_admin_can_install_and_uninstall_shared_content(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
@@ -150,22 +134,6 @@ def test_agent_world_admin_can_install_import_and_uninstall_shared_content(
     headers = _headers(keys["admin"])
 
     assert client.post("/api/agent-market/store/demo/install", headers=headers).status_code == 200
-    assert (
-        client.get(
-            "/api/agent-market/packs/preview",
-            params={"path": "/tmp/pack"},
-            headers=headers,
-        ).status_code
-        == 200
-    )
-    assert (
-        client.post(
-            "/api/agent-market/packs/import-agent",
-            json={"path": "/tmp/pack", "agent_name": "demo"},
-            headers=headers,
-        ).status_code
-        == 200
-    )
     assert (
         client.post(
             "/api/agent-market/cloud/store/demo/install",
@@ -187,7 +155,40 @@ def test_agent_world_admin_can_install_import_and_uninstall_shared_content(
         ).status_code
         == 200
     )
+    assert (
+        client.delete(
+            "/api/agent-market/cloud/plugins/demo-plugin/install",
+            headers=headers,
+        ).status_code
+        == 200
+    )
     assert client.delete("/api/agent-market/store/demo/install", headers=headers).status_code == 200
+
+
+def test_agent_world_local_desktop_allows_authenticated_plugin_lifecycle(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    """The loopback desktop may manage its own cloud plugin catalog."""
+
+    client, keys = _secured_client(
+        tmp_path,
+        monkeypatch,
+        allow_local_user_plugin_lifecycle=True,
+    )
+    headers = _headers(keys["alice"])
+
+    installed = client.post(
+        "/api/agent-market/cloud/plugins/demo-plugin/install",
+        headers=headers,
+    )
+    removed = client.delete(
+        "/api/agent-market/cloud/plugins/demo-plugin/install",
+        headers=headers,
+    )
+
+    assert installed.status_code == 200
+    assert removed.status_code == 200
 
 
 def test_production_agent_install_cannot_hot_register_mutable_prompt_directory(
@@ -236,6 +237,10 @@ def test_reviewed_factory_workbench_delegates_to_live_plugin_hub(
     class FactoryCatalog:
         def __init__(self, _kind: str) -> None:
             pass
+
+        @staticmethod
+        def is_factory_plugin(plugin_id: str) -> bool:
+            return plugin_id == "narrative_studio"
 
         def items(self) -> list[dict[str, Any]]:
             return [

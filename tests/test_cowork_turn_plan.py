@@ -172,6 +172,8 @@ def test_realtime_intent_gets_cowork_turn_plan(tmp_path) -> None:
     assert intent.user_context["cowork_is_multi"] is True
     assert intent.user_context["cowork_responders"] == ["db-agent", "ui-agent"]
     assert intent.user_context["cowork_plan"]["reason"].startswith("swarm")
+    assert intent.user_context["team_pattern"]["id"] == "parallel_roundtable"
+    assert intent.user_context["team_pattern"]["execution"] == "fanout"
 
 
 def test_realtime_explicit_response_mode_overrides_default_but_not_roster(tmp_path) -> None:
@@ -201,12 +203,41 @@ def test_realtime_explicit_response_mode_overrides_default_but_not_roster(tmp_pa
     assert intent.user_context["cowork_mode"] == "chat"
     assert intent.user_context["cowork_responders"] == []
     assert intent.user_context["cowork_waiting_for_mention"] is True
+    assert intent.user_context["team_pattern"]["id"] == "focused_reply"
     assert [item["agent_id"] for item in intent.user_context["agent_roster"]] == [
         "lead",
         "critic",
     ]
     # The persisted default remains untouched for the next sender/turn.
     assert store.state("thread-1").mode == "swarm"
+
+
+def test_realtime_chat_natural_group_request_selects_fanout_pattern(tmp_path) -> None:
+    store = GroupStore(base_dir=tmp_path)
+    invite_member(store, "thread-1", actor="u", target_id="lead", kind="agent")
+    invite_member(store, "thread-1", actor="u", target_id="critic", kind="agent")
+    runtime = type("Runtime", (), {"_cowork_group_store": store})()
+    intent = ParsedIntent(
+        raw="大家一起看下这个方案",
+        intent_type="task",
+        normalized_goal="大家一起看下这个方案",
+        user_context={},
+    )
+
+    _inject_cowork_turn_plan(
+        runtime,
+        thread_id="thread-1",
+        text="大家一起看下这个方案",
+        intent=intent,
+    )
+
+    # The durable room preference stays ordinary chat, while this one turn is
+    # routed through the internal collaboration pattern.
+    assert intent.user_context["cowork_mode"] == "chat"
+    assert intent.user_context["cowork_responders"] == []
+    assert intent.user_context["team_pattern"]["id"] == "parallel_roundtable"
+    assert intent.user_context["team_pattern"]["execution"] == "fanout"
+    assert store.state("thread-1").mode == "chat"
 
 
 def test_realtime_intent_ignores_unknown_thread_default_state(tmp_path) -> None:

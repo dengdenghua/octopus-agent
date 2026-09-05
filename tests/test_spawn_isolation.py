@@ -65,7 +65,7 @@ def test_isolated_spec_receives_a_worktree_path(monkeypatch: Any) -> None:
     monkeypatch.setattr("runtime.execution.subagents.worktree_loop.worktree_scope", fake_scope)
     monkeypatch.setattr(
         "runtime.execution.subagents.worktree_loop._capture_diff",
-        lambda _p: ("diff --git a/f b/f", ["f"]),
+        lambda _p, _root: ("diff --git a/f b/f", ["f"]),
     )
 
     env = ds._call_agent_parallel(specs=[_spec(isolate=True, bb_key="writer")])
@@ -98,7 +98,7 @@ def test_the_diff_survives_the_envelope_projection(monkeypatch: Any) -> None:
     monkeypatch.setattr("runtime.execution.subagents.worktree_loop.worktree_scope", fake_scope)
     monkeypatch.setattr(
         "runtime.execution.subagents.worktree_loop._capture_diff",
-        lambda _p: ("diff --git a/probe b/probe\n+new line", ["probe"]),
+        lambda _p, _root: ("diff --git a/probe b/probe\n+new line", ["probe"]),
     )
 
     env = ds._call_agent_parallel(specs=[_spec(isolate=True, bb_key="w")])
@@ -163,7 +163,7 @@ def test_diff_is_captured_before_the_worktree_is_removed(monkeypatch: Any) -> No
 
     monkeypatch.setattr("runtime.execution.subagents.worktree_loop.worktree_scope", fake_scope)
 
-    def fake_diff(_p: str) -> tuple[str, list[str]]:
+    def fake_diff(_p: str, _root: str) -> tuple[str, list[str]]:
         order.append("capture")
         return "d", ["f"]
 

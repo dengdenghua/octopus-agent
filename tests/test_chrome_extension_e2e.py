@@ -24,6 +24,8 @@ from runtime.execution.suckers.registry import SkillRegistry
 from runtime.platform.ui.browser_router import create_browser_router
 from runtime.safety.auth import Identity, IdentityStore
 
+pytestmark = pytest.mark.integration
+
 playwright = pytest.importorskip("playwright.sync_api")
 uvicorn = pytest.importorskip("uvicorn")
 

@@ -1,4 +1,4 @@
-"""Simplified tests for DSH P2 API endpoints."""
+"""Simplified tests for Octopus Native Session API v2 endpoints."""
 
 from __future__ import annotations
 

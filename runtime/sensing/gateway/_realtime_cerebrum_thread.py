@@ -35,6 +35,10 @@ from runtime.safety.approval.approval_policy_store import load_policy
 from runtime.sensing.gateway._realtime_thread_delete_probe import (
     assert_thread_accepts_runtime_writes,
 )
+from runtime.sensing.gateway._realtime_turn_lifecycle_helpers import (
+    _persist_cowork_agent_messages,
+    _sync_cowork_orchestration_run,
+)
 from runtime.sensing.gateway.realtime_event_bridge import _ReactBridgeState, _safe_list_remove
 from runtime.sensing.gateway.realtime_gateway import EventEmitter, _RpcError
 from runtime.sensing.gateway.realtime_thread_history import (
@@ -346,15 +350,15 @@ def _resume_turns(
                 log.turn_completed(turn.thread_id, turn.id, turn.status)
                 runtime._record_task_run_finished(turn, recover_stale_lease=True)
                 continue
-            turn.status = TurnStatus.FAILED
+            turn.status = TurnStatus.INTERRUPTED
             turn.error = {
-                "message": "上次执行在后端重启或连接中断时未完成，已自动结束。请重新发送或点击重试。",
+                "message": "上次执行因后端重启或连接中断而中止，未判定为任务失败。请重新发送或点击重试。",
                 "code": "stale_in_progress_turn",
             }
             turn.completed_at = now_utc()
             for item in turn.items:
                 if item.status == ItemStatus.IN_PROGRESS:
-                    item.status = ItemStatus.FAILED
+                    item.status = ItemStatus.INTERRUPTED
             log.turn_completed(turn.thread_id, turn.id, turn.status, error=turn.error)
             runtime._record_task_run_finished(turn, recover_stale_lease=True)
         return turns
@@ -390,6 +394,15 @@ def _snapshot_to_thread_store(
     after the snapshot, still inside the same swallowed try block so
     a provider failure can never break the turn lifecycle.
     """
+    # The collaboration ledger is authoritative execution state, not a sidebar
+    # cache, so keep it in sync even when the optional legacy thread store is
+    # disabled.
+    with contextlib.suppress(Exception):
+        _sync_cowork_orchestration_run(
+            runtime,
+            turns=log.replay(),
+            intent=intent,
+        )
     store = runtime._thread_store
     if store is None:
         return
@@ -437,6 +450,7 @@ def _snapshot_to_thread_store(
             "personal_workspace_enabled",
             "owner_actor_id",
             "actor_id",
+            "tenant_id",
         ):
             v = uc.get(key) if isinstance(uc, dict) else None
             if v is not None:
@@ -477,7 +491,27 @@ def _snapshot_to_thread_store(
             metadata=metadata if metadata else None,
             status=thread_status,
         )
-        if session_titles is not None:
+        # Keep the linked group room symmetric with the thread timeline: user
+        # prompts and completed agent answers must both be durable room
+        # messages. This is idempotent by source item id and safe to retry on
+        # every terminal snapshot.
+        _persist_cowork_agent_messages(
+            runtime,
+            thread_id=thread_id,
+            turns=turns,
+            intent=intent,
+        )
+        # Auto-title is a first-*completed*-turn enhancement. Running it for a
+        # prompt that the user just cancelled both wastes another model call
+        # and holds the live ``turn/completed`` notification behind that call,
+        # making a 50 ms cancellation look several seconds slow in the UI.
+        # Failed/paused/interrupted turns also must not consume the one-shot
+        # ``title_auto_attempted`` marker before a real answer exists.
+        if (
+            session_titles is not None
+            and latest_turn is not None
+            and latest_turn.status is TurnStatus.COMPLETED
+        ):
             session_titles.maybe_auto_refresh(thread_id)
     except Exception as exc:  # noqa: BLE001
         # Not fatal (the realtime event log is the durable record), but a

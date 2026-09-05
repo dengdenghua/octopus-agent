@@ -125,7 +125,9 @@ describe("getActionDisplay", () => {
   });
 
   it("maps browser_click to browser_click label", () => {
-    expect(getActionDisplay("browser_click", {}).labelKey).toBe("browser_click");
+    expect(getActionDisplay("browser_click", {}).labelKey).toBe(
+      "browser_click",
+    );
   });
 
   it("maps browser_type to browser_type label", () => {
@@ -153,8 +155,22 @@ describe("getActionDisplay", () => {
   it("maps teammate/subagent tools to delegate_task label", () => {
     const d = getActionDisplay("spawn_agent", { agent_name: "coder" });
     expect(d.labelKey).toBe("delegate_task");
-    expect(d.object).toContain("coder");
+    expect(d.object).toContain("Kane");
     expect(d.aggregateKind).toBe("teammate");
+  });
+
+  it("maps builtin runtime ids to persona names", () => {
+    expect(
+      getActionDisplay("spawn_agent", {
+        agent_id: "desktop_operator",
+      }).object,
+    ).toContain("Raven");
+    expect(
+      getActionDisplay("spawn_agent", { agent_id: "aoi" }).object,
+    ).toContain("Zero");
+    expect(
+      getActionDisplay("spawn_agent", { agent_id: "vibe_selling" }).object,
+    ).toContain("Luna");
   });
 
   it("uses the first named role for parallel teammate delegation", () => {

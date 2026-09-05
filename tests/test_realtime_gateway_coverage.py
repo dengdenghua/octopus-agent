@@ -53,6 +53,21 @@ def test_sanitize_turn_params_approval_bypass() -> None:
     assert out2["approvalPolicy"] == "never"
 
 
+def test_sanitize_turn_params_omits_non_protocol_reasoning_off() -> None:
+    gw = _gw()
+    conn = SimpleNamespace(actor_id=None, tenant_id=None)
+    out = gw._sanitize_turn_params(
+        {
+            "effort": "off",
+            "metadata": {"context": {"reasoning_effort": "off"}},
+        },
+        conn,
+    )
+
+    assert "effort" not in out
+    assert out["metadata"]["context"]["reasoning_effort"] == "off"
+
+
 def test_sanitize_turn_params_ownership() -> None:
     gw = _gw()
     conn = SimpleNamespace(actor_id="alice", tenant_id="t1")

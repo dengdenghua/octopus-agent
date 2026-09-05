@@ -93,3 +93,24 @@ def test_fires_on_opening_think_tag() -> None:
     answer = "<think>Let me analyze this...</think>\n\nThe answer is 42."
     msg = _control_tag_leak_guard(answer)
     assert msg is not None
+
+
+def test_fires_on_original_user_request_envelope() -> None:
+    answer = (
+        "[original-user-request]\n"
+        "Summarize the repository.\n"
+        "[/original-user-request]\n"
+        "The repository contains..."
+    )
+    msg = _control_tag_leak_guard(answer)
+    assert msg is not None
+    assert "internal prompt envelope" in msg
+    assert "[original-user-request]" in msg
+
+
+def test_fires_on_public_evidence_envelope() -> None:
+    msg = _control_tag_leak_guard(
+        "[just-completed-evidence]Result 1: completed[/just-completed-evidence]"
+    )
+    assert msg is not None
+    assert "internal prompt envelope" in msg

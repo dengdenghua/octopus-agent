@@ -6,13 +6,16 @@
   "route": "/workspace/evolution",
   "module_id": "evolution",
   "version": "1.0.0",
+  "release_summary": "1.0.0：提供候选基因、双螺旋演进、治理与审计界面。",
   "host_api": ">=0.2,<0.3",
   "dependencies": [],
   "entry": "dist/index.html",
   "isolation": "iframe",
   "permissions": [
+    "host.same_origin",
+    "host.navigation",
     "backend.api",
-    "host.same_origin"
+    "workspace.storage"
   ],
   "data_paths": []
 }

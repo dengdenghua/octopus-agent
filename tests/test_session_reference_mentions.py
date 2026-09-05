@@ -1,4 +1,4 @@
-"""Realtime host wiring for session-reference mentions (dsh host seam).
+"""Realtime host wiring for Octopus session-reference mentions.
 
 Covers the PHASE 3.5 mention-resolution helper in ``realtime_turn_lifecycle``
 and the prompt-assembly injection of the referenced-sessions frame.
@@ -82,7 +82,27 @@ def test_canonical_mention_resolves(tmp_path: Path) -> None:
         assert text == "see @Researcher please"
         assert frame is not None
         assert "## Referenced sessions" in frame
+        assert "octopus-session:" not in text
         assert "dsh-session:" not in text
+    finally:
+        sessions_module.get_subagent_session_store = original
+
+
+def test_historical_dsh_mention_still_resolves(tmp_path: Path) -> None:
+    store, sid = _store_with_session(tmp_path)
+    mention = format_session_reference_mention(sid, "Researcher").replace(
+        "octopus-session:",
+        "dsh-session:",
+    )
+    import runtime.execution.subagents.sessions as sessions_module
+
+    original = sessions_module.get_subagent_session_store
+    sessions_module.get_subagent_session_store = lambda: store
+    try:
+        text, frame = _resolve_session_reference_mentions(f"see {mention} please", "t1")
+        assert text == "see @Researcher please"
+        assert frame is not None
+        assert "find the patents" in frame
     finally:
         sessions_module.get_subagent_session_store = original
 

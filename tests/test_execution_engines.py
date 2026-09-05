@@ -33,6 +33,8 @@ from runtime.execution.engines import (
         ({"requested_engine": EngineId.OCTOPUS, "codex_partner": True}, EngineId.OCTOPUS, "react"),
         ({"requested_engine": EngineId.OCTOPUS, "coding_task": True}, EngineId.OCTOPUS, "react"),
         ({"coding_task": True}, EngineId.CODEX, "codex_app_server"),
+        ({"coordinated": True, "coding_task": True}, EngineId.OCTOPUS, "react"),
+        ({"coordinated": True, "codex_partner": True}, EngineId.OCTOPUS, "react"),
         (
             {"requested_engine": EngineId.OCTOPUS, "reflection_fast_path": True},
             EngineId.OCTOPUS,
@@ -46,7 +48,13 @@ def test_host_orchestration_precedence(signals, engine, driver):
 
 
 @pytest.mark.parametrize(
-    "signals", [{"project_command": True}, {"group_fanout": True}, {"topology_id": "team"}]
+    "signals",
+    [
+        {"project_command": True},
+        {"group_fanout": True},
+        {"topology_id": "team"},
+        {"coordinated": True},
+    ],
 )
 def test_codex_cannot_own_host_orchestration(signals):
     with pytest.raises(EngineSelectionError) as caught:

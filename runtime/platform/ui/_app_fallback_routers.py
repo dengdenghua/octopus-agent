@@ -1,47 +1,13 @@
 """Live model-dispatcher fallback routers for the Web UI app.
 
-Extracted from ``app.py`` during the god-file reduction. These attach
-the Molili / oct gateway fallback to the live model dispatcher so the
+Extracted from ``app.py`` during the god-file reduction. This attaches
+the oct gateway fallback to the live model dispatcher so the
 planner can route LLM calls without a named/BYO model.
 """
 
 from __future__ import annotations
 
 from typing import Any
-
-
-def _attach_molili_fallback_router(
-    *,
-    stack: Any,
-    molili_config: Any,
-    link_store: Any,
-) -> None:
-    """Point the live model dispatcher at the same Molili login store."""
-    dispatcher = getattr(
-        getattr(stack, "planner", None) if stack is not None else None,
-        "router",
-        None,
-    )
-    if dispatcher is None or not hasattr(dispatcher, "set_fallback"):
-        return
-    try:
-        from runtime.sensing.model_router.models import UnconfiguredModelRouter
-        from runtime.sensing.model_router.openai_router import (
-            build_fallback_router_from_custom_models,
-        )
-
-        planner_model = getattr(
-            getattr(stack, "planner", None),
-            "planner_model",
-            None,
-        )
-        # Self-configured model as the fallback (mirrors builder.py); a clear
-        # "no model configured" error when none exists, instead of the old
-        # login-gated Molili fallback.
-        self_fallback = build_fallback_router_from_custom_models(planner_model)
-        dispatcher.set_fallback(self_fallback or UnconfiguredModelRouter())
-    except (ImportError, AttributeError, TypeError):
-        return
 
 
 def _attach_oct_fallback_router(
@@ -75,7 +41,7 @@ def _attach_oct_fallback_router(
         )
         oct_router = OctModelRouter(
             link_store=link_store,
-            base_url=getattr(oct_config, "base_url", None) or "https://api.octoapk.com",
+            base_url=getattr(oct_config, "base_url", None) or "https://api.echo-age.com",
             default_model=getattr(oct_config, "default_model", None) or "qwen3.5-flash",
             timeout_seconds=getattr(oct_config, "llm_timeout_seconds", None) or 120.0,
         )

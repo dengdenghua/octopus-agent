@@ -22,6 +22,7 @@ import re
 from typing import Any
 
 from runtime.core.cerebrum.react_guards import _explicit_source_paths
+from runtime.platform.models import Budget, CostEntry
 from runtime.sensing.model_router.models import Message, ModelRequest, ToolCall
 
 from ._tool_bridge_native import (
@@ -228,13 +229,36 @@ def _ordered_read_handoffs_requested(goal: str) -> bool:
     )
 
 
+def _model_response_actual_cost(final: Any) -> CostEntry:
+    """Return one canonical actual-cost receipt from a provider response.
+
+    Routers historically populated the top-level token counters more
+    consistently than ``final.cost`` while USD only exists on ``final.cost``.
+    Prefer explicit top-level tokens when non-zero, fall back to the structured
+    cost entry, and never add the two representations together.
+    """
+
+    reported = getattr(final, "cost", None)
+    reported_in = int(getattr(reported, "tokens_in", 0) or 0)
+    reported_out = int(getattr(reported, "tokens_out", 0) or 0)
+    top_level_in = int(getattr(final, "input_tokens", 0) or 0)
+    top_level_out = int(getattr(final, "output_tokens", 0) or 0)
+    return CostEntry(
+        tokens_in=top_level_in or reported_in,
+        tokens_out=top_level_out or reported_out,
+        usd=float(getattr(reported, "usd", 0.0) or 0.0),
+        latency_ms=float(getattr(reported, "latency_ms", 0.0) or 0.0),
+    )
+
+
 def _generate_native_public_checkpoint(
     router: Any,
     *,
     model: str,
     messages: list[Message],
     prompt: str,
-) -> tuple[str, int, int]:
+    budget: Budget | None = None,
+) -> tuple[str, CostEntry]:
     """Run one small tools-disabled model continuation for public narration."""
     from runtime.sensing.model_router.rescue_policy import (
         next_custom_model_fallback as _next_custom_model_fallback,
@@ -282,35 +306,40 @@ def _generate_native_public_checkpoint(
         temperature=0.4,
         tools=[],
     )
+    reservation_id = (
+        budget.reserve(CostEntry(tokens_out=request.max_tokens)) if budget is not None else None
+    )
     chunks: list[str] = []
-    input_tokens = 0
-    output_tokens = 0
+    actual_cost = CostEntry()
     visible = {"started": False}
-    for event in _iter_native_model_stream_with_deadline(
-        router,
-        request,
-        PUBLIC_NARRATIVE_TIMEOUT_S,
-        visible_started=lambda: visible["started"],
-    ):
-        if event is _NATIVE_STREAM_DEADLINE:
-            break
-        if event.type == "text_delta":
-            chunks.append(event.delta)
-            visible["started"] = True
-        elif event.type == "done":
-            final = getattr(event, "final", None)
-            if final is not None:
-                input_tokens += int(getattr(final, "input_tokens", 0) or 0)
-                output_tokens += int(getattr(final, "output_tokens", 0) or 0)
-                if not chunks:
-                    text = str(getattr(final, "text", "") or "")
-                    if text:
-                        chunks.append(text)
-            break
+    try:
+        for event in _iter_native_model_stream_with_deadline(
+            router,
+            request,
+            PUBLIC_NARRATIVE_TIMEOUT_S,
+            visible_started=lambda: visible["started"],
+        ):
+            if event is _NATIVE_STREAM_DEADLINE:
+                break
+            if event.type == "text_delta":
+                chunks.append(event.delta)
+                visible["started"] = True
+            elif event.type == "done":
+                final = getattr(event, "final", None)
+                if final is not None:
+                    actual_cost = _model_response_actual_cost(final)
+                    if not chunks:
+                        text = str(getattr(final, "text", "") or "")
+                        if text:
+                            chunks.append(text)
+                break
+    finally:
+        if budget is not None and reservation_id is not None:
+            budget.commit(reservation_id, actual_cost)
     checkpoint = _native_public_checkpoint("".join(chunks))
     if checkpoint.strip().casefold() == "skip":
         checkpoint = ""
-    return checkpoint, input_tokens, output_tokens
+    return checkpoint, actual_cost
 
 
 def _generate_native_evidence_checkpoint(
@@ -318,12 +347,14 @@ def _generate_native_evidence_checkpoint(
     *,
     model: str,
     messages: list[Message],
-) -> tuple[str, int, int]:
+    budget: Budget | None = None,
+) -> tuple[str, CostEntry]:
     """Ask the model—not runtime templates—to narrate a quiet tool result."""
     return _generate_native_public_checkpoint(
         router,
         model=model,
         messages=messages,
+        budget=budget,
         prompt=(
             "[PUBLIC PROGRESS UPDATE]\n"
             "Based only on the completed tool results immediately above, "
@@ -354,12 +385,14 @@ def _generate_native_action_checkpoint(
     model: str,
     messages: list[Message],
     calls: list[ToolCall],
-) -> tuple[str, int, int]:
+    budget: Budget | None = None,
+) -> tuple[str, CostEntry]:
     """Narrate the purpose of a likely-long batch before it starts running."""
     return _generate_native_public_checkpoint(
         router,
         model=model,
         messages=messages,
+        budget=budget,
         prompt=(
             "[PUBLIC ACTION UPDATE]\n"
             f"A batch of {len(calls)} potentially long operation(s) is about to run. "

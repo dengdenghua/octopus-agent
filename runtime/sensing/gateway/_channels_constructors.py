@@ -72,6 +72,7 @@ _SENSITIVE_KEYS = {
     "encoding_aes_key",
     "corp_secret",
     "access_token",
+    "oauth_token",
 }
 
 
@@ -355,6 +356,44 @@ def _make_yuanbao(body: dict[str, Any]) -> Any:
     )
 
 
+def _body_bool(body: dict[str, Any], key: str, default: bool) -> bool:
+    value = body.get(key, default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    raise ValueError(f"{key} must be a boolean")
+
+
+def _make_irc(body: dict[str, Any]) -> Any:
+    from runtime.adapters.channels.irc import IRCChannel
+
+    return IRCChannel(
+        server=_require(body, "server"),
+        port=int(body.get("port", 6697)),
+        nickname=_require(body, "nickname"),
+        password=_optional(body, "password") or "",
+        channels=_require(body, "channels"),
+        use_tls=_body_bool(body, "use_tls", True),
+        channel_id=str(body.get("channel_id", "irc")),
+    )
+
+
+def _make_twitch(body: dict[str, Any]) -> Any:
+    from runtime.adapters.channels.irc import TwitchChannel
+
+    return TwitchChannel(
+        oauth_token=_require(body, "oauth_token"),
+        nickname=_require(body, "nickname"),
+        channels=_require(body, "channels"),
+        channel_id=str(body.get("channel_id", "twitch")),
+    )
+
+
 register_channel_constructor("slack", _make_slack)
 register_channel_constructor("dingtalk", _make_dingtalk)
 register_channel_constructor("feishu", _make_feishu)
@@ -379,6 +418,8 @@ register_channel_constructor("google_chat", _make_google_chat)
 register_channel_constructor("simplex", _make_simplex)
 register_channel_constructor("open_webui", _make_open_webui)
 register_channel_constructor("yuanbao", _make_yuanbao)
+register_channel_constructor("irc", _make_irc)
+register_channel_constructor("twitch", _make_twitch)
 
 
 def _load_credentials_and_bootstrap(

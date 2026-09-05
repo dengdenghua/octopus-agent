@@ -150,6 +150,43 @@ describe("MessageList scroll-to-latest affordance", () => {
     }
   });
 
+  test("keeps historical node registration stable across streamed rerenders", () => {
+    const firstOwner = vi.fn();
+    const nextOwner = vi.fn();
+    const view = render(
+      <HistoricalTurnBoundary
+        cacheKey="thread:stable-turn"
+        virtualize={false}
+        onNode={firstOwner}
+      >
+        <span>first frame</span>
+      </HistoricalTurnBoundary>,
+    );
+    const boundary = view.container.firstElementChild;
+    expect(firstOwner).toHaveBeenCalledTimes(1);
+    expect(firstOwner).toHaveBeenCalledWith(boundary);
+    firstOwner.mockClear();
+
+    view.rerender(
+      <HistoricalTurnBoundary
+        cacheKey="thread:stable-turn"
+        virtualize={false}
+        onNode={nextOwner}
+      >
+        <span>next streamed frame</span>
+      </HistoricalTurnBoundary>,
+    );
+
+    // A callback-prop identity change must not masquerade as a DOM unmount /
+    // remount. MessageList supplies an inline owner callback per turn.
+    expect(firstOwner).not.toHaveBeenCalled();
+    expect(nextOwner).not.toHaveBeenCalled();
+
+    view.unmount();
+    expect(nextOwner).toHaveBeenCalledTimes(1);
+    expect(nextOwner).toHaveBeenCalledWith(null);
+  });
+
   beforeEach(() => {
     scrollIntoViewMock.mockClear();
   });

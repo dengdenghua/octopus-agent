@@ -5,8 +5,7 @@ from __future__ import annotations
 
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import suppress
-from threading import Barrier, BrokenBarrierError, Lock
+from threading import Barrier, Lock
 
 import pytest
 
@@ -233,13 +232,7 @@ def test_concurrent_group_runs_execute_only_the_cas_winners_task(
             return _bind(*args, **kwargs)
 
         def synchronized_claim(*args, _claim=original_claim, **kwargs):
-            # The CAS loser may observe the winner's project after its only
-            # runnable task has already been claimed and therefore never call
-            # ``claim_task``. The barrier widens the true concurrent-claim
-            # window when both runners reach it, but it is not itself the
-            # invariant under test; the execute-count assertion below is.
-            with suppress(BrokenBarrierError):
-                claim_barrier.wait(timeout=5)
+            claim_barrier.wait(timeout=5)
             return _claim(*args, **kwargs)
 
         monkeypatch.setattr(store, "bind_thread_if_absent_versioned", synchronized_bind)
@@ -721,12 +714,15 @@ def _assert_team_scope(calls: list[dict], explicit_runner) -> None:
         assert trusted.metadata == context["runtime_session_metadata"]
         from runtime.execution.codex_backend.role_runner import resolve_codex_sandbox_mode
 
+        # A legacy review workflow guides how the agent works; it is not a
+        # filesystem capability boundary.  Only an explicit read-only turn
+        # may narrow a delegated ProjectOS worker to read-only.
         assert (
             resolve_codex_sandbox_mode(
                 context,
                 trusted_parent_metadata=trusted.metadata,
             )
-            == "read-only"
+            == "workspace-write"
         )
 
 

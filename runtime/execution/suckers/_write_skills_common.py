@@ -60,7 +60,8 @@ def _ensure_sandbox(
         if "escapes_sandbox" in reason:
             reason = (
                 f"path_escapes_sandbox: {verdict.resolved} not under {sandbox_dir}. "
-                f"该路径在当前工作区沙箱之外，无法写入。"
+                f"该路径不在当前任务获准的工作区内，无法写入。"
+                f"这是工作区授权边界，不代表执行沙箱已开启。"
                 f"可操作建议：1) 确认路径是否正确；"
                 f"2) 切换到 project workspace 模式以扩大工作区范围；"
                 f"3) 使用 CLI code 模式（python -m runtime.cli code --cwd <项目根目录>）运行任务。"

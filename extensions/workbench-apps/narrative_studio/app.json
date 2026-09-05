@@ -6,14 +6,17 @@
   "route": "/workspace/narrative",
   "module_id": "narrative",
   "version": "0.2.0",
-  "runtime_plugin": "narrative_studio",
+  "release_summary": "0.2.0：支持角色、世界观、剧情分支与正典资产协作。",
   "host_api": ">=0.2,<0.3",
   "dependencies": [],
   "entry": "dist/index.html",
+  "runtime_plugin": "narrative_studio",
   "isolation": "iframe",
   "permissions": [
+    "host.same_origin",
+    "host.navigation",
     "backend.api",
-    "host.same_origin"
+    "workspace.storage"
   ],
   "data_paths": [
     "narrative-studio"

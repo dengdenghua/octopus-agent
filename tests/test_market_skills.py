@@ -202,6 +202,40 @@ class TestRegistration:
         )
         assert count == 0
 
+    def test_fast_followup_pass_skips_registered_directory_reads(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        skill = tmp_path / "already-loaded"
+        skill.mkdir()
+        skill_md = skill / "SKILL.md"
+        skill_md.write_text(
+            "---\nname: already-loaded\ndescription: cached.\n---\nbody",
+            encoding="utf-8",
+        )
+        registry = SkillRegistry()
+        assert register_market_skills(registry, all_skills_dir=tmp_path) == 1
+
+        original_read_text = Path.read_text
+
+        def fail_if_skill_is_read(path: Path, *args: object, **kwargs: object) -> str:
+            if path == skill_md:
+                raise AssertionError("registered skill file was read again")
+            return original_read_text(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", fail_if_skill_is_read)
+
+        assert (
+            register_market_skills(
+                registry,
+                all_skills_dir=tmp_path,
+                respect_enabled_flag=False,
+                skip_registered_directories=True,
+            )
+            == 0
+        )
+
     def test_production_chokepoint_rejects_direct_mutable_catalog_registration(
         self,
         tmp_path: Path,

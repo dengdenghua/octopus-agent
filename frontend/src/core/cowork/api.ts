@@ -7,6 +7,12 @@ import type {
   CollabRoomInput,
   CollabRoomResponse,
   CollaborationSession,
+  CoworkAnnotation,
+  CoworkAnnotationInput,
+  CoworkAnnotationReplyInput,
+  CoworkMessageReaction,
+  CoworkMessageReactionInput,
+  CoworkPinnedMessage,
   CoworkGroupResponse,
   CoworkInviteInput,
   CoworkMessageProjectActionInput,
@@ -143,6 +149,7 @@ export async function markCoworkRead(
   threadId: string,
   memberId: string,
   seq?: number,
+  messageSeq?: number,
 ): Promise<void> {
   const res = await fetch(`${BASE()}/${encodeURIComponent(threadId)}/read`, {
     method: "POST",
@@ -150,6 +157,7 @@ export async function markCoworkRead(
     body: JSON.stringify({
       member_id: memberId,
       ...(seq != null ? { seq } : {}),
+      ...(messageSeq != null ? { message_seq: messageSeq } : {}),
     }),
   });
   await parseJson<{ ok: boolean }>(res, "Mark cowork read");
@@ -236,6 +244,7 @@ export async function postCollabRoomMessage(
           ? { entity_refs: input.entity_refs }
           : {}),
         ...(input.system_card ? { system_card: input.system_card } : {}),
+        ...(input.reply_to ? { reply_to: input.reply_to } : {}),
         ...(input.metadata && Object.keys(input.metadata).length > 0
           ? { metadata: input.metadata }
           : {}),
@@ -243,6 +252,142 @@ export async function postCollabRoomMessage(
     },
   );
   return parseJson<CollabRoomMessageResponse>(res, "Post collab room message");
+}
+
+export async function getCollabAnnotations(
+  threadId: string,
+): Promise<CoworkAnnotation[]> {
+  const res = await fetch(
+    `${COLLAB_BASE()}/${encodeURIComponent(threadId)}/annotations`,
+    { headers: authHeaders() },
+  );
+  const payload = await parseJson<{ annotations: CoworkAnnotation[] }>(
+    res,
+    "Load collaboration annotations",
+  );
+  return payload.annotations ?? [];
+}
+
+export async function getCollabMessageReactions(
+  threadId: string,
+): Promise<CoworkMessageReaction[]> {
+  const res = await fetch(
+    `${COLLAB_BASE()}/${encodeURIComponent(threadId)}/reactions`,
+    { headers: authHeaders() },
+  );
+  const payload = await parseJson<{ reactions: CoworkMessageReaction[] }>(
+    res,
+    "Load collaboration message reactions",
+  );
+  return payload.reactions ?? [];
+}
+
+export async function toggleCollabMessageReaction(
+  threadId: string,
+  input: CoworkMessageReactionInput,
+): Promise<CoworkMessageReaction> {
+  const res = await fetch(
+    `${COLLAB_BASE()}/${encodeURIComponent(threadId)}/reactions`,
+    { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify(input) },
+  );
+  const payload = await parseJson<{ reaction: CoworkMessageReaction }>(
+    res,
+    "Toggle collaboration message reaction",
+  );
+  return payload.reaction;
+}
+
+export async function getCollabPinnedMessages(
+  threadId: string,
+): Promise<CoworkPinnedMessage[]> {
+  const res = await fetch(
+    `${COLLAB_BASE()}/${encodeURIComponent(threadId)}/pinned-messages`,
+    { headers: authHeaders() },
+  );
+  const payload = await parseJson<{ pinned_messages: CoworkPinnedMessage[] }>(
+    res,
+    "Load collaboration pinned messages",
+  );
+  return payload.pinned_messages ?? [];
+}
+
+export async function toggleCollabPinnedMessage(
+  threadId: string,
+  messageId: string,
+): Promise<{ message_id: string; pinned: boolean }> {
+  const res = await fetch(
+    `${COLLAB_BASE()}/${encodeURIComponent(threadId)}/pinned-messages`,
+    {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify({ message_id: messageId }),
+    },
+  );
+  const payload = await parseJson<{
+    pin: { message_id: string; pinned: boolean };
+  }>(res, "Toggle pinned message");
+  return payload.pin;
+}
+
+export async function createCollabAnnotation(
+  threadId: string,
+  input: CoworkAnnotationInput,
+): Promise<CoworkAnnotation> {
+  const res = await fetch(
+    `${COLLAB_BASE()}/${encodeURIComponent(threadId)}/annotations`,
+    { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify(input) },
+  );
+  const payload = await parseJson<{ annotation: CoworkAnnotation }>(
+    res,
+    "Create collaboration annotation",
+  );
+  return payload.annotation;
+}
+
+export async function setCollabAnnotationResolved(
+  threadId: string,
+  annotationId: string,
+  resolved: boolean,
+): Promise<CoworkAnnotation> {
+  const res = await fetch(
+    `${COLLAB_BASE()}/${encodeURIComponent(threadId)}/annotations/${encodeURIComponent(annotationId)}`,
+    {
+      method: "PATCH",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify({ resolved }),
+    },
+  );
+  const payload = await parseJson<{ annotation: CoworkAnnotation }>(
+    res,
+    "Update collaboration annotation",
+  );
+  return payload.annotation;
+}
+
+export async function deleteCollabAnnotation(
+  threadId: string,
+  annotationId: string,
+): Promise<void> {
+  const res = await fetch(
+    `${COLLAB_BASE()}/${encodeURIComponent(threadId)}/annotations/${encodeURIComponent(annotationId)}`,
+    { method: "DELETE", headers: authHeaders() },
+  );
+  await parseJson<{ ok: boolean }>(res, "Delete collaboration annotation");
+}
+
+export async function createCollabAnnotationReply(
+  threadId: string,
+  annotationId: string,
+  input: CoworkAnnotationReplyInput,
+) {
+  const res = await fetch(
+    `${COLLAB_BASE()}/${encodeURIComponent(threadId)}/annotations/${encodeURIComponent(annotationId)}/replies`,
+    { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify(input) },
+  );
+  return parseJson<{ reply: CoworkAnnotation["replies"][number] }>(
+    res,
+    "Reply to collaboration annotation",
+  );
 }
 
 /** Promote one timeline message into the bound Project OS project. */

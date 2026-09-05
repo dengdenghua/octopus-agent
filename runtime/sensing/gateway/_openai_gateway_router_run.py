@@ -22,6 +22,11 @@ from .openai_gateway.context_manager import (
     _runtime_soul_for_agent,
 )
 from .openai_gateway.stream_handler import _direct_llm_fallback
+from .openai_gateway.turn_context import (
+    candidate_outcome_for_trajectory,
+    prepare_chat_turn,
+    settle_candidate_outcomes,
+)
 
 
 def _run_chat(
@@ -36,44 +41,91 @@ def _run_chat(
     force_deep: bool = False,
     conversation_id: str | None = None,
     tenant_id: str | None = None,
+    owner_actor_id: str | None = None,
 ) -> dict[str, Any]:
     task_id = uuid4()
     variant_name: str | None = None
+    from runtime.platform.process.session import session_scope
+    from runtime.safety.approval.cancellation import OperationCancelled
+
+    turn_session = prepare_chat_turn(
+        stack,
+        turn_id=str(task_id),
+        actor=actor,
+        agent=agent,
+        conversation_id=conversation_id,
+        tenant_id=tenant_id,
+        owner_actor_id=owner_actor_id,
+    ).session
 
     # Hint the planner/optimizer that the caller wants a real multi-step run
     # (not a trivial direct answer), so the graph is worth tracing/replaying.
     if force_deep and isinstance(getattr(intent, "user_context", None), dict):
         intent.user_context["force_deep"] = True
 
-    plan_kwargs: dict[str, Any] = {}
-    if agent is not None:
-        plan_kwargs["allowed_skills"] = agent.allowed_skill_union()
-        runtime_soul = _runtime_soul_for_agent(agent)
-        if runtime_soul:
-            plan_kwargs["soul"] = runtime_soul
-    if model and model not in ("octopus-agent", "", None):
-        plan_kwargs["model"] = model
+    # Planning must share the same Session as execution. Governed role and
+    # prompt candidates are selected during plan assembly; binding only the
+    # executor made canary routing impossible on this compatibility surface.
+    with session_scope(turn_session):
+        plan_kwargs: dict[str, Any] = {}
+        if agent is not None:
+            plan_kwargs["allowed_skills"] = agent.allowed_skill_union()
+            runtime_soul = _runtime_soul_for_agent(agent)
+            if runtime_soul:
+                plan_kwargs["soul"] = runtime_soul
+        if model and model not in ("octopus-agent", "", None):
+            plan_kwargs["model"] = model
 
-    if optimizer is not None:
-        try:
-            graph = optimizer.plan(intent, task_id=task_id, **plan_kwargs)
-            variant_name = optimizer.variant_for_task(task_id)
-        except TypeError:
+        if optimizer is not None:
             try:
-                graph = optimizer.plan(intent, task_id=task_id)
+                graph = optimizer.plan(intent, task_id=task_id, **plan_kwargs)
                 variant_name = optimizer.variant_for_task(task_id)
+            except TypeError:
+                try:
+                    graph = optimizer.plan(intent, task_id=task_id)
+                    variant_name = optimizer.variant_for_task(task_id)
+                except OperationCancelled:
+                    settle_candidate_outcomes(str(task_id), None)
+                    raise
+                except Exception as e:  # noqa: BLE001
+                    settle_candidate_outcomes(str(task_id), False)
+                    raise HTTPException(500, f"optimizer plan failed: {e}") from e
+            except OperationCancelled:
+                settle_candidate_outcomes(str(task_id), None)
+                raise
             except Exception as e:  # noqa: BLE001
+                settle_candidate_outcomes(str(task_id), False)
                 raise HTTPException(500, f"optimizer plan failed: {e}") from e
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(500, f"optimizer plan failed: {e}") from e
-    else:
-        try:
-            graph = stack.planner.plan(intent, **plan_kwargs)
-        except TypeError:
+        else:
             try:
-                graph = stack.planner.plan(intent)
+                graph = stack.planner.plan(intent, **plan_kwargs)
+            except TypeError:
+                try:
+                    graph = stack.planner.plan(intent)
+                except OperationCancelled:
+                    settle_candidate_outcomes(str(task_id), None)
+                    raise
+                except Exception as e:  # noqa: BLE001
+                    reply = _direct_llm_fallback(stack, intent, agent, model=model)
+                    settle_candidate_outcomes(str(task_id), False)
+                    if reply is not None:
+                        return _chat_completion_envelope(
+                            reply,
+                            model=model,
+                            actor=actor,
+                            agent=agent,
+                            extra={
+                                "fallback": f"planner_error: {e}",
+                                "deep_requested": force_deep,
+                            },
+                        )
+                    raise HTTPException(500, f"planner failed: {e}") from e
+            except OperationCancelled:
+                settle_candidate_outcomes(str(task_id), None)
+                raise
             except Exception as e:  # noqa: BLE001
                 reply = _direct_llm_fallback(stack, intent, agent, model=model)
+                settle_candidate_outcomes(str(task_id), False)
                 if reply is not None:
                     return _chat_completion_envelope(
                         reply,
@@ -83,17 +135,6 @@ def _run_chat(
                         extra={"fallback": f"planner_error: {e}", "deep_requested": force_deep},
                     )
                 raise HTTPException(500, f"planner failed: {e}") from e
-        except Exception as e:  # noqa: BLE001
-            reply = _direct_llm_fallback(stack, intent, agent, model=model)
-            if reply is not None:
-                return _chat_completion_envelope(
-                    reply,
-                    model=model,
-                    actor=actor,
-                    agent=agent,
-                    extra={"fallback": f"planner_error: {e}", "deep_requested": force_deep},
-                )
-            raise HTTPException(500, f"planner failed: {e}") from e
 
     arm_id_str = default_arm
     if agent is not None and len(agent.arms) > 0:
@@ -104,51 +145,50 @@ def _run_chat(
         task_id=graph.task_id,
         limits=BudgetLimits(tokens=50_000, usd=0.50),
     )
-    # The compat gateway never binds a Session for native-thread callers,
-    # so without this the executor's scope/sandbox/plan-mode-write-block,
-    # task-capability manifest, and approval gates (all keyed on
-    # ``current_session() is not None``) are silent no-ops here — a
-    # write/exec skill run through this path had no workspace
-    # confinement at all. ``mode`` defaults to "chat", which confines
-    # writes to this turn's own thread-artifact root instead of the
-    # unconfined legacy contract.
-    from runtime.platform.process.session import Session, session_scope
+    try:
+        with session_scope(turn_session):
+            traj = stack.runtime.run(
+                graph,
+                budget=budget,
+                caller=f"arms/{arm_id_str}",
+                arm_id=ArmId(arm_id_str),
+                actor=actor,
+            )
+    except OperationCancelled:
+        settle_candidate_outcomes(str(task_id), None)
+        raise
+    except Exception:
+        settle_candidate_outcomes(str(task_id), False)
+        raise
 
-    with session_scope(
-        Session(
-            actor=actor,
-            thread_id=conversation_id,
-            metadata={
-                "enforce_executor_approval": True,
-                "tenant_id": tenant_id,
-            },
-        )
-    ):
-        traj = stack.runtime.run(
-            graph,
-            budget=budget,
-            caller=f"arms/{arm_id_str}",
-            arm_id=ArmId(arm_id_str),
-            actor=actor,
-        )
+    candidate_success = candidate_outcome_for_trajectory(traj)
+    clean_success = candidate_success is True
 
     if optimizer is not None:
         try:
-            optimizer.record_outcome(task_id, success=traj.outcome.success)
+            optimizer.record_outcome(task_id, success=clean_success)
         except Exception as _e:  # noqa: BLE001
             _logger = logging.getLogger(__name__)
             _logger.debug("optimizer.record_outcome failed: %s", _e)
 
-    assistant_text = synthesize_reply(
-        stack,
-        goal=intent.normalized_goal,
-        trajectory=traj,
-        model=model,
-        agent=agent,
-        conversation_messages=_conversation_messages_payload(intent),
-        profile_memories=_profile_memories_payload(intent),
-        user_context=intent.user_context if intent is not None else None,
-    )
+    try:
+        assistant_text = synthesize_reply(
+            stack,
+            goal=intent.normalized_goal,
+            trajectory=traj,
+            model=model,
+            agent=agent,
+            conversation_messages=_conversation_messages_payload(intent),
+            profile_memories=_profile_memories_payload(intent),
+            user_context=intent.user_context if intent is not None else None,
+        )
+    except OperationCancelled:
+        settle_candidate_outcomes(str(task_id), None)
+        raise
+    except Exception:
+        settle_candidate_outcomes(str(task_id), False)
+        raise
+    settle_candidate_outcomes(str(task_id), candidate_success)
     finish_reason = "stop" if traj.outcome.success else "failed"
     planner_usage = getattr(graph, "planner_usage", None)
     if not isinstance(planner_usage, dict):

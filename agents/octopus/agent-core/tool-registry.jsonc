@@ -34,7 +34,6 @@
     "run_orchestration",
     "verdict_repair",
     "tournament",
-    "cli_team",
     "run_pipeline"
   ]
 }

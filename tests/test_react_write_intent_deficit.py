@@ -42,6 +42,34 @@ def test_read_only_goals_do_not_request_mutation(goal: str) -> None:
 
 @pytest.mark.parametrize(
     "goal",
+    [
+        (
+            "只执行以下两步后回答“Journal 回归通过”：1. 用 todo_write "
+            "创建一项已完成清单；2. 调用 list_cwd 查看当前项目根目录。"
+            "不要调用其他工具。"
+        ),
+        "Use todo_write to create a completed checklist, then call list_cwd.",
+        "添加一个待办事项清单并查看项目目录。",
+    ],
+)
+def test_todo_bookkeeping_is_not_workspace_mutation(goal: str) -> None:
+    assert _goal_requests_code_mutation(goal) is False
+
+
+@pytest.mark.parametrize(
+    "goal",
+    [
+        "用 todo_write 创建清单，然后创建 README.md 并写入结果。",
+        "创建任务清单组件并运行测试。",
+        "Create a checklist file and add it to the repository.",
+    ],
+)
+def test_todo_words_do_not_hide_real_workspace_mutation(goal: str) -> None:
+    assert _goal_requests_code_mutation(goal) is True
+
+
+@pytest.mark.parametrize(
+    "goal",
     ["不要动手改代码", "别改吧", "别动手", "不要修一下", "禁止修改", "不要修复任何东西"],
 )
 def test_prohibitions_survive_the_wider_vocabulary(goal: str) -> None:
@@ -65,3 +93,34 @@ def test_missing_write_guard_stays_silent_for_review_goals() -> None:
         _step(action='read_file({"path": "a.py"})', observation="(real tool execution succeeded)")
     ]
     assert _code_mode_missing_write_guard(reads, "审计结论如下。", goal="审计项目") is None
+
+
+def test_missing_write_guard_stays_silent_after_requested_todo_and_listing() -> None:
+    steps = [
+        _step(
+            action='todo_write({"todos":[{"title":"Journal 回归","status":"completed"}]})',
+            observation='{"ok":true}',
+            action_results=[
+                {
+                    "tool_name": "todo_write",
+                    "ok": True,
+                    "observation": "todo updated",
+                }
+            ],
+        ),
+        _step(
+            iteration=2,
+            action="list_cwd({})",
+            observation='{"entries":["runtime","tests"]}',
+            action_results=[
+                {
+                    "tool_name": "list_cwd",
+                    "ok": True,
+                    "observation": "listed cwd",
+                }
+            ],
+        ),
+    ]
+    goal = "用 todo_write 创建一项已完成清单；调用 list_cwd 查看当前项目根目录。不要调用其他工具。"
+
+    assert _code_mode_missing_write_guard(steps, "Journal 回归通过", goal=goal) is None

@@ -96,6 +96,11 @@ class TaskNode(BaseModel):
     input_schema: dict[str, Any] | None = None
     output_schema: dict[str, Any] | None = None
     failure_retry: int = 0
+    # Some nodes are probes whose failure is useful input for later repair
+    # nodes (for example, a test command that is expected to fail before a
+    # fix).  Keep the failed Step as evidence, but do not turn that expected
+    # observation into a graph-level terminal.
+    continue_on_failure: bool = False
     timeout_ms: int = 30_000
 
 

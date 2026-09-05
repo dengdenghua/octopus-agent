@@ -13,6 +13,7 @@ import {
   SearchIcon,
   SendHorizontalIcon,
   Settings2Icon,
+  WifiOffIcon,
   ZapIcon,
   MapIcon,
   PaperclipIcon,
@@ -21,7 +22,14 @@ import {
   SquareIcon,
   XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 
 import { useMentionAutocomplete } from "../mention-autocomplete";
@@ -104,6 +112,9 @@ import { FileTree } from "../file-tree";
 export function ChatComposer({
   status,
   disabled,
+  readyForMutations = true,
+  connectionPhase = "ready",
+  onRetryConnection,
   modelName,
   mode = "react",
   threadId,
@@ -140,11 +151,23 @@ export function ChatComposer({
   onDeepResearch,
   onSubmit,
   onStop,
+  isStopping = false,
   isUploading = false,
   className,
 }: ChatInputBoxProps) {
   const { t } = useI18n();
   const { models } = useModels();
+  // Async attachment work must never outlive the conversation that started
+  // it. Replace the scope during the route commit so abandoned concurrent
+  // renders cannot invalidate the still-visible conversation.
+  const composerThreadScopeRef = useRef({ threadId, generation: 0 });
+  useLayoutEffect(() => {
+    if (Object.is(composerThreadScopeRef.current.threadId, threadId)) return;
+    composerThreadScopeRef.current = {
+      threadId,
+      generation: composerThreadScopeRef.current.generation + 1,
+    };
+  }, [threadId]);
   const [draft, setDraft] = useState(
     () =>
       // A per-thread draft survives thread switches and reloads. defaultValue
@@ -154,11 +177,15 @@ export function ChatComposer({
   // Restore the stored draft when the composer moves to a different thread
   // (the component is reused across navigation).
   const prevDraftThreadRef = useRef(threadId);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (prevDraftThreadRef.current === threadId) return;
+    // The debounced persistence effect is cancelled by navigation. Flush the
+    // old value synchronously before restoring the destination thread so a
+    // quick switch cannot lose the user's last 300 ms of typing.
+    saveComposerDraft(prevDraftThreadRef.current, draft);
     prevDraftThreadRef.current = threadId;
     setDraft(loadComposerDraft(threadId) ?? "");
-  }, [threadId]);
+  }, [draft, threadId]);
   // Persist the draft (debounced) so a reload never loses half-typed text.
   useEffect(() => {
     const timer = setTimeout(() => saveComposerDraft(threadId, draft), 300);
@@ -192,6 +219,8 @@ export function ChatComposer({
   const [pendingImagePreviews, setPendingImagePreviews] = useState<
     Record<string, string>
   >({});
+  const pendingImagePreviewsRef = useRef(pendingImagePreviews);
+  pendingImagePreviewsRef.current = pendingImagePreviews;
   const [pendingImageSources, setPendingImageSources] = useState<
     Record<string, string>
   >({});
@@ -214,6 +243,38 @@ export function ChatComposer({
   const attachmentUploads = useAttachmentUploads(threadId);
   const attachmentUploadsRef = useRef(attachmentUploads);
   attachmentUploadsRef.current = attachmentUploads;
+  const resetAttachmentUploads = attachmentUploads.reset;
+
+  const clearPendingImagePreviews = useCallback(() => {
+    const previews = pendingImagePreviewsRef.current;
+    pendingImagePreviewsRef.current = {};
+    for (const url of Object.values(previews)) URL.revokeObjectURL(url);
+    setPendingImagePreviews({});
+    setPendingImageSources({});
+  }, []);
+
+  useLayoutEffect(() => {
+    // Attachments and research context are intentionally per-thread. The
+    // composer instance is reused across navigation, so clear them explicitly
+    // instead of letting the next thread inherit the previous one's state.
+    submitLockRef.current = false;
+    setPendingImages([]);
+    clearPendingImagePreviews();
+    setPendingFiles([]);
+    setResearchMaterials([]);
+    setResearchUrlText("");
+    setResearchTextTitle("");
+    setResearchTextBody("");
+    setResearchNote("");
+    setResearchConfigOpen(false);
+    setUploadingMaterials(false);
+    setCapturingAppshot(false);
+    setMaterialError(null);
+    resetAttachmentUploads();
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (contextFileInputRef.current) contextFileInputRef.current.value = "";
+    if (imageInputRef.current) imageInputRef.current.value = "";
+  }, [clearPendingImagePreviews, resetAttachmentUploads, threadId]);
 
   const parsedComposerDraft = parseComposerDraft(draft);
   const activeComposerMode = parsedComposerDraft.mode;
@@ -320,12 +381,19 @@ export function ChatComposer({
   // blocks too — silently dropping it is worse than making the user decide.
   const isBusy =
     disabled ||
+    isStopping ||
     uploadingMaterials ||
     isUploading ||
     attachmentUploads.isUploading ||
     attachmentUploads.hasFailed;
+  const submissionBlocked = !readyForMutations;
+  const connectionBlockedLabel =
+    connectionPhase === "recovery_error"
+      ? t.chatInputBox.connectionRecoveryFailed
+      : t.chatInputBox.restoringConnection;
   const sendLabel = t.chatInputBox.send;
   const stopLabel = t.chatInputBox.stop;
+  const activeStopLabel = isStopping ? t.chatInputBox.stopping : stopLabel;
   const parsedResearchUrls = useMemo(
     () => parseComposerUrls(researchUrlText),
     [researchUrlText],
@@ -483,12 +551,14 @@ export function ChatComposer({
   }, [addPendingWorkspaceFile, threadId]);
 
   const handleSubmit = useCallback(async () => {
+    const threadScope = composerThreadScopeRef.current;
     const text = draft.trim();
     const sendableText = parseComposerDraft(text).body.trim();
     const hasImages = pendingImages.length > 0;
     const hasFiles = pendingFiles.length > 0;
     if (
       (!sendableText && !hasImages && !hasFiles) ||
+      submissionBlocked ||
       isBusy ||
       (status === "streaming" && (hasImages || hasFiles))
     ) {
@@ -498,7 +568,9 @@ export function ChatComposer({
     submitLockRef.current = true;
     const releaseSubmitLock = () => {
       window.setTimeout(() => {
-        submitLockRef.current = false;
+        if (composerThreadScopeRef.current === threadScope) {
+          submitLockRef.current = false;
+        }
       }, 250);
     };
     // Fast path: client-side slash commands (mode/model/permission/
@@ -545,6 +617,7 @@ export function ChatComposer({
         setMaterialError(null);
         try {
           const result = await uploadFiles(threadId, pendingBrowserFiles);
+          if (composerThreadScopeRef.current !== threadScope) return;
           uploadedFileMaterials = result.files.map((file) => ({
             kind: "file" as const,
             title: file.filename,
@@ -552,14 +625,18 @@ export function ChatComposer({
             notes: `uploaded file · ${file.size} bytes`,
           }));
         } catch (err) {
+          if (composerThreadScopeRef.current !== threadScope) return;
           swallow(err);
           setMaterialError(t.chatInputBox.uploadFailed);
           releaseSubmitLock();
           return;
         } finally {
-          setUploadingMaterials(false);
+          if (composerThreadScopeRef.current === threadScope) {
+            setUploadingMaterials(false);
+          }
         }
       }
+      if (composerThreadScopeRef.current !== threadScope) return;
       let result: void | boolean;
       try {
         result = await onDeepResearch(
@@ -580,6 +657,7 @@ export function ChatComposer({
       } finally {
         releaseSubmitLock();
       }
+      if (composerThreadScopeRef.current !== threadScope) return;
       if (result !== false) {
         setDraft(
           activeLongTaskMode
@@ -598,8 +676,9 @@ export function ChatComposer({
       .map((file) => file.file)
       .filter((file): file is File => file instanceof File);
     const completedUploads = attachmentUploads.completed();
+    let accepted: void | boolean;
     try {
-      onSubmit?.({
+      accepted = onSubmit?.({
         text: appendReferencedFiles(text, pendingFiles),
         images: pendingImages.length > 0 ? pendingImages : undefined,
         files: browserUploadFiles.length > 0 ? browserUploadFiles : undefined,
@@ -610,6 +689,10 @@ export function ChatComposer({
     } finally {
       releaseSubmitLock();
     }
+    // The page performs the same readiness check at the mutation boundary.
+    // If transport readiness changed between render and click, keep every
+    // part of the draft instead of optimistically clearing an unsent message.
+    if (accepted === false) return;
     setDraft(
       activeLongTaskMode
         ? serializeComposerDraft({
@@ -626,11 +709,11 @@ export function ChatComposer({
     }
     if (pendingImages.length > 0) {
       setPendingImages([]);
-      setPendingImagePreviews({});
-      setPendingImageSources({});
+      clearPendingImagePreviews();
     }
   }, [
     draft,
+    submissionBlocked,
     isBusy,
     status,
     isDeepResearchMode,
@@ -649,6 +732,7 @@ export function ChatComposer({
     pendingImages,
     pendingFiles,
     attachmentUploads,
+    clearPendingImagePreviews,
     t,
     threadId,
     activeLongTaskMode,
@@ -703,10 +787,13 @@ export function ChatComposer({
         setMaterialError(t.chatInputBox.startThreadBeforeUpload);
         return;
       }
+      const threadScope = composerThreadScopeRef.current;
+      const uploadThreadId = threadId;
       setUploadingMaterials(true);
       setMaterialError(null);
       try {
-        const result = await uploadFiles(threadId, Array.from(files));
+        const result = await uploadFiles(uploadThreadId, Array.from(files));
+        if (composerThreadScopeRef.current !== threadScope) return;
         result.files.forEach((file) =>
           addMaterial({
             kind: "file",
@@ -717,11 +804,14 @@ export function ChatComposer({
         );
         setResearchNote("");
       } catch (err) {
+        if (composerThreadScopeRef.current !== threadScope) return;
         swallow(err);
         setMaterialError(t.chatInputBox.uploadFailed);
       } finally {
-        setUploadingMaterials(false);
-        if (fileInputRef.current) fileInputRef.current.value = "";
+        if (composerThreadScopeRef.current === threadScope) {
+          setUploadingMaterials(false);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        }
       }
     },
     [addMaterial, researchNote, t, threadId],
@@ -828,6 +918,7 @@ export function ChatComposer({
           const key = imageFileKey(file);
           if (!next[key]) next[key] = URL.createObjectURL(file);
         }
+        pendingImagePreviewsRef.current = next;
         return next;
       });
       setPendingImageSources((current) => {
@@ -851,6 +942,7 @@ export function ChatComposer({
         const url = prev[key];
         if (url) URL.revokeObjectURL(url);
         const { [key]: _omit, ...rest } = prev;
+        pendingImagePreviewsRef.current = rest;
         return rest;
       });
       setPendingImageSources((prev) => {
@@ -893,11 +985,13 @@ export function ChatComposer({
 
   const addCurrentWindowAppshot = useCallback(async () => {
     if (capturingAppshot) return;
+    const threadScope = composerThreadScopeRef.current;
     setCapturingAppshot(true);
     try {
       const appshot = await captureComputerAppshot({
         controlSessionId: `thread:${threadId || "new"}`,
       });
+      if (composerThreadScopeRef.current !== threadScope) return;
       const title =
         appshot.target.app_name || appshot.target.title || "Current window";
       const safeTitle = title.replace(/[^\p{L}\p{N}._-]+/gu, "-").slice(0, 72);
@@ -905,6 +999,7 @@ export function ChatComposer({
         appshot.screenshot.data_url || "",
         `Appshot-${safeTitle || "window"}.png`,
       );
+      if (composerThreadScopeRef.current !== threadScope) return;
       if (!screenshot) throw new Error("Screenshot data is unavailable");
       const semantic = new File(
         [
@@ -929,6 +1024,7 @@ export function ChatComposer({
       addPendingUploadFiles([semantic]);
       window.setTimeout(() => textareaRef.current?.focus(), 0);
     } catch (error) {
+      if (composerThreadScopeRef.current !== threadScope) return;
       swallow(error);
       toast.error(
         error instanceof Error && error.message
@@ -936,7 +1032,9 @@ export function ChatComposer({
           : t.chatInputBox.appshotFailed,
       );
     } finally {
-      setCapturingAppshot(false);
+      if (composerThreadScopeRef.current === threadScope) {
+        setCapturingAppshot(false);
+      }
     }
   }, [
     addPendingImages,
@@ -957,11 +1055,10 @@ export function ChatComposer({
   useEffect(() => {
     // Free any leftover object URLs when the component unmounts.
     return () => {
-      setPendingImagePreviews((current) => {
-        for (const url of Object.values(current)) URL.revokeObjectURL(url);
-        return {};
-      });
-      setPendingImageSources({});
+      for (const url of Object.values(pendingImagePreviewsRef.current)) {
+        URL.revokeObjectURL(url);
+      }
+      pendingImagePreviewsRef.current = {};
     };
   }, []);
   useEffect(() => {
@@ -971,14 +1068,19 @@ export function ChatComposer({
     rememberLastComposerTarget(hash);
   }, [threadId]);
   useEffect(() => {
+    let cancelled = false;
+    const threadScope = composerThreadScopeRef.current;
     const queued = consumeComposerImageEntries(threadId);
-    if (queued.length === 0) return;
+    if (queued.length === 0) return () => undefined;
     void Promise.all(
       queued.map(async (entry) => ({
         file: await dataUrlToFile(entry.dataUrl, entry.filename),
         sourceLabel: entry.sourceLabel?.trim() || "浏览器截图",
       })),
     ).then((entries) => {
+      if (cancelled || composerThreadScopeRef.current !== threadScope) {
+        return;
+      }
       const files = entries
         .map((entry) => entry.file)
         .filter((file): file is File => file instanceof File);
@@ -989,6 +1091,9 @@ export function ChatComposer({
           "浏览器截图",
       });
     });
+    return () => {
+      cancelled = true;
+    };
   }, [addPendingImages, threadId]);
   // Same recovery path for failed image-only sends: if the turn never
   // started, hand the images back to the composer so the user doesn't
@@ -1152,6 +1257,46 @@ export function ChatComposer({
         className,
       )}
     >
+      {submissionBlocked ? (
+        <div
+          data-testid="chat-connection-status"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className={cn(
+            "mx-2 mt-2 flex min-h-7 items-center gap-2 rounded-lg px-2 py-1 text-xs",
+            connectionPhase === "recovery_error"
+              ? "bg-destructive/8 text-destructive"
+              : "bg-muted/50 text-muted-foreground",
+          )}
+        >
+          {connectionPhase === "recovery_error" ? (
+            <WifiOffIcon className="size-3.5 shrink-0" aria-hidden="true" />
+          ) : (
+            <Loader2Icon
+              className="size-3.5 shrink-0 animate-spin"
+              aria-hidden="true"
+            />
+          )}
+          <span className="min-w-0 flex-1">{connectionBlockedLabel}</span>
+          {connectionPhase === "recovery_error" && onRetryConnection ? (
+            <button
+              type="button"
+              data-testid="chat-connection-retry"
+              className="shrink-0 rounded-md px-1.5 py-0.5 font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current/30"
+              onClick={() => {
+                try {
+                  void Promise.resolve(onRetryConnection()).catch(swallow);
+                } catch (error) {
+                  swallow(error);
+                }
+              }}
+            >
+              {t.chatInputBox.retryConnection}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <div className="relative">
         {slashPicker}
         <MentionPicker
@@ -1847,8 +1992,9 @@ export function ChatComposer({
                 type="button"
                 onClick={handleSubmit}
                 data-testid="chat-steer-button"
-                className="flex size-[42px] items-center justify-center rounded-lg bg-foreground text-background transition-all duration-base hover:bg-foreground/90 active:scale-95 sm:size-8"
-                title={sendLabel}
+                disabled={isBusy || submissionBlocked}
+                className="flex size-[42px] items-center justify-center rounded-lg bg-foreground text-background transition-all duration-base hover:bg-foreground/90 active:scale-95 disabled:cursor-wait disabled:opacity-70 sm:size-8"
+                title={submissionBlocked ? connectionBlockedLabel : sendLabel}
                 aria-label={sendLabel}
               >
                 <SendHorizontalIcon className="size-3.5" />
@@ -1856,22 +2002,48 @@ export function ChatComposer({
               <button
                 type="button"
                 onClick={onStop}
-                className="flex size-[42px] items-center justify-center rounded-lg border border-border bg-muted/60 text-muted-foreground transition-all duration-base hover:border-destructive/25 hover:bg-destructive/10 hover:text-destructive active:scale-95 sm:size-8"
-                title={stopLabel}
-                aria-label={stopLabel}
+                disabled={isStopping}
+                aria-busy={isStopping}
+                className="flex size-[42px] items-center justify-center rounded-lg border border-border bg-muted/60 text-muted-foreground transition-all duration-base hover:border-destructive/25 hover:bg-destructive/10 hover:text-destructive active:scale-95 disabled:cursor-wait disabled:opacity-70 sm:size-8"
+                title={activeStopLabel}
+                aria-label={activeStopLabel}
               >
-                <SquareIcon className="size-3" fill="currentColor" />
+                {isStopping ? (
+                  <Loader2Icon
+                    className="size-3.5 animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <SquareIcon
+                    className="size-3"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  />
+                )}
               </button>
             </>
           ) : status === "streaming" ? (
             <button
               type="button"
               onClick={onStop}
-              className="flex size-[42px] items-center justify-center rounded-lg border border-border bg-muted/60 text-muted-foreground transition-all duration-base hover:border-destructive/25 hover:bg-destructive/10 hover:text-destructive active:scale-95 sm:size-8"
-              title={stopLabel}
-              aria-label={stopLabel}
+              disabled={isStopping}
+              aria-busy={isStopping}
+              className="flex size-[42px] items-center justify-center rounded-lg border border-border bg-muted/60 text-muted-foreground transition-all duration-base hover:border-destructive/25 hover:bg-destructive/10 hover:text-destructive active:scale-95 disabled:cursor-wait disabled:opacity-70 sm:size-8"
+              title={activeStopLabel}
+              aria-label={activeStopLabel}
             >
-              <SquareIcon className="size-3" fill="currentColor" />
+              {isStopping ? (
+                <Loader2Icon
+                  className="size-3.5 animate-spin"
+                  aria-hidden="true"
+                />
+              ) : (
+                <SquareIcon
+                  className="size-3"
+                  fill="currentColor"
+                  aria-hidden="true"
+                />
+              )}
             </button>
           ) : (
             <button
@@ -1882,7 +2054,8 @@ export function ChatComposer({
                 (!sendableDraftText &&
                   pendingImages.length === 0 &&
                   pendingFiles.length === 0) ||
-                isBusy
+                isBusy ||
+                submissionBlocked
               }
               className={cn(
                 "flex size-[42px] items-center justify-center rounded-lg transition-all duration-base sm:size-8",
@@ -1897,7 +2070,9 @@ export function ChatComposer({
                   ? t.uploads.waitingForUpload
                   : attachmentUploads.hasFailed
                     ? t.uploads.uploadFailed
-                    : sendLabel
+                    : submissionBlocked
+                      ? connectionBlockedLabel
+                      : sendLabel
               }
               aria-label={sendLabel}
             >

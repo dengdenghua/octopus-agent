@@ -59,9 +59,7 @@ _current_session: ContextVar[Session | None] = ContextVar(
     default=None,
 )
 
-# Legacy ContextVar used by MoliliModelRouter and other pre-session
-# callers. We continue to set/reset it alongside the Session so the old
-# code keeps working while migration rolls forward.
+# Agent identity for call paths that do not receive a full Session.
 _current_agent_id: ContextVar[str | None] = ContextVar(
     "current_agent_id",
     default=None,
@@ -168,38 +166,21 @@ def parent_tool_use_scope(tool_use_id: str) -> Iterator[str]:
 def session_scope(session: Session) -> Iterator[Session]:
     """Activate a Session for the duration of the ``with`` block.
 
-    Also mirrors onto the legacy ContextVars so pre-session callers
-    (``eyes/molili_router.current_actor``) keep working.
+    Also mirrors the actor onto the provider-neutral model-router context.
     """
     tok_session: Token = _current_session.set(session)
     tok_agent: Token = _current_agent_id.set(session.agent_id)
 
-    # Legacy mirror: Molili router's own ContextVar. Import lazily to
-    # avoid a cycle if this module is imported before eyes is ready.
-    molili_tok = None
-    try:
-        from runtime.sensing.model_router.actor_context import (
-            current_actor as _molili_actor,
-        )
+    from runtime.sensing.model_router.actor_context import current_actor as _model_actor
 
-        molili_tok = _molili_actor.set(session.actor) if session.actor else None
-    except ImportError:  # noqa: BLE001 — molili optional; absence is no-op (real bugs surface as other exceptions)
-        pass
+    model_actor_tok = _model_actor.set(session.actor)
 
     try:
         yield session
     finally:
         _current_session.reset(tok_session)
         _current_agent_id.reset(tok_agent)
-        if molili_tok is not None:
-            try:
-                from runtime.sensing.model_router.actor_context import (
-                    current_actor as _molili_actor,
-                )
-
-                _molili_actor.reset(molili_tok)
-            except ImportError:  # noqa: BLE001 — molili optional; absence is no-op
-                pass
+        _model_actor.reset(model_actor_tok)
 
 
 def bind_thread_session(
@@ -210,44 +191,32 @@ def bind_thread_session(
     thread lifecycle (e.g. a Starlette-spawned SSE generator) and will
     manually ``unbind_thread_session`` at the end.
 
-    Returns ``(tok_session, tok_agent, tok_molili)`` — pass them to
+    Returns ``(tok_session, tok_agent, tok_model_actor)`` — pass them to
     :func:`unbind_thread_session` in a ``finally`` to reset the ContextVars
     and avoid leaking the session onto a reused thread.
     """
     tok_session = _current_session.set(session)
     tok_agent = _current_agent_id.set(session.agent_id)
-    tok_molili: Token | None = None
-    try:
-        from runtime.sensing.model_router.actor_context import (
-            current_actor as _molili_actor,
-        )
+    from runtime.sensing.model_router.actor_context import current_actor as _model_actor
 
-        if session.actor:
-            tok_molili = _molili_actor.set(session.actor)
-    except ImportError:  # noqa: BLE001 — molili optional; absence is no-op
-        pass
-    return tok_session, tok_agent, tok_molili
+    tok_model_actor = _model_actor.set(session.actor)
+    return tok_session, tok_agent, tok_model_actor
 
 
 def unbind_thread_session(
     tok_session: Token,
     tok_agent: Token,
-    tok_molili: Token | None = None,
+    tok_model_actor: Token | None = None,
 ) -> None:
     """Reset the ContextVars set by :func:`bind_thread_session` using its
     returned tokens. The documented partner that was previously referenced but
     never existed."""
     _current_session.reset(tok_session)
     _current_agent_id.reset(tok_agent)
-    if tok_molili is not None:
-        try:
-            from runtime.sensing.model_router.actor_context import (
-                current_actor as _molili_actor,
-            )
+    if tok_model_actor is not None:
+        from runtime.sensing.model_router.actor_context import current_actor as _model_actor
 
-            _molili_actor.reset(tok_molili)
-        except ImportError:  # noqa: BLE001 — molili optional; absence is no-op
-            pass
+        _model_actor.reset(tok_model_actor)
 
 
 __all__ = [

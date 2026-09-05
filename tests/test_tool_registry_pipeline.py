@@ -44,6 +44,35 @@ async def _register_echo(registry: ToolRegistry, **kwargs: object) -> None:
     )
 
 
+def test_dynamic_tool_and_pipeline_registrations_are_disposable() -> None:
+    registry = ToolRegistry()
+
+    async def handler(args: dict[str, object]) -> dict[str, object]:
+        return args
+
+    async def result_handler(_result) -> None:
+        return None
+
+    dispose_tool = registry.register_tool(
+        "plugin.echo",
+        "Echo plugin input",
+        {"type": "object"},
+        handler,
+    )
+    dispose_result = registry.on_result(result_handler)
+
+    assert "plugin.echo" in registry.tool_names
+    assert result_handler in registry._on_result
+
+    dispose_result()
+    dispose_tool()
+    dispose_result()
+    dispose_tool()
+
+    assert "plugin.echo" not in registry.tool_names
+    assert result_handler not in registry._on_result
+
+
 @pytest.mark.asyncio
 class TestSchemaAllowlist:
     """Host-only fields must never leak into a model request."""

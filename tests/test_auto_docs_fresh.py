@@ -29,6 +29,8 @@ Regeneration::
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -149,3 +151,14 @@ class TestAutoDocsFresh:
 
         for top in manifest["tree"]:
             check(top)
+
+    def test_check_mode_accepts_current_timestamped_manifest(self):
+        result = subprocess.run(
+            [sys.executable, "scripts/gen_wiki.py", "--check"],
+            cwd=_REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr

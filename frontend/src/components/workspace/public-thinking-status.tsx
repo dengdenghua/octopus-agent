@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
 import { useI18n } from "@/core/i18n/hooks";
 import {
   FIRST_RESPONSE_DELAY_NOTICE_MS,
@@ -16,6 +18,10 @@ interface PublicThinkingStatusProps {
   hasStreamingMessage?: boolean;
   vitals?: StreamVitals;
   className?: string;
+  /** Render the screen-reader live region. MessageList owns one outside its log. */
+  renderAnnouncement?: boolean;
+  /** Render the visible activity line. */
+  renderVisual?: boolean;
 }
 
 function compact(value: unknown, max = 80): string | undefined {
@@ -107,14 +113,21 @@ function eventSummary(
 }
 
 function latestRunningEvent(events: LiveToolEvent[]) {
-  return [...events]
-    .filter(
-      (event) =>
-        event.status === "running" || event.status === "waiting_approval",
-    )
-    .sort(
-      (a, b) => (b.finishedAt ?? b.startedAt) - (a.finishedAt ?? a.startedAt),
-    )[0];
+  let latest: LiveToolEvent | undefined;
+  let latestTimestamp = Number.NEGATIVE_INFINITY;
+  for (const event of events) {
+    if (event.status !== "running" && event.status !== "waiting_approval") {
+      continue;
+    }
+    const timestamp = event.finishedAt ?? event.startedAt;
+    // Preserve the stable-sort behaviour of the old implementation when two
+    // events share a timestamp: the first event remains the selected one.
+    if (!latest || timestamp > latestTimestamp) {
+      latest = event;
+      latestTimestamp = timestamp;
+    }
+  }
+  return latest;
 }
 
 export function PublicThinkingStatus({
@@ -123,10 +136,10 @@ export function PublicThinkingStatus({
   hasStreamingMessage,
   vitals,
   className,
+  renderAnnouncement = true,
+  renderVisual = true,
 }: PublicThinkingStatusProps) {
   const { t } = useI18n();
-
-  if (!isLoading) return null;
 
   // An optimistic outbound message becomes visible before turn/started can
   // seed vitals. During that receipt gap ``isLoading`` is already true while
@@ -139,8 +152,6 @@ export function PublicThinkingStatus({
       : hasStreamingMessage
         ? "streaming"
         : "waiting";
-  if (phase === "streaming") return null;
-
   const running = latestRunningEvent(liveToolEvents);
   const action = running ? eventSummary(running, t) : undefined;
   const firstResponseDelayed =
@@ -168,45 +179,87 @@ export function PublicThinkingStatus({
     !action && vitals && vitals.elapsedMs >= 3_000
       ? formatStreamElapsed(vitals.elapsedMs)
       : undefined;
+  const activeAnnouncement =
+    phase === "streaming"
+      ? t.publicThinkingStatus.processing
+      : detail
+        ? `${label} · ${detail}`
+        : label;
+  const [announcement, setAnnouncement] = useState("");
+  const previousIsLoadingRef = useRef(false);
+
+  useEffect(() => {
+    if (!renderAnnouncement) return;
+    const wasLoading = previousIsLoadingRef.current;
+    previousIsLoadingRef.current = isLoading;
+    if (isLoading) {
+      setAnnouncement(activeAnnouncement);
+    } else if (wasLoading) {
+      // `isLoading` also settles after a failure, cancellation or explicit
+      // stop. Keep this announcement outcome-neutral; the adjacent receipt
+      // carries the precise terminal status.
+      setAnnouncement(t.publicThinkingStatus.runEnded);
+    }
+  }, [
+    activeAnnouncement,
+    isLoading,
+    renderAnnouncement,
+    t.publicThinkingStatus.runEnded,
+  ]);
 
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      aria-atomic="false"
-      data-phase={phase}
-      data-first-response-delayed={firstResponseDelayed ? "true" : "false"}
-      data-testid="conversation-activity-pulse"
-      className={cn(
-        "my-1.5 ml-11 flex min-w-0 items-center gap-1.5 text-xs leading-4 text-muted-foreground/55",
-        className,
-      )}
-    >
-      <span
-        className={cn(
-          "inline-block size-1 shrink-0 rounded-full animate-pulse",
-          phase === "slow" || firstResponseDelayed
-            ? "bg-warning/50"
-            : phase === "disconnected"
-              ? "bg-destructive/50"
-              : "bg-muted-foreground/40",
-        )}
-        aria-hidden="true"
-      />
-      <span className="shrink-0">{label}</span>
-      {detail && (
-        <span className="min-w-0 truncate text-muted-foreground/45">
-          · {detail}
-        </span>
-      )}
-      {elapsed && (
+    <>
+      {/* Keep exactly one stable live region for meaningful run-state changes.
+          The visual timer below updates every second and is intentionally not
+          part of this region, otherwise screen readers repeatedly announce it. */}
+      {renderAnnouncement && (
         <span
-          className="shrink-0 tabular-nums text-muted-foreground/45"
-          data-testid="conversation-activity-elapsed"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="sr-only"
+          data-testid="conversation-activity-status"
         >
-          · {elapsed}
+          {announcement}
         </span>
       )}
-    </div>
+      {renderVisual && isLoading && phase !== "streaming" && (
+        <span
+          aria-hidden="true"
+          data-phase={phase}
+          data-first-response-delayed={firstResponseDelayed ? "true" : "false"}
+          data-testid="conversation-activity-pulse"
+          className={cn(
+            "my-1.5 ml-11 flex min-w-0 items-center gap-1.5 text-xs leading-4 text-muted-foreground/55",
+            className,
+          )}
+        >
+          <span
+            className={cn(
+              "inline-block size-1 shrink-0 rounded-full animate-pulse",
+              phase === "slow" || firstResponseDelayed
+                ? "bg-warning/50"
+                : phase === "disconnected"
+                  ? "bg-destructive/50"
+                  : "bg-muted-foreground/40",
+            )}
+          />
+          <span className="shrink-0">{label}</span>
+          {detail && (
+            <span className="min-w-0 truncate text-muted-foreground/45">
+              · {detail}
+            </span>
+          )}
+          {elapsed && (
+            <span
+              className="shrink-0 tabular-nums text-muted-foreground/45"
+              data-testid="conversation-activity-elapsed"
+            >
+              · {elapsed}
+            </span>
+          )}
+        </span>
+      )}
+    </>
   );
 }

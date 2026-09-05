@@ -1,8 +1,8 @@
 /**
  * Intent-based mode classification for the workspace work strategy.
  *
- * Decides whether a stretch of user conversation is asking for a coding task
- * (develop), a code/security review (audit), or a UI/design task (uxui).
+ * Decides whether a stretch of user conversation should use general-purpose
+ * work (develop, including review/research) or UI/design work (uxui).
  *
  * Pure, deterministic, dependency-free: a keyword lexicon + time-weighted
  * scoring. No LLM calls, no network, no React — easy to unit test and reason
@@ -167,13 +167,15 @@ const LEXICON: Lexicon = {
 };
 
 function normalize(text: string): string {
-  return text
-    .toLowerCase()
-    // Strip markdown fences / inline code backticks placeholders.
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/`/g, " ")
-    // Collapse punctuation/whitespace so "ui" and "ui." both match cleanly.
-    .replace(/[\s.,!?;:。，！？；：、…()（）"'“”‘’[\]]+/g, " ");
+  return (
+    text
+      .toLowerCase()
+      // Strip markdown fences / inline code backticks placeholders.
+      .replace(/```[\s\S]*?```/g, " ")
+      .replace(/`/g, " ")
+      // Collapse punctuation/whitespace so "ui" and "ui." both match cleanly.
+      .replace(/[\s.,!?;:。，！？；：、…()（）"'“”‘’[\]]+/g, " ")
+  );
 }
 
 function matchTerm(text: string, term: string): boolean {
@@ -229,7 +231,12 @@ export function classifyModeIntent(
   const top = entries[0];
 
   if (!top || top.score <= 0) {
-    return { mode: fallbackMode, confidence: 0, signals: [], handle: "none" };
+    return {
+      mode: canonicalVisibleMode(fallbackMode),
+      confidence: 0,
+      signals: [],
+      handle: "none",
+    };
   }
 
   const runner = entries[1] ?? top;
@@ -245,7 +252,18 @@ export function classifyModeIntent(
     handle = "none";
   }
 
-  return { mode: top.mode, confidence, signals, handle };
+  return {
+    mode: canonicalVisibleMode(top.mode),
+    confidence,
+    signals,
+    handle,
+  };
+}
+
+function canonicalVisibleMode(mode: AgentModeName): AgentModeName {
+  // Keep the audit lexicon because it is useful for recognizing that a user is
+  // leaving Design, but route it to General instead of surfacing a third mode.
+  return mode === "audit" ? "develop" : mode;
 }
 
 export {

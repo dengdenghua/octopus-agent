@@ -17,10 +17,25 @@ import os
 import re
 from typing import Any
 
+from runtime.execution.misc.skill_policy import (
+    filter_tool_specs_for_workspace_contract,
+    goal_forbids_local_workspace_access,
+    goal_is_read_only,
+)
+from runtime.execution.tool_engine.native_tool_execution import (
+    TOOL_OUTPUT_MAX_CHARS as _TOOL_OUTPUT_MAX_CHARS,
+)
 from runtime.platform.models import ParsedIntent
 from runtime.sensing.model_router.models import ToolCall
 
 _logger = logging.getLogger("octopus.agentic")
+
+# Compatibility names remain here because ``tool_bridge`` has historically
+# re-exported them and downstream tests/extensions import that surface.
+_filter_tool_specs_for_workspace_contract = filter_tool_specs_for_workspace_contract
+_goal_forbids_local_workspace_access = goal_forbids_local_workspace_access
+_goal_is_read_only = goal_is_read_only
+TOOL_OUTPUT_MAX_CHARS = _TOOL_OUTPUT_MAX_CHARS
 
 
 # Hard ceiling on the back-and-forth between model and executor.
@@ -43,9 +58,6 @@ CODE_CHANGE_ROUND_BUDGET = 160
 # Reflection nudge cadence: every REFLECTION_INTERVAL rounds the model is
 # asked to review whether it can wrap up or should keep going.
 REFLECTION_INTERVAL = 10
-
-# Upper bound for a single tool_result content block (chars).
-TOOL_OUTPUT_MAX_CHARS = 16000
 
 # Single-turn tool concurrency (octopus optimisation, lane B).
 # When the model emits N independent tool_use blocks in one
@@ -110,76 +122,6 @@ _CODE_MUTATION_TOOLS = frozenset(
 _CODE_VERIFICATION_TOOLS = frozenset({"run_tests"})
 _CODE_TERMINAL_VERIFIER_TOOLS = frozenset({"run_tests", "lint_check"})
 
-_NO_LOCAL_ACCESS_SAFE_TOOLS = frozenset(
-    {
-        "todo_read",
-        "todo_write",
-        "search_skills",
-        "query_skill",
-        "web_search",
-        "search_web",
-        "web_fetch",
-        "fetch_url",
-        "read_url",
-    }
-)
-
-_READ_ONLY_BLOCKED_TOOLS = frozenset(
-    {
-        "write_text_file",
-        "append_text_file",
-        "edit_text_file",
-        "edit_file",
-        "multi_edit_file",
-        "format_code",
-        "exec_shell",
-        "run_tests",
-        "update_soul",
-        "revert_soul",
-        "remember",
-        "note_user",
-        "diary_write",
-    }
-)
-
-
-def _goal_forbids_local_workspace_access(value: str) -> bool:
-    """Whether the user explicitly prohibited even reading local files."""
-    text = " ".join(str(value or "").strip().split()).lower()
-    return bool(
-        re.search(
-            r"(?:不要|禁止|不得|不可|严禁|不允许)\s*"
-            r"(?:读取|访问|查看|检查|分析)"
-            r"[^。；;\n]{0,48}(?:本地|项目|仓库|工作区)"
-            r"[^。；;\n]{0,24}(?:文件|代码|目录)",
-            text,
-        )
-        or re.search(
-            r"\b(?:do\s+not|don't|never|must\s+not)\s+"
-            r"(?:read|access|inspect|analy[sz]e)\b"
-            r"[^.\n]{0,64}\b(?:local|workspace|repository|repo|project)\b"
-            r"[^.\n]{0,32}\b(?:files?|code|director(?:y|ies))\b",
-            text,
-        )
-    )
-
-
-def _goal_is_read_only(value: str) -> bool:
-    text = str(value or "").lower()
-    return bool(
-        re.search(r"\bread[- ]only\b", text)
-        or re.search(
-            r"\b(?:do\s+not|don't|must\s+not|never)\s+"
-            r"(?:modify|change|edit|write|create|update|add|remove|delete|patch)",
-            text,
-        )
-        or re.search(
-            r"(?:只读|(?:不要|严禁|禁止|不得|不可|不允许)\s*"
-            r"(?:修改|改动|更改|编辑|写入|创建|新增|添加|删除|提交))",
-            text,
-        )
-    )
-
 
 def _goal_is_narrow_single_source_research(value: str) -> bool:
     """Whether the request asks for one small remote fact and one source."""
@@ -232,44 +174,6 @@ def _native_tool_round_budget(
     else:
         budget = _tb.DEFAULT_TOOL_ROUND_BUDGET
     return max(1, min(budget, max_rounds))
-
-
-def _filter_tool_specs_for_workspace_contract(
-    tool_specs: list[Any],
-    goal: str,
-    *,
-    user_context: dict[str, Any] | None = None,
-) -> tuple[list[Any], str | None]:
-    """Enforce user local-workspace restrictions at the capability boundary."""
-    from runtime.execution.misc.skill_policy import (
-        filter_audit_read_only_tool_specs,
-        is_audit_read_only_context,
-    )
-
-    if is_audit_read_only_context(user_context):
-        return (
-            filter_audit_read_only_tool_specs(
-                tool_specs,
-                context=user_context,
-            ),
-            "audit_read_only",
-        )
-    if _goal_forbids_local_workspace_access(goal):
-        allowed = [
-            spec
-            for spec in tool_specs
-            if str(getattr(spec, "name", "")) in _NO_LOCAL_ACCESS_SAFE_TOOLS
-            or str(getattr(spec, "name", "")).startswith("browser_")
-        ]
-        return allowed, "no_local_access"
-    if _goal_is_read_only(goal):
-        allowed = [
-            spec
-            for spec in tool_specs
-            if str(getattr(spec, "name", "")) not in _READ_ONLY_BLOCKED_TOOLS
-        ]
-        return allowed, "read_only"
-    return tool_specs, None
 
 
 def _is_code_change_task(intent: ParsedIntent) -> bool:

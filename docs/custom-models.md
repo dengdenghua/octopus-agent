@@ -411,7 +411,7 @@ StepFun、SiliconFlow、Baidu Qianfan。识别后会做三类兼容：
 
 **Q · "no current_actor set" 报错？**
 
-这是 Molili 默认路径需要登录态。用 custom model 后不经过 Molili，所以正常使用不会触发此错误。如果仍然报，说明 model_id 没命中 custom model 注册表，走到了 fallback Molili 路径 · 检查 model id 拼写。
+这是账号网关默认路径需要登录态。使用 custom model 后不经过账号网关，所以正常使用不会触发此错误。如果仍然报错，说明 model_id 没命中 custom model 注册表而走到了账号 fallback；请检查 model id 拼写。
 
 **Q · 响应里出现原始 `<thinking>` XML？**
 

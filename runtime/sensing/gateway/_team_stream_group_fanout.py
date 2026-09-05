@@ -14,11 +14,17 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
+import os
+import threading
 import time
 from typing import Any
 
+from runtime.memory.cowork.collaboration_collectors import (
+    CollaborationSteeringConflictError,
+)
 from runtime.memory.threads.event_log import EventLog
 from runtime.platform.models import ParsedIntent
 from runtime.protocol import (
@@ -105,16 +111,27 @@ def _fanout_member_context(ctx: dict[str, Any]) -> tuple[dict[str, Any], str]:
     """
 
     member_context = dict(ctx)
+    # Fanout lanes produce short conversational bubbles. The stack runner uses
+    # this trusted internal flag to bypass JSON task planning and tool setup.
+    member_context["direct_conversation_reply"] = True
     # These are group-driver implementation details, not child work policy.
     member_context.pop("agent_roster", None)
     member_context.pop("conversation_messages", None)
+    member_context.pop("cowork_member_context_messages", None)
+    member_context.pop("cowork_member_context_authorizations", None)
+    member_context.pop("cowork_durable_context", None)
+    # The context steward supplies an explicit, bounded history slice below.
+    # Disable every implicit parent/per-role memory injection so it cannot
+    # silently exceed that budget or bypass a cowork ContextGrant.
+    member_context["context_steward_managed"] = True
+    member_context["share_history"] = False
 
     from runtime.core.cerebrum._react_context_code import (
         _build_code_agent_mode_prompt,
         _build_personal_agent_mode_prompt,
         _build_workflow_preset_prompt,
     )
-    from runtime.execution.misc.skill_policy import is_audit_read_only_context
+    from runtime.execution.misc.skill_policy import is_enforced_read_only_context
 
     sections: list[str] = []
     workflow_preset = str(member_context.get("workflow_preset") or "").strip()
@@ -148,7 +165,7 @@ def _fanout_member_context(ctx: dict[str, Any]) -> tuple[dict[str, Any], str]:
             "<inherited-mode-contract>" + mode_contract[:2000] + "</inherited-mode-contract>"
         )
 
-    if is_audit_read_only_context(member_context):
+    if is_enforced_read_only_context(member_context):
         member_context["tool_allowlist_read_only"] = True
     policy_prompt = "\n".join(sections)
     existing_addendum = str(member_context.get("system_addendum") or "").strip()
@@ -157,6 +174,53 @@ def _fanout_member_context(ctx: dict[str, Any]) -> tuple[dict[str, Any], str]:
             part for part in (existing_addendum, policy_prompt) if part
         )
     return member_context, policy_prompt
+
+
+def _select_fanout_members(
+    ctx: dict[str, Any],
+    members: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Apply the server-owned addressing plan before any model is launched.
+
+    A natural-language group request or swarm turn intentionally includes the
+    active roster. Explicit ``@agent`` mentions are narrower: only the validated
+    responders may receive context or consume a model call.  The lifecycle
+    overwrites ``cowork_plan`` and ``cowork_responders`` from durable membership,
+    so this function never trusts a client-provided roster expansion.
+    """
+
+    available = [member for member in members if isinstance(member, dict)]
+    plan = ctx.get("cowork_plan")
+    addressed = plan.get("addressed") if isinstance(plan, dict) else None
+    raw_responders = ctx.get("cowork_responders")
+    responders = (
+        [str(value).strip() for value in raw_responders if str(value or "").strip()]
+        if isinstance(raw_responders, list)
+        else []
+    )
+    has_explicit_targets = isinstance(addressed, list) and bool(addressed)
+    if has_explicit_targets:
+        allowed = set(responders)
+        selected = [member for member in available if str(member.get("name") or "") in allowed]
+        reason = "explicit_mentions"
+    else:
+        selected = available
+        reason = "group_request_or_mode"
+    selected_ids = [str(member.get("name") or "") for member in selected]
+    selected_set = set(selected_ids)
+    excluded_ids = [
+        str(member.get("name") or "")
+        for member in available
+        if str(member.get("name") or "") not in selected_set
+    ]
+    return selected, {
+        "schema": "octopus.cowork_member_routing.v1",
+        "reason": reason,
+        "available_member_count": len(available),
+        "selected_member_count": len(selected),
+        "selected_agent_ids": selected_ids,
+        "excluded_agent_ids": excluded_ids,
+    }
 
 
 async def _drive_group_fanout(
@@ -174,6 +238,8 @@ async def _drive_group_fanout(
     room has <2 member agents or nobody answers, so the turn never stalls.
     """
     ctx = getattr(intent, "user_context", None) or {}
+    raw_team_pattern = ctx.get("team_pattern")
+    team_pattern = dict(raw_team_pattern) if isinstance(raw_team_pattern, dict) else {}
     try:
         from runtime.platform.process.session import Session, current_session
 
@@ -197,7 +263,7 @@ async def _drive_group_fanout(
                 )
     except (ImportError, LookupError):
         parent_session = None
-    member_context, member_policy_prompt = _fanout_member_context(ctx)
+    member_context, _member_policy_prompt = _fanout_member_context(ctx)
     # Standard Coder members execute on worker threads, but approvals must
     # still round-trip through this parent realtime turn.  This object is
     # server-created and deliberately replaces any similarly named client key.
@@ -210,14 +276,117 @@ async def _drive_group_fanout(
     )
     member_context["_codex_approval_provider"] = runtime._wrap_with_policy(group_gateway_provider)
     roster = ctx.get("agent_roster") or []
+    raw_authorizations = ctx.get("cowork_member_context_authorizations")
+    member_authorizations = raw_authorizations if isinstance(raw_authorizations, dict) else {}
     members = [
         {
             "name": str(r.get("agent_id")),
             "display_name": str(r.get("display_name") or r.get("agent_id")),
+            "description": str(r.get("description") or ""),
+            "affinity": list(r.get("affinity") or [])
+            if isinstance(r.get("affinity"), list)
+            else [],
+            "authorization": dict(member_authorizations.get(str(r.get("agent_id"))) or {}),
         }
         for r in roster
         if isinstance(r, dict) and r.get("agent_id")
     ]
+    members, fanout_routing = _select_fanout_members(ctx, members)
+    from runtime.execution.agents.team_patterns import pattern_member_role
+
+    pattern_id = str(team_pattern.get("id") or "parallel_roundtable")
+    for index, member in enumerate(members):
+        role = pattern_member_role(pattern_id, index)
+        # Independent candidate generation should not inherit conversational
+        # anchoring. Critics/verifiers remain selective so they can use prior
+        # decisions; the current debate transcript is still passed explicitly.
+        member["context_mode"] = (
+            "isolated" if role in {"explorer", "proposer", "alternative"} else "selective"
+        )
+    context_engine_host = getattr(runtime, "_cowork_context_engine_host", None)
+    context_engine_events: list[dict[str, Any]] = []
+    context_engine_events_lock = threading.Lock()
+
+    def _record_context_engine_hook(hook: str, **kwargs: Any) -> dict[str, Any] | None:
+        if context_engine_host is None:
+            return None
+        report = (
+            context_engine_host.bootstrap_session(turn.thread_id)
+            if hook == "bootstrap"
+            else context_engine_host.invoke_hook(hook, **kwargs)
+        )
+        safe_report = {
+            key: value
+            for key, value in report.items()
+            if key in {"hook", "status", "duration_ms", "error_type"}
+        }
+        with context_engine_events_lock:
+            context_engine_events.append(safe_report)
+        return safe_report
+
+    _record_context_engine_hook("bootstrap")
+    _record_context_engine_hook(
+        "ingest",
+        session_id=turn.thread_id,
+        turn_id=turn.id,
+        message=text,
+        is_heartbeat=False,
+    )
+    context_plan = None
+    try:
+        from runtime.memory.cowork.context_steward import plan_group_context
+
+        raw_messages = ctx.get("conversation_messages")
+        raw_histories = ctx.get("cowork_member_context_messages")
+        durable_context = ctx.get("cowork_durable_context")
+        context_plan = plan_group_context(
+            text,
+            members,
+            list(raw_messages) if isinstance(raw_messages, list) else [],
+            member_histories=(
+                {
+                    str(agent_id): list(history)
+                    for agent_id, history in raw_histories.items()
+                    if isinstance(history, list)
+                }
+                if isinstance(raw_histories, dict)
+                else None
+            ),
+            durable_context=(dict(durable_context) if isinstance(durable_context, dict) else None),
+            selection_engine=(
+                context_engine_host or getattr(runtime, "_cowork_context_engine", None)
+            ),
+            session_id=turn.thread_id,
+            turn_id=turn.id,
+        )
+        if context_plan.budget_tier == "long_project":
+            _record_context_engine_hook(
+                "compact",
+                session_id=turn.thread_id,
+                turn_id=turn.id,
+                reason="long_project_budget",
+                statistics={
+                    "history_messages": context_plan.history_message_count,
+                    "full_tokens": context_plan.full_context_estimated_tokens,
+                    "selected_tokens": context_plan.selected_estimated_tokens,
+                },
+            )
+    except Exception as exc:  # noqa: BLE001 — current-message-only is the safe fallback
+        _logger.warning("cowork context planning failed: %s", exc, exc_info=True)
+
+    team_trace_item: McpToolCallItem | None = None
+    member_trace_items: dict[str, SubagentItem] = {}
+    team_trace_started = 0.0
+    planned_group_capacity: dict[str, Any] = {}
+    collaboration_run_id: str | None = None
+    context_lifecycle_admitted = False
+    collaboration_run_worker = f"realtime:{os.getpid()}:{turn.id}"
+
+    def _run_store() -> Any:
+        store = getattr(runtime, "_collaboration_store", None)
+        if store is not None:
+            return store
+        return getattr(getattr(runtime, "_app_state", None), "collaboration_store", None)
 
     async def _emit(
         body: str,
@@ -248,10 +417,47 @@ async def _drive_group_fanout(
             agent_icon=icon,
             reply_to=reply_to,
         )
+        store = _run_store()
+        enqueue = getattr(store, "enqueue_collaboration_delivery", None)
+        if collaboration_run_id and callable(enqueue):
+            delivery_id = f"cowork-delivery:{item.id}"
+            try:
+                from runtime.sensing.gateway.collaboration_delivery_outbox import (
+                    persist_collaboration_delivery,
+                )
+
+                delivery = enqueue(
+                    delivery_id=delivery_id,
+                    run_id=str(collaboration_run_id or ""),
+                    session_id=turn.thread_id,
+                    turn_id=turn.id,
+                    payload={
+                        "schema": "octopus.collaboration_delivery_payload.v1",
+                        "item": item.model_dump(by_alias=True, mode="json"),
+                    },
+                )
+                persist_collaboration_delivery(
+                    store,
+                    delivery,
+                    log=log,
+                    worker_id=collaboration_run_worker,
+                )
+            except Exception as exc:  # noqa: BLE001 — retained for automatic/manual retry
+                _logger.warning(
+                    "cowork reply delivery queued for retry (%s): %s",
+                    delivery_id,
+                    exc,
+                    exc_info=True,
+                )
+                return
+        else:
+            try:
+                log.item_started(turn.thread_id, turn.id, item, durable=True)
+                log.item_completed(turn.thread_id, turn.id, item, durable=True)
+            except Exception as exc:  # noqa: BLE001 — do not announce non-durable output
+                _logger.warning("cowork reply event-log write failed: %s", exc, exc_info=True)
+                return
         turn.items.append(item)
-        with contextlib.suppress(Exception):
-            log.item_started(turn.thread_id, turn.id, item)
-            log.item_completed(turn.thread_id, turn.id, item)
         payload = {
             "threadId": turn.thread_id,
             "turnId": turn.id,
@@ -260,6 +466,22 @@ async def _drive_group_fanout(
         with contextlib.suppress(Exception):
             await emitter.notify(ServerMethod.ITEM_STARTED, payload)
             await emitter.notify(ServerMethod.ITEM_COMPLETED, payload)
+
+    # Availability is roster state, not a reasoning task. Answer it once from
+    # the server-owned active roster instead of launching every model and then
+    # waiting for the slowest one to say "在线".
+    from runtime.execution.agents.group_fanout import (
+        format_group_presence_reply,
+        is_group_presence_query,
+    )
+
+    if is_group_presence_query(text):
+        await _emit(
+            format_group_presence_reply(members),
+            display_name="协作状态",
+            icon="●",
+        )
+        return
 
     async def _fallback_to_react() -> None:
         loop = asyncio.get_running_loop()
@@ -326,13 +548,160 @@ async def _drive_group_fanout(
         with contextlib.suppress(Exception):
             await emitter.notify(ServerMethod.ITEM_COMPLETED, payload)
 
-    team_trace_item: McpToolCallItem | None = None
-    member_trace_items: dict[str, SubagentItem] = {}
-    team_trace_started = 0.0
-    planned_group_capacity: dict[str, Any] = {}
+    async def _drain_pending_deliveries() -> None:
+        """Replay due results from interrupted prior turns before new work starts."""
+
+        store = _run_store()
+        due = getattr(store, "due_collaboration_deliveries", None)
+        if not callable(due):
+            return
+        try:
+            from runtime.sensing.gateway.collaboration_delivery_outbox import (
+                persist_collaboration_delivery,
+            )
+
+            for delivery in due(session_id=turn.thread_id, limit=100):
+                item = persist_collaboration_delivery(
+                    store,
+                    delivery,
+                    log=log,
+                    worker_id=collaboration_run_worker,
+                )
+                payload = {
+                    "threadId": str(delivery.get("session_id") or turn.thread_id),
+                    "turnId": str(delivery.get("turn_id") or turn.id),
+                    "item": item.model_dump(by_alias=True, mode="json"),
+                }
+                with contextlib.suppress(Exception):
+                    await emitter.notify(ServerMethod.ITEM_STARTED, payload)
+                    await emitter.notify(ServerMethod.ITEM_COMPLETED, payload)
+        except Exception as exc:  # noqa: BLE001 — remaining rows stay queued
+            _logger.warning("cowork delivery replay deferred: %s", exc, exc_info=True)
+
+    def _finish_persistent_run(
+        status: str,
+        *,
+        result: dict[str, Any] | None = None,
+        error: str | None = None,
+    ) -> None:
+        """Close the durable run without making observability a failure source."""
+
+        if not collaboration_run_id:
+            return
+        store = _run_store()
+        transition = getattr(store, "transition_collaboration_run", None)
+        if not callable(transition):
+            return
+        try:
+            read_collector = getattr(store, "collaboration_collector", None)
+            close_collector = getattr(store, "close_collaboration_collector", None)
+            collector = read_collector(collaboration_run_id) if callable(read_collector) else None
+            if (
+                isinstance(collector, dict)
+                and collector.get("status") == "collecting"
+                and callable(close_collector)
+            ):
+                close_collector(
+                    collaboration_run_id,
+                    status="cancelled" if status == "cancelled" else "failed",
+                    reason=(
+                        "collaboration cancelled by user"
+                        if status == "cancelled"
+                        else "parent fanout terminated before every registered member result arrived"
+                    ),
+                )
+            transition(
+                collaboration_run_id,
+                status=status,
+                result=result,
+                error=error,
+                worker_id=collaboration_run_worker,
+                payload={"turn_id": turn.id},
+            )
+        except Exception as exc:  # noqa: BLE001 — trace persistence is best effort
+            _logger.warning("cowork collaboration run finalization failed: %s", exc, exc_info=True)
+
+    def _start_persistent_collector(group_members: list[dict[str, Any]]) -> None:
+        """Register first-round member lanes before any worker can finish."""
+
+        if not collaboration_run_id:
+            return
+        store = _run_store()
+        create_collector = getattr(store, "create_collaboration_collector", None)
+        if not callable(create_collector):
+            return
+        child_ids = [str(member.get("name") or "") for member in group_members]
+        child_ids = [child_id for child_id in child_ids if child_id]
+        if not child_ids:
+            return
+        try:
+            create_collector(
+                run_id=collaboration_run_id,
+                child_ids=child_ids,
+                completion_policy="all",
+            )
+        except Exception as exc:  # noqa: BLE001 - execution remains authoritative
+            _logger.warning("cowork collaboration collector setup failed: %s", exc, exc_info=True)
+
+    def _record_persistent_reply(reply: dict[str, Any]) -> bool:
+        """Atomically persist a lane unless a newer correction superseded it."""
+
+        if (
+            not collaboration_run_id
+            or int(reply.get("round") or 1) != 1
+            or bool(reply.get("cancelled"))
+        ):
+            return True
+        store = _run_store()
+        record = getattr(store, "record_collaboration_collector_result", None)
+        if not callable(record):
+            return True
+        child_id = str(reply.get("agent_id") or "")
+        if not child_id:
+            return True
+        try:
+            record(
+                collaboration_run_id,
+                child_id=child_id,
+                status=(
+                    "cancelled"
+                    if bool(reply.get("cancelled"))
+                    else "success"
+                    if bool(reply.get("ok"))
+                    else "failed"
+                ),
+                result={
+                    "response_id": reply.get("response_id"),
+                    "agent_id": child_id,
+                    "display_name": reply.get("display_name"),
+                    "reply": str(reply.get("reply") or "")[:16_000],
+                    "error": str(reply.get("error") or "")[:4_000] or None,
+                    "validation": reply.get("validation"),
+                    "pattern_role": reply.get("pattern_role"),
+                    "round": 1,
+                    "context_delivery": reply.get("context_delivery"),
+                    "session_compaction": reply.get("session_compaction"),
+                    "steering_count": reply.get("steering_count", 0),
+                    "steering_generation": reply.get("steering_generation"),
+                    "steering_seq": reply.get("steering_seq", 0),
+                },
+                expected_generation=reply.get("steering_generation"),
+                expected_steering_seq=reply.get("steering_seq", 0),
+            )
+        except CollaborationSteeringConflictError:
+            # The correction won the transaction race. The fanout worker will
+            # discard this obsolete reply and invoke the member again.
+            return False
+        except Exception as exc:  # noqa: BLE001 - execution remains authoritative
+            _logger.warning(
+                "cowork collaboration result persistence failed: %s",
+                exc,
+                exc_info=True,
+            )
+        return True
 
     async def _start_group_trace(
-        group_members: list[dict[str, str]],
+        group_members: list[dict[str, Any]],
         *,
         max_members: int,
         max_concurrency: int,
@@ -345,6 +714,7 @@ async def _drive_group_fanout(
         runtime now records a replayable parent ``team_swarm`` item plus one
         ``SubagentItem`` lane per member.
         """
+        nonlocal collaboration_run_id, context_lifecycle_admitted
         nonlocal team_trace_item, team_trace_started
         if not group_members:
             return
@@ -370,15 +740,24 @@ async def _drive_group_fanout(
             if len(dispatched_members) >= 2
             else "single",
         }
-        specs = [
-            {
-                "agent_id": member["name"],
-                "display_name": member["display_name"],
-                "role": "cowork",
-                "task": text[:500],
-            }
-            for member in dispatched_members
-        ]
+        specs = []
+        for index, member in enumerate(dispatched_members):
+            planned_member = (
+                context_plan.for_agent(member["name"]) if context_plan is not None else None
+            )
+            member_context_audit = (
+                planned_member.audit_dict() if planned_member is not None else None
+            )
+            specs.append(
+                {
+                    "agent_id": member["name"],
+                    "display_name": member["display_name"],
+                    "role": "cowork",
+                    "pattern_role": pattern_member_role(pattern_id, index),
+                    "task": text[:500],
+                    "context": member_context_audit,
+                }
+            )
         team_trace_item = McpToolCallItem(
             server="team",
             tool="team_swarm",
@@ -388,9 +767,86 @@ async def _drive_group_fanout(
                 "message": text[:1000],
                 "specs": specs,
                 "capacity": planned_group_capacity,
+                "pattern": team_pattern or None,
+                "routing": fanout_routing,
+                "context_plan": context_plan.audit_dict() if context_plan is not None else None,
+                "context_engine": (
+                    context_engine_host.describe() if context_engine_host is not None else None
+                ),
+                "context_engine_lifecycle": list(context_engine_events),
             },
             status=ItemStatus.IN_PROGRESS,
         )
+        store = _run_store()
+        create_run = getattr(store, "create_collaboration_run", None)
+        claim_run = getattr(store, "claim_collaboration_run", None)
+        if callable(create_run) and callable(claim_run):
+            candidate_run_id = f"cowork-fanout:{turn.id}"
+            try:
+                create_run(
+                    run_id=candidate_run_id,
+                    session_id=turn.thread_id,
+                    room_id=str(ctx.get("cowork_room_id") or ""),
+                    turn_id=turn.id,
+                    kind="group_fanout",
+                    input={
+                        "schema": "octopus.group_fanout_run_input.v1",
+                        "message": text[:1000],
+                        "selected_agent_ids": [
+                            str(member.get("name") or "") for member in dispatched_members
+                        ],
+                        "capacity": planned_group_capacity,
+                        "pattern": team_pattern or None,
+                        "routing": fanout_routing,
+                        "context_plan": (
+                            context_plan.audit_dict() if context_plan is not None else None
+                        ),
+                    },
+                )
+                claim_run(
+                    candidate_run_id,
+                    worker_id=collaboration_run_worker,
+                    # A single member may wait up to 90 seconds and debate has
+                    # at most three rounds. Leave room for scheduling overhead.
+                    lease_seconds=360,
+                )
+                collaboration_run_id = candidate_run_id
+            except Exception as exc:  # noqa: BLE001 — event log/UI still proceed
+                _logger.warning(
+                    "cowork collaboration run persistence failed: %s", exc, exc_info=True
+                )
+        if collaboration_run_id:
+            # The browser uses this opaque coordinate to subscribe to the
+            # durable collector. Keep it on the public team event rather than
+            # asking the UI to guess which ledger row belongs to this turn.
+            team_trace_item.arguments["collaboration_run_id"] = collaboration_run_id
+        admit_context = getattr(store, "admit_context_turn", None)
+        if context_plan is not None and callable(admit_context):
+            try:
+                lifecycle = admit_context(
+                    session_id=turn.thread_id,
+                    turn_id=turn.id,
+                    run_id=collaboration_run_id or "",
+                    message=text,
+                    receipt=context_plan.lifecycle_receipt(
+                        [str(member.get("name") or "") for member in dispatched_members]
+                    ),
+                )
+                context_lifecycle_admitted = True
+                team_trace_item.arguments["context_lifecycle"] = {
+                    "schema": lifecycle.get("schema"),
+                    "status": lifecycle.get("status"),
+                    "expected_members": lifecycle.get("expected_members"),
+                    "selected_tokens": lifecycle.get("selected_tokens"),
+                    "full_tokens": lifecycle.get("full_tokens"),
+                    "deep_recall": lifecycle.get("deep_recall"),
+                }
+            except Exception as exc:  # noqa: BLE001 — execution remains available
+                _logger.warning(
+                    "cowork context lifecycle admission failed: %s",
+                    type(exc).__name__,
+                    exc_info=True,
+                )
         await _notify_started(team_trace_item)
         for member in dispatched_members:
             agent_id = member["name"]
@@ -408,29 +864,121 @@ async def _drive_group_fanout(
             await _notify_started(item)
 
     async def _complete_group_trace(result: dict[str, Any]) -> None:
+        cancelled = bool(result.get("cancelled"))
         replies = [reply for reply in result.get("replies", []) if isinstance(reply, dict)]
         by_agent = {str(reply.get("agent_id") or ""): reply for reply in replies}
+        context_lifecycle: dict[str, Any] | None = None
+        if context_lifecycle_admitted:
+            settle_context = getattr(_run_store(), "settle_context_turn", None)
+            if callable(settle_context):
+                try:
+                    outcomes = []
+                    for agent_id in member_trace_items:
+                        reply = by_agent.get(agent_id, {})
+                        body = str(reply.get("reply") or "").strip()
+                        error_code = str(reply.get("error") or "empty-or-cancelled").strip()
+                        committed = bool(reply.get("ok")) and bool(body)
+                        outcomes.append(
+                            {
+                                "agent_id": agent_id,
+                                "status": "committed" if committed else "aborted",
+                                "result_sha256": hashlib.sha256(
+                                    (body if committed else error_code).encode("utf-8")
+                                ).hexdigest(),
+                            }
+                        )
+                    settled = settle_context(
+                        turn.thread_id,
+                        turn.id,
+                        outcomes,
+                    )
+                    context_lifecycle = {
+                        "schema": settled.get("schema"),
+                        "status": settled.get("status"),
+                        "expected_members": settled.get("expected_members"),
+                        "committed_members": settled.get("committed_members"),
+                        "aborted_members": settled.get("aborted_members"),
+                        "selected_tokens": settled.get("selected_tokens"),
+                        "full_tokens": settled.get("full_tokens"),
+                        "deep_recall": settled.get("deep_recall"),
+                    }
+                    if context_plan is not None:
+                        _record_context_engine_hook(
+                            "commit_turn",
+                            session_id=turn.thread_id,
+                            turn_id=turn.id,
+                            advancement_key=f"{turn.thread_id}:{turn.id}",
+                            receipt=context_plan.lifecycle_receipt(list(member_trace_items)),
+                            outcomes=outcomes,
+                        )
+                        _record_context_engine_hook(
+                            "maintain",
+                            session_id=turn.thread_id,
+                            turn_id=turn.id,
+                            outcome={
+                                "status": settled.get("status"),
+                                "committed_members": settled.get("committed_members"),
+                                "aborted_members": settled.get("aborted_members"),
+                            },
+                        )
+                except Exception as exc:  # noqa: BLE001 — trace delivery must continue
+                    _logger.warning(
+                        "cowork context lifecycle settlement failed: %s",
+                        type(exc).__name__,
+                        exc_info=True,
+                    )
         for agent_id, item in member_trace_items.items():
             reply = by_agent.get(agent_id, {})
             body = str(reply.get("reply") or "").strip()
             err = str(reply.get("error") or "").strip()
             ok = bool(reply.get("ok")) and bool(body)
-            item.status = ItemStatus.COMPLETED if ok else ItemStatus.FAILED
+            item.status = (
+                ItemStatus.INTERRUPTED
+                if bool(reply.get("cancelled"))
+                else ItemStatus.COMPLETED
+                if ok
+                else ItemStatus.FAILED
+            )
             item.summary = body[:2000] if body else None
             item.error = None if ok else (err or "empty cowork fanout reply")
-            item.iteration_count = 1
+            validation = reply.get("validation")
+            item.iteration_count = max(
+                1,
+                int(validation.get("attempt_count") or 1) if isinstance(validation, dict) else 1,
+            )
             await _notify_completed(item)
         if team_trace_item is not None:
             ok = bool(result.get("ok"))
-            team_trace_item.status = ItemStatus.COMPLETED if ok else ItemStatus.FAILED
+            team_trace_item.status = (
+                ItemStatus.INTERRUPTED
+                if cancelled
+                else ItemStatus.COMPLETED
+                if ok
+                else ItemStatus.FAILED
+            )
             team_trace_item.result = {
                 "schema": "octopus.group_fanout_result.v1",
+                "collaboration_run_id": collaboration_run_id,
+                "cancelled": cancelled,
                 "count": result.get("count"),
                 "spoke": result.get("spoke"),
+                "attempt_count": result.get("attempt_count"),
+                "quality_retry_count": result.get("quality_retry_count", 0),
+                "recovered_after_retry_count": result.get("recovered_after_retry_count", 0),
                 "dropped": result.get("dropped", 0),
                 "capacity": result.get("capacity") or planned_group_capacity,
                 "arbitration": result.get("arbitration"),
                 "synthesis": result.get("synthesis"),
+                "quality": result.get("quality"),
+                "delivery": result.get("delivery"),
+                "pattern": result.get("pattern") or team_pattern or None,
+                "routing": result.get("routing") or fanout_routing,
+                "context_plan": result.get("context_plan"),
+                "context_lifecycle": context_lifecycle,
+                "context_engine": (
+                    context_engine_host.describe() if context_engine_host is not None else None
+                ),
+                "context_engine_lifecycle": list(context_engine_events),
                 "replies": replies,
             }
             team_trace_item.error = None if ok else str(result.get("error") or "no member replied")
@@ -439,8 +987,85 @@ async def _drive_group_fanout(
                 int((time.monotonic() - team_trace_started) * 1000),
             )
             await _notify_completed(team_trace_item)
+        compact_result = {
+            "schema": "octopus.group_fanout_durable_result.v1",
+            "collaboration_run_id": collaboration_run_id,
+            "ok": bool(result.get("ok")),
+            "cancelled": cancelled,
+            "count": result.get("count"),
+            "spoke": result.get("spoke"),
+            "attempt_count": result.get("attempt_count"),
+            "quality_retry_count": result.get("quality_retry_count", 0),
+            "recovered_after_retry_count": result.get("recovered_after_retry_count", 0),
+            "dropped": result.get("dropped", 0),
+            "capacity": result.get("capacity") or planned_group_capacity,
+            "arbitration": result.get("arbitration"),
+            "synthesis": result.get("synthesis"),
+            "quality": result.get("quality"),
+            "delivery": result.get("delivery"),
+            "pattern": result.get("pattern") or team_pattern or None,
+            "routing": result.get("routing") or fanout_routing,
+            "context_plan": result.get("context_plan"),
+            "context_lifecycle": context_lifecycle,
+            "context_engine": (
+                context_engine_host.describe() if context_engine_host is not None else None
+            ),
+            "context_engine_lifecycle": list(context_engine_events),
+            # Preserve identity/status for replay and recovery without copying
+            # every potentially large response body into the lifecycle row.
+            "outcomes": [
+                {
+                    "response_id": reply.get("response_id"),
+                    "agent_id": reply.get("agent_id"),
+                    "display_name": reply.get("display_name"),
+                    "ok": bool(reply.get("ok")),
+                    "round": reply.get("round"),
+                    "pattern_role": reply.get("pattern_role"),
+                    "validation": reply.get("validation"),
+                    "context_delivery": reply.get("context_delivery"),
+                    "context_engine_lifecycle": reply.get("context_engine_lifecycle"),
+                    "session_compaction": reply.get("session_compaction"),
+                    "error": reply.get("error"),
+                }
+                for reply in replies
+            ],
+        }
+        _finish_persistent_run(
+            "cancelled" if cancelled else "completed" if bool(result.get("ok")) else "failed",
+            result=compact_result if bool(result.get("ok")) else None,
+            error=(
+                "collaboration cancelled by user"
+                if cancelled
+                else None
+                if bool(result.get("ok"))
+                else str(result.get("error") or "no reply")
+            ),
+        )
 
     async def _fail_group_trace(exc: BaseException) -> None:
+        if context_lifecycle_admitted and member_trace_items:
+            settle_context = getattr(_run_store(), "settle_context_turn", None)
+            if callable(settle_context):
+                failure_digest = hashlib.sha256(type(exc).__name__.encode("utf-8")).hexdigest()
+                with contextlib.suppress(Exception):
+                    settle_context(
+                        turn.thread_id,
+                        turn.id,
+                        [
+                            {
+                                "agent_id": agent_id,
+                                "status": "aborted",
+                                "result_sha256": failure_digest,
+                            }
+                            for agent_id in member_trace_items
+                        ],
+                    )
+        _record_context_engine_hook(
+            "maintain",
+            session_id=turn.thread_id,
+            turn_id=turn.id,
+            outcome={"status": "aborted", "error_type": type(exc).__name__},
+        )
         for item in member_trace_items.values():
             if item.status == ItemStatus.IN_PROGRESS:
                 item.status = ItemStatus.FAILED
@@ -454,6 +1079,7 @@ async def _drive_group_fanout(
                 int((time.monotonic() - team_trace_started) * 1000),
             )
             await _notify_completed(team_trace_item)
+        _finish_persistent_run("failed", error=f"{type(exc).__name__}: {exc}")
 
     def _group_summary(result: dict[str, Any]) -> str | None:
         arbitration = result.get("arbitration")
@@ -464,12 +1090,10 @@ async def _drive_group_fanout(
         failed = arbitration.get("failed_agent_ids")
         empty = arbitration.get("empty_agent_ids")
         if isinstance(synthesis, dict):
-            primary = str(synthesis.get("primary_agent_id") or "").strip()
             recommended = str(
                 synthesis.get("recommended_next_action") or "",
             ).strip()
         else:
-            primary = str(arbitration.get("primary_agent_id") or "").strip()
             recommended = str(arbitration.get("recommended_next_action") or "").strip()
         if not isinstance(answered, list):
             answered = []
@@ -485,13 +1109,33 @@ async def _drive_group_fanout(
         parts = [
             f"协作汇总: {len(distinct_answered)} 位成员已回应",
         ]
+        pattern = result.get("pattern")
+        pattern_label = str(pattern.get("label") or "").strip() if isinstance(pattern, dict) else ""
+        if pattern_label:
+            parts.append(f"采用{pattern_label}")
         debate = result.get("debate")
         debate_rounds = debate.get("rounds") if isinstance(debate, dict) else None
         rounds = int(debate_rounds or arbitration.get("rounds") or 1)
         if rounds > 1:
             parts.append(f"共 {rounds} 轮成员互见辩论")
-        if primary:
-            parts.append(f"优先采纳 {primary} 的视角继续")
+        delivery = result.get("delivery")
+        if isinstance(delivery, dict):
+            semantic_review = delivery.get("semantic_review")
+            verdict = (
+                str(semantic_review.get("verdict") or "").strip()
+                if isinstance(semantic_review, dict)
+                else ""
+            )
+            if verdict == "pass":
+                parts.append("独立语义验证已通过")
+            elif delivery.get("semantic_review_required"):
+                parts.append("仍需语义或事实复核")
+        recovered = int(result.get("recovered_after_retry_count") or 0)
+        if recovered:
+            parts.append(f"{recovered} 位成员经自动返工后通过验收")
+        # Arbitration's deterministic primary is a transport fallback (today
+        # it mostly prefers a successful, fuller reply), not a semantic quality
+        # judgment. Do not present it to users as "the best viewpoint".
         if recommended and recommended != "use_primary_response":
             parts.append(f"下一步建议: {_group_next_action_label(recommended)}")
         blocked = [str(x) for x in [*failed, *empty] if x]
@@ -543,6 +1187,15 @@ async def _drive_group_fanout(
         )
 
         def _wants_debate() -> int:
+            # The server-selected declarative pattern is the normal source of
+            # verification depth. Explicit bounded context remains available
+            # to internal callers and tests.
+            try:
+                pattern_rounds = int(team_pattern.get("debate_rounds") or 0)
+            except (TypeError, ValueError):
+                pattern_rounds = 0
+            if pattern_rounds >= 2:
+                return min(pattern_rounds, 3)
             # Explicit context flag wins.
             for key in ("swarm_debate_rounds", "debate_rounds"):
                 raw = ctx.get(key)
@@ -575,23 +1228,384 @@ async def _drive_group_fanout(
 
         chat_members = list(members)
         # @-mentioned chat members first so a small fan-out cap never drops them.
-        chat_members.sort(key=lambda m: 0 if _mentioned(m["display_name"]) else 1)
+        chat_members.sort(key=lambda m: 0 if _mentioned(str(m.get("display_name") or "")) else 1)
+
+        steering_cursors: dict[tuple[str, int], int] = {}
+        steering_cursor_lock = threading.Lock()
+
+        def _drain_member_steering(agent_id: str) -> list[str]:
+            """Read this member's durable corrections exactly once per live worker."""
+
+            if not collaboration_run_id:
+                return []
+            store = _run_store()
+            read = getattr(store, "collaboration_collector_steering", None)
+            collector = store.collaboration_collector(collaboration_run_id)
+            if not callable(read) or not isinstance(collector, dict):
+                return []
+            generation = int(collector.get("generation") or 1)
+            key = (agent_id, generation)
+            with steering_cursor_lock:
+                after_seq = steering_cursors.get(key, 0)
+            try:
+                rows = read(
+                    collaboration_run_id,
+                    child_id=agent_id,
+                    generation=generation,
+                    after_seq=after_seq,
+                )
+            except (KeyError, ValueError):
+                return []
+            if not rows:
+                return []
+            newest = max(int(row.get("seq") or 0) for row in rows)
+            with steering_cursor_lock:
+                steering_cursors[key] = max(steering_cursors.get(key, 0), newest)
+            return [str(row.get("text") or "").strip() for row in rows if row.get("text")]
+
+        def _member_steering_position(agent_id: str) -> tuple[int, int]:
+            """Return the generation and highest correction sequence this lane saw."""
+
+            if not collaboration_run_id:
+                return (1, 0)
+            collector = _run_store().collaboration_collector(collaboration_run_id)
+            generation = int(collector.get("generation") or 1) if isinstance(collector, dict) else 1
+            with steering_cursor_lock:
+                return (generation, steering_cursors.get((agent_id, generation), 0))
+
+        def _steering_addendum(corrections: list[str]) -> str:
+            if not corrections:
+                return ""
+            return (
+                "\n\n<user-steering>用户刚刚只对你追加了以下纠偏要求。"
+                "它们优先于更早的任务描述；不要复述纠偏过程，直接按新要求完成：\n"
+                + "\n".join(f"- {text}" for text in corrections)
+                + "\n</user-steering>"
+            )
+
+        def _member_caller_unlocked(
+            agent_id: str,
+            prompt: str,
+            timeout_s: int = 90,
+        ) -> dict[str, Any]:
+            """Run every group member through the in-process agent boundary."""
+            member_plan = context_plan.for_agent(agent_id) if context_plan is not None else None
+            runtime_checkpoint = None
+            checkpoint_reader = getattr(_run_store(), "collaboration_member_runtime", None)
+            if member_plan is not None and callable(checkpoint_reader):
+                try:
+                    runtime_checkpoint = checkpoint_reader(turn.thread_id, agent_id)
+                except Exception:  # noqa: BLE001 - fall back to a fresh private session
+                    _logger.warning(
+                        "cowork member continuation lookup failed · member=%s",
+                        agent_id,
+                        exc_info=True,
+                    )
+            current_hashes = member_plan.context_section_hashes() if member_plan is not None else {}
+            previous_hashes = (
+                dict(runtime_checkpoint.get("context_hashes") or {})
+                if isinstance(runtime_checkpoint, dict)
+                else {}
+            )
+            safe_continuation = False
+            continuation_reset_reason: str | None = None
+            if member_plan is not None and runtime_checkpoint:
+                safe_continuation, continuation_reset_reason = member_plan.continuation_safety(
+                    previous_hashes
+                )
+            continuation_id = (
+                str(runtime_checkpoint.get("subagent_session_id") or "").strip()
+                if safe_continuation and isinstance(runtime_checkpoint, dict)
+                else ""
+            )
+            if runtime_checkpoint and not safe_continuation:
+                clear_checkpoint = getattr(
+                    _run_store(),
+                    "clear_collaboration_member_runtime",
+                    None,
+                )
+                if callable(clear_checkpoint):
+                    with contextlib.suppress(Exception):
+                        clear_checkpoint(turn.thread_id, agent_id)
+            if member_plan is not None:
+                planned_context, current_hashes, context_delivery = (
+                    member_plan.render_incremental_prompt(
+                        previous_hashes if continuation_id else None
+                    )
+                )
+            else:
+                planned_context = ""
+                context_delivery = {
+                    "schema": "octopus.cowork_context_delivery.v1",
+                    "mode": "unavailable",
+                    "included_sections": [],
+                    "omitted_unchanged_sections": [],
+                    "full_estimated_tokens": 0,
+                    "sent_estimated_tokens": 0,
+                    "avoided_estimated_tokens": 0,
+                    "context_projection": {
+                        "schema": "octopus.cowork_context_projection.v1",
+                        "mode": "unavailable",
+                        "epoch": "",
+                        "bootstrap_required": False,
+                        "delta_required": False,
+                    },
+                }
+            context_delivery["continued_session"] = bool(continuation_id)
+            projection = context_delivery.get("context_projection")
+            if isinstance(projection, dict):
+                projection["backend_thread_reused"] = bool(continuation_id)
+            member_engine_start = _record_context_engine_hook(
+                "on_member_start",
+                session_id=turn.thread_id,
+                turn_id=turn.id,
+                agent_id=agent_id,
+                projection_epoch=(
+                    member_plan.projection_epoch() if member_plan is not None else ""
+                ),
+            )
+            if runtime_checkpoint and not safe_continuation and continuation_reset_reason:
+                context_delivery["reset_reason"] = continuation_reset_reason
+            base_prompt = planned_context + "\n\n" + prompt if planned_context else prompt
+            corrections = _drain_member_steering(agent_id)
+            final_prompt = base_prompt + _steering_addendum(corrections)
+            result: dict[str, Any] = {}
+            # A direct conversational provider call cannot be modified in
+            # place. If steering lands while it is running, discard that
+            # obsolete answer and restart with the accumulated corrections.
+            # Two restarts bound adversarial click-spam and actual model cost.
+            for restart in range(3):
+                scoped_context = dict(member_context)
+                scoped_context["steering_drain"] = lambda: _drain_member_steering(agent_id)
+                result = _call_agent(
+                    agent_id=agent_id,
+                    # The member's persona is injected by the runner. Repeating
+                    # the coordinator's full mode contract in every 1–3 sentence
+                    # bubble only burns context and can steer it back into task
+                    # planning.
+                    prompt=final_prompt,
+                    timeout_s=timeout_s,
+                    context=scoped_context,
+                    session=parent_session,
+                    continue_session_id=continuation_id or None,
+                )
+                if continuation_id and result.get("session_error") == "unknown_session":
+                    clear_checkpoint = getattr(
+                        _run_store(),
+                        "clear_collaboration_member_runtime",
+                        None,
+                    )
+                    if callable(clear_checkpoint):
+                        with contextlib.suppress(Exception):
+                            clear_checkpoint(
+                                turn.thread_id,
+                                agent_id,
+                                subagent_session_id=continuation_id,
+                            )
+                    continuation_id = ""
+                    if member_plan is not None:
+                        planned_context, current_hashes, context_delivery = (
+                            member_plan.render_incremental_prompt(None)
+                        )
+                    context_delivery["continued_session"] = False
+                    context_delivery["reset_reason"] = "subagent_session_missing"
+                    projection = context_delivery.get("context_projection")
+                    if isinstance(projection, dict):
+                        projection["backend_thread_reused"] = False
+                    base_prompt = planned_context + "\n\n" + prompt if planned_context else prompt
+                    final_prompt = base_prompt + _steering_addendum(corrections)
+                    continue
+                returned_session_id = str(result.get("session_id") or "").strip()
+                if returned_session_id:
+                    continuation_id = returned_session_id
+                arrived_during_call = _drain_member_steering(agent_id)
+                if not arrived_during_call:
+                    break
+                corrections.extend(arrived_during_call)
+                final_prompt = base_prompt + _steering_addendum(corrections)
+                if restart == 2:
+                    exhausted = {
+                        **result,
+                        "success": False,
+                        "output": "",
+                        "error": "member steering restart limit exceeded; retry the member",
+                    }
+                    exhausted["context_engine_lifecycle"] = {
+                        "start": member_engine_start,
+                        "end": _record_context_engine_hook(
+                            "on_member_end",
+                            session_id=turn.thread_id,
+                            turn_id=turn.id,
+                            agent_id=agent_id,
+                            status="aborted",
+                            result_sha256=hashlib.sha256(
+                                b"member_steering_restart_limit"
+                            ).hexdigest(),
+                        ),
+                    }
+                    return exhausted
+            if result.get("success") and continuation_id and member_plan is not None:
+                save_checkpoint = getattr(
+                    _run_store(),
+                    "save_collaboration_member_runtime",
+                    None,
+                )
+                if callable(save_checkpoint):
+                    try:
+                        save_checkpoint(
+                            turn.thread_id,
+                            agent_id,
+                            subagent_session_id=continuation_id,
+                            context_hashes=current_hashes,
+                        )
+                    except Exception:  # noqa: BLE001 - reply remains usable without reuse
+                        _logger.warning(
+                            "cowork member continuation save failed · member=%s",
+                            agent_id,
+                            exc_info=True,
+                        )
+            context_delivery["continued_session"] = bool(
+                context_delivery.get("continued_session") and continuation_id
+            )
+            projection = context_delivery.get("context_projection")
+            if isinstance(projection, dict):
+                projection["backend_thread_reused"] = bool(
+                    context_delivery.get("continued_session")
+                )
+            result["context_delivery"] = context_delivery
+            successful_body = str(result.get("output") or "").strip()
+            result_status = (
+                "committed" if bool(result.get("success")) and successful_body else "aborted"
+            )
+            result_fingerprint = (
+                successful_body
+                if result_status == "committed"
+                else str(result.get("error") or "empty-or-cancelled")
+            )
+            result["context_engine_lifecycle"] = {
+                "start": member_engine_start,
+                "end": _record_context_engine_hook(
+                    "on_member_end",
+                    session_id=turn.thread_id,
+                    turn_id=turn.id,
+                    agent_id=agent_id,
+                    status=result_status,
+                    result_sha256=hashlib.sha256(result_fingerprint.encode("utf-8")).hexdigest(),
+                ),
+            }
+            steering_generation, steering_seq = _member_steering_position(agent_id)
+            result["steering_generation"] = steering_generation
+            result["steering_seq"] = steering_seq
+            result["steering_count"] = steering_seq
+            return result
 
         def _member_caller(agent_id: str, prompt: str, timeout_s: int = 90) -> dict[str, Any]:
-            """Run every group member through the in-process agent boundary."""
-            effective_prompt = (
-                member_policy_prompt + "\n\n" + prompt if member_policy_prompt else prompt
+            """Serialize only turns that target the same durable member session."""
+
+            lease_store = _run_store()
+            acquire_lease = getattr(
+                lease_store,
+                "acquire_collaboration_member_runtime_lease",
+                None,
             )
+            release_lease = getattr(
+                lease_store,
+                "release_collaboration_member_runtime_lease",
+                None,
+            )
+            if not callable(acquire_lease) or not callable(release_lease):
+                return _member_caller_unlocked(agent_id, prompt, timeout_s)
+
+            lease_owner = f"member-turn:{os.getpid()}:{threading.get_ident()}:{time.time_ns()}"
+            wait_started = time.monotonic()
+            # Waiting indefinitely would consume the whole fan-out pool. A
+            # short bounded wait preserves turn order in normal overlap; a
+            # longer conflict becomes an explicit retryable lane failure.
+            wait_deadline = wait_started + min(15.0, max(1.0, timeout_s / 3))
+            lease = None
+            while lease is None:
+                try:
+                    lease = acquire_lease(
+                        turn.thread_id,
+                        agent_id,
+                        owner_id=lease_owner,
+                        # One steering-aware call may restart three times and
+                        # each delegated call may perform one transient retry.
+                        lease_seconds=min(3600.0, timeout_s * 7 + 120.0),
+                    )
+                except Exception:  # noqa: BLE001 - fail closed for session mutation
+                    _logger.warning(
+                        "cowork member session lease failed · member=%s",
+                        agent_id,
+                        exc_info=True,
+                    )
+                    return {
+                        "success": False,
+                        "output": "",
+                        "error": "member private session could not be locked; retry the member",
+                        "error_type": "member_session_lock_error",
+                        "retryable": True,
+                    }
+                if lease is not None:
+                    break
+                if time.monotonic() >= wait_deadline:
+                    return {
+                        "success": False,
+                        "output": "",
+                        "error": "member private session is handling an earlier turn; retry the member",
+                        "error_type": "member_session_busy",
+                        "retryable": True,
+                        "session_serialization_wait_ms": round(
+                            (time.monotonic() - wait_started) * 1000,
+                            3,
+                        ),
+                    }
+                time.sleep(0.05)
+            try:
+                result = _member_caller_unlocked(agent_id, prompt, timeout_s)
+                result["session_serialization_wait_ms"] = round(
+                    (time.monotonic() - wait_started) * 1000,
+                    3,
+                )
+                return result
+            finally:
+                with contextlib.suppress(Exception):
+                    release_lease(
+                        turn.thread_id,
+                        agent_id,
+                        owner_id=lease_owner,
+                    )
+
+        verifier_agent_id = next(
+            (
+                str(member.get("name") or "")
+                for index, member in enumerate(chat_members)
+                if pattern_member_role(str(team_pattern.get("id") or ""), index) == "verifier"
+            ),
+            "",
+        )
+
+        def _semantic_reviewer(prompt: str, timeout_s: int = 120) -> dict[str, Any]:
+            review_context = dict(member_context)
+            # The verifier may need tools to inspect cited sources. It remains
+            # context-steward managed and cannot inherit the full parent chat.
+            review_context["direct_conversation_reply"] = False
+            planned_context = (
+                context_plan.prompt_for(verifier_agent_id) if context_plan is not None else ""
+            )
+            final_prompt = planned_context + "\n\n" + prompt if planned_context else prompt
             return _call_agent(
-                agent_id=agent_id,
-                prompt=effective_prompt,
+                agent_id=verifier_agent_id,
+                prompt=final_prompt,
                 timeout_s=timeout_s,
-                context=member_context,
+                context=review_context,
                 session=parent_session,
             )
 
         spoke = 0
+        fanout_cancelled = False
         if chat_members:
+            await _drain_pending_deliveries()
             scale_mode = (
                 str(ctx.get("swarm_scale_mode") or ctx.get("fanout_scale_mode") or "safe")
                 .strip()
@@ -620,6 +1634,39 @@ async def _drive_group_fanout(
                 max_concurrency=fanout_concurrency,
                 scale_mode=scale_mode,
             )
+            _start_persistent_collector(chat_members[:fanout_limit])
+            from runtime.safety.approval.cancellation import current_cancellation_token
+
+            ambient_cancellation = current_cancellation_token()
+
+            def _group_fanout_cancelled() -> bool:
+                if ambient_cancellation.is_cancelled:
+                    return True
+                if not collaboration_run_id:
+                    return False
+                store = _run_store()
+                run = store.collaboration_run(collaboration_run_id)
+                collector = store.collaboration_collector(collaboration_run_id)
+                return bool(
+                    (isinstance(run, dict) and run.get("status") == "cancelled")
+                    or (isinstance(collector, dict) and collector.get("status") == "cancelled")
+                )
+
+            def _group_fanout_member_cancelled(agent_id: str) -> bool:
+                if not collaboration_run_id:
+                    return False
+                collector = _run_store().collaboration_collector(collaboration_run_id)
+                if not isinstance(collector, dict):
+                    return False
+                if agent_id in collector.get("cancellation_requested_child_ids", []):
+                    return True
+                return any(
+                    isinstance(item, dict)
+                    and item.get("child_id") == agent_id
+                    and item.get("status") == "cancelled"
+                    for item in collector.get("results") or []
+                )
+
             debate_rounds = _wants_debate()
             mentioned = _mentioned_names()
             result = await asyncio.to_thread(
@@ -635,8 +1682,25 @@ async def _drive_group_fanout(
                 turn_id=turn.id,
                 debate_rounds=debate_rounds,
                 mentioned=mentioned,
+                speaker=str(
+                    ctx.get("speaker_display_name") or ctx.get("human_display_name") or "用户"
+                ),
+                pattern=team_pattern or None,
+                semantic_reviewer=(
+                    _semantic_reviewer
+                    if verifier_agent_id
+                    and str(team_pattern.get("id") or "") == "adversarial_review"
+                    else None
+                ),
+                semantic_reviewer_agent_id=verifier_agent_id or None,
+                result_committer=_record_persistent_reply,
+                should_cancel=_group_fanout_cancelled,
+                should_cancel_member=_group_fanout_member_cancelled,
             )
-            await _complete_group_trace(result)
+            fanout_cancelled = bool(result.get("cancelled"))
+            if context_plan is not None:
+                result["context_plan"] = context_plan.audit_dict()
+            result["routing"] = fanout_routing
             arbitration = result.get("arbitration")
             if isinstance(arbitration, dict):
                 with contextlib.suppress(Exception):
@@ -645,7 +1709,12 @@ async def _drive_group_fanout(
                             {
                                 "schema": "octopus.group_fanout_audit.v1",
                                 "arbitration": arbitration,
+                                "quality": result.get("quality"),
+                                "delivery": result.get("delivery"),
                                 "capacity": result.get("capacity") or planned_group_capacity,
+                                "pattern": result.get("pattern") or team_pattern or None,
+                                "routing": result.get("routing") or fanout_routing,
+                                "context_plan": result.get("context_plan"),
                             },
                             ensure_ascii=False,
                             sort_keys=True,
@@ -670,8 +1739,6 @@ async def _drive_group_fanout(
                         icon="⚔️",
                     )
                 if reply.get("ok") and body:
-                    # ③ @因果链：把回复里 @ 到的成员解析出来，作为气泡的
-                    # reply_to 附加信息，前端在气泡标题旁显示"回应 @谁"。
                     reply_to = _extract_mention_target(body, chat_members)
                     await _emit(
                         body,
@@ -680,9 +1747,7 @@ async def _drive_group_fanout(
                         reply_to=reply_to,
                     )
                     spoke += 1
-                elif not reply.get("ok"):
-                    # ② 蜂群失败可视化：workbuddy 在 inbox 里明确显示
-                    # "X failed · 原因"，我们之前是静默跳过——现在打一行。
+                elif not reply.get("ok") and not reply.get("cancelled"):
                     err = str(reply.get("error") or "no reply")
                     await _emit(
                         "⚠️ "
@@ -692,11 +1757,12 @@ async def _drive_group_fanout(
                         display_name=str(reply.get("display_name") or ""),
                         agent_id=str(reply.get("agent_id") or ""),
                     )
-            summary = _group_summary(result)
+            summary = None if fanout_cancelled else _group_summary(result)
             if summary:
                 await _emit(summary)
+            await _complete_group_trace(result)
 
-        if spoke == 0:
+        if spoke == 0 and not fanout_cancelled:
             _record_fallback_audit("no_member_response")
             await _fallback_to_react()
     except Exception as exc:  # noqa: BLE001 — never break the turn on a fan-out fault

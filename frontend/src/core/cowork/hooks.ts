@@ -9,6 +9,7 @@ import {
   inviteCoworkMember,
   linkCoworkRoom,
   postCollabRoomMessage,
+  markCoworkRead,
   removeCoworkMember,
   replaceCoworkRoster,
   searchCowork,
@@ -147,6 +148,29 @@ export function useCoworkPresence(
     enabled,
     refetchInterval: enabled ? (opts.refetchInterval ?? 15000) : false,
     staleTime: 5000,
+  });
+}
+
+export function useMarkCoworkRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      threadId,
+      memberId,
+      messageSeq,
+    }: {
+      threadId: string;
+      memberId: string;
+      messageSeq: number;
+    }) => markCoworkRead(threadId, memberId, undefined, messageSeq),
+    onSuccess: (_data, { threadId }) => {
+      void qc.invalidateQueries({
+        queryKey: coworkQueryKeys.presence(threadId),
+      });
+      void qc.invalidateQueries({
+        queryKey: coworkQueryKeys.session(threadId),
+      });
+    },
   });
 }
 

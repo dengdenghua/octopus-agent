@@ -5,7 +5,6 @@ export interface SmartTeamPlugin {
   label: string;
   reason: string;
 }
-
 export interface SmartTeamPlan {
   members: AgentWorldAgent[];
   plugins: SmartTeamPlugin[];

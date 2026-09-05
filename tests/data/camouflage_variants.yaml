@@ -1,0 +1,5 @@
+variants:
+  - name: baseline
+    system_prompt_suffix: ''
+    weight: 1.0
+    description: 'Default · empty suffix'

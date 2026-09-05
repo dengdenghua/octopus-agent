@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 
 import pytest
 
+from runtime.memory.cowork._collaboration_room_write import ProjectRoomVersionConflict
 from runtime.memory.cowork.collaboration_store import CollaborationStore
 from runtime.memory.cowork.group import MemberEvent
 from runtime.memory.cowork.group_store import GroupStore
@@ -159,3 +162,119 @@ def test_collaboration_store_normalizes_payload_boundaries(tmp_path) -> None:
             "thread-1",
             {"id": "task-big", "room_id": "room-1", "title": "Big", "blob": "x" * 600_000},
         )
+
+
+@pytest.mark.parametrize("write_kind", ["message", "task"])
+def test_for_room_writes_reject_a_room_that_moved_after_lookup(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_kind: str,
+) -> None:
+    stale = CollaborationStore(base_dir=tmp_path)
+    winner = CollaborationStore(base_dir=tmp_path)
+    stale.upsert_room("team:room-race", {"id": "room-race", "name": "Before"})
+    resolved = Event()
+    release = Event()
+    real_session_id_for_room = stale.session_id_for_room
+
+    def paused_session_id_for_room(room_id: str) -> str | None:
+        session_id = real_session_id_for_room(room_id)
+        resolved.set()
+        assert release.wait(timeout=5)
+        return session_id
+
+    monkeypatch.setattr(stale, "session_id_for_room", paused_session_id_for_room)
+
+    def write() -> object:
+        if write_kind == "message":
+            return stale.append_message_for_room("room-race", text="late message")
+        return stale.upsert_task_for_room(
+            "room-race",
+            {"id": "late-task", "title": "Late task"},
+        )
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(write)
+        assert resolved.wait(timeout=5)
+        winner.upsert_room("thread-new", {"id": "room-race", "name": "After"})
+        release.set()
+        with pytest.raises(ProjectRoomVersionConflict, match="moved"):
+            future.result(timeout=5)
+
+    assert winner.room_for_session("team:room-race") is None
+    assert winner.room_for_session("thread-new")["id"] == "room-race"
+    assert winner.messages_for_session("team:room-race") == []
+    assert winner.messages_for_session("thread-new") == []
+    assert winner.tasks_for_session("team:room-race") == []
+    assert winner.tasks_for_session("thread-new") == []
+
+
+def test_project_projection_tombstone_clears_standalone_room_and_fences_late_writes(
+    tmp_path,
+) -> None:
+    store = CollaborationStore(base_dir=tmp_path)
+    store.upsert_project_room(
+        session_id="project:P-deleted",
+        room={"id": "project:P-deleted", "name": "Standalone"},
+        project_id="P-deleted",
+        generation=0,
+    )
+    store.upsert_project_task(
+        session_id="project:P-deleted",
+        room_id="project:P-deleted",
+        project_id="P-deleted",
+        milestone_id="M-deleted",
+        task={"id": "T-deleted", "title": "Old projection"},
+        binding_generation=0,
+    )
+
+    store.tombstone_project_projection("P-deleted", "PD-delete")
+
+    room = store.room_for_session("project:P-deleted")
+    assert room is not None
+    assert room["project_id"] is None
+    assert room["metadata"]["project_binding_generation"] == 1
+    assert store.tasks_for_session("project:P-deleted") == []
+    with pytest.raises(RuntimeError, match="projection was deleted"):
+        store.upsert_project_room(
+            session_id="project:P-deleted",
+            room={"id": "project:P-deleted"},
+            project_id="P-deleted",
+            generation=0,
+        )
+    with pytest.raises(RuntimeError, match="projection was deleted"):
+        store.upsert_project_task(
+            session_id="project:P-deleted",
+            room_id="project:P-deleted",
+            project_id="P-deleted",
+            milestone_id="M-deleted",
+            task={"id": "T-late", "title": "Late projection"},
+            binding_generation=0,
+        )
+
+
+def test_project_room_cannot_appear_after_a_no_room_delete_tombstone(tmp_path) -> None:
+    deleting = CollaborationStore(base_dir=tmp_path)
+    stale = CollaborationStore(base_dir=tmp_path)
+    ready = Event()
+    release = Event()
+
+    def late_projection() -> object:
+        ready.set()
+        assert release.wait(timeout=5)
+        return stale.upsert_project_room(
+            session_id="project:P-no-room",
+            room={"id": "project:P-no-room"},
+            project_id="P-no-room",
+            generation=0,
+        )
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(late_projection)
+        assert ready.wait(timeout=5)
+        deleting.tombstone_project_projection("P-no-room", "PD-no-room")
+        release.set()
+        with pytest.raises(RuntimeError, match="projection was deleted"):
+            future.result(timeout=5)
+
+    assert deleting.room_for_session("project:P-no-room") is None

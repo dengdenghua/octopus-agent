@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 
-import { deriveRunReviews, type RunReviewEvent } from "./run-review-panel";
+import {
+  dedupeRunReviewEvents,
+  deriveRunReviews,
+  type RunReviewEvent,
+} from "./run-review-panel";
 
 function event(partial: RunReviewEvent): RunReviewEvent {
   return {
@@ -79,5 +83,29 @@ describe("deriveRunReviews", () => {
         "budget_breaker_reject",
       ]),
     );
+  });
+});
+
+describe("dedupeRunReviewEvents", () => {
+  test("collapses SSE replay frames by event id", () => {
+    const first = event({
+      event_id: "journal-42",
+      event_type: "sub_tool_end",
+      tool_call_id: "tool-1",
+      tool_name: "read_file",
+    });
+
+    expect(dedupeRunReviewEvents([first, { ...first }])).toEqual([first]);
+  });
+
+  test("uses a stable payload key for legacy frames without an id", () => {
+    const first = event({
+      event_type: "file_op",
+      action: "write",
+      path: "src/app.tsx",
+    });
+    const duplicate = { ...first };
+
+    expect(dedupeRunReviewEvents([first, duplicate])).toHaveLength(1);
   });
 });

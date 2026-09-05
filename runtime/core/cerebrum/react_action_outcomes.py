@@ -14,6 +14,7 @@ import re
 from runtime.core.cerebrum.react_execution import _beak_step_effective_success
 from runtime.core.cerebrum.react_parsing import _parse_action
 from runtime.core.cerebrum.react_types import ReActStep
+from runtime.execution.tool_engine.effect_receipts import is_side_effecting
 from runtime.platform.models import Step
 
 
@@ -135,21 +136,14 @@ def _observation_is_noop(observation: str) -> bool:
     return bool(_NOOP_OBSERVATION_RE.search(observation))
 
 
-# Affinity tags that mark a tool as having side effects, so a failed call must
-# NOT be silently auto-retried (a partial write, or a shell command that ran
-# before its result failed to parse, would be doubled). Mirrors the executor's
-# ``_mutates_files`` set plus ``delete`` (file-safety) — the union of every
-# side-effecting tag the runtime recognises.
-_NON_IDEMPOTENT_AFFINITY = frozenset({"write", "edit", "exec", "delete", "dangerous"})
-
-
 def _retry_safe_affinity(affinity: list[str] | None) -> bool:
     """Whether a failed tool may be auto-retried once.
 
-    Only idempotent tools qualify: the affinity must be KNOWN and carry none of
-    the side-effecting tags. Unknown affinity (``None``) is treated as unsafe
-    (fail-closed) so the loop never re-runs a tool whose first attempt may have
-    already mutated state."""
-    if affinity is None:
-        return False
-    return not (set(affinity) & _NON_IDEMPOTENT_AFFINITY)
+    Reuse the effect-receipt layer's fail-closed classifier instead of keeping
+    a looser ReAct-only denylist.  A tool is retry-safe only when it carries an
+    explicit read-only affinity.  Empty, unknown, domain-only (for example
+    ``trade``/``order``), or explicitly mutating affinities are unsafe because
+    the first attempt may already have changed external state.
+    """
+
+    return not is_side_effecting(affinity)

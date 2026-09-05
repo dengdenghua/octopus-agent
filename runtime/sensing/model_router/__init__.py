@@ -1,6 +1,4 @@
-from .actor_context import (
-    current_actor as molili_current_actor,
-)
+from .actor_context import current_actor
 from .capability_probe import (
     clear_capability_cache,
     get_cached_capabilities,
@@ -71,7 +69,7 @@ __all__ = [
     "estimate_cache_savings",
     "get_cached_capabilities",
     "mark_cache_breakpoint",
-    "molili_current_actor",
+    "current_actor",
     "prepare_cached_system",
     "prepare_cached_tools",
     "probe_provider",

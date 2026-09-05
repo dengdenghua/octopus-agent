@@ -84,6 +84,20 @@ REQUIRED_DOMESTIC_PROFILE_IDS: tuple[str, ...] = (
 
 _PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
     OpenAICompatProviderProfile(
+        id="opencode_zen",
+        display_name="OpenCode Zen",
+        base_url_markers=("opencode.ai/zen/v1",),
+        model_markers=("big-pickle",),
+        supported_efforts=(),
+        supports_vision=False,
+        strict_tool_schema=True,
+        compatibility_notes=(
+            "OpenAI-compatible Zen gateway with model-specific capabilities",
+            "free-tier model availability is discovered during plugin connection",
+            "tool schemas are normalized before dispatch",
+        ),
+    ),
+    OpenAICompatProviderProfile(
         id="kimi_coding",
         display_name="Kimi Coding",
         base_url_markers=(

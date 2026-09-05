@@ -97,7 +97,7 @@ from runtime._cli_parser import _build_parser, _normalize_cli_argv
 from runtime.platform.i18n import set_lang
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv: list[str] | None = None) -> int:
     """CLI entrypoint for ``octopus-agent``.
 
     Argparse construction lives in ``runtime._cli_parser``; the individual
@@ -406,6 +406,33 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     return 2
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Dispatch the CLI, binding a one-shot Cron Session when inherited.
+
+    Only the background Cron executor writes the private environment payload.
+    It is consumed before any command runs so nested subprocesses cannot reuse
+    another task's authority.
+    """
+
+    from runtime.execution.cron_context import (
+        CronContextError,
+        consume_cron_session_from_environment,
+    )
+
+    try:
+        cron_session = consume_cron_session_from_environment()
+    except CronContextError as exc:
+        _logger.error("refusing malformed cron execution context: %s", exc)
+        return 2
+    if cron_session is None:
+        return _main(argv)
+
+    from runtime.platform.process.session import session_scope
+
+    with session_scope(cron_session):
+        return _main(argv)
 
 
 if __name__ == "__main__":

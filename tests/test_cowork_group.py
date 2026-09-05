@@ -73,6 +73,19 @@ def test_mute_and_mode_fold() -> None:
     assert state.member("a").muted is False
 
 
+def test_legacy_project_event_is_read_as_chat() -> None:
+    event = MemberEvent.from_dict(
+        {
+            "action": "mode",
+            "actor": "legacy-client",
+            "mode": "project",
+        }
+    )
+
+    assert event.mode == "chat"
+    assert fold_state(_seq(event)).mode == "chat"
+
+
 def test_context_grant_ranges() -> None:
     def m(scope, **kw):
         return Member(

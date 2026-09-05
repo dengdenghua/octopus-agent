@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -35,6 +36,29 @@ from ._health_helpers import (
 )
 
 _PROCESS_STARTED_AT = datetime.now(UTC)
+_CLEAN_SOURCE_ID = re.compile(r"[0-9a-f]{40}")
+
+
+def _runtime_identity() -> dict[str, Any]:
+    """Return a public-safe build identity for desktop compatibility checks.
+
+    A source revision is reported as verified only when a trusted launcher has
+    explicitly asserted that it validated the immutable runtime bundle.  The
+    native Echo OS entrypoint owns that assertion after checking the wheel,
+    WebUI, resources and Codex manifests.
+    """
+
+    identity: dict[str, Any] = {
+        "name": "octopus-agent-runtime",
+        "version": __version__,
+        "verifiedBundle": False,
+    }
+    source_id = os.environ.get("OCTOPUS_RUNTIME_SOURCE_ID", "").strip()
+    verified = os.environ.get("OCTOPUS_RUNTIME_BUNDLE_VERIFIED") == "1"
+    if verified and _CLEAN_SOURCE_ID.fullmatch(source_id):
+        identity["sourceId"] = source_id
+        identity["verifiedBundle"] = True
+    return identity
 
 
 def _lifecycle_generation() -> dict[str, Any]:
@@ -96,6 +120,7 @@ def create_health_router(
         out: dict[str, Any] = {
             "status": "ok",
             "ts": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            "runtime": _runtime_identity(),
             "skills": len(state.registry),
             "journal_events": -1,
             "agents": 0,
@@ -152,17 +177,6 @@ def create_health_router(
 
         with contextlib.suppress(Exception):
             return storage_status()
-        return {"up": False, "heartbeat": False, "error": "unavailable"}
-
-    @router.get("/api/searxng/status")
-    def api_searxng_status() -> dict[str, Any]:
-        """Liveness of the optional one-click local SearXNG (private web-search
-        backend). ``up=false`` just means web search uses the default ddg
-        backend; deploy/stop go through the authenticated /api/searxng router."""
-        from runtime.sensing.gateway.searxng_supervisor import searxng_status
-
-        with contextlib.suppress(Exception):
-            return searxng_status()
         return {"up": False, "heartbeat": False, "error": "unavailable"}
 
     @router.get("/api/status")

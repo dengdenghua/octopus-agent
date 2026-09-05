@@ -51,14 +51,21 @@ from benchmarks.verifier_sandbox import (
     FixtureInfrastructureError,
     verifier_sandbox_provenance,
 )
+from runtime.platform.process.paths import app_paths
+from runtime.safety.evolution.experiment_protocol import (
+    ExperimentStore,
+    ExperimentTrial,
+    TaskSpec,
+    TrialStatus,
+)
 
 COMPARISON_SCHEMA = "octopus.engine_comparison.v2"
 COMPARISON_VERSION = 2
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CODING_CASES = frozenset({"coding.concurrent-cache", "coding.path-boundary"})
 DEFAULT_AGENTS: dict[BackendId, str] = {
-    "native": "coder",
-    "codex": "local_codex_cli",
+    "native": "general",
+    "codex": "coder",
 }
 _NATIVE_PATH_WRITE_TOOLS = frozenset(
     {
@@ -321,6 +328,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         source_stable=source_stable,
         hardened_runner_stable=hardened_runner_stable,
     )
+    payload["experiment_protocol"] = ingest_comparison_measurements(
+        measurements,
+        payload=payload,
+        store=ExperimentStore(args.experiment_store),
+        artifact_path=args.output,
+    )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
@@ -366,6 +379,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", default=None)
     parser.add_argument("--timeout", type=float, default=900.0)
     parser.add_argument("--preserve-runs", action="store_true")
+    parser.add_argument(
+        "--experiment-store",
+        type=Path,
+        default=app_paths().evolution_experiments_path,
+        help="Append typed same-task trial evidence to this JSONL store.",
+    )
     return parser
 
 
@@ -418,8 +437,6 @@ def _runner_for_case(
         values: dict[str, Any] = {}
         if isinstance(allowed_write_paths, list):
             values["allowed_write_paths"] = list(allowed_write_paths)
-        if backend == "codex" and model:
-            values["partner_model"] = model
         return values
 
     return RealtimeTrialRunner(
@@ -612,6 +629,151 @@ def build_comparison_payload(
         "aggregates": aggregates,
         "measurements": [measurement.to_dict() for measurement in measurements],
     }
+
+
+def ingest_comparison_measurements(
+    measurements: Sequence[ExecutionMeasurement],
+    *,
+    payload: dict[str, Any],
+    store: ExperimentStore,
+    artifact_path: Path | None = None,
+) -> dict[str, Any]:
+    """Persist the real head-to-head run using the unified experiment protocol."""
+
+    experiment_id = str(payload.get("run_id") or "").strip()
+    if not experiment_id:
+        raise ValueError("comparison payload run_id is required")
+    existing = {trial.run_id for trial in store.list_trials(experiment_id=experiment_id)}
+    configuration = payload.get("configuration")
+    configuration = configuration if isinstance(configuration, dict) else {}
+    contracts = {
+        str(row.get("case_id") or ""): row
+        for row in configuration.get("cases") or []
+        if isinstance(row, dict)
+    }
+    source = payload.get("controller_source_manifest")
+    source = source if isinstance(source, dict) else {}
+    validity = payload.get("run_validity")
+    validity = validity if isinstance(validity, dict) else {}
+    environment_digest = _canonical_sha256(
+        {
+            "controller_source": source.get("pre_run_sha256"),
+            "control_plane": configuration.get("control_plane"),
+            "requested_model": configuration.get("requested_model"),
+            "approval": configuration.get("approval"),
+            "sandbox": configuration.get("hidden_verifier_sandbox"),
+            "hardened_verifier": configuration.get("hidden_verifier_postflight"),
+        }
+    )
+    appended = skipped = 0
+    trial_ids: list[str] = []
+    for measurement in measurements:
+        run_id = ":".join(
+            (
+                experiment_id,
+                measurement.backend,
+                measurement.case_id,
+                str(measurement.trial_index),
+            )
+        )
+        trial_ids.append(run_id)
+        if run_id in existing:
+            skipped += 1
+            continue
+        contract = contracts.get(measurement.case_id, {})
+        grader = contract.get("grader") if isinstance(contract.get("grader"), dict) else {}
+        verifier = contract.get("verifier") if isinstance(contract.get("verifier"), dict) else {}
+        fixture = contract.get("fixture") if isinstance(contract.get("fixture"), dict) else {}
+        task_spec = TaskSpec(
+            case_id=measurement.case_id,
+            goal=str(contract.get("prompt") or measurement.case_id),
+            domain=measurement.case_id.split(".", 1)[0],
+            environment_digest=environment_digest,
+            workspace_fixture_digest=str(fixture.get("manifest_sha256") or "unattested"),
+            role_id="engine_comparison",
+            gene_scope="baseline",
+            budget_policy={"timeout_s": configuration.get("timeout_seconds")},
+            grader_version=_canonical_sha256({"grader": grader, "verifier": verifier}),
+            metadata={
+                "prompt_sha256": contract.get("prompt_sha256"),
+                "suite_prompt_contract_sha256": contract.get("suite_prompt_contract_sha256"),
+            },
+        )
+        globally_valid = validity.get("valid") is True
+        infrastructure_error = measurement.infrastructure_reason
+        if not globally_valid:
+            infrastructure_error = str(validity.get("reason") or "comparison run invalid")
+        status = (
+            TrialStatus.COMPLETED
+            if globally_valid and measurement.valid_for_engine_rate
+            else TrialStatus.INFRASTRUCTURE_FAILED
+        )
+        postflight = configuration.get("hidden_verifier_postflight")
+        postflight = postflight if isinstance(postflight, dict) else {}
+        hard_gates = {
+            "controller_source_stable": source.get("stable_during_run") is True,
+            "hardened_verifier_stable": postflight.get("stable_during_run") is True,
+            "execution_completed": measurement.execution_success is True,
+            "outcome_grader": measurement.grader_passed is True,
+        }
+        metrics = {
+            "quality": 1.0 if measurement.grader_passed is True else 0.0,
+            "duration_ms": float(measurement.duration_ms),
+        }
+        if measurement.usage.total_tokens is not None:
+            metrics["total_tokens"] = float(measurement.usage.total_tokens)
+        if measurement.usage.cost_usd is not None:
+            metrics["cost_usd"] = float(measurement.usage.cost_usd)
+        seed = int(
+            hashlib.sha256(
+                f"{configuration.get('execution_schedule')}:{measurement.trial_index}".encode()
+            ).hexdigest()[:8],
+            16,
+        )
+        store.append(
+            ExperimentTrial(
+                experiment_id=experiment_id,
+                run_id=run_id,
+                task_spec=task_spec,
+                engine="octopus" if measurement.backend == "native" else "codex",
+                trial_index=measurement.trial_index,
+                seed=seed,
+                status=status,
+                outcome_passed=(
+                    measurement.grader_passed if status == TrialStatus.COMPLETED else None
+                ),
+                hard_gates=hard_gates,
+                metrics=metrics,
+                artifacts={
+                    "comparison_artifact": str(artifact_path) if artifact_path else None,
+                    "trajectory_sha256": measurement.trajectory_sha256,
+                    "measurement_trial_id": measurement.trial_id,
+                    "agent_id": measurement.agent_id,
+                },
+                error=measurement.grader_reason if measurement.grader_passed is False else None,
+                infrastructure_error=infrastructure_error,
+            )
+        )
+        appended += 1
+    return {
+        "schema": "octopus.evolution.experiment_ingest.v1",
+        "experiment_id": experiment_id,
+        "store_path": str(store.path),
+        "appended": appended,
+        "skipped_existing": skipped,
+        "trial_run_ids": trial_ids,
+    }
+
+
+def _canonical_sha256(value: Any) -> str:
+    serialized = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(serialized).hexdigest()
 
 
 def _measurement_summary(

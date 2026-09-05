@@ -53,6 +53,7 @@ def mount_thread_state_routes(
             group_store=group_store,
             collaboration_store=collaboration_store,
             team_rooms_router=team_rooms_router,
+            project_store=lambda: getattr(app.state, "project_store", None),
         )
     )
 

@@ -48,9 +48,12 @@ import os
 import subprocess
 import sys
 import tempfile
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
+
+pytestmark = pytest.mark.contract
 
 SNAPSHOT_PATH = Path(__file__).resolve().parent.parent / "docs" / "openapi-snapshot.json"
 _REPOSITORY_ROOT = SNAPSHOT_PATH.parent.parent
@@ -59,6 +62,21 @@ _SCHEMA_SCRIPT = f"""
 import json
 import os
 from pathlib import Path
+
+from runtime.platform.ui import _app_routers_extra
+
+# The contract snapshot covers the stable host API. Bundled workbench plugins
+# contribute their own separately tested routes and change independently, so
+# point PluginHub at empty roots before constructing the app. Without this,
+# merely adding an installed/bundled plugin makes the supposedly hermetic base
+# schema depend on the checkout contents.
+plugin_root = Path(os.environ[{_SCHEMA_OUTPUT_ENV!r}]).parent / "plugins"
+(plugin_root / "user").mkdir(parents=True, exist_ok=True)
+(plugin_root / "bundled").mkdir(parents=True, exist_ok=True)
+_app_routers_extra._plugin_hub_roots = lambda: (
+    plugin_root / "user",
+    plugin_root / "bundled",
+)
 
 from runtime.platform.ui.app import create_app
 
@@ -70,6 +88,7 @@ Path(os.environ[{_SCHEMA_OUTPUT_ENV!r}]).write_text(
 """
 
 
+@lru_cache(maxsize=1)
 def _current_schema() -> dict:
     """Build the live schema in a hermetic child process.
 
@@ -78,7 +97,9 @@ def _current_schema() -> dict:
     endpoint shouldn't shift the baseline.  The fresh interpreter and
     temporary HOME/data roots are also important: connector modules cache
     default paths at import time, and an unrelated local master key must not
-    decide whether connector/capability routes appear in this contract.
+    decide whether connector/capability routes appear in this contract.  The
+    schema is immutable within this module's tests, so one hermetic build is
+    shared across the three contract assertions.
     """
     with tempfile.TemporaryDirectory(prefix="octopus-openapi-") as temporary:
         isolated_root = Path(temporary)

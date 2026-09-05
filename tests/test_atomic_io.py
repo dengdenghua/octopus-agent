@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import multiprocessing
 import threading
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -17,6 +19,28 @@ from runtime.platform.io.atomic import (
     debounced_json_writer,
     read_json_with_backup,
 )
+from runtime.platform.io.transactional import JsonMutation, mutate_json_file
+
+
+def _transaction_process_worker(path: str, key: str, barrier) -> None:
+    for _index in range(12):
+        barrier.wait(timeout=5)
+
+        def increment(state):
+            value = int(state.get(key, 0)) + 1
+            # Widen the stale-read window.  A missing OS lock deterministically
+            # lets both workers replace a snapshot that lacks the peer update.
+            time.sleep(0.002)
+            state[key] = value
+            return JsonMutation(None)
+
+        mutate_json_file(
+            path,
+            default_factory=dict,
+            validate=lambda state: None,
+            mutate=increment,
+        )
+
 
 # ─── atomic_write_bytes / text / json ───────────────────────
 
@@ -218,6 +242,31 @@ def test_concurrent_writers_never_leave_corruption(tmp_path: Path) -> None:
     # Final file is always parseable.
     data = json.loads(target.read_text(encoding="utf-8"))
     assert "writer" in data and "i" in data
+
+
+def test_transactional_json_serializes_read_modify_write_across_processes(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "shared-state.json"
+    context = multiprocessing.get_context("spawn")
+    barrier = context.Barrier(2)
+    workers = [
+        context.Process(
+            target=_transaction_process_worker,
+            args=(str(target), key, barrier),
+        )
+        for key in ("worker-a", "worker-b")
+    ]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(timeout=15)
+        assert worker.exitcode == 0
+
+    assert json.loads(target.read_text(encoding="utf-8")) == {
+        "worker-a": 12,
+        "worker-b": 12,
+    }
 
 
 # ─── debounced_json_writer ──────────────────────────────────

@@ -50,11 +50,9 @@ from runtime.sensing.gateway._team_tasks_helpers import (
     RunnerFactory,
     TaskProjection,
     TeamEventBroadcaster,
-    _cli_team_artifacts,
     _fallback_topology,  # noqa: F401 — compatibility re-export
     _jsonable,
     _load_state,
-    _local_cli_members,
     _mobile_artifacts,
     _normalize_status,
     _now,
@@ -528,73 +526,6 @@ def create_team_tasks_router(
                     _persist_prebuilt_task(updated)
                 return
 
-            # ── CLI-team route ──────────────────────────────────
-            # If the task is assigned to local coding-agent CLIs
-            # (Claude Code / Codex / …, ref ``local_*``), run them
-            # through the diff-first CLI engine — each in its own
-            # worktree with the shared blackboard — instead of the
-            # role topology. The CLIs use their own subscriptions.
-            cli_members = _local_cli_members(task)
-            if cli_members:
-                import os as _os
-
-                from runtime.execution.agents.cli_team import run_cli_team
-
-                with scoped_cancellation(source.token):
-                    cli_result = run_cli_team(
-                        prepared["task_input"],
-                        cli_members,
-                        repo_root=_os.getcwd(),
-                        turn_id=task.id,
-                    )
-                final_status = (
-                    "cancelled"
-                    if source.is_cancelled
-                    else ("done" if cli_result.get("ok") else "failed")
-                )
-                metadata = {
-                    **_current_metadata(task.id, fallback=task.metadata),
-                    "runner": {
-                        "engine": "cli_team",
-                        "members": cli_result.get("count", 0),
-                        "succeeded": cli_result.get("succeeded", 0),
-                        "failed": cli_result.get("failed", 0),
-                        "summary": cli_result.get("summary"),
-                        "next_action": cli_result.get("next_action"),
-                        "changed_files": _jsonable(cli_result.get("changed_files", [])),
-                        "failed_members": _jsonable(cli_result.get("failed_members", [])),
-                        "recovery_groups": _jsonable(cli_result.get("recovery_groups", [])),
-                        "note": cli_result.get("note"),
-                    },
-                }
-                if final_status == "failed":
-                    metadata["error"] = (
-                        cli_result.get("error")
-                        or cli_result.get("summary")
-                        or "cli_team reported no successful member"
-                    )
-                cli_updates: dict[str, Any] = {
-                    "status": final_status,
-                    "completed_at": _now(),
-                    "metadata": metadata,
-                }
-                cli_artifacts = _cli_team_artifacts(cli_result)
-                if cli_artifacts:
-                    cli_updates["produced_artifacts"] = cli_artifacts
-                updated = _build_terminal_task(
-                    task.id,
-                    cli_updates,
-                    status=final_status,
-                    error=str(metadata.get("error") or ""),
-                )
-                if updated is not None:
-                    _record_terminal_event(
-                        updated,
-                        status=final_status,
-                        error=str(metadata.get("error") or ""),
-                    )
-                    _persist_prebuilt_task(updated)
-                return
             runner = _runner_instance(_emit_runner_event)
             with scoped_cancellation(source.token):
                 result = runner.run(

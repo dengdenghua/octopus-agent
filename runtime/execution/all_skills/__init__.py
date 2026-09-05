@@ -130,6 +130,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
     "file_stats": {"group": "builtin", "atomic": True},
     "count_words": {"group": "builtin", "atomic": True},
     "hash_text": {"group": "builtin", "atomic": True},
+    "use_chatgpt_connector": {"group": "builtin", "atomic": True},
     # File-system discovery/search. These are read-only and are mentioned by
     # the builtin tool descriptions, so they must be callable anywhere the
     # model can see those hints.
@@ -142,6 +143,11 @@ _CATALOG: dict[str, dict[str, Any]] = {
     "web_search": {"group": "web", "atomic": False},
     "web_fetch": {"group": "web", "atomic": False},
     "crawl_site": {"group": "crawler", "atomic": False},
+    "platform_search": {"group": "web", "atomic": False},
+    "platform_read": {"group": "web", "atomic": False},
+    "platform_collect": {"group": "web", "atomic": False},
+    "platform_monitor": {"group": "web", "atomic": False},
+    "reach_doctor": {"group": "web", "atomic": False},
     "search_image_by_text": {"group": "kimi_compat", "atomic": False},
     "search_image_by_image": {"group": "kimi_compat", "atomic": False},
     "get_data_source_desc": {"group": "kimi_compat", "atomic": True},
@@ -434,6 +440,7 @@ _GROUP_REGISTRARS: dict[str, Callable[[SkillRegistry], Any]] = {
     "market": lambda registry: _register_market(
         registry,
         respect_enabled_flag=False,
+        skip_registered_directories=True,
     ),
 }
 

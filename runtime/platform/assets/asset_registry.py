@@ -23,9 +23,11 @@ sync 是幂等的(不覆盖已有、不删除源),index.json 是唯一动态产�
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 import shutil
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +59,12 @@ _SKIP_DIRS = {
 }
 _KIND_DIR = {"plugin": "plugins", "skill": "skills", "agent": "agents", "team": "agents"}
 _SLUG_RE = re.compile(r"[^a-z0-9_.-]+", re.I)
+_INDEX_CACHE_LOCK = threading.RLock()
+_INDEX_CACHE_MAX_ENTRIES = 16
+_INDEX_CACHE: dict[
+    Path,
+    tuple[tuple[int, int, int, int], dict[str, Any]],
+] = {}
 
 
 def _slug(value: str) -> str:
@@ -69,6 +77,25 @@ def _read_json(path: Path) -> dict[str, Any] | None:
         return data if isinstance(data, dict) else None
     except (OSError, ValueError, UnicodeDecodeError):
         return None
+
+
+def _file_stamp(path: Path) -> tuple[int, int, int, int] | None:
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return (stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size, stat.st_ino)
+
+
+def _cache_index(path: Path, index: dict[str, Any]) -> None:
+    stamp = _file_stamp(path)
+    if stamp is None:
+        return
+    key = path.absolute()
+    with _INDEX_CACHE_LOCK:
+        if key not in _INDEX_CACHE and len(_INDEX_CACHE) >= _INDEX_CACHE_MAX_ENTRIES:
+            _INDEX_CACHE.pop(next(iter(_INDEX_CACHE)))
+        _INDEX_CACHE[key] = (stamp, index)
 
 
 def _copy_light(src: Path, dest: Path) -> int:
@@ -344,7 +371,7 @@ def sync_assets(*, dest_root: str | Path | None = None) -> dict[str, Any]:
         dest = root / _KIND_DIR.get(item["kind"], f"{item['kind']}s") / item["dir"]
         files_copied += _copy_light(src, dest)
 
-    index = {
+    index: dict[str, Any] = {
         "schema": "octopus.assets.v1",
         "meta": {
             "title": "Octopus 统一资产仓库(插件/技能/角色)",
@@ -359,10 +386,15 @@ def sync_assets(*, dest_root: str | Path | None = None) -> dict[str, Any]:
         },
         "assets": all_assets,
     }
-    (root / "index.json").write_text(json.dumps(index, ensure_ascii=False, indent=1), "utf-8")
+    index_path = root / "index.json"
+    index_path.write_text(json.dumps(index, ensure_ascii=False, indent=1), "utf-8")
+    _cache_index(index_path, index)
     return {
         "root": str(root),
-        "counts": index["meta"]["counts"],
+        # The same index object now backs the in-process read cache. Do not
+        # expose a mutable reference that a sync caller could accidentally
+        # use to corrupt subsequent summary/list responses.
+        "counts": copy.deepcopy(index["meta"]["counts"]),
         "files_copied": files_copied,
         "updated_at": index["meta"]["updated_at"],
     }
@@ -371,14 +403,38 @@ def sync_assets(*, dest_root: str | Path | None = None) -> dict[str, Any]:
 # ── 读取 ───────────────────────────────────────────────────
 def _load_index(root: str | Path | None = None) -> dict[str, Any] | None:
     path = Path(root or UNIFIED_ROOT) / "index.json"
-    return _read_json(path)
+    key = path.absolute()
+    with _INDEX_CACHE_LOCK:
+        # Retry once if another process replaces the index while it is read.
+        # A stable invalid/missing index remains a normal cache miss.
+        data: dict[str, Any] | None = None
+        for _attempt in range(2):
+            before = _file_stamp(path)
+            if before is None:
+                _INDEX_CACHE.pop(key, None)
+                return None
+            cached = _INDEX_CACHE.get(key)
+            if cached is not None and cached[0] == before:
+                return cached[1]
+
+            data = _read_json(path)
+            after = _file_stamp(path)
+            if before == after:
+                if data is None:
+                    _INDEX_CACHE.pop(key, None)
+                else:
+                    if key not in _INDEX_CACHE and len(_INDEX_CACHE) >= _INDEX_CACHE_MAX_ENTRIES:
+                        _INDEX_CACHE.pop(next(iter(_INDEX_CACHE)))
+                    _INDEX_CACHE[key] = (after, data)
+                return data
+        return data
 
 
 def summary(root: str | Path | None = None) -> dict[str, Any] | None:
     idx = _load_index(root)
     if not idx:
         return None
-    return {"root": str(Path(root or UNIFIED_ROOT)), **idx["meta"]}
+    return {"root": str(Path(root or UNIFIED_ROOT)), **copy.deepcopy(idx["meta"])}
 
 
 def list_assets(
@@ -405,7 +461,7 @@ def list_assets(
             or q in str(i.get("id", "")).lower()
             or q in str(i.get("description", "")).lower()
         ]
-    return items
+    return copy.deepcopy(items)
 
 
 def get_asset(kind: str, asset_id: str, root: str | Path | None = None) -> dict[str, Any] | None:

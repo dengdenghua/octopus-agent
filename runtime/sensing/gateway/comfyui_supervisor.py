@@ -19,9 +19,12 @@ _LOCK = threading.Lock()
 
 
 def resolve_comfyui_home() -> Path | None:
+    from runtime.sensing.gateway.comfyui_manager import managed_home
+
     configured = os.environ.get("OCTOPUS_COMFYUI_HOME", "").strip()
     candidates = [
         Path(configured).expanduser() if configured else None,
+        managed_home(),
         app_paths().data_dir / "comfyui",
         Path.home() / "ComfyUI",
     ]
@@ -32,6 +35,8 @@ def resolve_comfyui_home() -> Path | None:
 
 
 def resolve_comfyui_command() -> tuple[list[str], Path] | None:
+    from runtime.sensing.gateway.comfyui_manager import managed_home, managed_python
+
     home = resolve_comfyui_home()
     if home is None or not (home / "main.py").is_file():
         return None
@@ -39,6 +44,8 @@ def resolve_comfyui_command() -> tuple[list[str], Path] | None:
         home / ".venv" / "bin" / "python",
         home / "venv" / "bin" / "python",
     ]
+    if home == managed_home() and managed_python().is_file():
+        python_candidates.insert(0, managed_python())
     python = next((item for item in python_candidates if item.is_file()), Path(sys.executable))
     raw_url = os.environ.get("OCTOPUS_COMFYUI_URL", "http://127.0.0.1:8188")
     parsed = urlparse(raw_url)

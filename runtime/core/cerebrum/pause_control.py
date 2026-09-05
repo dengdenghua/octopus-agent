@@ -56,6 +56,7 @@ PauseReason = Literal[
     "iteration_near_limit",  # Implementation note.
     "model_spinning",  # Implementation note.
     "client_disconnect",  # Implementation note.
+    "approval_required",  # Tool/sandbox approval could not be answered live.
     "external",  # Implementation note.
 ]
 
@@ -69,6 +70,15 @@ class ActiveTask:
     current_iteration: int = 0
     max_iterations: int = 0
     tokens_spent: int = 0
+    input_tokens_spent: int = 0
+    output_tokens_spent: int = 0
+    cache_read_tokens: int = 0
+    # ``tokens_spent`` is cumulative accounting across every model call.  It
+    # must not be presented as the current prompt/window size: a long ReAct
+    # task resends part of its prompt on each iteration, so the two values can
+    # differ by an order of magnitude.
+    current_context_tokens: int = 0
+    context_capacity_tokens: int = 0
     cost_usd: float = 0.0
     max_tokens: int = BUDGET_DEFAULT_MAX_TOKENS  # Implementation note.
     max_usd: float = BUDGET_DEFAULT_MAX_USD
@@ -83,6 +93,16 @@ class ActiveTask:
             "current_iteration": self.current_iteration,
             "max_iterations": self.max_iterations,
             "tokens_spent": self.tokens_spent,
+            "input_tokens_spent": self.input_tokens_spent,
+            "output_tokens_spent": self.output_tokens_spent,
+            "cache_read_tokens": self.cache_read_tokens,
+            "current_context_tokens": self.current_context_tokens,
+            "context_capacity_tokens": self.context_capacity_tokens,
+            "context_utilization": (
+                min(1.0, self.current_context_tokens / self.context_capacity_tokens)
+                if self.context_capacity_tokens > 0
+                else 0.0
+            ),
             "cost_usd": self.cost_usd,
             "max_tokens": self.max_tokens,
             "max_usd": self.max_usd,
@@ -602,6 +622,11 @@ class PauseController:
         task_id: str,
         *,
         tokens_delta: int = 0,
+        input_tokens_delta: int = 0,
+        output_tokens_delta: int = 0,
+        cache_read_tokens_delta: int = 0,
+        current_context_tokens: int | None = None,
+        context_capacity_tokens: int | None = None,
         cost_delta: float = 0.0,
     ) -> ActiveTask | None:
         with self._lock:
@@ -609,7 +634,37 @@ class PauseController:
             if task is None:
                 return None
             task.tokens_spent += max(0, int(tokens_delta))
+            task.input_tokens_spent += max(0, int(input_tokens_delta))
+            task.output_tokens_spent += max(0, int(output_tokens_delta))
+            task.cache_read_tokens += max(0, int(cache_read_tokens_delta))
+            if current_context_tokens is not None:
+                task.current_context_tokens = max(0, int(current_context_tokens))
+            if context_capacity_tokens is not None:
+                task.context_capacity_tokens = max(0, int(context_capacity_tokens))
             task.cost_usd += max(0.0, float(cost_delta))
+            return task
+
+    def extend_active_limits(
+        self,
+        task_id: str,
+        *,
+        extra_tokens: int = 0,
+        extra_usd: float = 0.0,
+    ) -> ActiveTask | None:
+        """Apply a consumed resume grant to the already-registered run.
+
+        Resume registration intentionally happens before checkpoint recovery so
+        the task is visible while restore I/O runs.  Grants are consumed after
+        recovery, therefore they must update the live record explicitly rather
+        than only being returned to the caller.
+        """
+
+        with self._lock:
+            task = self._active.get(task_id)
+            if task is None:
+                return None
+            task.max_tokens += max(0, int(extra_tokens))
+            task.max_usd += max(0.0, float(extra_usd))
             return task
 
     def unregister_active(self, task_id: str) -> None:
@@ -636,9 +691,13 @@ class PauseController:
 
         Checks in order:
         1. Wall-clock time (if max_wall_time_seconds > 0)
-        2. Token budget (if tokens_spent >= max_tokens)
+        2. Token accounting budget (if tokens_spent >= max_tokens)
         3. Cost budget (if cost_usd >= max_usd)
         4. Iteration count (if current_iteration >= max_iterations)
+
+        The ReAct guard deliberately consumes only the wall-time result. Token
+        and cost auto-pause policy lives in ``react_model_stream`` where the
+        opt-in flags and current-context telemetry are available.
         """
         with self._lock:
             task = self._active.get(task_id)

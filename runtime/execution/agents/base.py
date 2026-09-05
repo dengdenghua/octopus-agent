@@ -98,6 +98,11 @@ class AgentRegistry:
     def __init__(self, *, event_bus: Any = None) -> None:
         self._by_id: dict[str, Agent] = {}
         self._lock = threading.RLock()
+        # Read-mostly HTTP/UI consumers must not wait behind a long hot-reload
+        # transaction. Mutations publish a new immutable tuple atomically;
+        # readers can keep showing the last complete roster while a watcher is
+        # rebuilding agents in the background.
+        self._snapshot: tuple[Agent, ...] = ()
         self._event_bus = event_bus
 
     def register(self, agent: Agent) -> None:
@@ -105,6 +110,7 @@ class AgentRegistry:
             if agent.agent_id in self._by_id:
                 raise ValueError(f"duplicate agent_id: {agent.agent_id!r}")
             self._by_id[agent.agent_id] = agent
+            self._snapshot = tuple(self._by_id.values())
 
         if self._event_bus is not None:
             try:
@@ -129,6 +135,8 @@ class AgentRegistry:
     def remove(self, agent_id: str) -> bool:
         with self._lock:
             existed = self._by_id.pop(agent_id, None) is not None
+            if existed:
+                self._snapshot = tuple(self._by_id.values())
         if existed and self._event_bus is not None:
             try:
                 from runtime.core.nerves import AgentRemoved
@@ -152,6 +160,7 @@ class AgentRegistry:
         with self._lock:
             prev = self._by_id.get(agent.agent_id)
             self._by_id[agent.agent_id] = agent
+            self._snapshot = tuple(self._by_id.values())
         if self._event_bus is not None:
             try:
                 from runtime.core.nerves import AgentAdded
@@ -180,8 +189,7 @@ class AgentRegistry:
             return sorted(self._by_id.keys())
 
     def all_agents(self) -> list[Agent]:
-        with self._lock:
-            return list(self._by_id.values())
+        return list(self._snapshot)
 
     def __len__(self) -> int:
         with self._lock:

@@ -100,6 +100,8 @@ function messageListTree({
   completedAgentOutput = false,
   showSenderName = false,
   onAuthorizeNetwork,
+  onStop,
+  isStopping = false,
 }: {
   thread: BaseStream<AgentThreadState>;
   liveToolEvents?: LiveToolEvent[];
@@ -119,9 +121,14 @@ function messageListTree({
     avatar_url?: string | null;
     icon?: string | null;
     role?: string | null;
+    description?: string | null;
+    model?: string | null;
+    toolGroups?: string[] | null;
   }>;
   showSenderName?: boolean;
   onAuthorizeNetwork?: (tier: "common" | "full") => void;
+  onStop?: () => void | Promise<void>;
+  isStopping?: boolean;
 }) {
   return (
     <SubtasksProvider>
@@ -138,6 +145,8 @@ function messageListTree({
           agentRoster={agentRoster}
           showSenderName={showSenderName}
           onAuthorizeNetwork={onAuthorizeNetwork}
+          onStop={onStop}
+          isStopping={isStopping}
         />
       </ThreadProviders>
     </SubtasksProvider>
@@ -163,10 +172,15 @@ function renderMessageList(args: {
     avatar_url?: string | null;
     icon?: string | null;
     role?: string | null;
+    description?: string | null;
+    model?: string | null;
+    toolGroups?: string[] | null;
   }>;
   showSenderName?: boolean;
   completedAgentOutput?: boolean;
   onAuthorizeNetwork?: (tier: "common" | "full") => void;
+  onStop?: () => void | Promise<void>;
+  isStopping?: boolean;
 }) {
   return renderWithProviders(messageListTree(args), {
     locale: args.locale ?? "en-US",
@@ -201,6 +215,88 @@ describe("MessageList process trace lifecycle", () => {
         (node) => node.getAttribute("data-execution-engine"),
       ),
     ).toEqual(["codex", "octopus"]);
+  });
+
+  test("keeps a legacy member failure sticky across duplicate completion markers", () => {
+    const failed: AIMessage = {
+      id: "failed-member",
+      type: "ai",
+      content: "",
+      tool_calls: [
+        {
+          id: "failed-general",
+          name: "subagent",
+          args: {
+            subagent_id: "general",
+            name: "Eve",
+            role: "cowork",
+            status: "failed",
+            error: "该成员当时未能生成有效回复。",
+          },
+        },
+      ],
+    };
+    const staleCompletion: AIMessage = {
+      id: "stale-completion",
+      type: "ai",
+      content: "",
+      tool_calls: [
+        {
+          id: "completed-general",
+          name: "subagent",
+          args: {
+            subagent_id: "general",
+            name: "Eve",
+            role: "cowork",
+            status: "completed",
+          },
+        },
+      ],
+    };
+
+    expect(deriveSubagentsFromMessages([failed, staleCompletion])).toEqual([
+      expect.objectContaining({
+        id: "general",
+        name: "Eve",
+        status: "error",
+        error: "该成员当时未能生成有效回复。",
+      }),
+    ]);
+  });
+
+  test("does not repaint a failed persisted member from a stale live done marker", () => {
+    renderWithProviders(
+      <InlineSubagentCards
+        settled
+        agents={[
+          {
+            id: "general",
+            name: "Eve",
+            role: "cowork",
+            status: "error",
+            task: "你们都在线么",
+            error: "该成员当时未能生成有效回复。",
+            filesTouchedCount: 0,
+            index: 0,
+          },
+        ]}
+        events={[
+          toolEvent("subagent", {
+            id: "finish-general",
+            lifecycle: "finished",
+            status: "done",
+            agentId: "general",
+            subagentCodename: "general",
+          }),
+        ]}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(screen.getByText("1 个子 Agent · 1 异常")).toBeInTheDocument();
+    expect(
+      screen.queryByText("1 个子 Agent · 1 已完成"),
+    ).not.toBeInTheDocument();
   });
 
   test("does not settle an inline agent from child tool completion", () => {
@@ -467,6 +563,35 @@ describe("MessageList process trace lifecycle", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /收起报告/ }));
     expect(screen.queryByTestId("agent-report-0")).not.toBeInTheDocument();
+  });
+
+  test("labels a conversational cowork result as a reply, not a report", () => {
+    renderWithProviders(
+      <InlineSubagentCards
+        settled
+        agents={[
+          {
+            id: "coder",
+            name: "Kane",
+            role: "cowork",
+            status: "done",
+            task: "回应群聊",
+            summary: "在线，随时可以开始。",
+            filesTouchedCount: 0,
+            index: 0,
+          },
+        ]}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /查看回复/ }));
+    expect(screen.getByTestId("agent-report-0")).toHaveTextContent(
+      "在线，随时可以开始。",
+    );
+    expect(
+      screen.getByRole("button", { name: /收起回复/ }),
+    ).toBeInTheDocument();
   });
 
   test("expands a failed agent card to reveal the failure reason", () => {
@@ -798,6 +923,17 @@ describe("MessageList process trace lifecycle", () => {
     expect(
       screen.getByTestId("conversation-activity-pulse"),
     ).toBeInTheDocument();
+    expect(screen.getByRole("log", { name: "对话消息" })).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+    expect(screen.getByRole("log")).toHaveAttribute(
+      "aria-relevant",
+      "additions",
+    );
+    expect(screen.getByRole("log")).not.toContainElement(
+      screen.getByRole("status"),
+    );
     expect(screen.getAllByAltText("Eve")).toHaveLength(1);
 
     const planning: AIMessage = {
@@ -896,6 +1032,13 @@ describe("MessageList process trace lifecycle", () => {
     expect(
       screen.queryByTestId("conversation-activity-pulse"),
     ).not.toBeInTheDocument();
+    // Keep the navigable log semantics, but release its queued additions only
+    // after the streamed turn has settled.
+    expect(screen.getByRole("log")).toHaveAttribute("aria-busy", "false");
+    expect(screen.getByRole("log")).toHaveAttribute(
+      "aria-relevant",
+      "additions",
+    );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getAllByAltText("Eve")).toHaveLength(1);
   });
@@ -941,6 +1084,409 @@ describe("MessageList process trace lifecycle", () => {
       "src",
       expect.stringContaining("/api/agents/general/avatar"),
     );
+  });
+
+  test("opens the HUD-derived member profile from a main conversation avatar", () => {
+    const thread = mockThread({
+      messages: [
+        message("user-1", "human", "请汇总一下"),
+        message("assistant-1", "ai", "我会完成汇总。"),
+      ],
+    });
+
+    renderMessageList({
+      thread,
+      mode: "chat",
+      showSenderName: true,
+      agentRoster: [
+        {
+          name: "writer",
+          display_name: "Luna",
+          role: "member",
+          description: "负责把多方结论整理成清晰的交付内容。",
+          model: "deepseek-v4",
+          toolGroups: ["文档", "搜索"],
+        },
+      ],
+    });
+
+    const avatar = screen.getByRole("button", {
+      name: "Luna · 查看成员信息",
+    });
+    fireEvent.pointerDown(avatar, { button: 0, ctrlKey: false });
+
+    expect(screen.getByLabelText("Luna 的成员信息")).toBeInTheDocument();
+    expect(
+      screen.getByText("负责把多方结论整理成清晰的交付内容。"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("deepseek-v4")).toBeInTheDocument();
+    expect(
+      screen.getByText("知识整理与内容沉淀、资料检索与事实核验"),
+    ).toBeInTheDocument();
+  });
+
+  test("keeps a legacy member reply when its redundant group trace is hidden", () => {
+    const thread = mockThread({
+      messages: [
+        message("user-legacy-group", "human", "你们都在线么"),
+        {
+          id: "legacy-coder-trace",
+          type: "ai",
+          content: "",
+          tool_calls: [
+            {
+              id: "legacy-coder-subagent",
+              name: "subagent",
+              args: {
+                subagent_id: "coder",
+                name: "coder",
+                role: "cowork",
+                status: "failed",
+                error: "该成员当时未能生成有效回复。",
+              },
+            },
+          ],
+        } as AIMessage,
+        {
+          id: "legacy-coder-message",
+          type: "ai",
+          content: "我在线。",
+          additional_kwargs: {
+            agent_id: "coder",
+            agent_display_name: "coder",
+          },
+        } as AIMessage,
+      ],
+    });
+
+    renderMessageList({
+      thread,
+      mode: "chat",
+      locale: "zh-CN",
+      showSenderName: true,
+      agentRoster: [
+        {
+          agent_id: "coder",
+          name: "coder",
+          display_name: "Kane",
+          avatar_url: "/api/agents/coder/avatar",
+          role: "member",
+        },
+      ],
+    });
+
+    expect(screen.getByText("我在线。")).toBeInTheDocument();
+    expect(screen.queryByText("Agent 集群")).not.toBeInTheDocument();
+    expect(screen.queryByText("coder")).not.toBeInTheDocument();
+  });
+
+  test("binds a compact status control to each matching agent reply", () => {
+    const subagentMessage = (
+      id: string,
+      name: string,
+      status: "completed" | "failed",
+    ): AIMessage => ({
+      id: `trace-${id}`,
+      type: "ai",
+      content: "",
+      tool_calls: [
+        {
+          id: `subagent-${id}`,
+          name: "subagent",
+          args: {
+            subagent_id: id,
+            name,
+            role: "cowork",
+            description: "内部委派任务",
+            status,
+            ...(status === "failed"
+              ? { error: "该成员当时未能生成有效回复。" }
+              : { summary: `${name} 已完成` }),
+          },
+        },
+      ],
+    });
+    const reply = (id: string, name: string, content: string): AIMessage => ({
+      id: `reply-${id}`,
+      type: "ai",
+      content,
+      additional_kwargs: {
+        agent_id: id,
+        agent_display_name: name,
+      },
+    });
+    const thread = mockThread({
+      messages: [
+        message("user-paired", "human", "分别回答"),
+        subagentMessage("coder", "Kane", "completed"),
+        subagentMessage("aoi", "Zero", "failed"),
+        reply("coder", "Kane", "Kane 的实际回答"),
+        reply("aoi", "Zero", "⚠️ 该成员当时未能生成有效回复。"),
+      ],
+    });
+
+    renderMessageList({
+      thread,
+      mode: "chat",
+      locale: "zh-CN",
+      showSenderName: true,
+      agentRoster: [
+        {
+          agent_id: "coder",
+          name: "coder",
+          display_name: "Kane",
+          avatar_url: "/api/agents/coder/avatar",
+        },
+        {
+          agent_id: "aoi",
+          name: "aoi",
+          display_name: "Zero",
+          avatar_url: "/api/agents/aoi/avatar",
+        },
+      ],
+    });
+
+    const zeroCard = screen.getByRole("button", {
+      name: /Zero · 异常 · 查看执行画面/,
+    });
+    const zeroReply = screen.getByText("⚠️ 该成员当时未能生成有效回复。");
+    expect(
+      zeroCard.compareDocumentPosition(zeroReply) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const zeroStrip = screen.getByTestId("agent-task-strip-aoi");
+    expect(zeroStrip.querySelector("img")).toBeNull();
+    expect(zeroStrip).not.toHaveTextContent("内部委派任务");
+    expect(screen.queryByText("Agent 集群")).toBeNull();
+    expect(screen.queryByText(/1 个子 Agent/)).toBeNull();
+    expect(screen.queryByText("2 个子 Agent · 1 已完成 · 1 异常")).toBeNull();
+  });
+
+  test("keeps team execution clusters in the right workbench, not the chat", () => {
+    const processing: AIMessage = {
+      id: "team-swarm-trace",
+      type: "ai",
+      content: "",
+      tool_calls: [
+        {
+          id: "team-swarm",
+          name: "team_swarm",
+          args: { message: "上面中断任务啊" },
+        },
+        {
+          id: "subagent-eve",
+          name: "subagent",
+          args: {
+            subagent_id: "general",
+            name: "Eve",
+            role: "cowork",
+            task: "上面中断任务啊",
+            status: "running",
+          },
+        },
+        {
+          id: "subagent-zero",
+          name: "subagent",
+          args: {
+            subagent_id: "aoi",
+            name: "Zero",
+            role: "cowork",
+            task: "上面中断任务啊",
+            status: "running",
+          },
+        },
+      ],
+    };
+    const thread = mockThread({
+      messages: [
+        message("user-team-swarm", "human", "上面中断任务啊"),
+        processing,
+      ],
+      isLoading: true,
+      streamingMessage: processing,
+    });
+
+    renderMessageList({
+      thread,
+      mode: "chat",
+      locale: "zh-CN",
+      showSenderName: true,
+      agentRoster: [
+        { name: "general", display_name: "Eve" },
+        { name: "aoi", display_name: "Zero" },
+      ],
+    });
+
+    expect(screen.queryByText("Agent 集群")).toBeNull();
+    expect(screen.queryByText(/2 个子 Agent/)).toBeNull();
+    expect(
+      screen.queryByText("上面中断任务啊", { selector: "button" }),
+    ).toBeNull();
+  });
+
+  test("keeps every member's main avatar after replay hides the execution lane", () => {
+    const processing: AIMessage = {
+      id: "replayed-team-swarm-trace",
+      type: "ai",
+      content: "",
+      tool_calls: [
+        {
+          id: "replayed-team-swarm",
+          name: "team_swarm",
+          args: { message: "请五位成员分别介绍职责" },
+        },
+        ...[
+          ["general", "Eve"],
+          ["coder", "Kane"],
+          ["desktop_operator", "Raven"],
+          ["aoi", "Zero"],
+          ["vibe_selling", "Luna"],
+        ].map(([id, name]) => ({
+          id: `subagent-${id}`,
+          name: "subagent",
+          args: {
+            subagent_id: id,
+            name,
+            role: "cowork",
+            task: "请五位成员分别介绍职责",
+            status: "completed",
+          },
+        })),
+      ],
+    };
+    const members = [
+      ["general", "Eve"],
+      ["coder", "Kane"],
+      ["desktop_operator", "Raven"],
+      ["aoi", "Zero"],
+      ["vibe_selling", "Luna"],
+    ] as const;
+    const thread = mockThread({
+      messages: [
+        message("user-replayed-team", "human", "请五位成员分别介绍职责"),
+        processing,
+        ...members.map(
+          ([id, name]) =>
+            ({
+              id: `answer-${id}`,
+              type: "ai",
+              content: `${name} 的职责说明。`,
+              additional_kwargs: {
+                agent_id: id,
+                agent_display_name: name,
+                message_kind: "answer",
+              },
+            }) as AIMessage,
+        ),
+      ],
+    });
+
+    renderMessageList({
+      thread,
+      mode: "chat",
+      locale: "zh-CN",
+      showSenderName: true,
+      agentRoster: members.map(([id, name]) => ({
+        agent_id: id,
+        name: id,
+        display_name: name,
+        avatar_url: `/api/agents/${id}/avatar`,
+      })),
+    });
+
+    for (const [, name] of members) {
+      expect(screen.getByAltText(name)).toBeInTheDocument();
+      expect(screen.getByText(`${name} 的职责说明。`)).toBeInTheDocument();
+    }
+    expect(screen.queryByText("Agent 集群")).toBeNull();
+  });
+
+  test("renders a tool-call message's final team report only once", () => {
+    const processingWithReport: AIMessage = {
+      id: "team-swarm-report",
+      type: "ai",
+      content: "最终报告：建议保留当前协作方案。",
+      additional_kwargs: { message_kind: "answer" },
+      tool_calls: [
+        {
+          id: "team-swarm-report-call",
+          name: "team_swarm",
+          args: { message: "整理最终报告" },
+        },
+        {
+          id: "subagent-report-eve",
+          name: "subagent",
+          args: {
+            subagent_id: "general",
+            name: "Eve",
+            role: "cowork",
+            task: "整理最终报告",
+            status: "completed",
+          },
+        },
+      ],
+    };
+    const thread = mockThread({
+      messages: [
+        message("user-team-report", "human", "整理最终报告"),
+        processingWithReport,
+      ],
+    });
+
+    renderMessageList({
+      thread,
+      mode: "chat",
+      locale: "zh-CN",
+      showSenderName: true,
+      agentRoster: [{ name: "general", display_name: "Eve", role: "tl" }],
+    });
+
+    expect(
+      screen.getAllByText("最终报告：建议保留当前协作方案。"),
+    ).toHaveLength(1);
+    expect(screen.queryByText("Agent 集群")).toBeNull();
+  });
+
+  test("shows only compact member states while keeping paired tasks internal", () => {
+    renderWithProviders(
+      <InlineSubagentCards
+        variant="paired"
+        settled
+        agents={[
+          {
+            id: "coder",
+            name: "Kane",
+            role: "cowork",
+            status: "done",
+            task: "不应出现在群聊里的内部委派任务",
+            filesTouchedCount: 0,
+            index: 0,
+          },
+          {
+            id: "aoi",
+            name: "Zero",
+            role: "cowork",
+            status: "error",
+            task: "另一条不应出现在群聊里的内部委派任务",
+            filesTouchedCount: 0,
+            index: 1,
+          },
+        ]}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: /Kane · 已回应 · 查看执行画面/,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: /Zero · 异常 · 查看执行画面/,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/不应出现在群聊里的内部委派任务/)).toBeNull();
   });
 
   test("keeps model strategy and token metadata out of the main transcript", () => {
@@ -2284,7 +2830,7 @@ describe("MessageList stalled-run warning", () => {
     expect(screen.queryByAltText("Octopus")).not.toBeInTheDocument();
   });
 
-  test("warns only after a loading run stops making visible progress", () => {
+  test("warns only after a loading run stops making visible progress", async () => {
     vi.useFakeTimers();
     try {
       const messages = [
@@ -2297,7 +2843,8 @@ describe("MessageList stalled-run warning", () => {
         isLoading: true,
       });
 
-      renderMessageList({ thread });
+      const onStop = vi.fn(() => new Promise<void>(() => undefined));
+      const { rerender } = renderMessageList({ thread, onStop });
 
       act(() => {
         vi.advanceTimersByTime(MESSAGE_LIST_TIMEOUT_WARNING_MS - 1_000);
@@ -2308,6 +2855,17 @@ describe("MessageList stalled-run warning", () => {
         vi.advanceTimersByTime(2_000);
       });
       expect(screen.getByText(/No progress for/)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+      await act(async () => Promise.resolve());
+      expect(onStop).toHaveBeenCalledTimes(1);
+
+      rerender(messageListTree({ thread, onStop, isStopping: true }));
+      const stoppingButton = screen.getByRole("button", {
+        name: "Stopping…",
+      });
+      expect(stoppingButton).toBeDisabled();
+      expect(stoppingButton).toHaveAttribute("aria-busy", "true");
     } finally {
       vi.useRealTimers();
     }

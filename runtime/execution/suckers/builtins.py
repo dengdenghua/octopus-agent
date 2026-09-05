@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from .browser_skills import register_browser_skills
@@ -290,7 +291,7 @@ def _list_cwd(path: str = ".", cwd: str | None = None, **_kw: Any) -> dict[str, 
             for e in p.iterdir()
             if not e.name.startswith(".")
         ),
-        key=lambda x: x["name"],
+        key=lambda x: str(x["name"]),
     )
     return {"path": str(p.resolve()), "items": items, "count": len(items)}
 
@@ -506,6 +507,58 @@ def _file_stats(
     }
 
 
+def _use_chatgpt_connector(
+    app_id: str,
+    request: str,
+    *,
+    session: Any = None,
+) -> dict[str, Any]:
+    """Run one principal-enabled ChatGPT App without exposing its credentials."""
+
+    normalized_app = str(app_id or "").strip()
+    instruction = str(request or "").strip()
+    if (
+        not normalized_app
+        or len(normalized_app) > 256
+        or any(char in normalized_app for char in "\x00\r\n")
+    ):
+        return {"error": "invalid ChatGPT connector id"}
+    if not instruction or len(instruction) > 20_000 or "\x00" in instruction:
+        return {"error": "connector request must be non-empty and at most 20000 characters"}
+    metadata = getattr(session, "metadata", None)
+    stack = metadata.get("_execution_stack") if isinstance(metadata, dict) else None
+    if stack is None:
+        return {"error": "ChatGPT connector bridge is unavailable on this execution surface"}
+    agent = getattr(session, "agent", None) or SimpleNamespace(
+        agent_id="chatgpt-connector-bridge",
+        capabilities={},
+        arms=(),
+        extra_skills=(),
+        model=None,
+    )
+    try:
+        from runtime.execution.codex_backend.role_runner import run_agent_role_sync
+
+        result = run_agent_role_sync(
+            stack,
+            agent,
+            instruction,
+            context={
+                "caller_session": session,
+                "_codex_app_id": normalized_app,
+                "timeout_s": 300.0,
+            },
+        )
+    except (RuntimeError, ValueError, OSError) as exc:
+        return {"error": f"ChatGPT connector failed: {type(exc).__name__}"}
+    return {
+        "app_id": normalized_app,
+        "success": result.success,
+        "status": result.status,
+        "content": result.output,
+    }
+
+
 def register_builtins(registry: SkillRegistry) -> SkillRegistry:
     registry.register(
         Skill(
@@ -661,10 +714,35 @@ def register_builtins(registry: SkillRegistry) -> SkillRegistry:
             ],
         )
     )
+    registry.register(
+        Skill(
+            name="use_chatgpt_connector",
+            summary="Use one explicitly enabled ChatGPT App connector.",
+            description=(
+                "Use an OpenAI/ChatGPT App connector already enabled by the current user. "
+                "Pass the exact app_id shown in Coder settings and a concrete request. "
+                "Authentication remains inside Codex App Server; connector side effects "
+                "require the normal Octopus approval flow."
+            ),
+            affinity=["connector", "external"],
+            cost_profile="mid",
+            trusted_source="skill://public/use_chatgpt_connector",
+            handler=_use_chatgpt_connector,
+            timeout_s=360.0,
+        ),
+        verify_tests=False,
+    )
     return registry
 
 
-BUILTIN_NAMES = ["list_cwd", "read_file", "count_words", "hash_text", "file_stats"]
+BUILTIN_NAMES = [
+    "list_cwd",
+    "read_file",
+    "count_words",
+    "hash_text",
+    "file_stats",
+    "use_chatgpt_connector",
+]
 
 
 def register_all(registry: SkillRegistry) -> int:

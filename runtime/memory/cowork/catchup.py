@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from runtime.memory.cowork.context_view import resolve_view, slice_messages
+from runtime.memory.cowork.context_view import materialize_messages, resolve_view
 from runtime.memory.cowork.group import GroupState
 
 
@@ -70,7 +70,7 @@ def build_catchup(
     view = resolve_view(state, member_id, max_message=max(0, len(messages) - 1))
     if view is None:
         return None
-    visible = slice_messages(view, messages)
+    visible = materialize_messages(view, messages)
     recent_texts = [t for t in (_as_text(m) for m in visible[-recent:]) if t]
     return CatchUp(
         member_id=member_id,

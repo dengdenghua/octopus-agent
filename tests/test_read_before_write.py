@@ -480,3 +480,98 @@ def test_non_guarded_tool_is_not_checked(
     assert step.success
     assert step.result.error_type != "read_before_write_required"
     assert target.read_text(encoding="utf-8") == "overwritten\n"
+
+
+@pytest.mark.parametrize(
+    ("read_tool", "write_tool", "suffix"),
+    [
+        ("documents.extract_text", "documents.replace_text", ".docx"),
+        ("spreadsheets.read_sheet", "spreadsheets.update_cells", ".xlsx"),
+        ("presentations.extract_text", "presentations.replace_text", ".pptx"),
+    ],
+)
+def test_office_edits_require_a_same_turn_native_read(
+    tmp_path: Path,
+    immunity: TrustEngine,
+    journal: InMemoryJournal,
+    budget: Budget,
+    read_tool: str,
+    write_tool: str,
+    suffix: str,
+) -> None:
+    """Native Office readers unlock only their matching file for editing."""
+    target = tmp_path / f"artifact{suffix}"
+    target.write_bytes(b"original")
+
+    registry = SkillRegistry()
+
+    def _read_handler(path: str = "", **_kw):
+        return {"path": path, "content": "current contents"}
+
+    def _write_handler(path: str = "", **_kw):
+        Path(path).write_bytes(b"updated")
+        return {"path": path, "updated": True}
+
+    registry.register(
+        Skill(
+            name=read_tool,
+            description="read an Office artifact",
+            affinity=["file", "read"],
+            trusted_source=f"skill://public/{read_tool}",
+            handler=_read_handler,
+        )
+    )
+    registry.register(
+        Skill(
+            name=write_tool,
+            description="edit an Office artifact",
+            affinity=["file", "write", "edit"],
+            trusted_source=f"skill://public/{write_tool}",
+            handler=_write_handler,
+        )
+    )
+    executor = ToolExecutor(registry=registry, immunity=immunity, journal=journal)
+    session = Session(
+        metadata={
+            "mode": "code",
+            "workspace_path": str(tmp_path),
+            "allowed_write_paths": [target.name],
+        }
+    )
+
+    with session_scope(session):
+        blocked = executor.execute_step(
+            step_id=0,
+            node_id="blocked-write",
+            sucker_id=SkillId(write_tool),
+            args={"path": str(target)},
+            caller="arms/code_arm",
+            task_id=budget.task_id,
+            arm_id=ArmId("code_arm"),
+            budget=budget,
+        )
+        read_step = executor.execute_step(
+            step_id=1,
+            node_id="native-read",
+            sucker_id=SkillId(read_tool),
+            args={"path": str(target)},
+            caller="arms/code_arm",
+            task_id=budget.task_id,
+            arm_id=ArmId("code_arm"),
+            budget=budget,
+        )
+        allowed = executor.execute_step(
+            step_id=2,
+            node_id="allowed-write",
+            sucker_id=SkillId(write_tool),
+            args={"path": str(target)},
+            caller="arms/code_arm",
+            task_id=budget.task_id,
+            arm_id=ArmId("code_arm"),
+            budget=budget,
+        )
+
+    assert blocked.result.error_type == "read_before_write_required"
+    assert read_step.success
+    assert allowed.success
+    assert target.read_bytes() == b"updated"

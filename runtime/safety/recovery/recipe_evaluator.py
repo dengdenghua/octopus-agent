@@ -10,6 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from runtime.adapters.instrumentation import trace_stage
 from runtime.memory.journal import Journal, TrajectoryEvent
 from runtime.platform.models import Trajectory
+from runtime.safety.auth.scope import TenantScope
+from runtime.safety.recovery.tenant_scope import read_learning_events
 
 RecipeVerdict = Literal["winning", "neutral", "losing", "insufficient_data"]
 
@@ -76,9 +78,12 @@ class RecipeEvaluator:
         self,
         journal: Journal,
         config: RecipeEvaluatorConfig | None = None,
+        *,
+        scope: TenantScope | None = None,
     ) -> None:
         self.journal = journal
         self.config = config or RecipeEvaluatorConfig()
+        self.scope = scope
 
     def evaluate(self) -> RecipeEvaluationReport:
         with trace_stage("regeneration.recipe_evaluator.evaluate"):
@@ -105,7 +110,11 @@ class RecipeEvaluator:
             )
 
     def _collect_trajectories(self) -> list[Trajectory]:
-        events = self.journal.read_by_type("trajectory")
+        events = read_learning_events(
+            self.journal,
+            "trajectory",
+            scope=self.scope,
+        )
         trajs = [e.trajectory for e in events if isinstance(e, TrajectoryEvent)]
 
         # Swarm tasks can emit both per-arm trajectories and one
@@ -113,31 +122,25 @@ class RecipeEvaluator:
         # task_id. When the aggregate exists, it is the whole-task
         # sample we want; keeping both copies inflates recipe uses and
         # biases success/cost statistics.
-        by_task: dict[str, list[Trajectory]] = defaultdict(list)
+        by_task: dict[str, list[tuple[int, Trajectory]]] = defaultdict(list)
         order: list[str] = []
-        for traj in trajs:
+        for idx, traj in enumerate(trajs):
             key = str(traj.task_id)
             if key not in by_task:
                 order.append(key)
-            by_task[key].append(traj)
+            by_task[key].append((idx, traj))
 
         selected: list[Trajectory] = []
         for key in order:
             bucket = by_task[key]
-            swarm_bucket = [t for t in bucket if t.strategy_id == "swarm"]
+            swarm_bucket = [item for item in bucket if item[1].strategy_id == "swarm"]
             if swarm_bucket:
-                selected.append(
-                    max(
-                        swarm_bucket,
-                        key=lambda t: (
-                            t.step_count,
-                            int(t.outcome.success),
-                            t.completed_at,
-                        ),
-                    )
-                )
+                # The latest append is the authoritative retry/resume result.
+                # Outcome-based selection could let an old clean/degraded row
+                # hide the terminal aggregate actually written last.
+                selected.append(max(swarm_bucket, key=lambda item: item[0])[1])
                 continue
-            selected.extend(bucket)
+            selected.extend(traj for _idx, traj in bucket)
         return selected
 
     def _score_recipe(
@@ -147,7 +150,7 @@ class RecipeEvaluator:
         median_cost: float,
     ) -> RecipeScore:
         uses = len(cluster)
-        successes = sum(1 for t in cluster if t.outcome.success)
+        successes = sum(1 for t in cluster if t.outcome.success and not t.outcome.degraded)
         success_rate = successes / uses
 
         costs = [t.outcome.cost.usd for t in cluster]

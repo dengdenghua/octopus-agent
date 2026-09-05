@@ -19,6 +19,7 @@ persistence is unavailable.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import logging
 import os
@@ -35,6 +36,15 @@ from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 
+
+def _env_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, value))
+
+
 MAX_TRANSCRIPT_TURNS = 6
 MAX_TRANSCRIPT_CHARS = 6000
 MAX_REPORTS_PROMPT_CHARS = 4000
@@ -44,6 +54,15 @@ MAX_REPORTS_PROMPT_CHARS = 4000
 # Off by default (dsh hosts opt into the session-reference service).
 TRANSCRIPT_PROJECTION_ENABLED = os.environ.get("OCTOPUS_SESSION_REFERENCE_BOUNDED", "0") != "0"
 MAX_TRANSCRIPT_PROJECTION_BYTES = 16000
+DEFAULT_SESSION_COMPACTION_TRIGGER_TURNS = _env_int(
+    "OCTOPUS_SUBAGENT_COMPACTION_TRIGGER_TURNS", 12, minimum=4, maximum=10_000
+)
+DEFAULT_SESSION_COMPACTION_KEEP_RECENT = _env_int(
+    "OCTOPUS_SUBAGENT_COMPACTION_KEEP_RECENT", 4, minimum=1, maximum=1_000
+)
+DEFAULT_SESSION_CHECKPOINT_CHARS = _env_int(
+    "OCTOPUS_SUBAGENT_CHECKPOINT_CHARS", 1600, minimum=400, maximum=32_000
+)
 # Max chars of a queued report injected into the running parent turn's next
 # step (dsh ``inject``). Matches the per-report prompt bound so a chatty
 # child cannot flood the live model context.
@@ -90,6 +109,35 @@ class SubagentSessionTurn:
 
 
 @dataclass
+class SubagentSessionCheckpoint:
+    """Durable summary of an immutable prefix of a child session."""
+
+    summary: str
+    through_turn: int
+    source_digest: str
+    created_at: str = field(default_factory=_utc_now_iso)
+    strategy: str = "deterministic-v1"
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> SubagentSessionCheckpoint | None:
+        try:
+            through_turn = int(data.get("through_turn") or 0)
+        except (TypeError, ValueError):
+            return None
+        summary = str(data.get("summary") or "").strip()
+        source_digest = str(data.get("source_digest") or "").strip()
+        if through_turn <= 0 or not summary or not source_digest:
+            return None
+        return cls(
+            summary=summary,
+            through_turn=through_turn,
+            source_digest=source_digest,
+            created_at=str(data.get("created_at") or _utc_now_iso()),
+            strategy=str(data.get("strategy") or "deterministic-v1"),
+        )
+
+
+@dataclass
 class SubagentReport:
     """One child→parent delivery (dsh ``tool-subagent-report``).
 
@@ -132,6 +180,7 @@ class SubagentSession:
     turns: list[SubagentSessionTurn] = field(default_factory=list)
     reports: list[SubagentReport] = field(default_factory=list)
     reports_delivered_up_to: int = 0
+    checkpoint: SubagentSessionCheckpoint | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SubagentSession:
@@ -155,6 +204,11 @@ class SubagentSession:
                 if isinstance(item, dict)
             ],
             reports_delivered_up_to=int(data.get("reports_delivered_up_to") or 0),
+            checkpoint=(
+                SubagentSessionCheckpoint.from_dict(data["checkpoint"])
+                if isinstance(data.get("checkpoint"), dict)
+                else None
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -169,6 +223,7 @@ class SubagentSession:
             "turns": [asdict(turn) for turn in self.turns],
             "reports": [asdict(report) for report in self.reports],
             "reports_delivered_up_to": self.reports_delivered_up_to,
+            "checkpoint": asdict(self.checkpoint) if self.checkpoint is not None else None,
         }
 
 
@@ -195,12 +250,21 @@ class SubagentSessionStore:
         on_report: Callable[[str, SubagentReport], None] | None = None,
         max_consecutive_wakes: int | None = None,
         max_cached_sessions: int | None = None,
+        compaction_trigger_turns: int = DEFAULT_SESSION_COMPACTION_TRIGGER_TURNS,
+        compaction_keep_recent: int = DEFAULT_SESSION_COMPACTION_KEEP_RECENT,
+        max_checkpoint_chars: int = DEFAULT_SESSION_CHECKPOINT_CHARS,
     ) -> None:
         self._base_dir: Path | None = None
         if base_dir is not None:
             self._base_dir = Path(base_dir)
         else:
             self._base_dir = _default_base_dir()
+        self._compaction_trigger_turns = max(2, int(compaction_trigger_turns))
+        self._compaction_keep_recent = max(
+            1,
+            min(int(compaction_keep_recent), self._compaction_trigger_turns - 1),
+        )
+        self._max_checkpoint_chars = max(400, int(max_checkpoint_chars))
         # Live-session cache (LRU): the weak-reference set for the wake
         # budget, mirroring dsh ``spentWakes`` keyed by the exact Agent.
         self._memory: OrderedDict[str, SubagentSession] = OrderedDict()
@@ -542,10 +606,51 @@ class SubagentSessionStore:
                     error=error,
                 )
             )
+            self._maybe_refresh_checkpoint_locked(session)
             session.updated_at = _utc_now_iso()
             self._store_locked(session)
             self._write_locked(session)
             return _copy_session(session)
+
+    def _maybe_refresh_checkpoint_locked(self, session: SubagentSession) -> None:
+        """Create or refresh a verifiable summary of the immutable old prefix."""
+
+        checkpoint = session.checkpoint
+        if checkpoint is not None and not _checkpoint_is_valid(session, checkpoint):
+            checkpoint = None
+            session.checkpoint = None
+        if len(session.turns) < self._compaction_trigger_turns:
+            return
+        if (
+            checkpoint is not None
+            and len(session.turns) - checkpoint.through_turn < self._compaction_trigger_turns
+        ):
+            return
+        through_turn = len(session.turns) - self._compaction_keep_recent
+        if through_turn <= 0:
+            return
+        prefix = session.turns[:through_turn]
+        session.checkpoint = SubagentSessionCheckpoint(
+            summary=_summarize_turn_prefix(prefix, self._max_checkpoint_chars),
+            through_turn=through_turn,
+            source_digest=_turn_prefix_digest(prefix),
+        )
+
+    def compaction_stats(self, session: SubagentSession) -> dict[str, Any]:
+        """Content-free observability for one session's checkpoint lifecycle."""
+
+        checkpoint = session.checkpoint
+        valid = checkpoint is not None and _checkpoint_is_valid(session, checkpoint)
+        return {
+            "schema": "octopus.subagent_session_compaction.v1",
+            "raw_turns_retained": len(session.turns),
+            "checkpoint_valid": valid,
+            "checkpoint_through_turn": checkpoint.through_turn if valid and checkpoint else 0,
+            "recent_turns": len(session.turns) - checkpoint.through_turn
+            if valid and checkpoint
+            else len(session.turns),
+            "strategy": checkpoint.strategy if valid and checkpoint else None,
+        }
 
     def _write_locked(self, session: SubagentSession) -> None:
         path = self._path_for(session.session_id)
@@ -648,7 +753,9 @@ class SubagentSessionStore:
             session = self.get(session_id)
             if session is None:
                 return None
-            effective_delivery = "wakeup" if delivery != "quiet" else "quiet"
+            effective_delivery: Literal["wakeup", "quiet", "queued"] = (
+                "wakeup" if delivery != "quiet" else "quiet"
+            )
             if effective_delivery == "wakeup":
                 with self._live_lock:
                     owner_busy = session_id in self._owner_busy or bool(
@@ -933,18 +1040,37 @@ class SubagentSessionStore:
             bounded = TRANSCRIPT_PROJECTION_ENABLED
         if bounded:
             return self._bounded_transcript_prompt(session, max_projection_bytes)
+        checkpoint = session.checkpoint
+        checkpoint_valid = checkpoint is not None and _checkpoint_is_valid(session, checkpoint)
         lines: list[str] = ["## Previous turns in this subagent session"]
         total = 0
-        for turn in session.turns[-MAX_TRANSCRIPT_TURNS:]:
+        start = max(0, len(session.turns) - MAX_TRANSCRIPT_TURNS)
+        if checkpoint_valid and checkpoint is not None:
+            checkpoint_block = (
+                f"\n### Compacted checkpoint (turns 1-{checkpoint.through_turn})\n"
+                f"{checkpoint.summary}"
+            )
+            lines.append(checkpoint_block)
+            total += len(checkpoint_block)
+            start = checkpoint.through_turn
+        blocks: list[str] = []
+        for turn in session.turns[start:]:
             block = (
                 f"\n### Turn ({'ok' if turn.success else 'failed'})\n"
-                f"**User asked**: {_truncate(turn.prompt, 400)}\n"
-                f"**Subagent answered**: {_truncate(turn.output or turn.error or '(no output)', 1200)}"
+                f"**User asked**: {_head_tail_truncate(turn.prompt, 300)}\n"
+                "**Subagent answered**: "
+                f"{_head_tail_truncate(turn.output or turn.error or '(no output)', 700)}"
             )
+            blocks.append(block)
+        # Keep the newest recent turns when unusually large outputs still
+        # exceed the prompt cap. The checkpoint preserves the old objective.
+        retained: list[str] = []
+        for block in reversed(blocks):
             if total + len(block) > MAX_TRANSCRIPT_CHARS:
-                break
-            lines.append(block)
+                continue
+            retained.append(block)
             total += len(block)
+        lines.extend(reversed(retained))
         return "\n".join(lines)
 
     def _bounded_transcript_prompt(
@@ -957,7 +1083,13 @@ class SubagentSessionStore:
             retain_session_reference,
         )
 
-        events = _surface_events_prefer_journal(session)
+        checkpoint = session.checkpoint
+        checkpoint_valid = checkpoint is not None and _checkpoint_is_valid(session, checkpoint)
+        events = (
+            _surface_events_for_continuation(session)
+            if checkpoint_valid
+            else _surface_events_prefer_journal(session)
+        )
         result = retain_session_reference(
             events,
             session_id=session.session_id,
@@ -988,7 +1120,98 @@ class SubagentSessionStore:
                 f"{stats.original_messages} messages, "
                 f"omitted {stats.omitted_bytes} UTF-8 bytes)_"
             )
+        if checkpoint_valid and checkpoint is not None:
+            lines.append(
+                f"\n_(compacted checkpoint through turn {checkpoint.through_turn}; "
+                f"{len(session.turns)} raw turns retained for audit)_"
+            )
         return "\n".join(lines)
+
+
+def _turn_prefix_digest(turns: list[SubagentSessionTurn]) -> str:
+    payload = [
+        {
+            "prompt": turn.prompt,
+            "output": turn.output,
+            "success": turn.success,
+            "rounds": turn.rounds,
+            "error": turn.error,
+            "timestamp": turn.timestamp,
+        }
+        for turn in turns
+    ]
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _checkpoint_is_valid(
+    session: SubagentSession,
+    checkpoint: SubagentSessionCheckpoint,
+) -> bool:
+    return (
+        0 < checkpoint.through_turn <= len(session.turns)
+        and _turn_prefix_digest(session.turns[: checkpoint.through_turn])
+        == checkpoint.source_digest
+    )
+
+
+def _summarize_turn_prefix(turns: list[SubagentSessionTurn], max_chars: int) -> str:
+    """Deterministic goal/outcome ledger that keeps the first and newest facts."""
+
+    blocks = [
+        (
+            f"- Turn {index + 1} ({'ok' if turn.success else 'failed'}): "
+            f"request={_head_tail_truncate(turn.prompt, 220)!r}; "
+            "outcome="
+            f"{_head_tail_truncate(turn.output or turn.error or '(no output)', 360)!r}"
+        )
+        for index, turn in enumerate(turns)
+    ]
+    if not blocks:
+        return "(no completed turns)"
+    full = "\n".join(blocks)
+    if len(full) <= max_chars:
+        return full
+    first = blocks[0]
+    retained = [first]
+    used = len(first)
+    omitted = max(0, len(blocks) - 1)
+    tail: list[str] = []
+    for block in reversed(blocks[1:]):
+        notice = f"\n- … {max(0, omitted - len(tail))} intermediate turns omitted …"
+        if used + len(notice) + sum(len(item) + 1 for item in tail) + len(block) + 1 > max_chars:
+            continue
+        tail.append(block)
+    tail.reverse()
+    omitted = max(0, len(blocks) - len(tail) - 1)
+    if omitted:
+        retained.append(f"- … {omitted} intermediate turns omitted …")
+    retained.extend(tail)
+    return "\n".join(retained)[:max_chars]
+
+
+def _surface_events_for_continuation(session: SubagentSession) -> list[dict[str, Any]]:
+    checkpoint = session.checkpoint
+    if checkpoint is None or not _checkpoint_is_valid(session, checkpoint):
+        return _surface_events_prefer_journal(session)
+    checkpoint_event = {
+        "type": "user/message",
+        "data": {
+            "source": {"kind": "plugin", "plugin": "compact"},
+            "content": [{"type": "text", "text": checkpoint.summary}],
+        },
+    }
+    recent = SubagentSession(
+        session_id=session.session_id,
+        agent_id=session.agent_id,
+        thread_id=session.thread_id,
+        created_at=session.created_at,
+        updated_at=session.updated_at,
+        owner_actor_id=session.owner_actor_id,
+        tenant_id=session.tenant_id,
+        turns=session.turns[checkpoint.through_turn :],
+    )
+    return [checkpoint_event, *_surface_events_from_turns(recent)]
 
 
 def _surface_events_from_turns(session: SubagentSession) -> list[dict[str, Any]]:
@@ -1100,6 +1323,11 @@ def _copy_session(session: SubagentSession) -> SubagentSession:
         turns=[SubagentSessionTurn(**asdict(turn)) for turn in session.turns],
         reports=[SubagentReport(**asdict(report)) for report in session.reports],
         reports_delivered_up_to=session.reports_delivered_up_to,
+        checkpoint=(
+            SubagentSessionCheckpoint(**asdict(session.checkpoint))
+            if session.checkpoint is not None
+            else None
+        ),
     )
 
 
@@ -1144,6 +1372,19 @@ def _truncate(text: str, max_chars: int) -> str:
     return text[: max_chars - 3] + "…"
 
 
+def _head_tail_truncate(text: str, max_chars: int) -> str:
+    """Keep both context provenance at the head and the actual task at the tail."""
+
+    clean = (text or "").strip()
+    if len(clean) <= max_chars:
+        return clean
+    notice = "\n[… earlier prompt middle omitted …]\n"
+    available = max(0, max_chars - len(notice))
+    head = max(1, available // 3)
+    tail = max(1, available - head)
+    return clean[:head] + notice + clean[-tail:]
+
+
 _STORE: SubagentSessionStore | None = None
 _STORE_LOCK = threading.Lock()
 
@@ -1165,6 +1406,9 @@ def get_subagent_session_store() -> SubagentSessionStore | None:
 
 __all__ = [
     "DEFAULT_MAX_CONSECUTIVE_WAKES",
+    "DEFAULT_SESSION_COMPACTION_KEEP_RECENT",
+    "DEFAULT_SESSION_COMPACTION_TRIGGER_TURNS",
+    "SubagentSessionCheckpoint",
     "SubagentReport",
     "SubagentSession",
     "SubagentSessionStore",

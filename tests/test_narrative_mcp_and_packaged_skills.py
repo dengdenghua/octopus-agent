@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -245,10 +246,15 @@ def test_disable_enable_removes_and_restores_single_mcp_route_and_owned_skills(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "app-data"))
+    # Narrative Studio is delivered as a remotely installable workbench, not
+    # executed from the immutable bundled source tree. Exercise the real
+    # installed-plugin lifecycle instead of bypassing that delivery boundary.
+    external_root = tmp_path / "external-plugins"
+    shutil.copytree(PLUGIN_DIR, external_root / "workbench" / "narrative_studio")
     app = FastAPI()
     registry = SkillRegistry()
     hub = PluginHub(
-        plugin_dir=tmp_path / "external-plugins",
+        plugin_dir=external_root,
         bundled_plugin_dir=PLUGIN_DIR.parent,
         skill_registry=registry,
         fastapi_app=app,

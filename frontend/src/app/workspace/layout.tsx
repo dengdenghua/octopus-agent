@@ -1,5 +1,5 @@
 import { Fragment, lazy, Suspense, useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { Banner } from "@/components/ui/banner";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -24,6 +24,7 @@ import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
 import { useActiveAgentId } from "@/core/agents/active";
 import { workspacePresetForAgent } from "@/core/workspace/workspace-presets";
 import { useWorkbenchAvailabilitySync } from "@/core/workbench/availability";
+import { freshDesignWorkspaceRoute } from "@/core/design/mode-bridge";
 
 const CommandPalette = lazy(() =>
   import("@/components/workspace/command-palette").then((m) => ({
@@ -79,6 +80,7 @@ function StubResponseBannerHost() {
 export default function WorkspaceLayout() {
   const electron = inElectron();
   const navigate = useNavigate();
+  const location = useLocation();
   const activeAgentId = useActiveAgentId() ?? "general";
   const personaThemeId = workspacePresetForAgent(activeAgentId).themeId;
   const [searchParams] = useSearchParams();
@@ -93,6 +95,17 @@ export default function WorkspaceLayout() {
   useEvent(
     "task:new",
     (taskIdentity) => {
+      const taskNonce = uuid();
+      if (location.pathname === "/workspace/design") {
+        navigate(
+          freshDesignWorkspaceRoute({
+            currentSearch: location.search,
+            taskNonce,
+          }),
+          { state: { taskNonce } },
+        );
+        return;
+      }
       navigate(
         taskWorkspaceRoute({
           agentId: taskIdentity?.agentId,
@@ -100,13 +113,13 @@ export default function WorkspaceLayout() {
         }),
         {
           state: {
-            taskNonce: uuid(),
+            taskNonce,
             workspacePath: taskIdentity?.workspacePath,
           },
         },
       );
     },
-    [navigate],
+    [location.pathname, location.search, navigate],
   );
   return (
     <Fragment>

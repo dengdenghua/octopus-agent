@@ -11,14 +11,21 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../");
+const REPO_ROOT = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../../",
+);
 
 describe("realtime protocol enums are generated", () => {
   it("regenerating produces no diff (source of truth is items.py)", () => {
     expect(() =>
       execFileSync(
-        "python3",
-        [resolve(REPO_ROOT, "scripts/gen_realtime_protocol_enums.py"), "--check"],
+        process.env.PYTHON ??
+          (process.platform === "win32" ? "python" : "python3"),
+        [
+          resolve(REPO_ROOT, "scripts/gen_realtime_protocol_enums.py"),
+          "--check",
+        ],
         { cwd: REPO_ROOT, encoding: "utf-8" },
       ),
     ).not.toThrow();

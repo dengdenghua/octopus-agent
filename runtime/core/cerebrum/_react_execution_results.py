@@ -12,6 +12,7 @@ never imports react_loop or react_execution.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from runtime.core.cerebrum.completion_receipt import build_completion_receipt
@@ -32,6 +33,10 @@ _SCOPED_ARTIFACT_WRITE_TOOLS = frozenset(
         "edit_file",
         "multi_edit_file",
     }
+)
+_VERIFICATION_PROBE_ONLY_RE = re.compile(
+    r"(?:^|\s)(?:--version|-V|--help|-h|--collect-only|--co)(?:\s|$)",
+    re.IGNORECASE,
 )
 
 
@@ -57,6 +62,9 @@ def _background_task_info_from_observation(observation: str | None) -> dict[str,
 
 def _verification_kind_from_command(command: str) -> str | None:
     """Classify shell commands that are actually verification steps."""
+
+    if _VERIFICATION_PROBE_ONLY_RE.search(command):
+        return None
 
     text = f" {command.lower()} "
     test_markers = (

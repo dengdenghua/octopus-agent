@@ -100,15 +100,19 @@ function setDocumentHidden(hidden: boolean): void {
 function makeClient(opts: {
   onIncomingRequest?: (req: any) => Promise<unknown>;
   onNotification?: (n: any) => void;
+  onNotificationBatch?: (notes: any[]) => void;
   onOpen?: () => void;
   onClose?: () => void;
+  onError?: (error: Event | Error) => void;
 }) {
   return new RealtimeClient({
     url: "ws://test/api/realtime",
     onIncomingRequest: opts.onIncomingRequest ?? (async () => null),
     onNotification: opts.onNotification ?? (() => {}),
+    onNotificationBatch: opts.onNotificationBatch,
     onOpen: opts.onOpen,
     onClose: opts.onClose,
+    onError: opts.onError,
     initialBackoffMs: 10,
     maxBackoffMs: 50,
   });
@@ -202,6 +206,80 @@ describe("RealtimeClient", () => {
     client.close();
   });
 
+  it("times out a queued request and removes it before the outbox can flush", async () => {
+    vi.useFakeTimers();
+    const client = makeClient({});
+
+    const promise = client.request(
+      "thread/resume",
+      { threadId: "t" },
+      { timeoutMs: 15_000 },
+    );
+    const rejection = expect(promise).rejects.toThrow(
+      /thread\/resume timed out after 15000ms/,
+    );
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    await rejection;
+    expect(
+      (client as unknown as { pending: Map<unknown, unknown> }).pending.size,
+    ).toBe(0);
+
+    client.connect();
+    const ws = FakeWebSocket.lastInstance!;
+    ws.open();
+    expect(ws.sentRaw).toHaveLength(0);
+    client.close();
+  });
+
+  it("ignores a response that arrives after its request timed out", async () => {
+    vi.useFakeTimers();
+    const client = makeClient({});
+    client.connect();
+    const ws = FakeWebSocket.lastInstance!;
+    ws.open();
+
+    const promise = client.request(
+      "thread/events",
+      { threadId: "t" },
+      { timeoutMs: 15_000 },
+    );
+    const rejection = expect(promise).rejects.toThrow(
+      /thread\/events timed out/,
+    );
+    expect(ws.sentRaw).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await rejection;
+
+    expect(() => {
+      ws.receive({ jsonrpc: "2.0", id: 1, result: { events: [] } });
+    }).not.toThrow();
+    expect(
+      (client as unknown as { pending: Map<unknown, unknown> }).pending.size,
+    ).toBe(0);
+    client.close();
+  });
+
+  it("does not impose a default timeout on turn/start", async () => {
+    vi.useFakeTimers();
+    const client = makeClient({});
+    client.connect();
+    const ws = FakeWebSocket.lastInstance!;
+    ws.open();
+
+    const promise = client.request<{ ok: true }>("turn/start", {
+      threadId: "t",
+    });
+    await vi.advanceTimersByTimeAsync(15_001);
+    expect(
+      (client as unknown as { pending: Map<unknown, unknown> }).pending.size,
+    ).toBe(1);
+
+    ws.receive({ jsonrpc: "2.0", id: 1, result: { ok: true } });
+    await expect(promise).resolves.toEqual({ ok: true });
+    client.close();
+  });
+
   it("dispatches notifications to onNotification untouched", async () => {
     const onNotification = vi.fn();
     const client = makeClient({ onNotification });
@@ -223,6 +301,68 @@ describe("RealtimeClient", () => {
     expect(onNotification.mock.calls[0]![0].method).toBe(
       "item/agentMessage/delta",
     );
+    client.close();
+  });
+
+  it("reports malformed websocket frames without throwing or dispatching them", () => {
+    const onNotification = vi.fn();
+    const onIncomingRequest = vi.fn(async () => null);
+    const onError = vi.fn();
+    const client = makeClient({
+      onNotification,
+      onIncomingRequest,
+      onError,
+    });
+    client.connect();
+    const ws = FakeWebSocket.lastInstance!;
+    ws.open();
+
+    const malformedFrames = [
+      "{",
+      "null",
+      "42",
+      "[]",
+      "{}",
+      JSON.stringify({ jsonrpc: "1.0", method: "turn/heartbeat", params: {} }),
+      JSON.stringify({ jsonrpc: "2.0", method: 7, params: {} }),
+      JSON.stringify({ jsonrpc: "2.0", method: "turn/heartbeat" }),
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "turn/heartbeat",
+        params: [],
+      }),
+      JSON.stringify({ jsonrpc: "2.0", id: 1, error: "not-an-error" }),
+    ];
+
+    for (const frame of malformedFrames) {
+      expect(() => ws.receive(frame)).not.toThrow();
+    }
+
+    expect(onError).toHaveBeenCalledTimes(malformedFrames.length);
+    expect(onNotification).not.toHaveBeenCalled();
+    expect(onIncomingRequest).not.toHaveBeenCalled();
+
+    // A bad frame must not poison the socket for later valid traffic.
+    ws.receive({
+      jsonrpc: "2.0",
+      method: "turn/heartbeat",
+      params: { threadId: "t", turnId: "turn" },
+    });
+    expect(onNotification).toHaveBeenCalledTimes(1);
+    client.close();
+  });
+
+  it("contains errors thrown by the malformed-frame observer", () => {
+    const client = makeClient({
+      onError: () => {
+        throw new Error("observer failed");
+      },
+    });
+    client.connect();
+    const ws = FakeWebSocket.lastInstance!;
+    ws.open();
+
+    expect(() => ws.receive("null")).not.toThrow();
     client.close();
   });
 
@@ -260,6 +400,89 @@ describe("RealtimeClient", () => {
       method: "item/agentMessage/delta",
       params: { itemId: "b", delta: "other" },
     });
+    client.close();
+  });
+
+  it("preserves every durable event id so replay can dedupe adjacent deltas", async () => {
+    const onNotification = vi.fn();
+    const client = makeClient({ onNotification });
+    client.connect();
+    const ws = FakeWebSocket.lastInstance!;
+    ws.open();
+
+    ws.receive({
+      jsonrpc: "2.0",
+      method: "item/agentMessage/delta",
+      params: {
+        threadId: "t",
+        turnId: "turn",
+        itemId: "a",
+        delta: "hello",
+        eventId: "e1",
+      },
+    });
+    ws.receive({
+      jsonrpc: "2.0",
+      method: "item/agentMessage/delta",
+      params: {
+        threadId: "t",
+        turnId: "turn",
+        itemId: "a",
+        delta: " world",
+        eventId: "e2",
+      },
+    });
+
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+
+    // If these collapsed into one callback, only e1 would enter the hook's
+    // live-id ledger. A later durable replay of e2 would then append
+    // " world" a second time.
+    expect(onNotification).toHaveBeenCalledTimes(2);
+    expect(onNotification.mock.calls.map(([note]) => note.params)).toEqual([
+      expect.objectContaining({ eventId: "e1", delta: "hello" }),
+      expect.objectContaining({ eventId: "e2", delta: " world" }),
+    ]);
+    client.close();
+  });
+
+  it("delivers a durable frame through one optional batch callback", async () => {
+    const onNotification = vi.fn();
+    const onNotificationBatch = vi.fn();
+    const client = makeClient({ onNotification, onNotificationBatch });
+    client.connect();
+    const ws = FakeWebSocket.lastInstance!;
+    ws.open();
+
+    for (const [eventId, delta] of [
+      ["e1", "a"],
+      ["e2", "b"],
+    ]) {
+      ws.receive({
+        jsonrpc: "2.0",
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: "t",
+          turnId: "turn",
+          itemId: "a",
+          eventId,
+          delta,
+        },
+      });
+    }
+
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+
+    expect(onNotification).not.toHaveBeenCalled();
+    expect(onNotificationBatch).toHaveBeenCalledTimes(1);
+    expect(onNotificationBatch.mock.calls[0]![0]).toEqual([
+      expect.objectContaining({
+        params: expect.objectContaining({ eventId: "e1" }),
+      }),
+      expect.objectContaining({
+        params: expect.objectContaining({ eventId: "e2" }),
+      }),
+    ]);
     client.close();
   });
 
@@ -619,6 +842,74 @@ describe("RealtimeClient", () => {
     client.close();
   });
 
+  it("does not send a late server-request reply on a new socket epoch", async () => {
+    vi.useFakeTimers();
+    let resolveRequest!: (value: unknown) => void;
+    const client = makeClient({
+      onIncomingRequest: () =>
+        new Promise((resolve) => {
+          resolveRequest = resolve;
+        }),
+    });
+    client.connect();
+    const oldSocket = FakeWebSocket.lastInstance!;
+    oldSocket.open();
+    oldSocket.receive({
+      jsonrpc: "2.0",
+      id: 73,
+      method: "item/commandExecution/requestApproval",
+      params: { tool: "slow" },
+    });
+
+    oldSocket.serverClose(1006, "network lost");
+    await vi.advanceTimersByTimeAsync(10);
+    const newSocket = FakeWebSocket.lastInstance!;
+    expect(newSocket).not.toBe(oldSocket);
+    newSocket.open();
+
+    resolveRequest({ action: "accept" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(oldSocket.sentRaw).toHaveLength(0);
+    expect(newSocket.sentRaw).toHaveLength(0);
+    client.close();
+  });
+
+  it("ignores delayed message and close callbacks from an old socket epoch", async () => {
+    vi.useFakeTimers();
+    const onNotification = vi.fn();
+    const onClose = vi.fn();
+    const client = makeClient({ onNotification, onClose });
+    client.connect();
+    const oldSocket = FakeWebSocket.lastInstance!;
+    oldSocket.open();
+
+    oldSocket.serverClose(1006, "network lost");
+    await vi.advanceTimersByTimeAsync(10);
+    const newSocket = FakeWebSocket.lastInstance!;
+    newSocket.open();
+
+    // Browsers can still drain callbacks already queued for the dead
+    // WebSocket. Neither callback may affect the replacement connection.
+    oldSocket.receive({
+      jsonrpc: "2.0",
+      method: "turn/heartbeat",
+      params: { threadId: "t", turnId: "old" },
+    });
+    oldSocket.serverClose(1006, "late duplicate close");
+
+    expect(onNotification).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
+    client.notify("client/say", { text: "new epoch" });
+    expect(newSocket.sentRaw).toHaveLength(1);
+    expect(newSocket.parseSent(0)).toMatchObject({
+      method: "client/say",
+      params: { text: "new epoch" },
+    });
+    client.close();
+  });
+
   it("buffers sends when the socket is not yet open and flushes on connect", async () => {
     const client = makeClient({});
     client.notify("client/say", { text: "early" });
@@ -632,6 +923,53 @@ describe("RealtimeClient", () => {
     ws.open();
     expect(ws.sentRaw.length).toBe(1);
     expect(ws.parseSent(0)).toMatchObject({ method: "client/say" });
+    client.close();
+  });
+
+  it("rejects and forgets a queued request evicted by outbox backpressure", async () => {
+    const client = makeClient({});
+    const rejection = vi.fn();
+    void client.request("turn/start", { input: "oldest" }).catch(rejection);
+
+    // The request is the oldest of 257 entries and is evicted before a
+    // socket exists. Its Promise must not remain pending forever.
+    for (let index = 0; index < 256; index += 1) {
+      client.notify("client/say", { index });
+    }
+    await Promise.resolve();
+
+    expect(rejection).toHaveBeenCalledTimes(1);
+    expect(rejection.mock.calls[0]![0]).toMatchObject({
+      name: "Error",
+      message: expect.stringMatching(/backpressure.*outbox capacity/i),
+    });
+    expect(
+      (client as unknown as { pending: Map<unknown, unknown> }).pending.size,
+    ).toBe(0);
+
+    client.connect();
+    const ws = FakeWebSocket.lastInstance!;
+    ws.open();
+    expect(ws.sentRaw).toHaveLength(256);
+    expect(
+      ws.sentRaw.map((_, index) => ws.parseSent(index)),
+    ).not.toContainEqual(expect.objectContaining({ id: 1 }));
+    client.close();
+  });
+
+  it("drops the oldest queued notification when the outbox is full", () => {
+    const client = makeClient({});
+    for (let index = 0; index < 257; index += 1) {
+      client.notify("client/say", { index });
+    }
+
+    client.connect();
+    const ws = FakeWebSocket.lastInstance!;
+    ws.open();
+
+    expect(ws.sentRaw).toHaveLength(256);
+    expect(ws.parseSent(0)).toMatchObject({ params: { index: 1 } });
+    expect(ws.parseSent(255)).toMatchObject({ params: { index: 256 } });
     client.close();
   });
 

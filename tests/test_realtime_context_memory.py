@@ -214,10 +214,11 @@ def test_failed_turn_answer_anchor_kept_in_next_react_context(tmp_path) -> None:
     # The user prompt, the failure marker and the progress anchor survive.
     assert "神经网络真的有用么" in texts
     assert any("上一轮任务失败" in (t or "") for t in texts)
-    anchor = next((t for t in texts if "上一轮任务进行到" in (t or "")), None)
+    anchor = next((t for t in texts if "Internal recovery context" in (t or "")), None)
     assert anchor is not None
     assert "任务被环境阻塞" in anchor
     assert "pnpm typecheck" in anchor
+    assert "后文已省略" not in anchor
 
 
 def test_failed_turn_without_answer_injects_no_progress_anchor(tmp_path) -> None:

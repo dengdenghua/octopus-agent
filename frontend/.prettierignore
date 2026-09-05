@@ -1,13 +1,18 @@
-# Dependencies & build output
-node_modules
-dist
+# Dependencies and generated build output
+node_modules/
+dist/
+release/
+playwright-report/
+test-results/
+coverage/
+.vite/
 
-# Generated test / debug artifacts
-test-results
-output
+# Local visual-review and tool output
+.codex-logs/
+output/
 
-# Pre-built / generated CSS
-src/styles/tailwind-prebuilt.css
-
-# Lock file (kept as-is for deterministic installs)
+# Generated or externally maintained files
 pnpm-lock.yaml
+src/core/api/openapi-types.ts
+src/core/realtime/protocol-enums.generated.ts
+src/styles/tailwind-prebuilt.css

@@ -1,6 +1,6 @@
 """Message feedback collection system.
 
-DSH P2 feature parity: user feedback on assistant messages for RLHF data collection.
+Octopus Native feedback collection for assistant-message evaluation data.
 
 Architecture:
 - Append-only JSONL storage per thread

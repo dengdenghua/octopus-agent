@@ -6,7 +6,7 @@ from datetime import UTC
 from unittest.mock import patch
 
 from runtime.safety.evolution.canary import CanaryConfig, CanaryManager, CanaryPhase
-from runtime.safety.evolution.drift_monitor import DriftMonitor
+from runtime.safety.evolution.drift_monitor import DriftEvent, DriftMonitor
 from runtime.safety.evolution.federation import FederationConfig, FederationHub, SharedProposal
 from runtime.safety.evolution.fitness import (
     FitnessReport,
@@ -244,6 +244,24 @@ class TestComputeFitnessRegression:
         assert captured[0].agent_id == report.agent_id
         assert captured[0].verdict == report.verdict
 
+    def test_compute_fitness_read_only_mode_skips_event(self, monkeypatch):
+        from runtime.safety.evolution import fitness as fitness_module
+
+        published: list[object] = []
+        monkeypatch.setattr(
+            fitness_module,
+            "_publish_fitness_event",
+            published.append,
+        )
+
+        report = fitness_module.compute_fitness(
+            "read_only_agent",
+            publish_event=False,
+        )
+
+        assert report.agent_id == "read_only_agent"
+        assert published == []
+
 
 # ═══════════════════════════════════════════════════════════
 # Integration: Federation + Ledger
@@ -317,6 +335,57 @@ class TestDriftFitnessStrategyIntegration:
         )
         decision = engine.decide(report)
         assert decision.action == "hold"
+
+    def test_drift_monitor_read_only_mode_skips_events(self, monkeypatch):
+        from runtime.safety.evolution import drift_monitor as drift_module
+
+        published: list[object] = []
+        monkeypatch.setattr(
+            drift_module,
+            "_publish_drift_events",
+            lambda events, **_kwargs: published.extend(events),
+        )
+        monitor = DriftMonitor("read_only_agent")
+
+        with (
+            patch.object(monitor, "_check_soul_drift", return_value=None),
+            patch.object(monitor, "_check_genome_drift", return_value=None),
+            patch.object(monitor, "_check_score_drift", return_value=None),
+        ):
+            report = monitor.check(publish_events=False)
+
+        assert report.agent_id == "read_only_agent"
+        assert published == []
+
+    def test_published_drift_event_keeps_source_agent_id(self, monkeypatch):
+        from runtime.platform.process import eventbus
+
+        published: list[object] = []
+        monkeypatch.setattr(
+            eventbus,
+            "publish_event",
+            lambda event, **_kwargs: published.append(event),
+        )
+        monitor = DriftMonitor("researcher")
+        change = DriftEvent(
+            kind="soul_change",
+            severity="critical",
+            detail="SOUL.md changed",
+            ts="2026-08-26T00:00:00",
+        )
+
+        with (
+            patch.object(monitor, "_check_soul_drift", return_value=change),
+            patch.object(monitor, "_check_genome_drift", return_value=None),
+            patch.object(monitor, "_check_score_drift", return_value=None),
+        ):
+            monitor.check()
+
+        assert len(published) == 1
+        event = published[0]
+        assert isinstance(event, eventbus.DriftDetected)
+        assert event.agent_id == "researcher"
+        assert event.drift_kind == "soul_change"
 
 
 # ═══════════════════════════════════════════════════════════

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -167,6 +169,32 @@ async def test_proxy_websocket_sends_error_on_upstream_failure() -> None:
     assert any("upstream failed" in m for m in client.received)
 
 
+@pytest.mark.asyncio
+async def test_proxy_websocket_forwards_remote_auth_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backend = RemoteBackend(id="x", name="x", url="https://example.com")
+    client = _FakeClientWs([])
+    upstream = _FakeUpstream([])
+    captured: dict[str, Any] = {}
+
+    def connect(url: str, **kwargs: Any) -> _FakeUpstream:
+        captured.update({"url": url, **kwargs})
+        return upstream
+
+    monkeypatch.setattr(
+        "runtime.safety.auth.url_guard.check_url",
+        lambda *_args, **_kwargs: SimpleNamespace(allow=True, resolved_ip=None),
+    )
+    monkeypatch.setitem(sys.modules, "websockets", SimpleNamespace(connect=connect))
+
+    await proxy_websocket(backend, client, auth_token="remote-secret")
+
+    assert captured["additional_headers"] == {
+        "Authorization": "Bearer remote-secret",
+    }
+
+
 # ─── /api/remote-backends/{id}/realtime endpoint ────────────
 
 
@@ -214,6 +242,59 @@ def test_realtime_ws_404_for_unknown_backend(
         assert "not found" in msg["params"]["message"]
 
 
+def test_realtime_ws_uses_ssh_tunnel_and_closes_it(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    _reset_flags: None,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_FF_UI_REMOTE_TRANSPORT", "1")
+    ff.reload()
+    created = client.post(
+        "/api/remote-backends",
+        json={
+            "name": "private",
+            "url": "http://127.0.0.1:8000",
+            "ssh": {"host": "bastion.example.com"},
+        },
+    )
+    backend_id = created.json()["backend"]["id"]
+    events: list[str] = []
+
+    class _Forwarder:
+        def __init__(self, backend: RemoteBackend) -> None:
+            assert backend.ssh is not None
+
+        def start(self) -> RemoteBackend:
+            events.append("start")
+            return RemoteBackend(
+                id=backend_id,
+                name="private",
+                url="http://127.0.0.1:43123",
+                tunnel_active=True,
+            )
+
+        def close(self) -> None:
+            events.append("close")
+
+    async def _proxy(backend: RemoteBackend, ws: Any, **_kwargs: Any) -> None:
+        assert backend.tunnel_active is True
+        assert backend.url == "http://127.0.0.1:43123"
+        await ws.send_text(json.dumps({"ok": True}))
+        await ws.close()
+
+    monkeypatch.setattr(
+        "runtime.sensing.gateway.remote_backends_router.SshTunnelForwarder",
+        _Forwarder,
+    )
+    monkeypatch.setattr(
+        "runtime.sensing.gateway.remote_backends_router.proxy_websocket",
+        _proxy,
+    )
+    with client.websocket_connect(f"/api/remote-backends/{backend_id}/realtime") as websocket:
+        assert json.loads(websocket.receive_text()) == {"ok": True}
+    assert events == ["start", "close"]
+
+
 def test_realtime_ws_requires_auth_when_enabled(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -244,17 +325,10 @@ def test_realtime_ws_requires_auth_when_enabled(
     ):
         ws.receive_text()
 
-    with (
-        pytest.raises(WebSocketDisconnect),
-        client.websocket_connect("/api/remote-backends/missing/realtime?token=sk-alice") as ws,
-    ):
-        ws.receive_text()
-
     with client.websocket_connect(
         "/api/remote-backends/missing/realtime",
-        subprotocols=["bearer", "sk-alice"],
+        headers={"Authorization": "Bearer sk-alice"},
     ) as ws:
-        assert ws.accepted_subprotocol == "bearer"
         msg = json.loads(ws.receive_text())
         assert msg["method"] == "proxy/error"
         assert "not found" in msg["params"]["message"]

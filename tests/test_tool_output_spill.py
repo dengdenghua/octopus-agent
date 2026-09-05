@@ -18,6 +18,7 @@ from runtime.execution.tool_engine.tool_output_spill import (
     SpillRef,
     encode_segment,
     head_tail_preview,
+    is_current_session_spill_path,
     maybe_spill_text,
     save_text_spill,
     session_spill_dir,
@@ -30,6 +31,7 @@ from runtime.execution.tool_engine.tool_protocol import (
 )
 from runtime.platform.process.session import Session, session_scope
 from runtime.safety.auth import TrustEngine
+from runtime.safety.auth.path_guard import check_path
 from runtime.sensing.gateway import _tool_bridge_exec as _tbe
 
 SPILL_SESSION = "test-spill-session"
@@ -125,6 +127,47 @@ def test_save_text_spill_raises_on_storage_failure(tmp_path) -> None:
             suggested_name="x.txt",
             root=str(blocker),
         )
+
+
+def test_current_session_can_read_its_spill_outside_workspace(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    spill_root = tmp_path / "spill"
+    workspace.mkdir()
+    with session_scope(Session(thread_id="owner-thread")):
+        ref = save_text_spill(
+            session_key="owner-thread",
+            content="full tool output",
+            suggested_name="result.txt",
+            root=str(spill_root),
+        )
+        assert is_current_session_spill_path(ref.locator)
+        assert check_path(ref.locator, sandbox_dir=workspace, must_exist=True).allow
+
+
+def test_spill_capability_is_not_shared_with_other_sessions(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    ref = save_text_spill(
+        session_key="owner-thread",
+        content="private tool output",
+        suggested_name="result.txt",
+        root=str(tmp_path / "spill"),
+    )
+    with session_scope(Session(thread_id="other-thread")):
+        assert not is_current_session_spill_path(ref.locator)
+        verdict = check_path(ref.locator, sandbox_dir=workspace, must_exist=True)
+        assert not verdict.allow
+        assert "escapes_sandbox" in verdict.reason
+
+
+def test_arbitrary_external_file_is_not_a_spill_capability(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    external = tmp_path / "ordinary.txt"
+    external.write_text("not a spill", encoding="utf-8")
+    with session_scope(Session(thread_id="owner-thread")):
+        assert not is_current_session_spill_path(external)
+        assert not check_path(external, sandbox_dir=workspace).allow
 
 
 # ═══════════════════════════════════════════════════════════
@@ -459,6 +502,6 @@ def test_react_path_falls_back_to_prune_when_spill_disabled(monkeypatch) -> None
 def test_spill_master_switch_reads_env_at_import() -> None:
     from runtime.execution.tool_engine import tool_output_spill
 
-    assert (os.environ.get("OCTOPUS_TOOL_SPILL", "0") != "0") == (
+    assert (os.environ.get("OCTOPUS_TOOL_SPILL", "1") != "0") == (
         tool_output_spill.TOOL_RESULT_SPILL_ENABLED
     )

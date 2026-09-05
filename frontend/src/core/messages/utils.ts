@@ -657,6 +657,27 @@ export function sanitizeLegacyGuardDiagnostic(content: string): string {
   ].join("\n\n");
 }
 
+const LEGACY_INTERNAL_AGENT_ERROR_RE =
+  /^\s*(?:`{1,3})?\[(?:planner|runner|subagent) error\]/i;
+
+/**
+ * Old group-fanout turns persisted model-runner diagnostics as ordinary chat
+ * text and sometimes marked the corresponding member lane completed. Keep the
+ * immutable event log intact for audit, but never expose that internal parser
+ * protocol in the conversation UI.
+ */
+export function isLegacyInternalAgentError(content: unknown): boolean {
+  return (
+    typeof content === "string" && LEGACY_INTERNAL_AGENT_ERROR_RE.test(content)
+  );
+}
+
+export function sanitizeLegacyInternalAgentError(content: string): string {
+  return isLegacyInternalAgentError(content)
+    ? "⚠️ 该成员当时未能生成有效回复。"
+    : content;
+}
+
 function stripReactProtocol(content: string): string {
   let cleaned = content
     .replace(REACT_ACTION_BLOCK_RE, "")

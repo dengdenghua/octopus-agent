@@ -96,7 +96,8 @@ def create_team_rooms_router(
     room_message_store: Any = None,
     room_projection: Callable[[dict[str, Any]], None] | None = None,
     room_delete_projection: Callable[[str], None] | None = None,
-    room_message_projection: Callable[[str, dict[str, Any]], None] | None = None,
+    room_message_projection: Callable[[str, dict[str, Any]], int | None] | None = None,
+    room_receipt_projection: Callable[[str, dict[str, Any]], Any] | None = None,
     room_message_provider: Callable[[str, int, int, str], list[dict[str, Any]]] | None = None,
     invitation_store: TeamInvitationStore | None = None,
     project_store: Any = None,
@@ -921,6 +922,7 @@ def create_team_rooms_router(
         twin_responder=twin_responder,
         message_store=room_message_store,
         message_projection=room_message_projection,
+        receipt_projection=room_receipt_projection,
     )
 
     @router.get("/api/teams/{team_id}/messages")

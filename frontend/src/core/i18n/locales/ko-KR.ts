@@ -220,11 +220,20 @@ export const koKR: Translations = {
       ]
         .filter(Boolean)
         .join(" · "),
+    agentResponseSummary: (total, responded, errors) =>
+      [
+        `멤버 ${total}명`,
+        responded > 0 ? `${responded}명 응답` : "",
+        errors > 0 ? `${errors}개 오류` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
     processDetails: "자세히 열기",
     completedSteps: (n: number) => `${n}개 단계 완료`,
     completedThings: (n: number) => `${n}건 완료`,
     statusViewing: "실행 중",
     statusCompleted: "완료됨",
+    statusResponded: "응답함",
     statusError: "오류",
     statusWaiting: "대기 중",
     assistant: "어시스턴트",
@@ -247,8 +256,10 @@ export const koKR: Translations = {
     showMoreAgents: (n: number) => `다른 에이전트 ${n}개 더 보기`,
     collapseAgents: "에이전트 접기",
     viewReport: "보고서 보기",
+    viewReply: "답변 보기",
     viewReportError: "실패 사유 보기",
     collapseReport: "보고서 접기",
+    collapseReply: "답변 접기",
     latestTool: "최근 작업",
     execution: "작업",
     verification: "검증",
@@ -274,6 +285,7 @@ export const koKR: Translations = {
     makeSimilar: "비슷한 것 만들기",
     makeSimilarHint: "같은 프롬프트로 새 작업 시작",
     retryTask: "재시도",
+    retryingTask: "다시 시도 중…",
     retryTaskHint: "같은 프롬프트로 새 작업 시작",
     taskFailedReason: "실패 사유",
     resultUrl: "결과 링크",
@@ -448,7 +460,7 @@ export const koKR: Translations = {
       "파일 변경은 자동으로 실행되며, 명령 실행 전에는 확인합니다.",
     permissionModeBypass: "완전 액세스",
     permissionModeBypassDesc:
-      "모든 작업을 확인 없이 자동 실행합니다. 최대 권한입니다.",
+      "로컬 실행과 전체 네트워크를 포함하며 모든 작업을 확인 없이 실행합니다.",
     permissionModeBypassConfirmTitle: "완전 액세스로 전환할까요?",
     permissionModeBypassConfirmDesc:
       "명령, 파일 변경 및 Git 작업의 일반 확인을 건너뜁니다. 안전 차단은 유지되지만 오작동 위험이 높아집니다.",
@@ -458,6 +470,10 @@ export const koKR: Translations = {
     seedWorkflow: "워크플로를 생성하거나 실행하세요: ",
     send: "보내기",
     stop: "중지",
+    stopping: "중지 중…",
+    restoringConnection: "연결을 복구 중… 초안은 안전하게 보관됩니다.",
+    connectionRecoveryFailed: "연결을 복구하지 못했습니다.",
+    retryConnection: "다시 시도",
     projectModeLabel: "프로젝트 연결됨",
     projectModeHint:
       "로컬 폴더가 연결되어 있습니다. 이 스레드는 코드 작업에 프로젝트 컨텍스트를 사용합니다.",
@@ -515,6 +531,56 @@ export const koKR: Translations = {
     kindRoomMessage: "룸 메시지",
     kindRoomTask: "룸 작업",
     linkedRoom: "연결된 룸",
+    deliveryPending: (n) => `${n}개의 멤버 답변이 전송 대기 중`,
+    deliveryWaiting: "복구 중",
+    deliveryFailed: "전송 실패",
+    deliveryRetry: "재시도",
+    deliveryDismiss: "이 답변 무시",
+    deliveryUnknownMember: "협업 멤버",
+    deliveryMonitorUnavailable:
+      "답변 전송 상태를 일시적으로 불러올 수 없습니다",
+    collectorTitle: "멤버 실행",
+    collectorProgress: (completed, total) => `${completed}/${total} 응답`,
+    collectorSuccess: "완료",
+    collectorFailed: "미완료",
+    collectorWaiting: "대기 중",
+    collectorRetrying: "재시도 중",
+    collectorCancelled: "취소됨",
+    collectorRetryFailedOnly: "실패한 멤버만 재시도",
+    collectorRetryFailedRuns: (n) => `실패한 실행 재시도 (${n})`,
+    collectorStop: "협업 중지",
+    collectorStopRuns: (n) => `진행 중인 협업 중지 (${n})`,
+    collectorStopFailed: "협업을 중지하지 못했습니다",
+    collectorSteer: "방향 수정",
+    collectorSteerMemberLabel: (name) => `${name} 방향 수정`,
+    collectorSteerPlaceholder: (name) => `${name}에게만 보낼 새 지시…`,
+    collectorSteerSubmit: "수정 전송",
+    collectorSteerCancel: "취소",
+    collectorSteerFailed:
+      "수정을 보내지 못했습니다. 멤버 상태가 변경되었을 수 있습니다",
+    collectorStopMember: "이 멤버 중지",
+    collectorStopMemberLabel: (name) => `${name} 중지`,
+    collectorStopMemberFailed:
+      "멤버를 중지하지 못했습니다. 상태가 변경되었을 수 있습니다",
+    collectorRetryFailed:
+      "재시도를 시작할 수 없습니다. 잠시 후 다시 시도하세요.",
+    collectorQueueFull:
+      "백그라운드 작업이 많습니다. 실패 상태는 유지되므로 잠시 후 다시 시도하세요.",
+    collectorAttempts: (n) => `${n}회 시도`,
+    collectorAttempt: (n) => `${n}번째 시도`,
+    collectorContextDelivery: (mode, sent, avoided) =>
+      mode === "cursor_only"
+        ? `구성원 메모리 재사용 · 중복 ${avoided} tokens 절감`
+        : mode === "incremental"
+          ? `증분 컨텍스트 ${sent} tokens · ${avoided} 절감`
+          : `전체 컨텍스트 ${sent} tokens`,
+    collectorContextPlan: (mode, selected, full, reductionPercent) =>
+      `컨텍스트 조정 · ${mode === "recall" ? "장기 기록 회상" : "필요한 내용만 선택"} · ${selected}/${full} tokens · ${reductionPercent}% 절약`,
+    collectorMemoryCheckpoint: (throughTurn, rawTurns) =>
+      `장기 기억 ${throughTurn}턴까지 정리 · 원본 ${rawTurns}턴 보존`,
+    collectorArchived: "보관됨",
+    collectorMonitorUnavailable:
+      "멤버 실행 상태를 일시적으로 불러올 수 없습니다",
   },
 
   // Collaboration Mode
@@ -1659,6 +1725,22 @@ export const koKR: Translations = {
     nameAria: "백엔드 이름",
     urlPlaceholder: "https://host:port",
     urlAria: "백엔드 URL",
+    tokenPlaceholder: "액세스 토큰(선택 사항)",
+    tokenAria: "백엔드 액세스 토큰",
+    authConfigured: "인증됨",
+    useSsh: "SSH를 통해 연결",
+    sshHint:
+      "신뢰할 수 있는 SSH 호스트에서만 런타임 URL에 접근할 수 있을 때 사용합니다.",
+    sshHostPlaceholder: "SSH 호스트",
+    sshHostAria: "SSH 호스트",
+    sshUserPlaceholder: "SSH 사용자(선택 사항)",
+    sshUserAria: "SSH 사용자",
+    sshPortPlaceholder: "SSH 포트",
+    sshPortAria: "SSH 포트",
+    sshIdentityPlaceholder: "키 파일(선택 사항)",
+    sshIdentityAria: "SSH 키 파일",
+    directTransport: "직접 연결",
+    sshTransport: "SSH 터널",
     add: "Add",
     adding: "추가 중...",
     loading: "로드 중...",
@@ -2260,8 +2342,8 @@ export const koKR: Translations = {
     pairedGroups: "페어링된 그룹",
     pendingRequests: "대기 중인 요청",
     noGroupPairing: "그룹 페어링 없음",
-    configureAgent: "에이전트 구성",
-    configureAgentHint: "이 채널의 메시지를 처리할 에이전트를 선택하세요",
+    configureAgent: "응답 대상 구성",
+    configureAgentHint: "메시지를 처리할 에이전트 또는 AI 팀 선택",
     agentConfigured: "에이전트 구성됨",
     selectAgent: "에이전트 선택",
     selectAgentTitle: (channel: string) => `${channel}의 에이전트 선택`,
@@ -2348,20 +2430,36 @@ export const koKR: Translations = {
     toastBindFailed: "연결 실패",
     toastAgentUnbound: "에이전트 연결 해제됨",
     toastUnbindFailed: "연결 해제 실패",
-    assignDialogTitle: (name: string) => `"${name}"에 에이전트 지정`,
+    assignDialogTitle: (name: string) => `"${name}" 응답 대상 선택`,
     assignDialogDesc:
-      "이 채널의 메시지는 선택한 에이전트가 처리합니다. 나중에 교체하거나 해제할 수 있습니다.",
+      "단일 에이전트 또는 병렬 협업 후 함께 답하는 AI 팀을 선택할 수 있습니다.",
     noAgentsAvailable:
-      "사용 가능한 에이전트가 없습니다. 먼저 에이전트 페이지에서 만드세요.",
-    unassignCurrent: "현재 에이전트 연결 해제",
-    unassignConfirmTitle: "에이전트 연결 해제",
+      "사용 가능한 에이전트나 AI 팀이 없습니다. 먼저 생성하세요.",
+    searchRespondersPlaceholder: "에이전트, 팀 또는 멤버 검색…",
+    aiTeams: "AI 팀",
+    singleAgents: "단일 에이전트",
+    teamMembers: (n: number) => `${n}명이 병렬로 협업`,
+    toastTeamBound: "AI 팀 연결됨",
+    unassignCurrent: "현재 응답 대상 연결 해제",
+    unassignConfirmTitle: "응답 대상 연결 해제",
     unassignConfirmDescription:
-      "이 채널의 메시지는 더 이상 에이전트가 처리하지 않습니다. 언제든 다시 연결할 수 있습니다.",
+      "연결 해제 후 이 채널은 기본 메시지 처리 방식으로 돌아갑니다.",
     howToSetup: "연결 방법",
-    clickToChangeAgent: "클릭해 에이전트 변경",
+    clickToChangeAgent: "클릭해 응답 대상 변경",
     handlingMessages: "이 채널의 메시지 처리 중",
+    handlingMessagesAsTeam: "멤버가 병렬로 협업해 하나로 응답",
     rebindOrUnbind: "다시 연결 / 해제",
     helpDocsComingSoon: "도움말 문서가 곧 제공됩니다",
+    healthHealthy: "정상 작동",
+    healthDegraded: "성능 저하",
+    healthUnknown: "확인 안 됨",
+    healthUnsupported: "능동 상태 확인 미지원",
+    healthChecking: "확인 중",
+    runHealthCheck: "확인",
+    healthCheckPassed: "채널이 정상 작동 중입니다",
+    healthCheckFailed: "채널 상태 확인에 실패했습니다",
+    activeThreads: (n: number) => `활성 스레드 ${n}개`,
+    duplicatesBlocked: (n: number) => `중복 ${n}건 차단`,
   },
 
   // Pairing Authorization
@@ -2762,6 +2860,7 @@ export const koKR: Translations = {
 
   chatPage: {
     stopNote: "사용자가 채팅 입력에서 중지를 클릭했습니다",
+    stopFailed: "실행을 중지하지 못했습니다. 다시 시도해 주세요.",
   },
 
   // Agents
@@ -3139,6 +3238,7 @@ export const koKR: Translations = {
 
   // Conversation
   conversation: {
+    messageLog: "대화 메시지",
     noMessages: "아직 메시지 없음",
     startConversation: "대화를 시작하면 여기에 메시지가 표시됩니다",
     noArtifactSelected: "선택된 아티팩트 없음",
@@ -5184,9 +5284,9 @@ export const koKR: Translations = {
   modes: {
     builder: "Builder",
     coder: "Coder",
-    develop: "Develop",
+    develop: "일반",
     audit: "Audit",
-    uxui: "UX/UI",
+    uxui: "디자인",
     architect: "Architect",
     ultra: "Ultra",
     standard: "표준",
@@ -5194,9 +5294,9 @@ export const koKR: Translations = {
     admin: "Admin",
     builderTooltip: "새 프로젝트/빈 폴더: 먼저 실행 가능한 슬라이스를 구축",
     coderTooltip: "기존 코드베이스: 구조 검사, 작은 수정, 검증",
-    developTooltip: "자동 신규/기존 프로젝트 처리를 통한 개발 구현",
+    developTooltip: "요청에서 구현, 검토, 분석, 조사를 자동 판단하는 일반 작업",
     auditTooltip: "증거, 위험, 우선순위가 있는 품질 감사",
-    uxuiTooltip: "UX/UI: 흐름, 레이아웃, 시각, 회귀 검토",
+    uxuiTooltip: "흐름, 레이아웃, 시각, 상호작용 회귀를 다루는 디자인 작업",
     architectTooltip: "아키텍처/마이그레이션: 영향 평가 및 단계별 작업",
     ultraTooltip:
       "감사 · 최고 오케스트레이션: UltraCode 스타일의 다단계 워크플로 스케줄링, 검증, 검토",
@@ -5204,7 +5304,7 @@ export const koKR: Translations = {
     adminTooltip: "시스템 관리자 — 최고 권한, 모든 Agent와 설정을 관리",
     builderDesc: "새 프로젝트",
     coderDesc: "기존 코드베이스",
-    developDesc: "빌드, 수정, 반복",
+    developDesc: "구현, 검토, 분석, 조사",
     auditDesc: "품질 및 위험",
     uxuiDesc: "경험과 시각",
     architectDesc: "Architecture",
@@ -5214,7 +5314,7 @@ export const koKR: Translations = {
     coderEffect:
       "먼저 기존 구조를 읽고, 작은 단계로 수정하고, 관련 검사를 실행합니다.",
     developEffect:
-      "프로젝트 스캔이 신규/기존을 처리합니다; 작은 검증 단계로 구현합니다.",
+      "요청에서 작업 방식을 판단하고 필요한 변경을 작게 실행한 뒤 검증합니다.",
     auditEffect:
       "먼저 읽고, 그 다음 증거, 심각도, 제안된 수정과 함께 문제를 보고합니다.",
     uxuiEffect:
@@ -6089,6 +6189,7 @@ export const koKR: Translations = {
     firstResponseSlow: "첫 응답이 평소보다 늦어지고 있습니다",
     modelWorking: "생각 중...",
     thinkingCompleted: "생각 완료",
+    runEnded: "처리가 종료되었습니다",
     slowResponse: "계속 진행 중입니다. 조금 더 걸리고 있습니다",
     reconnecting: "연결이 끊겨 다시 돌아오는 중입니다",
     processing: "처리 중",
@@ -6372,6 +6473,10 @@ export const koKR: Translations = {
     status: "상태",
     nonTextContent: "[텍스트 외 콘텐츠]",
     binaryContent: "[바이너리 콘텐츠]",
+    taskHistory: "원격 작업",
+    noTasks: "원격 작업이 없습니다",
+    refreshTask: "작업 상태 새로고침",
+    cancelTask: "작업 취소",
   },
 
   // Live Tool Timeline
@@ -7953,7 +8058,7 @@ export const koKR: Translations = {
   sandboxSettings: {
     title: "샌드박스 및 실행 권한",
     description:
-      "실행 환경과 권한 수준은 독립적인 두 축으로 자유롭게 조합할 수 있습니다. 예: '샌드박스 + 완전 액세스'는 격리 환경에서 완전 자동, '로컬 + 편집 수락'은 이 머신에서 실행하되 명령은 확인을 요청합니다.",
+      "실행 환경, 확인 및 네트워크는 보통 별도로 설정할 수 있지만 완전 액세스는 로컬 실행과 전체 네트워크를 켜는 포함 프리셋입니다.",
     activeTag: "현재",
     scopeNote:
       "변경 사항은 로컬 설정에 저장되며 이후의 모든 새 작업에 적용됩니다. 실행 중인 작업에는 영향을 주지 않습니다.",
@@ -8004,7 +8109,8 @@ export const koKR: Translations = {
       },
       bypassPermissions: {
         label: "완전 액세스",
-        description: "모든 작업을 확인 없이 자동 실행합니다. 최대 권한입니다.",
+        description:
+          "로컬 실행과 전체 네트워크를 포함하며 모든 작업을 확인 없이 실행합니다.",
       },
     },
     networkTitle: "네트워크 액세스",

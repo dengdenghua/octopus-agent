@@ -9,6 +9,7 @@ execution paths.
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -28,12 +29,25 @@ from runtime.protocol import ServerMethod, Turn
 from runtime.protocol.items import ExecutionSnapshot
 from runtime.sensing.gateway.realtime_execution_context import RealtimeExecutionContext
 
+_CODING_PURPOSE = re.compile(
+    r"代码|编程|前端|后端|源码|单元测试|接口实现|修复.*(?:报错|错误|漏洞)|"
+    r"(?:开发|实现|搭建|构建).*(?:网站|网页|应用|程序|脚本|接口)|"
+    r"\b(?:code|coding|debug|refactor|typescript|javascript|python|pytest|"
+    r"frontend|backend|bug|repository|unit\s+tests?)\b|"
+    r"\b(?:build|implement|develop)\b.*\b(?:app|website|api|script)\b",
+    re.IGNORECASE,
+)
+
 
 def is_coding_task(intent: ParsedIntent) -> bool:
     """Use explicit work modes and parsed intent, not an extra model hop."""
     context = intent.user_context or {}
     if intent.intent_type in {"refactor", "debug"}:
         return True
+    # The unified General/Design selector describes a work surface. It no
+    # longer implies a coding task, even when that surface grants code tools.
+    if context.get("agent_mode") in {"develop", "uxui"}:
+        return bool(_CODING_PURPOSE.search(intent.raw or intent.normalized_goal or ""))
     # Personal space grants code tools to general/office work too. That
     # capability is not evidence that the user asked for a coding task.
     if context.get("personal_mode") in {"general", "research"}:
@@ -102,6 +116,7 @@ async def select_turn_execution(
     topology_id: str | None,
     codex_partner: bool,
     reflection_fast_path: bool,
+    coordinated: bool = False,
 ) -> ExecutionRoute:
     requested = getattr(turn.params, "execution_engine", "auto")
     route = select_execution_route(
@@ -112,6 +127,7 @@ async def select_turn_execution(
         reflection_fast_path=reflection_fast_path,
         requested_engine=None if requested == "auto" else EngineId(requested),
         coding_task=is_coding_task(intent),
+        coordinated=coordinated,
     )
     if route.engine is EngineId.OCTOPUS:
         return route

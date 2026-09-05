@@ -23,7 +23,9 @@ export interface UseStreamResult<TState extends Record<string, unknown>> {
   isLoading: boolean;
   isThreadLoading?: boolean;
   error: Error | undefined;
-  stop: () => void;
+  /** Stop the active run. Realtime streams return a Promise once the server
+   * acknowledges the interrupt; legacy adapters may still complete inline. */
+  stop: () => void | Promise<void>;
   refresh: () => Promise<void>;
   submit: (
     input: Record<string, unknown>,

@@ -260,7 +260,12 @@ def assess_approval_risk(
     # capability. Treat any mcp_* tool as at least medium, and infer a
     # dangerous capability from danger keywords in the name (e.g.
     # ``mcp_<server>_exec_shell`` / ``..._write_file`` / ``..._upload``).
-    if name.startswith(("mcp_", "mcp__")):
+    # ``use_chatgpt_connector`` hands a free-form instruction to a third-party
+    # connector running under the user's own credentials, so it carries the same
+    # external-side-effect risk as an mcp_* call without matching the prefix.
+    # Left at low it was strictly more permissive than write_text_file (high),
+    # despite acting outside the machine with the user's identity.
+    if name.startswith(("mcp_", "mcp__")) or name == "use_chatgpt_connector":
         bump("medium", "external_mcp")
         _low = name.lower()
         if any(

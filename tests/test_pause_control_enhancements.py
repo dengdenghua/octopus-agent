@@ -178,6 +178,93 @@ def test_active_task_to_dict_includes_wall_time(ctrl: PauseController):
     assert d["max_wall_time_seconds"] == 600.0
 
 
+def test_active_task_separates_current_context_from_cumulative_accounting(
+    ctrl: PauseController,
+):
+    ctrl.register_active("t-context", max_tokens=150_000)
+    ctrl.update_active_usage(
+        "t-context",
+        tokens_delta=29_000,
+        input_tokens_delta=27_500,
+        output_tokens_delta=1_500,
+        cache_read_tokens_delta=8_000,
+        current_context_tokens=27_500,
+        context_capacity_tokens=100_000,
+    )
+    ctrl.update_active_usage(
+        "t-context",
+        tokens_delta=31_000,
+        input_tokens_delta=29_000,
+        output_tokens_delta=2_000,
+        current_context_tokens=29_000,
+        context_capacity_tokens=100_000,
+    )
+
+    task = ctrl.list_active()[0]
+    rendered = task.to_dict()
+    assert rendered["tokens_spent"] == 60_000
+    assert rendered["input_tokens_spent"] == 56_500
+    assert rendered["output_tokens_spent"] == 3_500
+    assert rendered["cache_read_tokens"] == 8_000
+    assert rendered["current_context_tokens"] == 29_000
+    assert rendered["context_utilization"] == pytest.approx(0.29)
+
+
+def test_resume_grant_extends_live_accounting_limits(ctrl: PauseController):
+    ctrl.register_active("t-grant", max_tokens=150_000, max_usd=3.0)
+
+    task = ctrl.extend_active_limits("t-grant", extra_tokens=100_000, extra_usd=1.5)
+
+    assert task is not None
+    assert task.max_tokens == 250_000
+    assert task.max_usd == pytest.approx(4.5)
+
+
+def test_resume_registration_applies_every_grant_dimension():
+    from runtime.core.cerebrum.pause_control import get_pause_controller
+    from runtime.core.cerebrum.react_resume import _resume_or_register_turn
+    from runtime.platform.models import ParsedIntent
+
+    controller = get_pause_controller()
+    task_id = "resume-grant-all-dimensions"
+    controller.clear(task_id)
+    controller.unregister_active(task_id)
+    controller.set_grant(
+        task_id,
+        extra_iterations=15,
+        extra_tokens=100_000,
+        extra_usd=1.25,
+    )
+    intent = ParsedIntent(
+        raw="继续",
+        intent_type="task",
+        normalized_goal="继续",
+        user_context={},
+    )
+    try:
+        resumed = _resume_or_register_turn(
+            object(),
+            intent,
+            None,
+            resume_task_id=task_id,
+            react_task_id=task_id,
+            thread_id="thread-grant",
+            max_iterations=30,
+            active_max_tokens_budget=150_000,
+            active_max_usd_budget=3.0,
+            messages=[],
+        )
+
+        active = next(task for task in controller.list_active() if task.task_id == task_id)
+        assert resumed.max_iterations == 45
+        assert active.max_iterations == 45
+        assert active.max_tokens == 250_000
+        assert active.max_usd == pytest.approx(4.25)
+    finally:
+        controller.clear(task_id)
+        controller.unregister_active(task_id)
+
+
 def test_check_active_task_limits_unknown_task(ctrl: PauseController):
     """check_active_task_limits returns False for unknown task."""
     exceeded, reason = ctrl.check_active_task_limits("unknown")

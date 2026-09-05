@@ -38,6 +38,9 @@ def _promotion_applier(deps: RouterDeps, scope=None):
         review_queue_path=deps.review_queue_path,
         promotion_audit_path=deps.promotion_audit_path,
         proposal_ledger_path=deps.proposal_ledger_path,
+        journal=deps.journal,
+        registry=deps.registry,
+        auto_persist_dir=deps.auto_persist_dir,
         scope=scope,
     )
 
@@ -80,6 +83,25 @@ def register_promotion_endpoints(router, deps: RouterDeps) -> None:
             target=body.get("target"),
             limit=limit,
         )
+        if _promotion_plan_has_target(plan, "forged_skill"):
+            missing = [
+                name
+                for name, value in (
+                    ("journal", deps.journal),
+                    ("registry", deps.registry),
+                    ("auto_persist_dir", deps.auto_persist_dir),
+                )
+                if value is None
+            ]
+            if missing:
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "message": "forged_skill promotion dependencies unavailable",
+                        "missing": missing,
+                        "promotion_plan": plan,
+                    },
+                )
         source_task_ids = _source_task_ids_from_promotion_plan(plan)
         min_cases = int(body.get("min_replay_cases") or 1)
         min_score = float(body.get("min_replay_score") or 1.0)

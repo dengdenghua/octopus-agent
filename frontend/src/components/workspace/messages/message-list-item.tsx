@@ -826,6 +826,36 @@ export function RoutedMessageLink({
   children,
   ...props
 }: ComponentProps<"a">) {
+  if (typeof href === "string" && isVideoPreviewHref(href)) {
+    const label = typeof children === "string" ? children : "视频预览";
+    return (
+      <span className="my-3 block w-full max-w-3xl">
+        <video
+          aria-label={label}
+          className="aspect-video w-full rounded-xl bg-black shadow-sm"
+          controls
+          playsInline
+          preload="metadata"
+          src={href}
+        />
+        <RoutedWebLink
+          {...props}
+          className="mt-1.5 inline-block text-xs text-muted-foreground underline underline-offset-2"
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(event) => {
+            onClick?.(event);
+            if (event.defaultPrevented) return;
+          }}
+          openTargetSource="conversation"
+        >
+          {children}
+        </RoutedWebLink>
+      </span>
+    );
+  }
+
   return (
     <RoutedWebLink
       {...props}
@@ -846,6 +876,10 @@ export function RoutedMessageLink({
       {children}
     </RoutedWebLink>
   );
+}
+
+function isVideoPreviewHref(href: string): boolean {
+  return /\.(?:mp4|webm|m4v|mov)(?:[?#].*)?$/i.test(href.trim());
 }
 
 function useLiveExecutionPlan(planFromMessage: ExecutionPlan): ExecutionPlan {

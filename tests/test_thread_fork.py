@@ -100,6 +100,20 @@ def test_fork_inherits_metadata_and_title() -> None:
     assert child["values"]["title"] == "源标题"
 
 
+def test_fork_does_not_inherit_project_binding_metadata() -> None:
+    store, source_id = _source()
+    source = store.set_project_binding_metadata(source_id, "P-source", generation=1)
+    assert source["metadata"]["project_id"] == "P-source"
+
+    child = store.fork_thread(source_id)
+
+    assert "project_id" not in child["metadata"]
+    assert "project_home" not in child["metadata"]
+    assert "project_binding_generation" not in child["metadata"]
+    assert child["metadata"]["agent"] == "octopus"
+    assert child["metadata"]["parent_thread_id"] == source_id
+
+
 def test_fork_title_override() -> None:
     store, source_id = _source()
     child = store.fork_thread(source_id, title="  分支会话 ")

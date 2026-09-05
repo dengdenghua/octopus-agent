@@ -113,6 +113,11 @@ def test_director_stage_persists_atomic_scene_edits(monkeypatch, tmp_path) -> No
                     "type": "set_environment",
                     "skyColor": "#dde8f5",
                     "backgroundMode": "flat",
+                    "backgroundImage": "data:image/png;base64,AAAA",
+                    "backgroundImageName": "车站全景.png",
+                    "horizontalRotation": 35,
+                    "sphereRadius": 120,
+                    "showRoleLabels": False,
                     "showGround": True,
                 },
             ]
@@ -125,6 +130,11 @@ def test_director_stage_persists_atomic_scene_edits(monkeypatch, tmp_path) -> No
         "移动长椅"
     )
     assert full_scene["scene"]["skyColor"] == "#dde8f5"
+    assert full_scene["scene"]["backgroundMode"] == "flat"
+    assert full_scene["scene"]["backgroundImageName"] == "车站全景.png"
+    assert full_scene["scene"]["horizontalRotation"] == 35
+    assert full_scene["scene"]["sphereRadius"] == 120
+    assert full_scene["scene"]["showRoleLabels"] is False
     assert client.get("/api/plugins/director-stage/scenes/film/diagnostics").json()["clean"] is True
 
     failed = client.post(
@@ -280,6 +290,13 @@ def test_comfyui_bridge_is_local_only_and_points_to_real_integration() -> None:
     caps = local.get("/api/plugins/comfyui-bridge/capabilities").json()
     assert caps["queue"] == "/api/design/comfyui/queue"
     assert caps["dependencies"] == "/api/design/comfyui/dependencies"
+    assert caps["install"] == "/api/design/comfyui/install"
+    assert caps["update"] == "/api/design/comfyui/update"
+    assert caps["custom_node_registry"] == "/api/design/comfyui/custom-nodes/registry"
+    assert caps["custom_node_rollback"].endswith("/{node_id}/rollback")
+    assert caps["model_download"] == "/api/design/comfyui/models/download"
+    assert caps["model_restore"] == "/api/design/comfyui/models/restore"
+    assert caps["workflow_diagnostics"].endswith("/{workflow_id}/diagnostics")
 
     remote = _load(
         ComfyUIBridgePlugin(),
@@ -325,8 +342,10 @@ def test_design_plugins_register_agent_callable_skills(monkeypatch, tmp_path) ->
         "director_stage.model_compare",
         "comfyui_bridge.status",
         "comfyui_bridge.dependencies",
+        "comfyui_bridge.manager_status",
         "comfyui_bridge.workflows",
         "comfyui_bridge.workflow_get",
+        "comfyui_bridge.workflow_diagnostics",
         "comfyui_bridge.workflow_save",
         "comfyui_bridge.queue",
         "comfyui_bridge.result",

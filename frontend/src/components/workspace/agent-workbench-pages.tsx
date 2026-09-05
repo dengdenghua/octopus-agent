@@ -31,6 +31,7 @@ import {
   type WorkBlockStatus,
 } from "./work-blocks";
 import { cn } from "@/lib/utils";
+import { builtinPersonaDisplayName } from "@/core/agents/persona-display";
 import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales/types";
 import type { OutlineRound } from "@/core/threads/progress-outline";
@@ -51,6 +52,8 @@ import {
 import { useSubtask } from "@/core/tasks/context";
 import { RoutedWebLink } from "@/components/ui/routed-web-link";
 import { SubtaskHoverPreview } from "./messages/parallel-subtasks-grid";
+import { CollaborationCollectorPanel } from "./collaboration-collector-panel";
+import type { LiveToolEvent } from "./live-tool-timeline";
 import {
   Tooltip,
   TooltipContent,
@@ -122,7 +125,7 @@ function SummaryDiffEntryList({
   const { t } = useI18n();
   const Icon = kind === "artifact" ? FilePlus2Icon : FileTextIcon;
   return (
-    <ul className="stable-scroll-viewport max-h-48 overflow-y-auto">
+    <ul className="stable-scroll-viewport max-h-48 overflow-x-hidden overflow-y-auto">
       {entries.map((entry) => (
         <li key={entry.id}>
           <button
@@ -935,6 +938,8 @@ export function AgentSummaryPage({
   onSelectTab,
   onOpenArtifact,
   resultPreviewUrl: _resultPreviewUrl,
+  threadId,
+  collaborationEvents = [],
 }: {
   phases: AgentPhase[];
   diffEntries: DiffEntry[];
@@ -962,6 +967,9 @@ export function AgentSummaryPage({
   onOpenArtifact?: (path: string) => void;
   /** A deployed or local result preview for the current completed case. */
   resultPreviewUrl?: string | null;
+  /** Durable group-run coordinates and member lifecycle events. */
+  threadId?: string;
+  collaborationEvents?: LiveToolEvent[];
 }) {
   const { t } = useI18n();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
@@ -1169,6 +1177,15 @@ export function AgentSummaryPage({
       .map((agent) => agent.taskLabel ?? agent.name ?? agent.role ?? agent.id);
     return { done, failed, failedLabels, pending, running, total };
   }, [agentTiles]);
+  const isCoworkResponseGroup =
+    agentTiles.length > 0 &&
+    agentTiles.every((agent) => agent.role === "cowork");
+  const settledAgentSummary = isCoworkResponseGroup
+    ? `${agentHealth.done}/${agentHealth.total} ${t.message.statusResponded}`
+    : t.agentWorkbenchPages.subagentsCompleted(
+        agentHealth.done,
+        agentHealth.total,
+      );
 
   const recoveredCount = blocks.filter(
     (block) => block.status === "warning",
@@ -1313,8 +1330,11 @@ export function AgentSummaryPage({
     totalReferenceItems === 0;
 
   return (
-    <div className="stable-scroll-viewport flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
-      <div className="mx-auto w-full max-w-2xl px-5 py-4 pb-8">
+    <div
+      data-testid="agent-summary-scroll-viewport"
+      className="stable-scroll-viewport flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto bg-background/35"
+    >
+      <div className="mx-auto w-full min-w-0 max-w-2xl px-5 py-4 pb-8">
         {/* 思考/执行详情均在对话框内完整展示，右侧不再重复渲染。
             The task plan stays visible even when a transcript process event is
             focused: selecting evidence must not erase the user's todo list. */}
@@ -1368,7 +1388,7 @@ export function AgentSummaryPage({
               (phases.length > 0 ? (
                 <ul
                   className={cn(
-                    "stable-scroll-viewport mt-3 overflow-y-auto pr-0.5",
+                    "stable-scroll-viewport mt-3 overflow-x-hidden overflow-y-auto pr-0.5",
                     hasTodoPlan ? "max-h-72 space-y-0.5" : "space-y-1",
                   )}
                   data-testid={
@@ -1513,6 +1533,11 @@ export function AgentSummaryPage({
           </section>
         )}
 
+        <CollaborationCollectorPanel
+          events={collaborationEvents}
+          threadId={threadId}
+        />
+
         {/* 产物 */}
         {diffEntries.length > 0 && (
           <section className="border-b border-border-subtle py-4">
@@ -1597,10 +1622,7 @@ export function AgentSummaryPage({
                 {t.agentWorkbenchPages.subagents}
               </h3>
               <span className="ml-auto text-xs text-muted-foreground">
-                {t.agentWorkbenchPages.subagentsCompleted(
-                  agentHealth.done,
-                  agentHealth.total,
-                )}
+                {settledAgentSummary}
               </span>
               {expandedSections.has("subagents") ? (
                 <ChevronDownIcon className="size-3.5 text-muted-foreground" />
@@ -1626,10 +1648,7 @@ export function AgentSummaryPage({
                       )}
                     />
                     <span className="font-medium text-foreground">
-                      {t.agentWorkbenchPages.subagentsCompleted(
-                        agentHealth.done,
-                        agentHealth.total,
-                      )}
+                      {settledAgentSummary}
                     </span>
                     {agentHealth.failed > 0 && (
                       <span className="font-medium text-destructive">
@@ -1673,10 +1692,7 @@ export function AgentSummaryPage({
                   ? t.agentWorkbenchPages.subagentsRunning(agentHealth.running)
                   : agentHealth.failed > 0
                     ? t.agentWorkbenchPages.subagentsFailed(agentHealth.failed)
-                    : t.agentWorkbenchPages.subagentsCompleted(
-                        agentHealth.done,
-                        agentHealth.total,
-                      )}
+                    : settledAgentSummary}
               </div>
             )}
           </section>
@@ -1826,7 +1842,10 @@ export function AgentSummaryPage({
                   </div>
                 </div>
                 {/* 上下文列表 */}
-                <ul className="stable-scroll-viewport mt-2 max-h-64 space-y-1 overflow-y-auto pr-0.5">
+                <ul
+                  data-testid="workbench-reference-list"
+                  className="mt-2 space-y-1 overflow-x-hidden pr-0.5"
+                >
                   {observedReferenceTabs.length === 0 ? (
                     <li className="py-4 text-center text-xs text-muted-foreground">
                       {t.agentWorkbenchPages.noObservableReferences}
@@ -2035,7 +2054,9 @@ export function AgentCreationCard({
                     )}
                   >
                     {active && <Loader2Icon className="size-3 animate-spin" />}
-                    {agentStatusLabel(agent.status)}
+                    {agent.status === "done" && agent.role === "cowork"
+                      ? t.message.statusResponded
+                      : agentStatusLabel(agent.status)}
                   </span>
                   {agent.iterationCount !== undefined && (
                     <span className="text-xs text-muted-foreground">
@@ -2122,6 +2143,8 @@ export function findAgentTileByFocusId(
 export function friendlyRoleName(role: string | undefined | null): string {
   const value = role?.trim();
   if (!value) return "Task Agent";
+  const personaName = builtinPersonaDisplayName(value);
+  if (personaName) return personaName;
   const lower = value.toLowerCase();
   const map: Record<string, string> = {
     architect: "Architect",
