@@ -342,15 +342,12 @@ def test_retryable_error_is_status_only_but_terminal_error_fails() -> None:
             "start_new_segment": True,
         }
     ]
+
+
+def test_terminal_error_fails_without_retry() -> None:
     assert translate_notification(
-        _notification(
-            "error",
-            threadId="thread-1",
-            turnId="turn-1",
-            message="permanent failure",
-            willRetry=False,
-        ),
-        state,
+        _notification("error", message="permanent failure", willRetry=False),
+        CodexEventState(),
     ) == [
         {
             "type": "react_error",
@@ -358,3 +355,24 @@ def test_retryable_error_is_status_only_but_terminal_error_fails() -> None:
             "message": "permanent failure",
         }
     ]
+
+
+def test_model_unavailable_error_and_completion_have_plain_public_message() -> None:
+    from runtime.platform.models.provider_errors import MODEL_UNAVAILABLE_MESSAGE
+
+    wrapped = {
+        "codexErrorInfo": "other",
+        "message": (
+            "unexpected status 400 Bad Request: "
+            + MODEL_UNAVAILABLE_MESSAGE
+            + ", url: http://127.0.0.1:12345/v1/responses"
+        ),
+    }
+    state = CodexEventState()
+    error = translate_notification(_notification("error", error=wrapped, willRetry=False), state)
+    assert error[0]["message"] == MODEL_UNAVAILABLE_MESSAGE
+    completed = translate_notification(
+        _notification("turn/completed", turn={"status": "failed", "error": wrapped}), state
+    )
+    assert completed[0]["success"] is False
+    assert completed[0]["completion_receipt"]["message"] == MODEL_UNAVAILABLE_MESSAGE

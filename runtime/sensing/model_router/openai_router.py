@@ -14,6 +14,7 @@ from runtime.platform.models.model_capabilities import (
     model_is_reasoning,
     model_rejects_temperature,
 )
+from runtime.platform.models.provider_errors import ModelProviderHTTPError
 
 from .custom_model_flags import (
     custom_model_entry_for,
@@ -29,7 +30,6 @@ from .custom_model_flags import (
 )
 from .models import (
     DEFAULT_USER_AGENT,
-    LLMResponseFormatError,
     Message,
     ModelRequest,
     ModelResponse,
@@ -106,7 +106,7 @@ def _compat_payload_fingerprint(payload: dict[str, Any]) -> str:
     return json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
 
 
-class OpenAIRouterError(LLMResponseFormatError):
+class OpenAIRouterError(ModelProviderHTTPError):
     pass
 
 
@@ -231,7 +231,9 @@ class OpenAIModelRouter(Provider, ModelRouter):
                         resp.status_code,
                         resp.text,
                         compatibility_events=self.last_compatibility_events,
-                    )
+                    ),
+                    status_code=resp.status_code,
+                    response_body=resp.text,
                 )
 
             try:
@@ -473,7 +475,9 @@ class OpenAIModelRouter(Provider, ModelRouter):
                         first_status,
                         first_text,
                         compatibility_events=self.last_compatibility_events,
-                    )
+                    ),
+                    status_code=first_status,
+                    response_body=first_text,
                 )
             except Exception:
                 # Closing a live httpx response/client wakes a blocked read by

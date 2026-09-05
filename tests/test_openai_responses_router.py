@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 
 import httpx
+import pytest
 
 from runtime.sensing.model_router.models import Message, ModelRequest, ToolSpec
 from runtime.sensing.model_router.openai_responses_router import (
     OpenAIResponsesModelRouter,
+    OpenAIResponsesRouterError,
 )
 
 
@@ -14,6 +16,28 @@ def _sse(*events: dict[str, object]) -> bytes:
     return b"".join(
         f"event: {event['type']}\ndata: {json.dumps(event)}\n\n".encode() for event in events
     )
+
+
+@pytest.mark.parametrize("status", [400, 401, 500])
+def test_responses_failure_preserves_typed_status_without_public_body(status) -> None:
+    router = OpenAIResponsesModelRouter(
+        base_url="https://example.test/v1",
+        api_key="test-key",
+        default_model="test-model",
+        client=httpx.Client(
+            transport=httpx.MockTransport(
+                lambda _: httpx.Response(status, text="Model is unavailable: private provider body")
+            )
+        ),
+    )
+    with pytest.raises(OpenAIResponsesRouterError) as exc:
+        router.call(
+            ModelRequest(model="test-model", messages=[Message(role="user", content="Reply OK")])
+        )
+    assert exc.value.status_code == status
+    public_status, public_message = exc.value.public_failure()
+    assert public_status == (502 if status == 500 else status)
+    assert "private provider body" not in public_message
 
 
 def test_responses_provider_streams_with_api_key_and_keeps_it_out_of_payload() -> None:

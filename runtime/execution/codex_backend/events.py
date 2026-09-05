@@ -18,10 +18,26 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
+from runtime.platform.models.provider_errors import (
+    MODEL_UNAVAILABLE_MESSAGE,
+    PROVIDER_HTTP_MESSAGES,
+)
+
 from .types import JsonObject, Notification
 
 _MAX_PREVIEW_CHARS = 8_000
 _MAX_ERROR_CHARS = 4_000
+
+
+def _public_error_text(value: Any) -> str:
+    detail = _text(value, limit=_MAX_ERROR_CHARS)
+    # App Server wraps proxy failures in a transport string/JSON object. Only
+    # unwrap our bounded messages; arbitrary upstream details stay on the
+    # existing diagnostic path.
+    for message in (MODEL_UNAVAILABLE_MESSAGE, *PROVIDER_HTTP_MESSAGES.values()):
+        if message in detail:
+            return message
+    return detail
 
 
 @dataclass(slots=True)
@@ -404,7 +420,7 @@ def translate_notification(
                 "success": success,
                 "terminated_reason": status,
                 "completion_receipt": {
-                    "message": _text(turn_obj.get("error"), limit=_MAX_ERROR_CHARS),
+                    "message": _public_error_text(turn_obj.get("error")),
                     "codex_status": status,
                 },
             }
@@ -428,7 +444,7 @@ def translate_notification(
             {
                 "type": "react_error",
                 "kind": "codex_app_server_error",
-                "message": _text(detail, limit=_MAX_ERROR_CHARS) or "Codex App Server error",
+                "message": _public_error_text(detail) or "Codex App Server error",
             }
         ]
 

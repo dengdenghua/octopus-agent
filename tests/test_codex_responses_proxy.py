@@ -93,17 +93,18 @@ class _RealToolLoopRouter:
 
 
 class _BlockingFailRouter:
-    def __init__(self) -> None:
+    def __init__(self, error: Exception | None = None) -> None:
         self.calls = 0
         self.started = Event()
         self.release = Event()
+        self.error = error or RuntimeError("private provider failure")
 
     def call(self, _request: ModelRequest) -> ModelResponse:
         self.calls += 1
         self.started.set()
         if not self.release.wait(timeout=5.0):
             raise TimeoutError("test did not release provider")
-        raise RuntimeError("private provider failure")
+        raise self.error
 
 
 def _scope(*, turn: str = "turn-a", model: str = "deepseek-chat") -> CodexResponsesScope:
@@ -563,11 +564,22 @@ async def test_proxy_token_allows_multi_round_idempotent_retry_cross_scope_and_e
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("status", [None, 400, 401, 402, 403, 404, 422, 429, 500])
 async def test_concurrent_failed_retry_gets_sanitized_http_response_and_can_retry(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
+    status: int | None,
 ) -> None:
-    router = _BlockingFailRouter()
+    from runtime.platform.models.provider_errors import ModelProviderHTTPError
+
+    error = (
+        ModelProviderHTTPError(
+            "private provider failure", status_code=status, response_body="Model is unavailable"
+        )
+        if status is not None
+        else None
+    )
+    router = _BlockingFailRouter(error)
     async with ScopedResponsesProxy(
         router,
         scope=_scope(),
@@ -592,14 +604,16 @@ async def test_concurrent_failed_retry_gets_sanitized_http_response_and_can_retr
         first_result, duplicate_result = await asyncio.gather(first, duplicate)
         retry_result = await _post(profile, _tool_history_payload())
 
-    assert first_result[0] == 502
-    assert duplicate_result[0] == 502
-    assert retry_result[0] == 502
+    expected_status = error.public_failure()[0] if error else 502
+    assert first_result[0] == expected_status
+    assert duplicate_result[0] == expected_status
+    assert retry_result[0] == expected_status
+    assert first_result[2] == duplicate_result[2] == retry_result[2]
     assert router.calls == 2
     assert b"private provider failure" not in first_result[2]
     assert b"private provider failure" not in duplicate_result[2]
     assert "private provider failure" not in caplog.text
-    assert "error_type=RuntimeError" in caplog.text
+    assert f"error_type={type(router.error).__name__}" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -734,6 +748,65 @@ def _real_codex_command() -> tuple[str, ...] | None:
     if Path(executable).is_file() or shutil.which(executable):
         return command
     return None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_real_codex_does_not_retry_unavailable_model(tmp_path: Path) -> None:
+    from runtime.platform.models.provider_errors import (
+        MODEL_UNAVAILABLE_MESSAGE,
+        ModelProviderHTTPError,
+    )
+
+    command = _real_codex_command()
+    if command is None:
+        pytest.skip("real Codex App Server executable is unavailable")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    router = _BlockingFailRouter(
+        ModelProviderHTTPError(
+            "private provider body", status_code=400, response_body="Model is unavailable"
+        )
+    )
+    router.release.set()
+    async with ScopedResponsesProxy(router, scope=_scope(), trusted_session=None) as proxy:
+        execution = CodexExecutionSession(
+            CodexExecutionRequest(
+                outer_thread_id="thread-a",
+                outer_turn_id="turn-a",
+                realm_id="test",
+                tenant_id="tenant-a",
+                principal_id="alice",
+                workspace=workspace,
+                prompt="Reply OK.",
+                command=command,
+                model="deepseek-chat",
+                provider_profile=proxy.provider_profile,
+            ),
+            security=CodexSidecarSecurity(
+                CodexSecurityPolicy(
+                    state_root=tmp_path / "state", allowed_workspace_roots=(tmp_path,)
+                )
+            ),
+            approval_provider=AutoDenyProvider(),
+            is_interrupted=lambda: False,
+        )
+        notifications = []
+        try:
+            async with asyncio.timeout(20):
+                await execution.start()
+                while True:
+                    notification = await execution.next_notification(timeout_s=10)
+                    notifications.append(notification)
+                    if notification.method == "turn/completed":
+                        break
+        finally:
+            await execution.close()
+    assert router.calls == 1
+    assert not any(
+        event.params.get("willRetry") for event in notifications if event.method == "error"
+    )
+    assert MODEL_UNAVAILABLE_MESSAGE in json.dumps(notifications[-1].params, ensure_ascii=False)
 
 
 @pytest.mark.integration

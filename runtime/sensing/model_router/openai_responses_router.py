@@ -7,6 +7,7 @@ from typing import Any
 
 from runtime.adapters.instrumentation import record_gen_ai_cost, trace_stage
 from runtime.platform.models.llm import ModelRequest, ModelResponse, ModelRouter, ModelStreamEvent
+from runtime.platform.models.provider_errors import ModelProviderHTTPError
 
 from .chatgpt_subscription_router import (
     _build_responses_payload,
@@ -25,7 +26,7 @@ except ImportError:  # pragma: no cover
     httpx = None  # type: ignore[assignment]
 
 
-class OpenAIResponsesRouterError(LLMResponseFormatError):
+class OpenAIResponsesRouterError(ModelProviderHTTPError):
     """An API-key Responses provider could not complete a request."""
 
 
@@ -97,7 +98,9 @@ class OpenAIResponsesModelRouter(Provider, ModelRouter):
                             response.status_code,
                             response.text,
                             provider_name=self.provider_name,
-                        )
+                        ),
+                        status_code=response.status_code,
+                        response_body=response.text,
                     )
                 final: ModelResponse | None = None
                 try:

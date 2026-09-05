@@ -40,6 +40,7 @@ from runtime.platform.models.llm import (
     normalize_reasoning_effort,
     thinking_budget_for_effort,
 )
+from runtime.platform.models.provider_errors import ModelProviderHTTPError
 from runtime.platform.process.session import Session, session_scope
 
 from ._security_support import (
@@ -77,6 +78,26 @@ class ResponsesRouter(Protocol):
 
 class ResponsesProxyError(ConfigurationError):
     """A scoped proxy could not safely translate or serve a request."""
+
+
+def _provider_failure_response(exc: BaseException) -> tuple[int, dict[str, str], bytes]:
+    status, message = (
+        exc.public_failure()
+        if isinstance(exc, ModelProviderHTTPError)
+        else (502, "Echo model request failed")
+    )
+    return (
+        status,
+        {"Content-Type": "application/json"},
+        _json_bytes(
+            {
+                "error": {
+                    "message": message,
+                    "type": "server_error" if status >= 500 else "invalid_request_error",
+                }
+            }
+        ),
+    )
 
 
 def load_or_create_compaction_key(
@@ -357,13 +378,7 @@ class ScopedResponsesProxy:
                 trace.tb_frame.f_code.co_name if trace else "unknown",
                 trace.tb_lineno if trace else 0,
             )
-            status, headers, payload = (
-                502,
-                {"Content-Type": "application/json"},
-                _json_bytes(
-                    {"error": {"message": "Octopus model request failed", "type": "server_error"}}
-                ),
-            )
+            status, headers, payload = _provider_failure_response(exc)
         try:
             await _write_http_response(writer, status, headers, payload)
         except (ConnectionError, OSError, RuntimeError):  # expected: client disconnected early
@@ -451,8 +466,8 @@ class ScopedResponsesProxy:
                         },
                         encoded,
                     )
-        except BaseException:
-            self._fail_request(fingerprint)
+        except BaseException as exc:
+            self._fail_request(fingerprint, exc)
             raise
         self._complete_request(fingerprint, result)
         return result
@@ -497,7 +512,7 @@ class ScopedResponsesProxy:
         self._completed_request_bytes += len(result[2])
         self._evict_completed_requests(keep=fingerprint)
 
-    def _fail_request(self, fingerprint: bytes) -> None:
+    def _fail_request(self, fingerprint: bytes, exc: BaseException) -> None:
         """Wake concurrent duplicates with the same sanitized failure.
 
         Removing the failed reservation permits a later explicit retry. A
@@ -508,20 +523,7 @@ class ScopedResponsesProxy:
         future = self._request_results.pop(fingerprint, None)
         if future is None or future.done():
             return
-        future.set_result(
-            (
-                502,
-                {"Content-Type": "application/json"},
-                _json_bytes(
-                    {
-                        "error": {
-                            "message": "Octopus model request failed",
-                            "type": "server_error",
-                        }
-                    }
-                ),
-            )
-        )
+        future.set_result(_provider_failure_response(exc))
 
     def _evict_completed_requests(self, *, keep: bytes) -> None:
         while (
@@ -1284,11 +1286,13 @@ async def _write_http_response(
         200: "OK",
         400: "Bad Request",
         401: "Unauthorized",
+        402: "Payment Required",
         403: "Forbidden",
         404: "Not Found",
         409: "Conflict",
         411: "Length Required",
         413: "Payload Too Large",
+        422: "Unprocessable Entity",
         429: "Too Many Requests",
         431: "Request Header Fields Too Large",
         502: "Bad Gateway",

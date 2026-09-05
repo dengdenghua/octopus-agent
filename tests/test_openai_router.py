@@ -1250,6 +1250,25 @@ class TestPricing:
 
 
 class TestErrors:
+    @pytest.mark.parametrize("streaming", [False, True])
+    def test_model_unavailable_has_terminal_http_status(self, streaming):
+        from runtime.platform.models.provider_errors import MODEL_UNAVAILABLE_MESSAGE
+
+        fake = _FakeClient(
+            response=_FakeResponse(
+                400,
+                {"error": {"message": "Error from provider: Model is unavailable."}},
+            )
+        )
+        router = OpenAIModelRouter(base_url="https://opencode.ai/zen/v1", client=fake)
+        with pytest.raises(OpenAIRouterError) as exc:
+            if streaming:
+                list(router.call_stream(_req()))
+            else:
+                router.call(_req())
+        assert exc.value.status_code == 400
+        assert exc.value.public_failure() == (400, MODEL_UNAVAILABLE_MESSAGE)
+
     def test_http_error_raises(self):
         fake = _FakeClient(response=_FakeResponse(500, text="Internal Server Error"))
         r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
