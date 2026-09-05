@@ -263,8 +263,211 @@ const COPY = {
   },
 };
 
+const COPY_JA: typeof COPY.en = {
+  ...COPY.en,
+  triggerFallback: "Coderモデル",
+  followSystem: "システムモデルに従う",
+  followSystemShort: "システム",
+  followSystemDescription:
+    "互換性のあるシステムモデル設定を使用します。認証情報はローカルバックエンドが管理します。",
+  accountMode: "ChatGPT / Codexを使用",
+  accountModeShort: "Codexアカウント",
+  subscriptionModeShort: "ChatGPTサブスクリプション",
+  accountModeDescription:
+    "ChatGPTサブスクリプションまたは別途登録したOpenAI APIキーを使用します。",
+  loading: "Coder設定を読み込み中…",
+  loadFailed: "Coderモデル設定を読み込めません。",
+  retry: "再試行",
+  compatible: "Codexエンジンで実行可能",
+  incompatible: "システムモデルはCodexと互換性がありません",
+  unavailable: "実行できません",
+  backendDefault: "バックエンドのデフォルトモデルに従う",
+  backendDefaultHint:
+    "チャットのデフォルトモデルとは別に、サーバーのデフォルトを保存します。",
+  accountConnected: "アカウント接続済み",
+  pendingModel: "実行可能なモデルを選択",
+  aliasHint:
+    "バックエンドのデフォルトは自動ルーティング入口で、実行可能なCodexモデルではありません。具体的なモデルまたは接続済みのChatGPT / Codexアカウントを選択してください。",
+  routeHint:
+    "選択したモデルにはバックエンドルートがありません。モデルを接続するか、ChatGPT / Codexアカウントを使用してください。",
+  proxyHint:
+    "システムモデルサービスを利用できません。バックエンドのモデル接続を確認してください。",
+  savedUnavailable: "設定を保存しましたが、現在は実行できません",
+  useChatDefault: (model) => `チャットのデフォルトを使用 · ${model}`,
+  provider: "プロバイダー",
+  effectiveModel: "実効モデル",
+  systemModel: "システムモデル",
+  title: "Coderエンジン",
+  subtitle:
+    "Coderは通常のロールです。ペルソナ、スキル、チームルールはEchoが管理し、コード実行はCodexエンジンが担当します。",
+  sourceTitle: "モデルのソース",
+  systemSource: "システムモデル",
+  subscriptionSource: "ChatGPTサブスクリプション",
+  apiKeySource: "OpenAI APIキー（従量制）",
+  systemDefault: "システムのデフォルトに従う",
+  systemDefaultHint: "現在のシステム設定を使用",
+  smartRoutingHint: "タスクごとに自動選択",
+  systemOrchestratorHint:
+    "現在のモデルはオーケストレーターです。下から実行モデルを選択してください",
+  signInToChoose: "ログインしてCodexモデルを選択",
+  reasoningShort: "推論レベル",
+  reasoningAdaptive: "このモデルが自動制御",
+  connected: "接続済み",
+  notConnected: "未接続",
+  pending: "認証待ち",
+  connectChatGPT: "ChatGPTにログイン",
+  connectDevice: "デバイスコードを使用",
+  connectApiKey: "APIキーを使用",
+  browserLoginHint:
+    "認証ページはシステムブラウザーで直接開きます。URLはローカルストレージに保存されません。",
+  deviceCode: "デバイスコード",
+  openAuthorization: "認証ページを開く",
+  cancelLogin: "認証をキャンセル",
+  copyCode: "デバイスコードをコピー",
+  copied: "コピーしました",
+  account: "Codexアカウント",
+  apiKeyLabel: "OpenAI APIキー",
+  apiKeyPlaceholder: "sk-…（ローカルバックエンドにのみ送信）",
+  apiKeyHint: "キーはURL、localStorage、ロール設定、ログに入りません。",
+  submitApiKey: "APIキーを接続",
+  logout: "接続を解除",
+  model: "Codexモデル",
+  modelDefault: "Codexのデフォルトモデルを使用",
+  modelUnavailable: "アカウントを接続して利用可能なモデルを読み込む",
+  reasoning: "推論強度",
+  reasoningDefault: "モデルのデフォルトに従う",
+  allowance: "利用枠",
+  remaining: "残り",
+  resetsAt: "リセット時刻",
+  lifetimeTokens: "累計トークン",
+  peakDailyTokens: "日次ピーク",
+  resetCredits: "レート制限リセット",
+  usageUnavailable:
+    "このログイン方式ではChatGPTアカウントの使用量を取得できません。",
+  connectors: "OpenAIコネクター",
+  connectorsHint:
+    "明示的に選択した接続だけを公開します。呼び出しにはEchoの承認が必要です。",
+  connectorUnavailable: "このアカウントで利用できるコネクターはありません。",
+  accountDetails: "コネクターと使用量",
+  saved: "Coderモデル設定を更新しました",
+  loginStarted: "認証ページでログインを完了してください",
+  loginComplete: "Codexアカウントを接続しました",
+  loginFailed: "Codex認証を完了できませんでした",
+  loginCancelled: "ログインをキャンセルしました",
+  apiKeyConnected: "APIキーを安全に接続しました",
+  accountSummary: (email, plan) =>
+    [email, plan].filter(Boolean).join(" · ") || "Codexアカウント",
+  openSettings: "ログインとモデルを管理",
+  activeSummary: (model) => `選択中のモデル · ${model}`,
+  technicalDetails: "設定の詳細",
+};
+
+const COPY_KO: typeof COPY.en = {
+  ...COPY.en,
+  triggerFallback: "Coder 모델",
+  followSystem: "시스템 모델 따르기",
+  followSystemShort: "시스템",
+  followSystemDescription:
+    "호환되는 시스템 모델 설정을 사용합니다. 인증 정보는 로컬 백엔드가 관리합니다.",
+  accountMode: "ChatGPT / Codex 사용",
+  accountModeShort: "Codex 계정",
+  subscriptionModeShort: "ChatGPT 구독",
+  accountModeDescription:
+    "ChatGPT 구독 또는 별도로 등록한 OpenAI API 키를 사용합니다.",
+  loading: "Coder 설정을 불러오는 중…",
+  loadFailed: "Coder 모델 설정을 불러올 수 없습니다.",
+  retry: "다시 시도",
+  compatible: "Codex 엔진에서 실행 가능",
+  incompatible: "시스템 모델이 Codex와 호환되지 않습니다",
+  unavailable: "실행할 수 없음",
+  backendDefault: "백엔드 기본 모델 따르기",
+  backendDefaultHint:
+    "위의 채팅 기본 모델과 별도로 서버 기본 모델을 사용합니다.",
+  accountConnected: "계정 연결됨",
+  pendingModel: "실행 가능한 모델 선택",
+  aliasHint:
+    "백엔드 기본값은 자동 라우팅 항목이며 실행 가능한 Codex 모델이 아닙니다. 특정 모델이나 연결된 ChatGPT / Codex 계정을 선택하세요.",
+  routeHint:
+    "선택한 모델에 백엔드 경로가 없습니다. 모델을 연결하거나 ChatGPT / Codex 계정을 사용하세요.",
+  proxyHint:
+    "시스템 모델 서비스를 사용할 수 없습니다. 백엔드 모델 연결을 확인하세요.",
+  savedUnavailable: "설정을 저장했지만 현재 실행할 수 없습니다",
+  useChatDefault: (model) => `채팅 기본 모델 사용 · ${model}`,
+  provider: "제공자",
+  effectiveModel: "실제 모델",
+  systemModel: "시스템 모델",
+  title: "Coder 엔진",
+  subtitle:
+    "Coder는 일반 역할입니다. 페르소나, 스킬, 팀 규칙은 Echo가 관리하고 코드 실행은 Codex 엔진이 담당합니다.",
+  sourceTitle: "모델 출처",
+  systemSource: "시스템 모델",
+  subscriptionSource: "ChatGPT 구독",
+  apiKeySource: "OpenAI API 키(종량제)",
+  systemDefault: "시스템 기본값 따르기",
+  systemDefaultHint: "현재 시스템 설정 사용",
+  smartRoutingHint: "작업별로 지능적으로 선택",
+  systemOrchestratorHint:
+    "현재 모델은 오케스트레이터입니다. 아래에서 실행 모델을 선택하세요",
+  signInToChoose: "로그인하여 Codex 모델 선택",
+  reasoningShort: "추론 수준",
+  reasoningAdaptive: "이 모델이 자동으로 제어",
+  connected: "연결됨",
+  notConnected: "연결되지 않음",
+  pending: "인증 대기 중",
+  connectChatGPT: "ChatGPT로 로그인",
+  connectDevice: "디바이스 코드 사용",
+  connectApiKey: "API 키 사용",
+  browserLoginHint:
+    "인증 페이지는 시스템 브라우저에서 직접 열립니다. URL은 로컬 저장소에 저장되지 않습니다.",
+  deviceCode: "디바이스 코드",
+  openAuthorization: "인증 페이지 열기",
+  cancelLogin: "인증 취소",
+  copyCode: "디바이스 코드 복사",
+  copied: "복사됨",
+  account: "Codex 계정",
+  apiKeyLabel: "OpenAI API 키",
+  apiKeyPlaceholder: "sk-… (로컬 백엔드에만 전송)",
+  apiKeyHint:
+    "키는 URL, localStorage, 역할 설정 또는 로그에 저장되지 않습니다.",
+  submitApiKey: "API 키 연결",
+  logout: "연결 해제",
+  model: "Codex 모델",
+  modelDefault: "Codex 기본 모델 사용",
+  modelUnavailable: "계정을 연결해 사용 가능한 모델 불러오기",
+  reasoning: "추론 강도",
+  reasoningDefault: "모델 기본값 따르기",
+  allowance: "사용량 한도",
+  remaining: "남음",
+  resetsAt: "재설정 시각",
+  lifetimeTokens: "누적 토큰",
+  peakDailyTokens: "일일 최대 토큰",
+  resetCredits: "요청 제한 재설정",
+  usageUnavailable:
+    "이 로그인 방식에서는 ChatGPT 계정 사용량을 제공하지 않습니다.",
+  connectors: "OpenAI 커넥터",
+  connectorsHint:
+    "명시적으로 선택한 연결만 노출합니다. 호출에는 Echo 승인이 필요합니다.",
+  connectorUnavailable: "이 계정에서 사용할 수 있는 커넥터가 없습니다.",
+  accountDetails: "커넥터 및 사용량",
+  saved: "Coder 모델 설정이 업데이트되었습니다",
+  loginStarted: "인증 페이지에서 로그인을 완료하세요",
+  loginComplete: "Codex 계정이 연결되었습니다",
+  loginFailed: "Codex 인증을 완료하지 못했습니다",
+  loginCancelled: "로그인이 취소되었습니다",
+  apiKeyConnected: "API 키가 안전하게 연결되었습니다",
+  accountSummary: (email, plan) =>
+    [email, plan].filter(Boolean).join(" · ") || "Codex 계정",
+  openSettings: "로그인 및 모델 관리",
+  activeSummary: (model) => `선택한 모델 · ${model}`,
+  technicalDetails: "설정 상세",
+};
+
 function copyForLocale(locale: string) {
-  return (locale || "en").toLowerCase().startsWith("zh") ? COPY.zh : COPY.en;
+  const normalized = (locale || "en").toLowerCase();
+  if (normalized.startsWith("zh")) return COPY.zh;
+  if (normalized.startsWith("ja")) return COPY_JA;
+  if (normalized.startsWith("ko")) return COPY_KO;
+  return COPY.en;
 }
 
 async function openSensitiveAuthorizationUrl(url: string): Promise<boolean> {
@@ -316,17 +519,17 @@ const DEFAULT_REASONING_EFFORTS: ReasoningEffort[] = [
 ];
 
 function reasoningLabel(effort: ReasoningEffort, locale: string) {
-  const zh = locale.toLowerCase().startsWith("zh");
-  const labels: Record<ReasoningEffort, [string, string]> = {
-    off: ["关闭", "Off"],
-    minimal: ["极低", "Minimal"],
-    low: ["低", "Low"],
-    medium: ["中", "Medium"],
-    high: ["高", "High"],
-    xhigh: ["极高", "XHigh"],
-    max: ["最大", "Max"],
+  const language = locale.toLowerCase().slice(0, 2);
+  const labels: Record<ReasoningEffort, Record<string, string>> = {
+    off: { zh: "关闭", ja: "オフ", ko: "끔", en: "Off" },
+    minimal: { zh: "极低", ja: "最小", ko: "최소", en: "Minimal" },
+    low: { zh: "低", ja: "低", ko: "낮음", en: "Low" },
+    medium: { zh: "中", ja: "中", ko: "중간", en: "Medium" },
+    high: { zh: "高", ja: "高", ko: "높음", en: "High" },
+    xhigh: { zh: "极高", ja: "超高", ko: "매우 높음", en: "XHigh" },
+    max: { zh: "最大", ja: "最大", ko: "최대", en: "Max" },
   };
-  return labels[effort][zh ? 0 : 1];
+  return labels[effort][language] ?? labels[effort].en;
 }
 
 function pickerModelValue(model: PickerModel) {
@@ -385,9 +588,7 @@ function profileProblem(profile: CoderModelProfile, locale: string) {
       return copy.aliasHint;
     }
     if (
-      profile.compatibility_reason?.includes(
-        "no exact Echo ModelRouter route",
-      )
+      profile.compatibility_reason?.includes("no exact Echo ModelRouter route")
     )
       return copy.routeHint;
     if (
@@ -397,28 +598,41 @@ function profileProblem(profile: CoderModelProfile, locale: string) {
     return profile.compatibility_reason || copy.incompatible;
   }
   if (profile.execution_available !== false) return null;
-  const zh = locale.toLowerCase().startsWith("zh");
-  const reasons: Record<string, [string, string]> = {
-    disabled: ["Codex 引擎尚未启用。", "The Codex engine is disabled."],
-    executable_unavailable: [
-      "未找到 Codex 程序，请检查本地安装。",
-      "Codex executable not found. Check the local installation.",
-    ],
-    tools_unavailable: [
-      "执行工具尚未就绪，请检查后端服务。",
-      "Execution tools are not ready. Check the backend service.",
-    ],
-    account_required: [
-      "请先连接 ChatGPT / Codex 账号。",
-      "Connect a ChatGPT / Codex account first.",
-    ],
-    account_unavailable: [
-      "账号凭据暂不可用，请重新连接。",
-      "Account credentials are unavailable. Reconnect your account.",
-    ],
+  const language = locale.toLowerCase().slice(0, 2);
+  const reasons: Record<string, Record<string, string>> = {
+    disabled: {
+      zh: "Codex 引擎尚未启用。",
+      ja: "Codexエンジンが有効になっていません。",
+      ko: "Codex 엔진이 활성화되지 않았습니다.",
+      en: "The Codex engine is disabled.",
+    },
+    executable_unavailable: {
+      zh: "未找到 Codex 程序，请检查本地安装。",
+      ja: "Codex実行ファイルが見つかりません。ローカルインストールを確認してください。",
+      ko: "Codex 실행 파일을 찾을 수 없습니다. 로컬 설치를 확인하세요.",
+      en: "Codex executable not found. Check the local installation.",
+    },
+    tools_unavailable: {
+      zh: "执行工具尚未就绪，请检查后端服务。",
+      ja: "実行ツールの準備ができていません。バックエンドサービスを確認してください。",
+      ko: "실행 도구가 준비되지 않았습니다. 백엔드 서비스를 확인하세요.",
+      en: "Execution tools are not ready. Check the backend service.",
+    },
+    account_required: {
+      zh: "请先连接 ChatGPT / Codex 账号。",
+      ja: "先にChatGPT / Codexアカウントを接続してください。",
+      ko: "먼저 ChatGPT / Codex 계정을 연결하세요.",
+      en: "Connect a ChatGPT / Codex account first.",
+    },
+    account_unavailable: {
+      zh: "账号凭据暂不可用，请重新连接。",
+      ja: "アカウント認証情報を利用できません。再接続してください。",
+      ko: "계정 자격 증명을 사용할 수 없습니다. 다시 연결하세요.",
+      en: "Account credentials are unavailable. Reconnect your account.",
+    },
   };
   const reason = reasons[profile.execution_unavailable_reason || ""];
-  return reason ? reason[zh ? 0 : 1] : copy.unavailable;
+  return reason ? (reason[language] ?? reason.en) : copy.unavailable;
 }
 
 function ProfileCompatibility({

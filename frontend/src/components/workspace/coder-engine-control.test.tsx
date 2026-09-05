@@ -89,6 +89,25 @@ afterEach(() => {
 });
 
 describe("CoderEngineControl", () => {
+  it("uses localized Coder settings copy for Japanese and Korean", async () => {
+    const japanese = renderWithProviders(<CoderEngineSettings />, {
+      locale: "ja-JP",
+    });
+    expect(await screen.findByText("Coderエンジン")).toBeVisible();
+    await screen.findByText("モデルのソース");
+    expect(
+      screen.getByRole("button", { name: "ChatGPTにログイン" }),
+    ).toBeVisible();
+    japanese.unmount();
+
+    renderWithProviders(<CoderEngineSettings />, { locale: "ko-KR" });
+    expect(await screen.findByText("Coder 엔진")).toBeVisible();
+    await screen.findByText("모델 출처");
+    expect(
+      screen.getByRole("button", { name: "ChatGPT로 로그인" }),
+    ).toBeVisible();
+  });
+
   it("lets the Octopus kernel switch between system and ChatGPT subscription models without mutating the Codex profile", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
