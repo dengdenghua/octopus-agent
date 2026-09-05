@@ -52,6 +52,47 @@ def _fake_parallel(monkeypatch: Any, outputs: dict[str, str] | None = None) -> d
 # ── the point of the skill: fan-in without a context round-trip ────
 
 
+def test_artifact_graph_does_not_replay_ownership_from_a_prior_run(monkeypatch: Any) -> None:
+    seen = _fake_parallel(monkeypatch)
+    nodes = [
+        {
+            "id": "build",
+            "agent_id": "coder",
+            "prompt": "build",
+            "input_files": ["brief.txt"],
+            "output_files": ["report.txt"],
+        }
+    ]
+    first = ds._run_agent_graph(nodes=nodes)
+    second = ds._run_agent_graph(nodes=nodes, resume_token=first["resume_token"])
+    assert second["replayed"] == [] and len(seen["batches"]) == 2
+    assert seen["batches"][1][0]["input_files"] == ["brief.txt"]
+    assert seen["batches"][1][0]["output_files"] == ["report.txt"]
+
+
+def test_graph_preserves_candidate_patch_and_retry_prohibition(monkeypatch: Any) -> None:
+    receipt = {"phase": "worktree_exported", "patch": {"path": "candidate.patch"}, "applied": False}
+
+    def fake(specs: Any = None, **_kw: Any) -> dict[str, Any]:
+        return {
+            "successes": [
+                {
+                    "bb_key": "build",
+                    "output": "done",
+                    "isolated": True,
+                    "worktree": receipt,
+                    "retry_allowed": False,
+                }
+            ],
+            "failures": [],
+        }
+
+    monkeypatch.setattr(ds, "_call_agent_parallel", fake)
+    result = ds._run_agent_graph(nodes=[{"id": "build", "prompt": "build", "isolate": True}])
+    assert result["nodes"]["build"]["worktree"] == receipt
+    assert result["nodes"]["build"]["retry_allowed"] is False
+
+
 def test_downstream_node_receives_the_upstream_output(monkeypatch: Any) -> None:
     seen = _fake_parallel(monkeypatch, {"a": "ALPHA-FINDING"})
     r = ds._run_agent_graph(

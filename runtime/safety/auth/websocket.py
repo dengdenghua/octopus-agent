@@ -22,7 +22,16 @@ def offered_websocket_subprotocols(connection: Any) -> list[str]:
     if isinstance(scope, dict):
         offered = scope.get("subprotocols")
         if isinstance(offered, (list, tuple)):
-            return [str(item).strip() for item in offered if str(item).strip()]
+            # Uvicorn's SansIO transport may retain each protocol header as
+            # one comma-separated entry. Normalize both ASGI shapes before
+            # looking for the auth marker; a browser's valid token must not
+            # disappear just because the transport coalesced its header.
+            return [
+                protocol.strip()
+                for item in offered
+                for protocol in str(item).split(",")
+                if protocol.strip()
+            ]
 
     headers = getattr(connection, "headers", {}) or {}
     raw = str(headers.get("sec-websocket-protocol") or "")

@@ -1257,6 +1257,22 @@
             ],
             "title": "Effective Model"
           },
+          "execution_available": {
+            "default": false,
+            "title": "Execution Available",
+            "type": "boolean"
+          },
+          "execution_unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Unavailable Reason"
+          },
           "mode": {
             "enum": [
               "follow_system",

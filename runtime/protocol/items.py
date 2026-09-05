@@ -544,6 +544,11 @@ class TurnParams(BaseModel):
         alias="sandboxPolicy",
     )
     model: str | None = None
+    # Per-task backend preference; role identity and model selection are
+    # independent. "auto" uses capability/work-mode signals before dispatch.
+    execution_engine: Literal["auto", "octopus", "codex"] = Field(
+        default="auto", alias="executionEngine"
+    )
     effort: Literal["minimal", "low", "medium", "high", "xhigh", "max"] = "medium"
     summary: Literal["none", "auto", "detailed"] = "none"
     output_schema: dict[str, Any] | None = Field(default=None, alias="outputSchema")
@@ -582,6 +587,18 @@ class TurnParams(BaseModel):
     owner_actor_id: str | None = Field(default=None, exclude=True)
 
 
+class ExecutionSnapshot(BaseModel):
+    """Server-selected execution coordinate, persisted before engine invocation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    engine: Literal["octopus", "codex"]
+    driver: str
+    reason: str
+    phase: Literal["primary", "steering", "verification", "repair"]
+    invocation: int = Field(ge=1, strict=True)
+
+
 class Turn(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -609,6 +626,9 @@ class Turn(BaseModel):
     # Trusted runtime-only execution strand used by the evolution ledger.
     # It is never accepted from or serialized back to the client.
     execution_engine: str | None = Field(default=None, exclude=True)
+    # Public evidence of the actual selected engine; unlike input metadata,
+    # this is stamped by the execution supervisor and survives log replay.
+    execution: ExecutionSnapshot | None = None
     # Resolved cwd after authentication, local-workspace validation, and
     # managed-workspace allocation. Task supervision consumes this trusted
     # value instead of guessing from the client's raw TurnParams shape.

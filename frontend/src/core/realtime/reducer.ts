@@ -9,6 +9,7 @@
 import type {
   AgentPhaseSnapshot,
   Conversation,
+  ExecutionSnapshot,
   FileHunk,
   GroundingSource,
   Item,
@@ -19,6 +20,7 @@ import type {
   WorkbenchSnapshotV2,
   WorkspaceFocus,
 } from "./items";
+import { mergeExecutionSnapshot } from "./items";
 
 let errorItemSeq = 0;
 
@@ -242,6 +244,10 @@ export type ConversationEvent =
       params: { threadId: string; tokenUsage: Record<string, unknown> };
     }
   | { method: "turn/started"; params: { threadId: string; turn: Turn } }
+  | {
+      method: "turn/execution/updated";
+      params: { threadId: string; turnId: string; execution: ExecutionSnapshot };
+    }
   | {
       method: "turn/completed";
       params: { threadId: string; turn: Turn };
@@ -716,6 +722,23 @@ export function reduce(
         changedTurnIds: [evt.params.turnId],
         changedItemIds: [],
       };
+    case "turn/execution/updated": {
+      const { threadId, turnId } = evt.params;
+      if (threadId !== state.threadId) return unchanged(state);
+      const index = state.turns.findIndex((turn) => turn.id === turnId);
+      const turn = state.turns[index];
+      if (!turn) return unchanged(state);
+      const execution = mergeExecutionSnapshot(turn.execution, evt.params.execution);
+      if (execution === turn.execution) return unchanged(state);
+      return {
+        next: {
+          ...state,
+          turns: replaceAt(state.turns, index, { ...turn, execution }),
+        },
+        changedTurnIds: [turnId],
+        changedItemIds: [],
+      };
+    }
     case "turn/plan/updated":
       return applyPlanUpdate(
         state,
@@ -964,6 +987,7 @@ function mergeCompletedTurn(existing: Turn, incoming: Turn): Turn {
   return {
     ...existing,
     ...incoming,
+    execution: mergeExecutionSnapshot(existing.execution, incoming.execution),
     items,
   };
 }

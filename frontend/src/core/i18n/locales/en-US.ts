@@ -545,6 +545,11 @@ export const enUS: Translations = {
 
   // Create Project Dialog
   createProjectDialog: {
+    advanced: "Members and invitations",
+    defaultAssistant: "Default assistant",
+    defaultAssistantHint: "Add members or invite people after creating the project.",
+    searchMembers: "Search members, IDs or capabilities",
+    noMembersFound: "No matching members",
     title: "New project",
     placeholder: "Project name",
     quickCategory: "Quick category",
@@ -6855,6 +6860,10 @@ Strategy:
 
   // Account Settings
   accountSettings: {
+    localAccount: "Local account",
+    localAccountDescription: "This account accesses the current deployment. Cloud profile editing and third-party account linking are unavailable.",
+    localPrivacyDescription: "This deployment does not provide cloud privacy preferences. Data handling depends on the models and plugins you connect; review their settings.",
+    privacyUnavailable: "Privacy settings could not be read. Retry before making changes.",
     creditsBalance: "Credits Balance",
     octAccount: "Official Account",
     available: "Available",

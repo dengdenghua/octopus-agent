@@ -50,6 +50,7 @@ def mount_reflex(
         logs_root=_realtime_logs_root,
         identity_store=ctx.identity_store,
         require_auth=ctx.require_auth,
+        allow_local_workspace_access=ctx.allow_local_workspace_access,
         jwt_secret=ctx.jwt_secret,
         jwt_issuer=ctx.jwt_issuer,
         jwt_audience=ctx.jwt_audience,

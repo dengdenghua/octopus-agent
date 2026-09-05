@@ -45,6 +45,7 @@ from runtime.execution.codex_backend.security import (
     CodexSecurityError,
 )
 from runtime.execution.codex_backend.types import RemoteError, RequestTimeoutError
+from runtime.execution.request import current_execution_request
 from runtime.platform.process.paths import app_paths
 from runtime.platform.process.session import Session, current_session
 from runtime.platform.runtime_policy.feature_flags import resolution
@@ -259,6 +260,7 @@ def _request_for_turn(
                     else None
                 ),
             ),
+            execution=current_execution_request(),
         )
 
     request, _broker, _provider = build_codex_role_request(

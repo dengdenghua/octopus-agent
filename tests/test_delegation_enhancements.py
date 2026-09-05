@@ -565,21 +565,25 @@ def test_call_agent_parallel_prefers_context_local_parent_tool_id(mock_subagent,
 # ─── Audit F-04: git lane failure degrades, never breaks the batch ─────────
 
 
-def test_isolated_git_lane_failure_degrades_to_failed_lane(mock_builtins, monkeypatch):
+def test_isolated_git_lane_failure_degrades_to_failed_lane(mock_builtins, monkeypatch, tmp_path):
     """A subprocess.CalledProcessError from worktree creation must degrade to
     one failed lane instead of escaping and killing the whole parallel batch."""
     import subprocess
 
-    import runtime.execution.subagents.worktree_loop as wt_loop
+    import runtime.execution.subagents.isolated_worktree as wt_loop
     from runtime.execution.suckers._delegation_skills_parallel import _call_agent_parallel
+    from tests.test_isolated_subagent import _host
 
-    def _boom(repo_root, name):
+    _repo, parent, _log = _host(tmp_path)
+
+    def _boom(repo_root, name, **_kwargs):
         raise subprocess.CalledProcessError(128, ["git", "worktree", "add"])
 
     monkeypatch.setattr(wt_loop, "worktree_scope", _boom)
 
     result = _call_agent_parallel(
         specs=[{"agent_id": "researcher", "prompt": "x", "isolate": True}],
+        session=parent,
     )
     assert result["ok"] is False
     assert result["success_count"] == 0

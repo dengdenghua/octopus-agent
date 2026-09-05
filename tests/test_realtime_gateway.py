@@ -398,15 +398,18 @@ def test_realtime_accepts_subprotocol_token_when_required(
     assert outcome["response"].result["turn"]["status"] == "completed"
 
 
+@pytest.mark.parametrize("coalesced", [False, True])
 def test_realtime_accepts_base64url_subprotocol_token_when_required(
     authenticated_gateway_client: Any,
+    coalesced: bool,
 ) -> None:
     client, _ = authenticated_gateway_client
     token = "令牌 with spaces/(test)"
     encoded = base64.urlsafe_b64encode(token.encode("utf-8")).decode("ascii").rstrip("=")
+    protocols = ["bearer.b64", encoded]
     with client.websocket_connect(
         "/api/realtime",
-        subprotocols=["bearer.b64", encoded],
+        subprotocols=[", ".join(protocols)] if coalesced else protocols,
     ) as ws:
         assert ws.accepted_subprotocol == "bearer.b64"
         outcome = _drive_turn(ws, thread_id="auth_th_b64", text="hello encoded auth")

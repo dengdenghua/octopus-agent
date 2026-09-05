@@ -15,7 +15,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   ActivityIcon,
   AlertTriangleIcon,
@@ -523,18 +523,20 @@ export default function ProjectsPage() {
               className="flex-1"
             />
           ) : projects.length === 0 ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
-              <ClipboardListIcon className="size-10 opacity-40" />
-              <div>
-                还没有项目。在实时会话里用 /project
-                开启一个里程碑式项目，或先建一个项目。
+            <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-12 text-center">
+              <div className="grid size-16 place-items-center rounded-2xl bg-primary/10 text-primary">
+                <ClipboardListIcon className="size-8" />
               </div>
-              <Link
-                to="/workspace/realtime/new"
-                className="text-xs text-primary underline-offset-4 hover:underline"
-              >
-                去新建会话
-              </Link>
+              <div className="max-w-md space-y-2">
+                <h2 className="text-xl font-semibold">把目标变成一个项目</h2>
+                <p className="text-sm leading-6 text-muted-foreground">
+                  为项目起个名字，和助手一起拆解里程碑、安排任务并跟进进度。成员和协作设置可以稍后调整。
+                </p>
+              </div>
+              <Button onClick={() => setCreateOpen(true)}>
+                <PlusIcon className="size-4" />
+                创建第一个项目
+              </Button>
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 items-stretch">

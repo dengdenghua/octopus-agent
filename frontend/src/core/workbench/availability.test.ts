@@ -33,8 +33,22 @@ it("shares one boot inventory across concurrent shell and app-center reads", asy
   ]);
 
   expect(snapshot.installed.plugins).toEqual([]);
-  expect(availability.projects).toBe(true);
+  expect(availability.projects).toBe(false);
   expect(apiMocks.fetchCloudInstalled).toHaveBeenCalledTimes(1);
   expect(apiMocks.fetchRuntimePluginStatuses).toHaveBeenCalledTimes(1);
   expect(setAvailability).toHaveBeenCalledTimes(1);
+});
+
+it("exposes project management only while its UI package is installed and enabled", async () => {
+  const installed = { skills: [], plugins: ["projects"], plugin_states: {} };
+  const enabled = await syncWorkbenchAvailability({
+    installed,
+    runtimeStatuses: new Map(),
+  });
+  expect(enabled.projects).toBe(true);
+  const removed = await syncWorkbenchAvailability({
+    installed: { skills: [], plugins: [], plugin_states: {} },
+    runtimeStatuses: new Map(),
+  });
+  expect(removed.projects).toBe(false);
 });

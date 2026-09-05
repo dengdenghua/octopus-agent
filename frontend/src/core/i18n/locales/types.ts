@@ -456,6 +456,11 @@ export interface Translations {
 
   // Create Project Dialog
   createProjectDialog: {
+    advanced: string;
+    defaultAssistant: string;
+    defaultAssistantHint: string;
+    searchMembers: string;
+    noMembersFound: string;
     title: string;
     placeholder: string;
     quickCategory: string;
@@ -5914,6 +5919,10 @@ export interface Translations {
 
   // Account Settings
   accountSettings: {
+    localAccount: string;
+    localAccountDescription: string;
+    localPrivacyDescription: string;
+    privacyUnavailable: string;
     creditsBalance: string;
     octAccount: string;
     available: string;

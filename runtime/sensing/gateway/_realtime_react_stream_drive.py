@@ -522,11 +522,23 @@ async def _drive_react(
         # ``asyncio.to_thread`` copies ContextVars from the calling
         # task, so installing the cancellation scope here makes the
         # token visible to every subprocess call downstream.
+        from runtime.execution.request import current_execution_request
         from runtime.memory.journal.journal_context import journal_context
-        from runtime.platform.process.session import Session, session_scope
+        from runtime.platform.process.session import Session, current_session, session_scope
 
         session_metadata = dict(intent.user_context or {})
         _apply_react_session_metadata(session_metadata, runtime._stack, provider)
+        shared_request = current_execution_request()
+        host_session = current_session()
+        if (
+            shared_request is not None
+            and shared_request.task.task_id == turn.id
+            and host_session is not None
+        ):
+            # Preserve the authenticated parent and shared write coordination
+            # across verification/repair producer threads. Engine-private
+            # context is never copied into ParsedIntent or the event log.
+            session_metadata.update(host_session.metadata)
         # Prompt guidance is not a sufficient mutation boundary. Derive a
         # private, server-owned read-only marker from the actual turn goal so
         # the executor and delegated children fail closed even when a model
@@ -554,7 +566,9 @@ async def _drive_react(
             session_metadata["_trace_store"] = runtime._trace_store
         session_agent = agent if hasattr(agent, "agent_id") else None
         turn_session = Session(
-            actor=getattr(intent, "actor", None),
+            actor=shared_request.task.actor_id
+            if shared_request is not None
+            else getattr(intent, "actor", None),
             agent=session_agent,
             thread_id=turn.thread_id,
             conversation_id=turn.thread_id,
@@ -678,6 +692,14 @@ async def _drive_react(
                         ),
                         steering_drain=lambda: runtime._drain_turn_steering(turn.id),
                         on_auto_parallel_batch=_on_auto_parallel_batch,
+                        **(
+                            {
+                                "max_tokens_budget": shared_request.task.resources.token_target,
+                                "max_usd_budget": shared_request.task.resources.usd_target,
+                            }
+                            if shared_request is not None
+                            else {}
+                        ),
                     )
                     for evt in events:
                         if (

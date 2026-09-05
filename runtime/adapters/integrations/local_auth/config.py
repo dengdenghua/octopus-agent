@@ -129,6 +129,10 @@ class LocalAuthConfig(BaseModel):
         default_factory=lambda: ["user", "local"],
         description="新建 Identity 的默认 roles",
     )
+    admin_usernames: list[str] = Field(
+        default_factory=list,
+        description="经正常登录验证后获得管理员角色的明确用户名；其他账号仍使用 default_roles",
+    )
 
     @property
     def password_required(self) -> bool:

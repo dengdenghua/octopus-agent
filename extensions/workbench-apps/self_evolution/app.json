@@ -1,0 +1,18 @@
+{
+  "schema": "octopus.workbench_app.v1",
+  "id": "self_evolution",
+  "name": "自进化",
+  "description": "双螺旋、候选基因、治理与审计",
+  "route": "/workspace/evolution",
+  "module_id": "evolution",
+  "version": "1.0.0",
+  "host_api": ">=0.2,<0.3",
+  "dependencies": [],
+  "entry": "dist/index.html",
+  "isolation": "iframe",
+  "permissions": [
+    "backend.api",
+    "host.same_origin"
+  ],
+  "data_paths": []
+}

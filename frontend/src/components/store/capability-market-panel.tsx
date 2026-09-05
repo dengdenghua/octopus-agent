@@ -707,6 +707,9 @@ function ConnectDialog({
         const res = await connectCapability(capability.id, {
           tokens: Object.keys(tokens).length ? tokens : undefined,
           run_cli: isCli && Object.keys(tokens).length === 0,
+          ...(isModelProvider && capability.permissions_granted
+            ? { grant_permissions: capability.permissions_granted }
+            : {}),
         });
         const isCurrentOperation =
           operationEpochRef.current === operationEpoch &&
@@ -1673,6 +1676,15 @@ export function CapabilityMarketPanel({
         ),
       );
       if (reviewedPlan) {
+        if (cap.model_provider) {
+          setPermissionReview(null);
+          setConnectTarget({
+            ...cap,
+            installed: true,
+            permissions_granted: permissions,
+          });
+          return;
+        }
         await setCapabilityEnabled(cap.id, true, permissions);
         enabledAfterInstall = true;
         setItems((prev) =>
@@ -1809,6 +1821,10 @@ export function CapabilityMarketPanel({
       await openPermissionReview(cap, "enable");
       return;
     }
+    if (!cap.enabled && cap.model_provider && !statusMap[cap.id]) {
+      setConnectTarget(cap);
+      return;
+    }
     setBusy(cap.id, true);
     setError(null);
     try {
@@ -1838,6 +1854,14 @@ export function CapabilityMarketPanel({
       return;
     }
     const permissions = review.plan.permissions;
+    if (review.capability.model_provider) {
+      setPermissionReview(null);
+      setConnectTarget({
+        ...review.capability,
+        permissions_granted: permissions,
+      });
+      return;
+    }
     setBusy(review.capability.id, true);
     setPermissionReview({ ...review, busy: true, error: null });
     try {
@@ -2128,6 +2152,13 @@ export function CapabilityMarketPanel({
             const typeMeta = TYPE_META[cap.type] ?? DEFAULT_TYPE_META;
             const busy = busyMap[cap.id];
             const connected = statusMap[cap.id];
+            const needsConnection =
+              cap.auth_mode !== "none" ||
+              Boolean(
+                cap.model_provider || cap.has_cli_auth || cap.oauth_supported,
+              );
+            const needsModelConfiguration =
+              Boolean(cap.model_provider) && !connected;
             const isPlugin = cap.source === "codex_plugin";
             const isCodexMarketplace = cap.is_codex_marketplace === true;
             return (
@@ -2224,12 +2255,22 @@ export function CapabilityMarketPanel({
                     <Badge
                       className={cn(
                         "border-transparent text-[11px]",
-                        connected
+                        cap.enabled && (!needsConnection || connected)
                           ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
                           : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
                       )}
                     >
-                      {connected ? "已连接" : "未连接"}
+                      {cap.permission_review_required
+                        ? "待确认权限"
+                        : needsModelConfiguration
+                          ? "待配置"
+                          : !cap.enabled
+                            ? "已停用"
+                            : !needsConnection
+                              ? "已启用"
+                              : connected
+                                ? "已连接"
+                                : "待连接"}
                     </Badge>
                   )}
                   {cap.permission_review_required ? (
@@ -2319,7 +2360,9 @@ export function CapabilityMarketPanel({
                             ? "禁用"
                             : cap.permission_review_required
                               ? "查看并确认签名权限"
-                              : "启用"
+                              : needsModelConfiguration
+                                ? "配置模型并启用"
+                                : "启用"
                         }
                       >
                         {busy ? (
@@ -2330,38 +2373,43 @@ export function CapabilityMarketPanel({
                           <Plug className="mr-1 h-3 w-3" />
                         )}
                         {cap.enabled
-                          ? "启用中"
+                          ? "已启用"
                           : cap.permission_review_required
                             ? "确认权限"
-                            : "已禁用"}
+                            : needsModelConfiguration
+                              ? "配置模型"
+                              : "启用"}
                       </Button>
-                      <Button
-                        size="sm"
-                        variant={connected ? "outline" : "secondary"}
-                        className="h-7 rounded-sm px-3 text-xs"
-                        disabled={busy || cap.permission_review_required}
-                        onClick={() =>
-                          connected
-                            ? void onDisconnect(cap)
-                            : void openConnect(cap)
-                        }
-                        title={
-                          cap.permission_review_required
-                            ? "请先确认权限并启用"
-                            : connected
-                              ? "断开并清除凭据"
-                              : "连接/认证"
-                        }
-                      >
-                        {busy ? (
-                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                        ) : connected ? (
-                          <Unplug className="mr-1 h-3 w-3" />
-                        ) : (
-                          <KeyRound className="mr-1 h-3 w-3" />
+                      {needsConnection &&
+                        !(needsModelConfiguration && !cap.enabled) && (
+                          <Button
+                            size="sm"
+                            variant={connected ? "outline" : "secondary"}
+                            className="h-7 rounded-sm px-3 text-xs"
+                            disabled={busy || cap.permission_review_required}
+                            onClick={() =>
+                              connected
+                                ? void onDisconnect(cap)
+                                : void openConnect(cap)
+                            }
+                            title={
+                              cap.permission_review_required
+                                ? "请先确认权限并启用"
+                                : connected
+                                  ? "断开并清除凭据"
+                                  : "连接/认证"
+                            }
+                          >
+                            {busy ? (
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            ) : connected ? (
+                              <Unplug className="mr-1 h-3 w-3" />
+                            ) : (
+                              <KeyRound className="mr-1 h-3 w-3" />
+                            )}
+                            {connected ? "断开" : "连接"}
+                          </Button>
                         )}
-                        {connected ? "断开" : "连接"}
-                      </Button>
                       <Button
                         size="sm"
                         variant="ghost"
@@ -2428,6 +2476,24 @@ export function CapabilityMarketPanel({
             if (!open) setConnectTarget(null);
           }}
           onConnected={() => {
+            if (connectTarget.model_provider) {
+              setItems((current) =>
+                current.map((cap) =>
+                  cap.id === connectTarget.id
+                    ? {
+                        ...cap,
+                        enabled: true,
+                        permission_active: true,
+                        permission_review_required: false,
+                        permissions_granted: connectTarget.permissions_granted,
+                      }
+                    : cap,
+                ),
+              );
+              void queryClient.invalidateQueries({
+                queryKey: CAPABILITY_SURFACE_QUERY_KEY,
+              });
+            }
             setStatusMap((m) => ({
               ...m,
               [connectTarget.id]: true,

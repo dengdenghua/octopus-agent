@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from runtime.core.cerebrum.planner import PlannerError
+from runtime.execution.request import current_execution_request
 from runtime.platform.models import (
     ArmId,
     Budget,
@@ -183,12 +184,18 @@ def make_stack_subagent_runner(
             )
 
             if agent_uses_codex_execution_backend(agent):
+                from runtime.safety.approval.cancellation import current_cancellation_token
+
+                parent_cancellation = current_cancellation_token()
                 result = run_agent_role_sync(
                     stack,
                     agent,
                     description,
                     context=ctx,
-                    is_interrupted=lambda: bool(cancel_event is not None and cancel_event.is_set()),
+                    is_interrupted=lambda: (
+                        parent_cancellation.is_cancelled
+                        or bool(cancel_event is not None and cancel_event.is_set())
+                    ),
                 )
                 if not result.success:
                     detail = result.output or result.status
@@ -218,6 +225,14 @@ def make_stack_subagent_runner(
             if isinstance(ctx.get("runtime_session_metadata"), dict)
             else {}
         )
+        shared_request = current_execution_request()
+        parent = current_session()
+        if shared_request is not None and parent is not None:
+            # The bridge has already installed a distinct child request and
+            # permission ceiling. Keep its authenticated identity and shared
+            # lease tables when the native planner creates its tool Session.
+            runtime_metadata = {**runtime_metadata, **parent.metadata}
+            actor = shared_request.task.actor_id
         emit_tool_event = (
             ctx.get("emit_tool_event") if callable(ctx.get("emit_tool_event")) else None
         )

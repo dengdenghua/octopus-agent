@@ -1,0 +1,18 @@
+{
+  "schema": "octopus.workbench_app.v1",
+  "id": "community",
+  "name": "发现社区",
+  "description": "发现并复用社区工作流",
+  "route": "/workspace/community",
+  "module_id": "community",
+  "version": "1.0.0",
+  "host_api": ">=0.2,<0.3",
+  "dependencies": [],
+  "entry": "dist/index.html",
+  "isolation": "iframe",
+  "permissions": [
+    "backend.api",
+    "host.same_origin"
+  ],
+  "data_paths": []
+}

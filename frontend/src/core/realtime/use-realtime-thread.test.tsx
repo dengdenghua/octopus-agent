@@ -1248,62 +1248,67 @@ describe("useRealtimeThread turn/start delivery anchoring", () => {
     return outcome;
   }
 
-  it("forwards the client item id as top-level turn/start userItemId", async () => {
-    const { rendered, handles } = setupDelivery();
-    await waitFor(() =>
-      expect(rendered.result.current.state.resumeState).toBe("resumed"),
-    );
-
-    let outcome!: ReturnType<typeof watchSettlement>;
-    act(() => {
-      outcome = watchSettlement(
-        rendered.result.current.startTurn({
-          input: "hello",
-          clientItemId: "itm_user_client_stable",
-          metadata: { context: { mode: "team" } },
-        }),
+  it.each(["auto", "octopus", "codex"] as const)(
+    "forwards the client item id and %s engine choice in turn/start",
+    async (executionEngine) => {
+      const { rendered, handles } = setupDelivery();
+      await waitFor(() =>
+        expect(rendered.result.current.state.resumeState).toBe("resumed"),
       );
-    });
 
-    const request = handles.requests.find(
-      (entry) => entry.method === "turn/start",
-    );
-    expect(request?.params).toMatchObject({
-      threadId: "th",
-      userItemId: "itm_user_client_stable",
-      input: [
-        {
-          type: "text",
-          text: "hello",
-          metadata: { context: { mode: "team" } },
-        },
-      ],
-    });
-    const input = request?.params.input as
-      | Array<{ metadata?: Record<string, unknown> }>
-      | undefined;
-    expect(input?.[0]?.metadata).not.toHaveProperty("client_message_id");
-
-    act(() => {
-      handles.emitNotification({
-        method: "turn/started",
-        params: {
-          threadId: "th",
-          turn: {
-            id: "t-live",
-            threadId: "th",
-            status: "inProgress",
-            items: [],
-            startedAt: "2026-01-01T00:00:00.000Z",
-            completedAt: null,
-            error: null,
-          },
-        },
+      let outcome!: ReturnType<typeof watchSettlement>;
+      act(() => {
+        outcome = watchSettlement(
+          rendered.result.current.startTurn({
+            input: "hello",
+            clientItemId: "itm_user_client_stable",
+            executionEngine,
+            metadata: { context: { mode: "team" } },
+          }),
+        );
       });
-      handles.rejectTurnStart(new Error("test cleanup"));
-    });
-    await waitFor(() => expect(outcome.value).toBe("resolved"));
-  });
+
+      const request = handles.requests.find(
+        (entry) => entry.method === "turn/start",
+      );
+      expect(request?.params).toMatchObject({
+        threadId: "th",
+        userItemId: "itm_user_client_stable",
+        executionEngine,
+        input: [
+          {
+            type: "text",
+            text: "hello",
+            metadata: { context: { mode: "team" } },
+          },
+        ],
+      });
+      const input = request?.params.input as
+        | Array<{ metadata?: Record<string, unknown> }>
+        | undefined;
+      expect(input?.[0]?.metadata).not.toHaveProperty("client_message_id");
+
+      act(() => {
+        handles.emitNotification({
+          method: "turn/started",
+          params: {
+            threadId: "th",
+            turn: {
+              id: "t-live",
+              threadId: "th",
+              status: "inProgress",
+              items: [],
+              startedAt: "2026-01-01T00:00:00.000Z",
+              completedAt: null,
+              error: null,
+            },
+          },
+        });
+        handles.rejectTurnStart(new Error("test cleanup"));
+      });
+      await waitFor(() => expect(outcome.value).toBe("resolved"));
+    },
+  );
 
   it("resolves startTurn when turn/started arrived before the socket-drop rejection", async () => {
     const { rendered, handles } = setupDelivery();

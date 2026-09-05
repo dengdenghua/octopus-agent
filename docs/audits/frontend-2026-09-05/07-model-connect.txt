@@ -1,0 +1,32 @@
+Browser tab: 1, Title: "新对话 - EchoAI", URL: "http://localhost:3000/#/workspace/agents?surface=chat&tab=plugins&view=featured".
+0 AXWebArea 新对话 - EchoAI, URL: localhost:3000/#/workspace/agents?surface=chat&tab=plugins&view=featured
+	1 container
+		2 container Notifications alt+T
+		3 container 连接 · OpenCode Zen 模型适配器, ID: radix-_r_3k_
+			4 heading 连接 · OpenCode Zen 模型适配器, Value: 2, ID: radix-_r_3l_
+				5 text 连接 ·  OpenCode Zen 模型适配器
+			6 container radix-_r_3m_
+				7 text 类型  插件  · 认证  Token
+			8 text 直连模型 API，不安装或检测 OpenCode CLI
+			9 text Key 会加密保存在本机；模型继续使用 Octopus 的流式输出、工具调用和记忆。
+			10 link Description: 登录 OpenCode Zen 并获取 API Key, Value: opencode.ai/zen
+			11 container
+				12 text OpenCode Zen API Key
+				13 text field (settable) OpenCode Zen API Key
+			14 text 当前免费模型
+			15 text big-pickle
+			16 text muse-spark-1.2-contributor-free
+			17 text mimo-v2.5-free
+			18 text hy3-free
+			19 text nemotron-3-ultra-free
+			20 text nemotron-3.5-lightning-free
+			21 container
+				22 text •  部分免费模型会记录请求，或将数据用于模型改进；不要发送机密代码和敏感数据。
+			23 container
+				24 text •  Muse Spark Contributor Free 通过 Zen Responses 协议调用，不依赖 ChatGPT 登录。
+			25 container
+				26 text •  Kimi 系列当前属于付费模型，不会被本适配器自动加入免费列表。
+			27 button 取消
+			28 button (disabled) 验证并接入免费模型
+
+The focused UI element is 13 text field (settable) OpenCode Zen API Key

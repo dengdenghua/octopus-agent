@@ -1,6 +1,12 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BotIcon, CheckIcon, CrownIcon, UsersRoundIcon } from "lucide-react";
+import {
+  BotIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  CrownIcon,
+  UsersRoundIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -13,6 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { AgentAvatar } from "@/components/workspace/sidebar-footer";
 import { useAgents } from "@/core/agents";
@@ -73,6 +80,8 @@ export function CreateProjectDialog({
     null,
   );
   const [invitePeopleAfterCreate, setInvitePeopleAfterCreate] = useState(false);
+  const [advanced, setAdvanced] = useState(false);
+  const [agentSearch, setAgentSearch] = useState("");
   const { agents, isLoading: agentsLoading } = useAgents();
   const activeAgentId = useActiveAgentId();
   const { mutate: createProject, isPending } = useCreateProject();
@@ -93,6 +102,25 @@ export function CreateProjectDialog({
     () => new Set(effectiveSelectedAgentIds),
     [effectiveSelectedAgentIds],
   );
+  // Use the stable role ID: two distinct roles can share a display name.
+  const uniqueAgents = useMemo(
+    () => [...new Map(agents.map((agent) => [agent.name, agent])).values()],
+    [agents],
+  );
+  const visibleAgents = uniqueAgents
+    .filter((agent) =>
+      advanced
+        ? `${agent.display_name ?? ""} ${agent.name} ${agent.description ?? ""}`
+            .toLocaleLowerCase()
+            .includes(agentSearch.trim().toLocaleLowerCase())
+        : agent.name === defaultAgentId,
+    )
+    .sort(
+      (a, b) =>
+        Number(b.name === defaultAgentId) - Number(a.name === defaultAgentId) ||
+        Number(selectedAgentSet.has(b.name)) -
+          Number(selectedAgentSet.has(a.name)),
+    );
 
   const resetForm = () => {
     setName("");
@@ -100,6 +128,8 @@ export function CreateProjectDialog({
     setSelectedIcon("📁");
     setSelectedAgentIds(null);
     setInvitePeopleAfterCreate(false);
+    setAdvanced(false);
+    setAgentSearch("");
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -178,17 +208,25 @@ export function CreateProjectDialog({
           <DialogDescription>{t.createProjectDialog.hint}</DialogDescription>
         </DialogHeader>
         <div className="flex min-h-0 flex-col gap-4 overflow-y-auto border-y px-6 py-4">
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={t.createProjectDialog.placeholder}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !isIMEComposing(e)) {
-                e.preventDefault();
-                handleSubmit();
-              }
-            }}
-          />
+          <div className="space-y-2">
+            <Label htmlFor="create-project-name">
+              {t.createProjectDialog.placeholder}
+            </Label>
+            <Input
+              id="create-project-name"
+              required
+              disabled={isPending}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t.createProjectDialog.placeholder}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !isIMEComposing(e)) {
+                  e.preventDefault();
+                  handleSubmit();
+                }
+              }}
+            />
+          </div>
           <div className="flex flex-col gap-2">
             <span className="text-muted-foreground text-sm">
               {t.createProjectDialog.quickCategory}
@@ -210,7 +248,25 @@ export function CreateProjectDialog({
             </div>
           </div>
 
+          <Button
+            type="button"
+            variant="ghost"
+            className="justify-between px-0"
+            aria-expanded={advanced}
+            aria-controls="create-project-members"
+            onClick={() => setAdvanced((value) => !value)}
+          >
+            {t.createProjectDialog.advanced}
+            <ChevronDownIcon
+              className={cn(
+                "size-4 transition-transform",
+                advanced && "rotate-180",
+              )}
+            />
+          </Button>
+
           <section
+            id="create-project-members"
             aria-labelledby="create-project-ai-members"
             className="overflow-hidden rounded-xl border border-border-default bg-muted/15"
           >
@@ -224,10 +280,14 @@ export function CreateProjectDialog({
                     id="create-project-ai-members"
                     className="text-sm font-medium"
                   >
-                    {t.createProjectDialog.aiMembersLabel}
+                    {advanced
+                      ? t.createProjectDialog.aiMembersLabel
+                      : t.createProjectDialog.defaultAssistant}
                   </h3>
                   <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-                    {t.createProjectDialog.aiMembersDescription}
+                    {advanced
+                      ? t.createProjectDialog.aiMembersDescription
+                      : t.createProjectDialog.defaultAssistantHint}
                   </p>
                 </div>
               </div>
@@ -238,21 +298,39 @@ export function CreateProjectDialog({
               </span>
             </div>
 
+            {advanced && (
+              <div className="p-2 pb-0">
+                <Input
+                  aria-label={t.createProjectDialog.searchMembers}
+                  placeholder={t.createProjectDialog.searchMembers}
+                  value={agentSearch}
+                  onChange={(event) => setAgentSearch(event.target.value)}
+                />
+              </div>
+            )}
             {agentsLoading ? (
               <div className="px-3 py-3 text-xs text-muted-foreground">
                 {t.createProjectDialog.agentsLoading}
               </div>
-            ) : agents.length > 0 ? (
+            ) : visibleAgents.length > 0 ? (
               <div className="grid max-h-44 grid-cols-1 gap-1 overflow-y-auto p-2 sm:grid-cols-2">
-                {agents.map((agent) => {
+                {visibleAgents.map((agent) => {
                   const selected = selectedAgentSet.has(agent.name);
                   const isLeader = agent.name === defaultAgentId;
                   const label = agent.display_name ?? agent.name;
+                  const duplicateLabel = uniqueAgents.some(
+                    (other) =>
+                      other.name !== agent.name &&
+                      (other.display_name ?? other.name) === label,
+                  );
                   return (
                     <button
                       key={agent.name}
                       type="button"
-                      aria-label={label}
+                      aria-label={
+                        duplicateLabel ? `${label} (${agent.name})` : label
+                      }
+                      title={`${label} · ${agent.name}${agent.description ? ` · ${agent.description}` : ""}`}
                       aria-pressed={selected}
                       disabled={isPending || isLeader}
                       onClick={() => toggleAgent(agent.name)}
@@ -273,7 +351,9 @@ export function CreateProjectDialog({
                           {label}
                         </span>
                         <span className="block truncate text-xs text-muted-foreground">
-                          {agent.description || agent.name}
+                          {duplicateLabel
+                            ? agent.name
+                            : agent.description || agent.name}
                         </span>
                       </span>
                       <span
@@ -292,55 +372,59 @@ export function CreateProjectDialog({
               </div>
             ) : (
               <div className="px-3 py-3 text-xs text-muted-foreground">
-                {t.createProjectDialog.agentsUnavailable}
+                {advanced && agentSearch.trim()
+                  ? t.createProjectDialog.noMembersFound
+                  : t.createProjectDialog.agentsUnavailable}
               </div>
             )}
           </section>
 
-          <div className="grid gap-2 sm:grid-cols-2">
-            <div className="flex items-start gap-2.5 rounded-xl border border-border-default px-3 py-2.5">
-              <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
-                <UsersRoundIcon className="size-4" />
-              </span>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
-                  <span>{t.createProjectDialog.humanMembersLabel}</span>
-                  <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground">
-                    {t.createProjectDialog.humanMembersAfterCreate}
-                  </span>
+          {advanced && (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="flex items-start gap-2.5 rounded-xl border border-border-default px-3 py-2.5">
+                <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                  <UsersRoundIcon className="size-4" />
+                </span>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
+                    <span>{t.createProjectDialog.humanMembersLabel}</span>
+                    <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground">
+                      {t.createProjectDialog.humanMembersAfterCreate}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    {t.createProjectDialog.humanMembersDescription}
+                  </p>
+                  <label className="mt-2 flex cursor-pointer items-center justify-between gap-2 rounded-lg bg-muted/45 px-2 py-1.5 text-xs font-medium">
+                    <span>{t.createProjectDialog.invitePeopleOnArrival}</span>
+                    <Switch
+                      checked={invitePeopleAfterCreate}
+                      onCheckedChange={setInvitePeopleAfterCreate}
+                      disabled={isPending}
+                      aria-label={t.createProjectDialog.invitePeopleOnArrival}
+                    />
+                  </label>
                 </div>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {t.createProjectDialog.humanMembersDescription}
-                </p>
-                <label className="mt-2 flex cursor-pointer items-center justify-between gap-2 rounded-lg bg-muted/45 px-2 py-1.5 text-xs font-medium">
-                  <span>{t.createProjectDialog.invitePeopleOnArrival}</span>
-                  <Switch
-                    checked={invitePeopleAfterCreate}
-                    onCheckedChange={setInvitePeopleAfterCreate}
-                    disabled={isPending}
-                    aria-label={t.createProjectDialog.invitePeopleOnArrival}
-                  />
-                </label>
               </div>
-            </div>
 
-            <div className="flex items-start gap-2.5 rounded-xl border border-border-default px-3 py-2.5">
-              <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                <CrownIcon className="size-4" />
-              </span>
-              <div className="min-w-0">
-                <div className="text-xs text-muted-foreground">
-                  {t.createProjectDialog.creatorRoleLabel}
+              <div className="flex items-start gap-2.5 rounded-xl border border-border-default px-3 py-2.5">
+                <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  <CrownIcon className="size-4" />
+                </span>
+                <div className="min-w-0">
+                  <div className="text-xs text-muted-foreground">
+                    {t.createProjectDialog.creatorRoleLabel}
+                  </div>
+                  <div className="mt-0.5 text-sm font-medium">
+                    {t.createProjectDialog.creatorRole}
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    {t.createProjectDialog.creatorRoleDescription}
+                  </p>
                 </div>
-                <div className="mt-0.5 text-sm font-medium">
-                  {t.createProjectDialog.creatorRole}
-                </div>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {t.createProjectDialog.creatorRoleDescription}
-                </p>
               </div>
             </div>
-          </div>
+          )}
         </div>
         <DialogFooter className="px-6 py-4">
           <Button variant="outline" onClick={() => handleOpenChange(false)}>

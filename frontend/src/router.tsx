@@ -15,10 +15,8 @@ import {
 } from "@/components/electron-title-bar";
 import { emitOpenSettings } from "@/core/events";
 import { useI18n } from "@/core/i18n/hooks";
-import {
-  loadAgentsPage,
-  loadProjectsPage,
-} from "@/core/navigation/workspace-route-preload";
+import { loadAgentsPage } from "@/core/navigation/workspace-route-preload";
+import { RouteTitle } from "@/core/navigation/route-title";
 import {
   WORKBENCH_BUILTIN_APPS,
   type WorkbenchBuiltinApp,
@@ -34,6 +32,7 @@ function remoteWorkbenchApp(id: string): WorkbenchBuiltinApp {
 }
 
 const COMMUNITY_APP = remoteWorkbenchApp("community");
+const PROJECTS_APP = remoteWorkbenchApp("projects");
 const INTELLIGENCE_APP = remoteWorkbenchApp("intelligence");
 const DESIGN_APP = remoteWorkbenchApp("design");
 const NARRATIVE_APP = remoteWorkbenchApp("narrative");
@@ -123,7 +122,6 @@ const ObservabilityPage = lazy(
 // and bounced the user to landing. Fixed by registering them here.
 const KnowledgePage = lazy(() => import("./app/workspace/knowledge/page"));
 const StoragePage = lazy(() => import("./app/workspace/storage/page"));
-const ProjectsPage = lazy(loadProjectsPage);
 const WorkspaceWebAppPage = lazy(() => import("./app/workspace/web-app/page"));
 // Reflex monitor + YAML editor. See app/workspace/reflex/page.tsx.
 const ReflexMonitorPage = lazy(() => import("./app/workspace/reflex/page"));
@@ -191,6 +189,7 @@ export function PageLoading() {
 export function AppRouter() {
   return (
     <ErrorBoundary>
+      <RouteTitle />
       <ElectronTitleBarProvider>
         <ElectronTitleBar />
         <Suspense fallback={<PageLoading />}>
@@ -289,7 +288,10 @@ export function AppRouter() {
                   path="evolution"
                   element={<RemoteWorkbenchSurface app={EVOLUTION_APP} />}
                 />
-                <Route path="projects" element={<ProjectsPage />} />
+                <Route
+                  path="projects"
+                  element={<RemoteWorkbenchSurface app={PROJECTS_APP} />}
+                />
                 <Route
                   path="design"
                   element={<RemoteWorkbenchSurface app={DESIGN_APP} />}

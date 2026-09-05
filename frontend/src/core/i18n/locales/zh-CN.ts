@@ -517,6 +517,11 @@ export const zhCN: Translations = {
 
   // Create Project Dialog
   createProjectDialog: {
+    advanced: "成员与邀请设置",
+    defaultAssistant: "默认协作助手",
+    defaultAssistantHint: "创建后可随时添加成员或邀请他人。",
+    searchMembers: "搜索成员名称、标识或能力",
+    noMembersFound: "没有匹配的成员",
     title: "创建项目",
     placeholder: "项目名称",
     quickCategory: "快速选择分类",
@@ -6470,6 +6475,10 @@ export const zhCN: Translations = {
 
   // Account Settings
   accountSettings: {
+    localAccount: "本地账户",
+    localAccountDescription: "此账户用于访问当前部署。云端资料编辑与第三方账号关联尚未开放。",
+    localPrivacyDescription: "当前部署不提供云端隐私偏好设置。模型和插件的数据使用方式取决于你连接的服务，可在对应设置中查看。",
+    privacyUnavailable: "隐私设置尚未读取成功，请重试后再修改。",
     creditsBalance: "积分余额",
     octAccount: "官方账号",
     available: "可用",

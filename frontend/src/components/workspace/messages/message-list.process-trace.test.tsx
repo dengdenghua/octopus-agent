@@ -175,6 +175,34 @@ function renderMessageList(args: {
 }
 
 describe("MessageList process trace lifecycle", () => {
+  test("shows recorded engines independently of the current persona and omits legacy guesses", () => {
+    const { container } = renderMessageList({
+      mode: "chat",
+      currentAgent: { name: "analyst", display_name: "Analyst" },
+      thread: mockThread({
+        messages: [
+          message("user-1", "human", "Task one"),
+          {
+            ...message("answer-1", "ai", "First result"),
+            additional_kwargs: { execution_engine: "codex" },
+          },
+          message("user-2", "human", "Task two"),
+          {
+            ...message("answer-2", "ai", "Second result"),
+            additional_kwargs: { execution_engine: "octopus" },
+          },
+          message("user-3", "human", "Old task"),
+          message("answer-3", "ai", "Legacy result"),
+        ],
+      }),
+    });
+    expect(
+      Array.from(container.querySelectorAll("[data-execution-engine]")).map(
+        (node) => node.getAttribute("data-execution-engine"),
+      ),
+    ).toEqual(["codex", "octopus"]);
+  });
+
   test("does not settle an inline agent from child tool completion", () => {
     const base = [
       toolEvent("subagent", {

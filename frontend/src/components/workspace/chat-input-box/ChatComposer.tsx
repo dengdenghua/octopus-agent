@@ -131,6 +131,7 @@ export function ChatComposer({
   reasoningEffort,
   modelProfileControl = false,
   executionEngine = "octopus",
+  executionEngineControl,
   onPermissionModeChange,
   onReasoningEffortChange,
   onModelChange,
@@ -1811,6 +1812,7 @@ export function ChatComposer({
           <div className="composer-footer__secondary contents">
             <EvolutionIndicator compact quiet />
           </div>
+          {executionEngineControl}
           {modelProfileControl ? (
             <div className="composer-footer__model contents">
               <CoderEngineControl

@@ -43,7 +43,13 @@ __all__ = [
     "_consume_paused_task_resume_intent",
     "_record_pending_resume_intent",
 ]
+from runtime.execution.engines import EngineSelectionError, ExecutionPhase
 from runtime.sensing.gateway.realtime_approval import GatewayApprovalProvider
+from runtime.sensing.gateway.realtime_execution import (
+    TurnExecutionRequest,
+    bind_turn_execution,
+    select_turn_execution,
+)
 from runtime.sensing.gateway.realtime_gateway import EventEmitter
 from runtime.sensing.gateway.realtime_thread_history import (
     _conversation_messages_for_react,
@@ -540,11 +546,15 @@ async def _start_turn(
             if isinstance(_user_ctx_for_complexity, dict)
             else None
         ) or ""
-        _external_model_owner = (
-            str(_user_ctx_for_complexity.get("execution_engine") or "").strip().lower()
-            if isinstance(_user_ctx_for_complexity, dict)
-            else ""
-        ) == "codex"
+        _external_model_owner = validated.execution_engine == "codex" or (
+            validated.execution_engine == "auto"
+            and (
+                str(_user_ctx_for_complexity.get("execution_engine") or "").strip().lower()
+                if isinstance(_user_ctx_for_complexity, dict)
+                else ""
+            )
+            == "codex"
+        )
         _is_code_mode_for_routing = bool(_mode_str == "code" or _capability_mode_str)
         _verdict = estimate_turn_complexity(
             text,
@@ -1037,113 +1047,87 @@ async def _start_turn(
                     },
                 )
 
-            if explicit_project_command:
-                # Project is a capability attached to the thread, not a fourth
-                # response strategy. Only an explicit command enters Project
-                # OS; ordinary group messages follow chat/cluster/swarm above.
-                turn_driver = "project_os"
-                await runtime._drive_project_os(
-                    turn,
-                    log,
-                    emitter,
-                    intent,
-                    thread_id=thread_id,
-                    text=text,
-                )
-            elif str((intent.user_context or {}).get("serve_mesh") or "").strip() == "1" or (
+            group_fanout = str(
+                (intent.user_context or {}).get("serve_mesh") or ""
+            ).strip() == "1" or (
                 bool((intent.user_context or {}).get("cowork_is_multi"))
                 and len((intent.user_context or {}).get("cowork_responders") or []) > 1
-            ):
-                # 蜂群 / 冒泡: the user picked the leaderless group mode. Fan the
-                # message out to every member agent in parallel — each chimes in
-                # with its own persona bubble ("boss speaks, everyone replies").
-                # No topology_id needed; degrades to single-agent if <2 members.
-                turn_driver = "group_fanout"
-                await runtime._drive_group_fanout(
-                    turn,
-                    log,
-                    emitter,
-                    intent,
-                    text=text,
+            )
+            orchestrated = explicit_project_command or group_fanout or bool(topology_id)
+            capabilities = getattr(agent, "capabilities", None)
+            codex_partner = (
+                not orchestrated
+                and isinstance(capabilities, dict)
+                and str(capabilities.get("execution_backend") or "").strip().casefold()
+                == "codex_app_server"
+            )
+            reflection = (
+                not orchestrated
+                and (not codex_partner or validated.execution_engine == "octopus")
+                and runtime._should_use_reflection_fast_path(
+                    text,
+                    validated,
+                    conversation_messages=cast(
+                        "list[dict[str, object]] | None", conversation_messages
+                    ),
+                    thread_id=thread_id,
                 )
-            elif topology_id:
-                # Explicit topology / 集群: orchestrated team — _drive_swarm_mesh
-                # auto-picks the boids/SignalBus parallel mesh vs the sequential
-                # TeamRunner by the planned graph's shape.
-                # An explicit per-turn model must govern the whole team, not
-                # only the parent turn.  TeamRunner passes ``model_name`` to
-                # every ephemeral role; leaving it absent silently falls back
-                # to role defaults/cheap models that may use a different,
-                # unavailable provider.  Auto/default selections retain the
-                # topology's normal heterogeneous routing.
-                _team_model = str(getattr(validated, "model", None) or "").strip()
-                if _team_model and _team_model.lower() not in {"auto", "default"}:
+            )
+            route = await select_turn_execution(
+                runtime,
+                turn,
+                agent,
+                intent,
+                project_command=explicit_project_command,
+                group_fanout=group_fanout,
+                topology_id=topology_id,
+                codex_partner=codex_partner,
+                reflection_fast_path=reflection,
+            )
+            # The explicit model still governs every member of an orchestrated
+            # topology. Engine selection does not change model ownership.
+            if route.driver == "swarm_mesh":
+                team_model = str(validated.model or "").strip()
+                if team_model and team_model.lower() not in {"auto", "default"}:
                     intent = intent.model_copy(
                         update={
                             "user_context": {
                                 **(intent.user_context or {}),
-                                "model_name": _team_model,
+                                "model_name": team_model,
                             }
                         }
                     )
-                turn_driver = "swarm_mesh"
-                await runtime._drive_swarm_mesh(
-                    turn,
-                    log,
-                    emitter,
-                    intent,
-                    text=text,
-                    topology_id=topology_id,
-                )
-            elif runtime._is_codex_app_server_partner(agent):
-                # Group/topology routing wins first: selecting Coder as one
-                # roster member must not turn the whole room into a single
-                # Coder turn. Concrete member dispatch still reaches this same
-                # backend through the persistent standard-role runner.
-                turn_driver = "codex_app_server"
-                await runtime._drive_codex_app_server(
-                    turn,
-                    log,
-                    emitter,
-                    intent,
-                    agent,
-                    provider,
-                    text=text,
-                )
-            elif runtime._should_use_reflection_fast_path(
-                text,
-                validated,
-                conversation_messages=cast("list[dict[str, object]] | None", conversation_messages),
-                thread_id=thread_id,
-            ):
-                turn_driver = "reflection_fast_path"
-                await runtime._drive_reflection_fast_path(
-                    turn,
-                    log,
-                    emitter,
-                    intent,
-                    agent,
-                    model=validated.model,
-                )
-            else:
-                turn_driver = "react"
-                await runtime._drive_react(
-                    turn,
-                    log,
-                    emitter,
-                    intent,
-                    provider,
-                    agent,
-                    model=validated.model,
-                )
+            turn_driver = route.driver
+            execution = bind_turn_execution(
+                runtime,
+                turn,
+                log,
+                emitter,
+                provider,
+                agent,
+                route,
+                topology_id=topology_id,
+            )
+            await execution.execute(TurnExecutionRequest(intent, text, validated.model))
         except Exception as exc:
             _logger.exception("CerebrumRuntime: turn driver crashed: %s", turn_driver)
-            turn.execution_engine = "codex" if turn_driver == "codex_app_server" else "octopus"
+            selection_error = isinstance(exc, EngineSelectionError)
+            if selection_error:
+                turn.error = {
+                    "code": "execution_unavailable",
+                    "engine": exc.engine.value,
+                    "reason": exc.reason,
+                    "message": str(exc),
+                    "disposition": "blocked_on_user",
+                }
+                turn_driver = "engine_selection"
+            else:
+                turn.execution_engine = "codex" if turn_driver == "codex_app_server" else "octopus"
             context = intent.user_context if isinstance(intent.user_context, dict) else {}
             err = ErrorItem(
                 message=str(exc) or exc.__class__.__name__,
                 error_info={
-                    "code": "turn_driver_exception",
+                    "code": "execution_unavailable" if selection_error else "turn_driver_exception",
                     "driver": turn_driver,
                     "exception_type": exc.__class__.__name__,
                     "cowork_mode": context.get("cowork_mode"),
@@ -1155,15 +1139,14 @@ async def _start_turn(
             await runtime._emit_item_completed(turn, log, emitter, err)
             turn.status = TurnStatus.FAILED
             _close_turn(log, thread_id, turn)
-            runtime._record_failed_turn_proposal(
-                turn,
-                intent=intent,
-                failure_source=f"{turn_driver}_exception",
-            )
+            if not selection_error:
+                runtime._record_failed_turn_proposal(
+                    turn,
+                    intent=intent,
+                    failure_source=f"{turn_driver}_exception",
+                )
             runtime._snapshot_to_thread_store(thread_id, log, intent)
             return turn
-
-        turn.execution_engine = "codex" if turn_driver == "codex_app_server" else "octopus"
 
         # Native tool turns consume steering between model rounds. Other
         # drivers (reflection, topology, Project OS) may finish one atomic
@@ -1194,32 +1177,11 @@ async def _start_turn(
                     "user_context": steering_context,
                 }
             )
-            if turn_driver == "codex_app_server":
-                # The App Server driver consumes most steering live.  A
-                # message that races its terminal event is still continued on
-                # the same durable inner Codex thread, never switched to a
-                # second planner against the same workspace.
-                await runtime._drive_codex_app_server(
-                    turn,
-                    log,
-                    emitter,
-                    steering_intent,
-                    agent,
-                    provider,
-                    text=correction,
-                )
-            else:
-                turn_driver = "react"
-                turn.execution_engine = "octopus"
-                await runtime._drive_react(
-                    turn,
-                    log,
-                    emitter,
-                    steering_intent,
-                    provider,
-                    agent,
-                    model=validated.model,
-                )
+            turn_driver = execution.route.driver_for(ExecutionPhase.STEERING)
+            await execution.execute(
+                TurnExecutionRequest(steering_intent, correction, validated.model),
+                phase=ExecutionPhase.STEERING,
+            )
 
         # ── PHASE 6 · status finalization + snapshot ───────────────
         if turn.status in {
@@ -1332,14 +1294,11 @@ async def _start_turn(
                         "user_context": repair_context,
                     }
                 )
-                await runtime._drive_react(
-                    turn,
-                    log,
-                    emitter,
-                    repair_intent,
-                    provider,
-                    agent,
-                    model=validated.model,
+                await execution.execute(
+                    TurnExecutionRequest(
+                        repair_intent, repair_intent.normalized_goal, validated.model
+                    ),
+                    phase=ExecutionPhase.REPAIR,
                 )
                 if turn.status == TurnStatus.INTERRUPTED:
                     _close_turn(log, thread_id, turn)
@@ -1479,14 +1438,11 @@ async def _start_turn(
                         "user_context": repair_context,
                     }
                 )
-                await runtime._drive_react(
-                    turn,
-                    log,
-                    emitter,
-                    repair_intent,
-                    provider,
-                    agent,
-                    model=validated.model,
+                await execution.execute(
+                    TurnExecutionRequest(
+                        repair_intent, repair_intent.normalized_goal, validated.model
+                    ),
+                    phase=ExecutionPhase.REPAIR,
                 )
                 if turn.status == TurnStatus.INTERRUPTED:
                     _close_turn(log, thread_id, turn)
@@ -1527,14 +1483,11 @@ async def _start_turn(
                             "user_context": verify_context,
                         }
                     )
-                    await runtime._drive_react(
-                        turn,
-                        log,
-                        emitter,
-                        verify_intent,
-                        provider,
-                        agent,
-                        model=validated.model,
+                    await execution.execute(
+                        TurnExecutionRequest(
+                            verify_intent, verify_intent.normalized_goal, validated.model
+                        ),
+                        phase=ExecutionPhase.VERIFICATION,
                     )
                     if turn.status in {
                         TurnStatus.INTERRUPTED,

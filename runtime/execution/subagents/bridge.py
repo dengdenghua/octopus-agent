@@ -7,6 +7,7 @@ isolated agent turn and returns a compact result to the caller.
 
 from __future__ import annotations
 
+import asyncio
 import concurrent.futures
 import logging
 import os
@@ -30,6 +31,8 @@ from ._bridge_trace import (
     _safe_journal_emit,
     _subagent_trace_context,
 )
+from .artifact_handoff import ArtifactHandoff, ArtifactHandoffError
+from .execution_context import child_execution_scope, child_timeout_seconds
 from .registry import SubagentRegistry
 from .schema_output import (
     coerce_schema_output,
@@ -238,7 +241,10 @@ def call_subagent(
     use_cheap_model: bool = False,
     extra_denied_paths: list[str] | None = None,
     workspace_path: str = "",
+    isolate: bool = False,
     output_schema: dict[str, Any] | None = None,
+    input_files: list[str] | None = None,
+    output_files: list[str] | None = None,
     schema_max_retries: int = 1,
     requires_capabilities: Iterable[str] | None = None,
     continue_session_id: str | None = None,
@@ -313,6 +319,14 @@ def call_subagent(
             "success": False,
             "error": "prompt is required",
         }
+    if not isinstance(isolate, bool):
+        return {
+            "agent_id": agent_id,
+            "output": "",
+            "success": False,
+            "error": "isolate must be a boolean",
+            "retry_allowed": False,
+        }
 
     # Public lane identity is the id requested by the delegating call. It is
     # intentionally distinct from ``agent_id`` below, which can be a generic
@@ -369,6 +383,28 @@ def call_subagent(
             ).strip()
 
     context = _inherit_parent_work_context(context, session)
+    handoff: ArtifactHandoff | None = None
+    isolated_workspace: Any = None
+    if isolate:
+        schema_max_retries = 0
+        if timeout_seconds is None:
+            timeout_seconds = float(timeout_s)
+    elif input_files is not None or output_files is not None:
+        try:
+            handoff = ArtifactHandoff.prepare(session, input_files, output_files)
+        except (ArtifactHandoffError, OSError, ValueError) as exc:
+            return {
+                "agent_id": agent_id,
+                "output": "",
+                "success": False,
+                "status": "artifact_contract_rejected",
+                "error": str(exc),
+                "retry_allowed": False,
+            }
+        prompt += handoff.instruction()
+        # A schema or transient retry could re-enter after file effects.
+        # Reconciliation and a new explicit dispatch are required instead.
+        schema_max_retries = 0
 
     # Capture the parent turn's react stack (ambient ContextVar set around
     # the main conversation's ``stream_react_loop``) so the runner can drive
@@ -663,6 +699,7 @@ def call_subagent(
 
     _parent_token = current_cancellation_token()
     _child_source = CancellationSource()
+    timeout_seconds = child_timeout_seconds(session, timeout_seconds)
 
     # Parent cancel → cancel child. If the parent is the never-token
     # (no ambient handler), ``on_cancelled`` is a no-op.
@@ -744,6 +781,7 @@ def call_subagent(
         _extra_meta["subagent_avatar"] = _avatar
         from runtime.platform.process.session import Session
 
+        binding = None
         if session is not None and isinstance(session, Session):
             from runtime.execution.subagents.threading import (
                 bind_subagent_session,
@@ -756,6 +794,8 @@ def call_subagent(
                 role=role,
                 persist=_flip_thread,
             )
+            if isolated_workspace is not None:
+                isolated_workspace.producer_task_id = binding.child_thread_id
             run_session = bind_subagent_session(
                 session,
                 binding,
@@ -775,7 +815,43 @@ def call_subagent(
 
             scope_token = _current_session.set(run_session)
         try:
-            with scoped_cancellation(_child_source.token):
+            if handoff is not None:
+                try:
+                    if _child_source.is_cancelled:
+                        raise ArtifactHandoffError("artifact child was cancelled before assignment")
+                    if binding is None:
+                        raise ArtifactHandoffError("artifact handoff requires a child identity")
+                    handoff.begin(binding.child_thread_id)
+                except (
+                    ArtifactHandoffError,
+                    OSError,
+                    ValueError,
+                    PermissionError,
+                    TimeoutError,
+                ) as exc:
+                    return {
+                        "agent_id": agent_id,
+                        "output": "",
+                        "success": False,
+                        "status": "artifact_handoff_failed",
+                        "error": str(exc),
+                    }
+            with (
+                scoped_cancellation(_child_source.token),
+                child_execution_scope(
+                    session,
+                    run_session,
+                    child_id=binding.child_thread_id if binding is not None else "",
+                    instruction=prompt,
+                    artifacts=(
+                        handoff.contract
+                        if handoff is not None
+                        else isolated_workspace.contract
+                        if isolated_workspace is not None
+                        else None
+                    ),
+                ),
+            ):
                 # Child→parent report lane (dsh ``tool-subagent-report``):
                 # stamp the continuable session id into the dispatch context
                 # so the in-process runner can expose the child's ``report``
@@ -805,6 +881,14 @@ def call_subagent(
                 )
 
                 with subagent_session_scope(_active_session["session_id"]):
+                    if handoff is not None and _child_source.is_cancelled:
+                        return {
+                            "agent_id": agent_id,
+                            "output": "",
+                            "success": False,
+                            "status": "cancelled",
+                            "error": "artifact child was cancelled before execution",
+                        }
                     return _dispatch(
                         agent_id=agent_id,
                         prompt=prompt,
@@ -829,6 +913,8 @@ def call_subagent(
                     pop_turn_denylist(denylist_token)
                 except ImportError:  # noqa: BLE001 — denylist is optional, skip if missing
                     pass
+            if handoff is not None and handoff.child_id is not None:
+                handoff.finished = True
 
     # Auto-retry wrapper. When the first call hits the round cap with
     # partial output, give it ONE more shot with a continuation prompt
@@ -839,7 +925,9 @@ def call_subagent(
     # We do NOT retry generic failures (router error / tool exception)
     # because those are likely deterministic — retrying would just burn
     # more budget without changing the outcome.
-    _retry_disabled = bool((context or {}).get("disable_auto_retry", False))
+    _retry_disabled = (
+        isolate or handoff is not None or bool((context or {}).get("disable_auto_retry", False))
+    )
 
     def _do_call_with_retry() -> dict[str, Any]:
         first = _do_call()
@@ -953,6 +1041,77 @@ def call_subagent(
         finally:
             prompt = base_prompt
 
+    def _execute_worker() -> dict[str, Any]:
+        if not isolate:
+            return _do_call_with_schema()
+        from .isolated_worktree import isolated_worktree_scope
+
+        nonlocal session, context, prompt, _locked_root, isolated_workspace
+        parent_session, parent_context, original_prompt = session, context, prompt
+        original_root = _locked_root
+        try:
+            with (
+                scoped_cancellation(_child_source.token),
+                isolated_worktree_scope(
+                    parent_session, input_files=input_files, output_files=output_files
+                ) as workspace,
+            ):
+                isolated_workspace = workspace
+                session = workspace.session
+                context = _inherit_parent_work_context(context, session)
+                _locked_root = str(workspace.path)
+                prompt += (
+                    f"\n\nYour execution workspace is {workspace.path}. "
+                    "Complete this task there. The host exports your changes as a candidate "
+                    "patch for the parent task to verify and apply."
+                )
+                if workspace.contract.output_paths:
+                    prompt += "\nRequired output files:\n" + "\n".join(
+                        str(path) for path in workspace.contract.output_paths
+                    )
+                try:
+                    result = _do_call_with_schema()
+                except asyncio.CancelledError:
+                    result = {"success": False, "output": "", "error": "child was cancelled"}
+                    return workspace.export(result, cancelled=True)
+                except Exception as exc:  # noqa: BLE001 — export partial work before cleanup
+                    result = {"success": False, "output": "", "error": str(exc)}
+                return workspace.export(result, cancelled=_child_source.is_cancelled)
+        except Exception as exc:  # noqa: BLE001 — fail one lane, never run it unisolated
+            return {
+                "agent_id": agent_id,
+                "success": False,
+                "output": "",
+                "error": f"{type(exc).__name__}: {exc}",
+                "status": "isolation_failed",
+                "retry_allowed": False,
+                **(
+                    {"retained_workspace": str(isolated_workspace.path)}
+                    if isolated_workspace is not None and isolated_workspace.path.exists()
+                    else {}
+                ),
+            }
+        finally:
+            session, context, prompt = parent_session, parent_context, original_prompt
+            _locked_root = original_root
+            isolated_workspace = None
+
+    def _reconcile_handoff(result: dict[str, Any] | None = None) -> None:
+        if handoff is None:
+            return
+        try:
+            receipt = handoff.abort_unchanged()
+        except (ArtifactHandoffError, OSError, ValueError, PermissionError) as exc:
+            # Partial outputs remain owned by the child. A failed journal is
+            # also fail-closed; neither case is permission to rerun the task.
+            if result is not None:
+                result["artifact_reconciliation_error"] = str(exc)
+            else:
+                _log.debug("artifact handoff retained for reconciliation: %s", exc)
+        else:
+            if result is not None and receipt is not None:
+                result["artifact_handoff"] = receipt
+
     def _augment(result: dict[str, Any]) -> dict[str, Any]:
         """Attach context-isolation telemetry to the subagent result.
 
@@ -970,6 +1129,37 @@ def call_subagent(
         """
         if not isinstance(result, dict):
             return result
+        if handoff is not None:
+            # Overwrite any model-provided manifest. Only completed, live
+            # children with valid schemas can transfer ownership to the parent.
+            result.pop("artifact_handoff", None)
+            result.pop("artifacts", None)
+            result.pop("artifact_reconciliation_error", None)
+            result["retry_allowed"] = False
+            if result.get("success") and not result.get("error"):
+                try:
+                    if _child_source.is_cancelled or result.get("schema_ok") is False:
+                        raise ArtifactHandoffError(
+                            "child was cancelled or its result schema failed"
+                        )
+                    receipt = handoff.accept()
+                    result["artifact_handoff"] = receipt
+                    result["artifacts"] = receipt["artifacts"]
+                    _files_touched[:] = list(
+                        dict.fromkeys(
+                            [*_files_touched, *[item["path"] for item in receipt["artifacts"]]]
+                        )
+                    )
+                except (
+                    ArtifactHandoffError,
+                    OSError,
+                    ValueError,
+                    PermissionError,
+                    TimeoutError,
+                ) as exc:
+                    result.update(success=False, status="artifact_handoff_failed", error=str(exc))
+            if not handoff.accepted:
+                _reconcile_handoff(result)
         output = result.get("output")
         has_output = isinstance(output, str) and bool(output.strip())
         has_structured_output = result.get("parsed") is not None
@@ -1220,14 +1410,14 @@ def call_subagent(
         # redirects while a non-cooperative child is still unwinding.
         monitor_parent = _parent_token is not CancellationToken.none()
         if timeout_seconds is None and not monitor_parent:
-            return _augment(_do_call_with_schema())
+            return _augment(_execute_worker())
 
         # Monitored path: run in a thread so we can enforce both a wall-clock
         # limit and parent cancellation.
         # We use shutdown(wait=False) to avoid blocking forever if the worker
         # thread is stuck (Python threads cannot be killed cleanly).
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        future = executor.submit(_do_call_with_schema)
+        future = executor.submit(_execute_worker)
 
         def _defer_slot_until_worker_finishes() -> None:
             """Keep the global slot occupied while a timed-out thread unwinds.
@@ -1239,6 +1429,10 @@ def call_subagent(
             ``add_done_callback`` invokes it synchronously in that case.
             """
             nonlocal slot_release_deferred
+            if handoff is not None:
+                # Cancellation cannot reclaim files from a still-running
+                # worker. The callback also runs if it just finished.
+                future.add_done_callback(lambda _future: _reconcile_handoff())
             if slot_release_deferred or future.done():
                 return
             slot_release_deferred = True
@@ -1279,6 +1473,7 @@ def call_subagent(
                     return _attach_trace_fields(
                         {
                             "status": "cancelled",
+                            **({"retry_allowed": False} if isolate or handoff is not None else {}),
                             "error": f"subagent cancelled: {reason}",
                             "cancelled": True,
                             "cancellation_reason": reason,
@@ -1346,6 +1541,7 @@ def call_subagent(
             return _attach_trace_fields(
                 {
                     "status": "timeout",
+                    **({"retry_allowed": False} if isolate or handoff is not None else {}),
                     "error": f"subagent timed out after {timeout_seconds}s",
                     "agent_id": agent_id,
                     "role": _role_label,
@@ -1363,6 +1559,7 @@ def call_subagent(
             executor.shutdown(wait=False)
     finally:
         _unlink_parent()
+        _reconcile_handoff()
         # A monitored worker that timed out/cancelled while already running
         # owns the slot until its thread actually exits.  This prevents a
         # retry from running concurrently with the old generation.

@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+from contextvars import copy_context
 from typing import Any
 
 from ._delegation_skills_common import (
@@ -75,6 +76,7 @@ def _call_agent_parallel(
     specs: list[dict[str, Any]] | str | None = None,
     *,
     timeout_s: int | str = _DEFAULT_SUBAGENT_TIMEOUT_S,
+    max_workers: int | str = 8,
     context: dict[str, Any] | None = None,
     session: Any = None,
     **_kw: Any,
@@ -134,6 +136,10 @@ def _call_agent_parallel(
 
     specs = _coerce_parallel_specs(specs)
     timeout_s = _coerce_timeout_s(timeout_s)
+    try:
+        worker_limit = max(1, min(8, int(max_workers)))
+    except (TypeError, ValueError):
+        worker_limit = 8
     if not specs or not isinstance(specs, list):
         return _empty_parallel_result(
             "specs is required (list of {agent_id, prompt})",
@@ -200,6 +206,8 @@ def _call_agent_parallel(
                 # reply is validated (and re-asked once on mismatch) by
                 # call_subagent, and the parsed object rides back in the envelope.
                 "output_schema": raw.get("output_schema"),
+                "input_files": raw.get("input_files"),
+                "output_files": raw.get("output_files"),
                 # Filesystem isolation opt-in. A BOOLEAN, never a path: the
                 # worktree is created on the trusted side and its path handed to
                 # call_subagent. ``workspace`` is in
@@ -279,69 +287,22 @@ def _call_agent_parallel(
         _ambient_react_stack = None
 
     def _invoke(spec: dict[str, Any], call_context: dict[str, Any]) -> dict[str, Any]:
-        """Spawn one sub-agent, in its own git worktree when ``isolate`` is set.
-
-        The trusted side creates the worktree and passes its path, which
-        ``call_subagent`` pins as the session's write root — a model-supplied
-        path would be stripped by ``arg_guard``, and rightly so.
-
-        The scope DELETES the worktree on exit, so the diff is captured inside
-        it. Without that the isolated writes would simply vanish and isolation
-        would silently mean "discard the work". Nothing is auto-merged:
-        reconciling parallel edits stays a human call, matching ``tournament``.
-        """
-        if not spec.get("isolate"):
-            return call_subagent(
-                agent_id=spec["agent_id"],
-                prompt=spec["prompt"],
-                context=call_context,
-                timeout_s=timeout_s,
-                session=session,
-                use_cheap_model=bool(spec.get("cheap")),
-                output_schema=spec.get("output_schema"),
-            )
-
-        import os
-
-        from runtime.execution.subagents.worktree_loop import (
-            _capture_diff,
-            is_git_repo,
-            worktree_scope,
+        """The bridge owns isolation for the complete child worker lifetime."""
+        contract = {
+            key: spec[key] for key in ("input_files", "output_files") if spec.get(key) is not None
+        }
+        return call_subagent(
+            agent_id=spec["agent_id"],
+            prompt=spec["prompt"],
+            context=call_context,
+            timeout_s=timeout_s,
+            timeout_seconds=float(timeout_s),
+            session=session,
+            use_cheap_model=bool(spec.get("cheap")),
+            output_schema=spec.get("output_schema"),
+            **({"isolate": True} if spec.get("isolate") else {}),
+            **contract,
         )
-
-        repo_root = os.getcwd()
-        if not is_git_repo(repo_root):
-            # Fail closed rather than silently running unisolated: the caller
-            # asked for confinement, and quietly writing to the live tree would
-            # be the opposite of what was requested.
-            return {
-                "agent_id": spec["agent_id"],
-                "output": "",
-                "success": False,
-                "error": f"isolate requested but not a git repo: {repo_root}",
-                "error_type": "isolation_unavailable",
-            }
-
-        label = str(spec.get("bb_key") or spec.get("spec_index") or "spawn")
-        with worktree_scope(repo_root, f"spawn-{label}") as (path, branch):
-            result = call_subagent(
-                agent_id=spec["agent_id"],
-                prompt=spec["prompt"],
-                context=call_context,
-                timeout_s=timeout_s,
-                session=session,
-                use_cheap_model=bool(spec.get("cheap")),
-                output_schema=spec.get("output_schema"),
-                workspace_path=path,
-            )
-            diff, files = _capture_diff(path)
-        result["isolated"] = True
-        # Audit F-08: the worktree branch is deleted right after capture, so
-        # the branch name in the envelope would be stale/misleading — the
-        # lane is identified by bb_key/spec_index instead.
-        result["diff"] = diff
-        result["files_touched"] = files
-        return result
 
     def _run_one(spec: dict[str, Any]) -> dict[str, Any]:
         # Bind parent session in this worker thread · ContextVars
@@ -482,7 +443,13 @@ def _call_agent_parallel(
         result["subagent_route_decision"] = route_decision
         # Retry once on transient failure. Per-spec retry, not per
         # parallel batch — one slow worker shouldn't block faster ones.
-        if _should_auto_retry(result):
+        if (
+            not spec.get("isolate")
+            and spec.get("input_files") is None
+            and spec.get("output_files") is None
+            and result.get("retry_allowed") is not False
+            and _should_auto_retry(result)
+        ):
             if orch_budget is not None and not orch_budget.try_charge():
                 result["retry_skipped"] = True
                 existing_err = result.get("error") or ""
@@ -540,19 +507,19 @@ def _call_agent_parallel(
     results: list[dict[str, Any]] = []
     # Bound concurrency · 8 workers covers most real fan-outs; more
     # would just thrash on LLM API rate limits anyway.
-    max_workers = min(len(cleaned), 8)
+    worker_count = min(len(cleaned), worker_limit)
     pool = _cf.ThreadPoolExecutor(
-        max_workers=max_workers,
+        max_workers=worker_count,
         thread_name_prefix="subagent-parallel",
     )
     try:
-        future_specs = {pool.submit(_run_one, s): s for s in cleaned}
+        future_specs = {pool.submit(copy_context().run, _run_one, s): s for s in cleaned}
         # ``timeout_s`` here is a batch-level guard. Finished workers
         # still return normally; stragglers become per-agent failures
         # instead of blowing away the whole parallel envelope.
         done, not_done = _cf.wait(
             future_specs.keys(),
-            timeout=timeout_s + 30,
+            timeout=timeout_s * ((len(cleaned) + worker_count - 1) // worker_count) + 30,
             return_when=_cf.ALL_COMPLETED,
         )
         for f in done:
@@ -666,6 +633,19 @@ def _build_parallel_envelope(
             "round_cap_exceeded": bool(r.get("round_cap_exceeded")),
             "partial": bool(r.get("partial")),
             "subagent_route_decision": r.get("subagent_route_decision"),
+            **{
+                key: r[key]
+                for key in (
+                    "isolated",
+                    "worktree",
+                    "artifact_handoff",
+                    "artifacts",
+                    "retry_allowed",
+                    "artifact_reconciliation_error",
+                    "retained_workspace",
+                )
+                if key in r
+            },
         }
         if r.get("success"):
             success_entry = {**common, "output": output}
@@ -699,7 +679,11 @@ def _build_parallel_envelope(
                 "status": r.get("status"),
             }
             failures.append(
-                {key: value for key, value in failure.items() if value not in (None, "", [], False)}
+                {
+                    key: value
+                    for key, value in failure.items()
+                    if key == "retry_allowed" or value not in (None, "", [], False)
+                }
             )
             if output.strip():
                 partial_outputs.append(

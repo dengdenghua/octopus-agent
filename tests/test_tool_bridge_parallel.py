@@ -17,6 +17,7 @@ agent message round, rather than serially. These tests pin:
 
 from __future__ import annotations
 
+import json
 import sys
 import threading
 import time
@@ -686,8 +687,8 @@ def test_parallel_tools_keep_code_workspace_scope(tmp_path) -> None:
     events = list(stream_agentic_fallback(stack, intent, _agent()))
     outputs = {event[1]["id"]: event[1]["output"] for event in events if event[0] == "tool_end"}
 
-    assert str(tmp_path.resolve()) in outputs["root"]
-    assert str(nested.resolve()) in outputs["nested"]
+    assert json.dumps(str(tmp_path.resolve())) in outputs["root"]
+    assert json.dumps(str(nested.resolve())) in outputs["nested"]
     tool_ends = [event for event in events if event[0] == "tool_end"]
     assert all(event[1].get("parallel") is not True for event in tool_ends)
 
@@ -748,7 +749,7 @@ def test_parallel_mixed_reads_keep_code_workspace_scope(tmp_path) -> None:
     events = list(stream_agentic_fallback(stack, intent, _agent()))
     outputs = {event[1]["id"]: event[1]["output"] for event in events if event[0] == "tool_end"}
 
-    assert str((tmp_path / "file_service.py").resolve()) in outputs["source"]
+    assert json.dumps(str((tmp_path / "file_service.py").resolve())) in outputs["source"]
     assert "test_fixture.py" in outputs["tests"]
     tool_ends = [event for event in events if event[0] == "tool_end"]
     assert all(event[1].get("parallel") is not True for event in tool_ends)

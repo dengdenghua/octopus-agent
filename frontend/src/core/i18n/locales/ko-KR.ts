@@ -534,6 +534,11 @@ export const koKR: Translations = {
 
   // Create Project Dialog
   createProjectDialog: {
+    advanced: "멤버 및 초대 설정",
+    defaultAssistant: "기본 도우미",
+    defaultAssistantHint: "프로젝트 생성 후 멤버를 추가하거나 초대할 수 있습니다.",
+    searchMembers: "이름, ID 또는 기능 검색",
+    noMembersFound: "일치하는 멤버가 없습니다",
     title: "새 프로젝트",
     placeholder: "프로젝트 이름",
     quickCategory: "빠른 분류",
@@ -6734,6 +6739,10 @@ export const koKR: Translations = {
 
   // Account Settings
   accountSettings: {
+    localAccount: "로컬 계정",
+    localAccountDescription: "현재 배포 환경에 접근하는 계정입니다. 클라우드 프로필 편집과 외부 계정 연결은 제공되지 않습니다.",
+    localPrivacyDescription: "이 배포 환경은 클라우드 개인정보 설정을 제공하지 않습니다. 데이터 처리는 연결한 모델과 플러그인에 따라 달라지며 해당 설정에서 확인할 수 있습니다.",
+    privacyUnavailable: "개인정보 설정을 읽지 못했습니다. 다시 시도한 후 변경하세요.",
     creditsBalance: "크레딧 잔액",
     octAccount: "공식 계정",
     available: "사용 가능",

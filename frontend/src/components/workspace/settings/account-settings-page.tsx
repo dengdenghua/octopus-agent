@@ -52,6 +52,50 @@ function formatCredits(
 }
 
 export default function AccountSettingsPage() {
+  const { user, authStatus } = useAuth();
+  if (user?.provider === "local" || authStatus?.enabled === false) {
+    return <LocalAccountSettings />;
+  }
+  return <CloudAccountSettings />;
+}
+
+function LocalAccountSettings() {
+  const { user } = useAuth();
+  const { t } = useI18n();
+  return (
+    <div className="space-y-6">
+      <OfficialCreditsCard />
+      <section className="rounded-xl border bg-card p-5">
+        <div className="flex items-center gap-3">
+          <div className="grid size-11 place-items-center rounded-full bg-primary/10 text-primary">
+            <UserIcon className="size-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-medium">
+              {user?.username || t.auth.currentAccount}
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t.accountSettings.localAccount}
+            </p>
+          </div>
+        </div>
+        <p className="mt-4 text-sm leading-6 text-muted-foreground">
+          {t.accountSettings.localAccountDescription}
+        </p>
+      </section>
+      <section className="space-y-2">
+        <h3 className="text-sm font-medium">
+          {t.settings.account.privacy.title}
+        </h3>
+        <p className="text-sm leading-6 text-muted-foreground">
+          {t.accountSettings.localPrivacyDescription}
+        </p>
+      </section>
+    </div>
+  );
+}
+
+function CloudAccountSettings() {
   const { t } = useI18n();
   const { user } = useAuth();
   const {
@@ -118,7 +162,7 @@ export default function AccountSettingsPage() {
   };
 
   const handleSaveProfile = () => {
-    if (!profileDirty) return;
+    if (!profileDirty || !profile || profileError) return;
     updateProfile.mutate({
       display_name: normalizedDisplayName || undefined,
       bio: normalizedBio || undefined,
@@ -197,7 +241,7 @@ export default function AccountSettingsPage() {
               <button
                 type="button"
                 onClick={handleAvatarClick}
-                disabled={uploadAvatar.isPending}
+                disabled={uploadAvatar.isPending || !profile || profileError}
                 aria-busy={uploadAvatar.isPending}
                 aria-label={t.accountSettings.clickToChangeAvatar}
                 className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-white opacity-0 transition group-hover:bg-black/40 group-hover:opacity-100 focus-visible:bg-black/40 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
@@ -241,7 +285,7 @@ export default function AccountSettingsPage() {
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder={t.settings.account.profile.displayNamePlaceholder}
                 maxLength={80}
-                disabled={updateProfile.isPending}
+                disabled={updateProfile.isPending || !profile || profileError}
                 className="h-9 text-sm"
               />
             </div>
@@ -256,7 +300,7 @@ export default function AccountSettingsPage() {
                 onChange={(e) => setBio(e.target.value)}
                 placeholder={t.settings.account.profile.bioPlaceholder}
                 maxLength={500}
-                disabled={updateProfile.isPending}
+                disabled={updateProfile.isPending || !profile || profileError}
                 className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-[64px] w-full rounded-lg border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
               />
               <p className="text-xs text-muted-foreground text-right">
@@ -269,7 +313,12 @@ export default function AccountSettingsPage() {
             <Button
               size="sm"
               onClick={handleSaveProfile}
-              disabled={!profileDirty || updateProfile.isPending}
+              disabled={
+                !profileDirty ||
+                updateProfile.isPending ||
+                !profile ||
+                profileError
+              }
               aria-busy={updateProfile.isPending}
             >
               <SaveIcon className="mr-1.5 size-3.5" />
@@ -348,6 +397,7 @@ export default function AccountSettingsPage() {
                   size="icon"
                   className="size-8 text-muted-foreground hover:text-destructive"
                   aria-label={`${t.common.unlink}: ${account.provider}`}
+                  disabled={profileError}
                   onClick={() =>
                     setUnlinkAccount({
                       provider: account.provider,
@@ -365,7 +415,9 @@ export default function AccountSettingsPage() {
               <li className="text-muted-foreground p-6 text-center">
                 <Link2Icon className="mx-auto mb-2 size-5 opacity-40" />
                 <p className="text-sm">
-                  {t.settings.account.linkedAccounts.notConnected}
+                  {!profile || profileError
+                    ? t.accountSettings.dataUnavailable
+                    : t.settings.account.linkedAccounts.notConnected}
                 </p>
               </li>
             )}
@@ -386,44 +438,50 @@ export default function AccountSettingsPage() {
             {t.settings.account.privacy.description}
           </p>
         </div>
-        <div className="rounded-lg border bg-card divide-y">
-          <div className="flex items-center justify-between px-5 py-4">
-            <div className="space-y-0.5 pr-4">
-              <Label className="text-sm">
-                {t.settings.account.privacy.shareUsageData}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {t.settings.account.privacy.shareUsageDataDescription}
-              </p>
+        {!privacy || privacyError ? (
+          <p className="rounded-lg border bg-card p-5 text-sm text-muted-foreground">
+            {t.accountSettings.privacyUnavailable}
+          </p>
+        ) : (
+          <div className="rounded-lg border bg-card divide-y">
+            <div className="flex items-center justify-between px-5 py-4">
+              <div className="space-y-0.5 pr-4">
+                <Label className="text-sm">
+                  {t.settings.account.privacy.shareUsageData}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t.settings.account.privacy.shareUsageDataDescription}
+                </p>
+              </div>
+              <Switch
+                checked={privacy.share_usage_analytics}
+                aria-label={t.settings.account.privacy.shareUsageData}
+                disabled={updatePrivacy.isPending}
+                onCheckedChange={(checked) =>
+                  updatePrivacy.mutate({ share_usage_analytics: checked })
+                }
+              />
             </div>
-            <Switch
-              checked={privacy?.share_usage_analytics ?? false}
-              aria-label={t.settings.account.privacy.shareUsageData}
-              disabled={updatePrivacy.isPending}
-              onCheckedChange={(checked) =>
-                updatePrivacy.mutate({ share_usage_analytics: checked })
-              }
-            />
-          </div>
-          <div className="flex items-center justify-between px-5 py-4">
-            <div className="space-y-0.5 pr-4">
-              <Label className="text-sm">
-                {t.settings.account.privacy.allowAnalytics}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {t.settings.account.privacy.allowAnalyticsDescription}
-              </p>
+            <div className="flex items-center justify-between px-5 py-4">
+              <div className="space-y-0.5 pr-4">
+                <Label className="text-sm">
+                  {t.settings.account.privacy.allowAnalytics}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t.settings.account.privacy.allowAnalyticsDescription}
+                </p>
+              </div>
+              <Switch
+                checked={privacy.data_collection_consent}
+                aria-label={t.settings.account.privacy.allowAnalytics}
+                disabled={updatePrivacy.isPending}
+                onCheckedChange={(checked) =>
+                  updatePrivacy.mutate({ data_collection_consent: checked })
+                }
+              />
             </div>
-            <Switch
-              checked={privacy?.data_collection_consent !== false}
-              aria-label={t.settings.account.privacy.allowAnalytics}
-              disabled={updatePrivacy.isPending}
-              onCheckedChange={(checked) =>
-                updatePrivacy.mutate({ data_collection_consent: checked })
-              }
-            />
           </div>
-        </div>
+        )}
       </section>
 
       {/* Unlink Confirm Dialog */}

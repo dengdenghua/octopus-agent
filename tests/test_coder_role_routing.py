@@ -201,8 +201,10 @@ def test_production_coder_rejects_context_selected_account_without_trusted_sessi
         )
 
 
+@pytest.mark.parametrize("role_backend", [None, "codex_app_server"])
 def test_standard_coder_ignores_ordinary_model_context_and_accepts_only_opaque_override(
     monkeypatch: pytest.MonkeyPatch,
+    role_backend: str | None,
 ) -> None:
     from runtime.execution.codex_backend import role_runner
     from runtime.execution.codex_backend.model_profile import CodexModelPreference
@@ -216,8 +218,8 @@ def test_standard_coder_ignores_ordinary_model_context_and_accepts_only_opaque_o
     )
     coder = SimpleNamespace(
         agent_id="coder",
-        model=None,
-        capabilities={"execution_backend": "codex_app_server"},
+        model="native-persona-model",
+        capabilities={"execution_backend": role_backend},
     )
     preference = CodexModelPreference(
         mode="chatgpt",
@@ -274,6 +276,22 @@ def test_standard_coder_ignores_ordinary_model_context_and_accepts_only_opaque_o
     )
     assert embedded_profile.effective_model == "gpt-account-choice"
     assert embedded_profile.reasoning_effort == "high"
+
+
+def test_native_persona_model_does_not_override_codex_default(monkeypatch):
+    from runtime.execution.codex_backend import role_runner
+    from runtime.execution.codex_backend.model_profile import CodexModelPreference
+
+    monkeypatch.setattr("runtime.platform.models.custom_model_flags.read_custom_models", lambda: {})
+    profile = role_runner._execution_profile(
+        SimpleNamespace(),
+        SimpleNamespace(model="native-persona-model", capabilities={}),
+        {},
+        preference=CodexModelPreference(),
+    )
+    assert profile.effective_model is None
+    assert profile.model_source == "codex_default"
+    assert not profile.proxy_required
 
 
 def test_connector_bridge_requires_principal_selection_and_removes_octopus_tools(

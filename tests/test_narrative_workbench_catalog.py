@@ -86,6 +86,40 @@ def _add_design_dependency(tmp_path: Path, *, dependencies: list[str] | None = N
     )
 
 
+def test_project_management_ui_uninstall_preserves_host_project_records(tmp_path, monkeypatch):
+    catalog, plugin_root = _catalog(tmp_path, monkeypatch)
+    source = tmp_path / "extensions" / "workbench-apps" / "projects"
+    (source / "dist").mkdir(parents=True)
+    (source / "dist" / "index.html").write_text("<h1>Projects</h1>", encoding="utf-8")
+    (source / "app.json").write_text(
+        json.dumps(
+            {
+                "schema": "octopus.workbench_app.v1",
+                "id": "projects",
+                "name": "Projects",
+                "route": "/workspace/projects",
+                "module_id": "projects",
+                "version": "1.0.0",
+                "entry": "dist/index.html",
+                "isolation": "iframe",
+                "data_paths": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    records = tmp_path / "data" / "projects" / "existing.json"
+    records.parent.mkdir(parents=True)
+    records.write_text('{"id":"existing","workspace":"retained"}', encoding="utf-8")
+    original = records.read_bytes()
+    assert catalog.install_plugin("projects", plugin_kind="workbench")["installed"]
+    assert (plugin_root / "workbench" / "projects" / "dist" / "index.html").is_file()
+    catalog.uninstall_plugin("projects", plugin_kind="workbench")
+    assert records.read_bytes() == original
+    assert not (plugin_root / "workbench" / "projects").exists()
+    assert catalog.install_plugin("projects", plugin_kind="workbench")["installed"]
+    assert records.read_bytes() == original
+
+
 def _set_narrative_dependencies(tmp_path: Path, dependencies: list[str]) -> None:
     manifest_path = tmp_path / "extensions" / "workbench-apps" / "narrative_studio" / "app.json"
     manifest = json.loads(manifest_path.read_text("utf-8"))

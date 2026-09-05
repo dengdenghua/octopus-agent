@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
@@ -613,9 +612,7 @@ def mount_routers_b(
             # isolated writable volume, so PluginHub must discover external
             # packages there instead of falling back to the developer's
             # ``~/.octopus/plugins`` directory.
-            plugin_dir=app_paths().data_dir / "plugins"
-            if os.environ.get("OCTOPUS_DATA_DIR")
-            else None,
+            plugin_dir=app_paths().data_dir / "plugins",
             skill_registry=state.registry,
             channel_manager=ctx.channel_manager,
             fastapi_app=app,

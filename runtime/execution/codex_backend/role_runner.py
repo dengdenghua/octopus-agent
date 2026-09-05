@@ -13,12 +13,14 @@ import threading
 import time
 from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import asynccontextmanager
+from contextvars import copy_context
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from runtime.execution.misc.skill_policy import is_audit_read_only_context
+from runtime.execution.request import current_execution_request
 from runtime.platform.process.paths import app_paths
 from runtime.platform.process.session import Session, current_session
 from runtime.platform.runtime_policy.feature_flags import is_on, resolution
@@ -223,6 +225,16 @@ def resolve_codex_sandbox_mode(
     a trusted parent's audit/read-only declaration during a dict merge.
     """
 
+    shared_request = current_execution_request()
+    if shared_request is not None:
+        # Codex's built-in shell/patch surface writes its entire workspace.
+        # When only an artifact subdirectory is granted, retain read-only
+        # built-ins; scoped Octopus dynamic tools can still write there.
+        workspace = context.get("workspace_path") or context.get("cwd")
+        if not isinstance(workspace, str) or not shared_request.task.permissions.allows_write(
+            workspace
+        ):
+            return "read-only"
     if _mapping_requires_read_only(context) or (
         trusted_parent_metadata is not None and _mapping_requires_read_only(trusted_parent_metadata)
     ):
@@ -312,7 +324,8 @@ def _execution_profile(
     return resolve_codex_execution_profile(
         preference=preference,
         turn_model=turn_model,
-        role_model=getattr(agent, "model", None),
+        # Persona model hints belong to the native backend. Codex uses this
+        # principal's model profile or an explicit trusted execution override.
         system_model=system_model if isinstance(system_model, str) else None,
         turn_effort=turn_effort,
         custom_models=custom_models,
@@ -327,25 +340,14 @@ def _server_model_override(
     agent: Any,
     context: Mapping[str, Any],
 ) -> tuple[str | None, str | None]:
-    capabilities = getattr(agent, "capabilities", None)
-    standard = (
-        str(capabilities.get("execution_backend") or "").strip().casefold()
-        if isinstance(capabilities, Mapping)
-        else ""
+    parent = _trusted_parent(context)
+    metadata = parent.metadata if parent is not None else None
+    override = (
+        metadata.get("_server_codex_execution_override") if isinstance(metadata, Mapping) else None
     )
-    if standard == "codex_app_server":
-        parent = _trusted_parent(context)
-        metadata = parent.metadata if parent is not None else None
-        override = (
-            metadata.get("_server_codex_execution_override")
-            if isinstance(metadata, Mapping)
-            else None
-        )
-        if not isinstance(override, ServerCodexExecutionOverride):
-            return None, None
-        return override.model, override.reasoning_effort
-
-    return None, None
+    if not isinstance(override, ServerCodexExecutionOverride):
+        return None, None
+    return override.model, override.reasoning_effort
 
 
 def build_codex_role_request(
@@ -381,6 +383,9 @@ def build_codex_role_request(
                 "production Codex execution requires a trusted principal session"
             )
     workspace = _workspace(ctx, parent)
+    shared_request = current_execution_request()
+    if shared_request is not None and not shared_request.task.permissions.allows_read(workspace):
+        raise CodexSecurityError("Codex workspace is outside the host task's readable scope")
     thread_id = str(
         outer_thread_id
         or ctx.get("thread_id")
@@ -394,6 +399,11 @@ def build_codex_role_request(
         or (parent.turn_id if parent is not None else "")
         or uuid4().hex
     )
+    if shared_request is not None and shared_request.task.parent_task_id is not None:
+        # Public child events may share the parent's workbench lane. Codex's
+        # private conversation must still have distinct child coordinates.
+        thread_id = shared_request.task.thread_id
+        turn_id = shared_request.task.task_id
     principal = str(
         (parent.actor if parent is not None else "")
         or ctx.get("owner_actor_id")
@@ -473,7 +483,7 @@ def build_codex_role_request(
         model=profile.effective_model,
         effort=profile.reasoning_effort,
         sandbox_mode=_sandbox_mode(
-            ctx,
+            {**ctx, "workspace_path": str(workspace)},
             trusted_parent_metadata=parent_meta,
         ),
         provider_profile=profile.provider_profile,
@@ -483,6 +493,7 @@ def build_codex_role_request(
         dynamic_tool_handler=None if requested_app_id else broker,
         selected_app_ids=(preference.app_ids if preference.mode == "chatgpt" else ()),
         app_mentions=((requested_app_id, requested_app_id),) if requested_app_id else (),
+        execution=shared_request,
     )
     return request, broker, provider
 
@@ -624,6 +635,10 @@ async def run_agent_role(
     events: list[dict[str, Any]] = []
     text_parts: list[str] = []
     execution_timeout_s = _timeout_s(ctx)
+    if request.execution is not None:
+        remaining = request.execution.task.resources.remaining_seconds()
+        if remaining is not None:
+            execution_timeout_s = min(execution_timeout_s, remaining)
     deadline = time.monotonic() + execution_timeout_s
     status = "failed"
     success = False
@@ -706,7 +721,13 @@ def run_agent_role_sync(
     except RuntimeError:
         _run()
     else:
-        worker = threading.Thread(target=_run, name="octopus-codex-role", daemon=True)
+        execution_context = copy_context()
+        worker = threading.Thread(
+            target=execution_context.run,
+            args=(_run,),
+            name="octopus-codex-role",
+            daemon=True,
+        )
         worker.start()
         worker.join()
     if error:

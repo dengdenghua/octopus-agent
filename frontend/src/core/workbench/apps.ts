@@ -36,7 +36,9 @@ export const WORKBENCH_BUILTIN_APPS: readonly WorkbenchBuiltinApp[] = [
     workspaceRoute: "/workspace/projects",
     launchUrl: "octopus://workspace/projects",
     icon: "projects",
-    delivery: "core",
+    delivery: "remote",
+    cloudId: "workbench_projects",
+    packageId: "projects",
   },
   {
     id: "paper-trading",

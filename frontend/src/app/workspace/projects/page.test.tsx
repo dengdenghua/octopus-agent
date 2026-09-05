@@ -23,7 +23,7 @@ vi.mock("@/core/config", () => ({
   getOctopusBaseURL: () => "",
 }));
 vi.mock("@/components/workspace/create-project-dialog", () => ({
-  CreateProjectDialog: () => null,
+  CreateProjectDialog: ({ open }: { open: boolean }) => open ? <div role="dialog" aria-label="创建项目" /> : null,
 }));
 
 import ProjectsPage from "./page";
@@ -115,7 +115,7 @@ describe("ProjectsPage production error states", () => {
     renderWithProviders(<ProjectsPage />, { locale: "zh-CN" });
 
     expect(screen.getByText("加载中…")).toBeInTheDocument();
-    expect(screen.queryByText(/还没有项目/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/把目标变成一个项目/)).not.toBeInTheDocument();
   });
 
   it("shows a friendly list error and only exposes a safe trace id", async () => {
@@ -132,7 +132,7 @@ describe("ProjectsPage production error states", () => {
     expect(alert).toHaveTextContent("项目加载失败，请稍后重试。");
     expect(alert).toHaveTextContent("追踪 ID：request-safe-123");
     expect(alert).not.toHaveTextContent(SECRET_RUNTIME_ERROR);
-    expect(screen.queryByText(/还没有项目/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/把目标变成一个项目/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
   });
 
@@ -144,8 +144,10 @@ describe("ProjectsPage production error states", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: "🗂️ 项目管理" }),
     ).toBeInTheDocument();
-    expect(await screen.findByText(/还没有项目/)).toBeInTheDocument();
+    expect(await screen.findByText(/把目标变成一个项目/)).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "创建第一个项目" }));
+    expect(screen.getByRole("dialog", { name: "创建项目" })).toBeInTheDocument();
   });
 
   it("sanitizes detail request failures", async () => {

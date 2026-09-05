@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import time
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 
 from runtime.platform.plugins.workbench_package import WorkbenchPackageStore
@@ -28,11 +31,38 @@ def create_workbench_packages_router(
     that gap the same way ``control_sessions_router`` /
     ``browser_router`` do: a no-op when ``require_auth`` is off (default /
     single-user dev), enforced 401 across every endpoint when auth is on.
+    An authenticated manifest read grants a one-hour, package-scoped HttpOnly
+    cookie so iframe documents and their assets can load without bearer headers.
     """
     store = store or WorkbenchPackageStore(require_integrity=True)
+    # Use a separate signing key: an asset capability must never be a login JWT.
+    asset_secret = (
+        hmac.new(jwt_secret.encode(), b"workbench-assets-v1", hashlib.sha256).hexdigest()
+        if jwt_secret
+        else None
+    )
+    cookie_name = "octopus_workbench_assets"
 
     def _auth_dep(request: Request) -> str | None:
         from runtime.adapters.web_auth import _resolve_actor
+        from runtime.safety.auth.identity import JWTError, verify_jwt_hs256
+
+        token = request.cookies.get(cookie_name)
+        if asset_secret and token and "asset_path" in request.path_params:
+            try:
+                claims = verify_jwt_hs256(
+                    token, secret=asset_secret, required_audience="workbench-assets"
+                )
+                actor = claims.get("sub")
+                if (
+                    claims.get("plugin") == request.path_params.get("plugin_id")
+                    and isinstance(actor, str)
+                    and identity_store is not None
+                    and identity_store.get(actor) is not None
+                ):
+                    return actor
+            except JWTError:
+                pass
 
         return _resolve_actor(
             request,
@@ -50,7 +80,12 @@ def create_workbench_packages_router(
     )
 
     @router.get("/{plugin_id}/manifest")
-    def get_manifest(plugin_id: str) -> dict[str, Any]:
+    def get_manifest(
+        plugin_id: str,
+        request: Request,
+        response: Response,
+        actor: str | None = Depends(_auth_dep),
+    ) -> dict[str, Any]:
         try:
             manifest = store.load_manifest(plugin_id)
         except FileNotFoundError as exc:
@@ -58,6 +93,27 @@ def create_workbench_packages_router(
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
         asset_base = f"/api/workbench-packages/{plugin_id}/assets"
+        if actor and asset_secret:
+            from runtime.safety.auth.identity import encode_jwt_hs256
+
+            response.set_cookie(
+                cookie_name,
+                encode_jwt_hs256(
+                    {
+                        "sub": actor,
+                        "plugin": plugin_id,
+                        "aud": "workbench-assets",
+                        "exp": int(time.time()) + 3600,
+                    },
+                    secret=asset_secret,
+                ),
+                max_age=3600,
+                path=asset_base + "/",
+                httponly=True,
+                secure=request.url.scheme == "https",
+                samesite="strict",
+            )
+        response.headers["Cache-Control"] = "no-store"
         return manifest.to_public(asset_base=asset_base)
 
     @router.get("/{plugin_id}/assets/{asset_path:path}")
@@ -73,9 +129,7 @@ def create_workbench_packages_router(
         response = FileResponse(path)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
-        response.headers["Cache-Control"] = (
-            "no-cache" if path.name == "index.html" else "public, max-age=31536000, immutable"
-        )
+        response.headers["Cache-Control"] = "private, no-cache"
         if path.suffix.lower() == ".html":
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "

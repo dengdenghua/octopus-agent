@@ -586,6 +586,13 @@ def _file_write_lease_owner(
     arm_id: ArmId,
     caller: str,
 ) -> str:
+    from runtime.execution.request import current_execution_request
+
+    request = current_execution_request()
+    if request is not None:
+        # Principal identity is shared by all children. Lease ownership must
+        # distinguish their tasks while remaining stable across repair calls.
+        return request.task.task_id
     return str(actor or arm_id or caller or "unknown")
 
 

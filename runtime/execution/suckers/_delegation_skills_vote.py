@@ -128,13 +128,15 @@ def _call_agent_vote(
     # Resolve the monkeypatch-visible name lazily via the delegation_skills
     # module so tests patching ``delegation_skills._call_agent_parallel``
     # observe it here.
+    from runtime.execution.subagents.execution_context import readonly_execution_parent
     from runtime.execution.suckers.delegation_skills import _call_agent_parallel
+    from runtime.platform.process.session import current_session
 
     env = _call_agent_parallel(
         specs=specs,
         timeout_s=timeout_s,
         context=vote_context,
-        session=session,
+        session=readonly_execution_parent(session if session is not None else current_session()),
     )
 
     votes: list[dict[str, Any]] = []

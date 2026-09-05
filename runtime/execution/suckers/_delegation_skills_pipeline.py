@@ -205,7 +205,13 @@ def _run_pipeline(
                     prompt=prompt,
                     context=context,
                     timeout_s=timeout_s,
+                    timeout_seconds=float(timeout_s),
                     session=session,
+                    **{
+                        key: stage_spec[key]
+                        for key in ("isolate", "input_files", "output_files", "output_schema")
+                        if key in stage_spec
+                    },
                 )
             except Exception as exc:  # noqa: BLE001
                 result = {
@@ -221,6 +227,21 @@ def _run_pipeline(
                 "agent_id": role,
                 "output": out,
                 "ok": ok,
+                **{
+                    key: result[key]
+                    for key in (
+                        "isolated",
+                        "worktree",
+                        "diff",
+                        "files_touched",
+                        "artifacts",
+                        "artifact_handoff",
+                        "retry_allowed",
+                        "artifact_reconciliation_error",
+                        "retained_workspace",
+                    )
+                    if key in result
+                },
             }
             if not ok:
                 entry["error"] = result.get("error") or "subagent failed"

@@ -106,6 +106,8 @@ def _coerce_graph_nodes(nodes: Any) -> tuple[list[dict[str, Any]], str]:
                 "depends_on": deps,
                 "agent_id": str(raw.get("agent_id") or raw.get("role") or "").strip(),
                 "output_schema": raw.get("output_schema"),
+                "input_files": raw.get("input_files"),
+                "output_files": raw.get("output_files"),
                 "isolate": bool(raw.get("isolate")),
             }
         )
@@ -336,7 +338,11 @@ def _run_agent_graph(
         to_spawn: list[dict[str, Any]] = []
         spawn_keys: dict[int, str] = {}
         for node in runnable:
-            if node.get("isolate"):
+            if (
+                node.get("isolate")
+                or node.get("input_files") is not None
+                or node.get("output_files") is not None
+            ):
                 to_spawn.append(node)
                 continue
             key = _node_cache_key(node, default_role, context)
@@ -364,6 +370,11 @@ def _run_agent_graph(
                     "prompt": n["resolved_prompt"],
                     "bb_key": n["id"],
                     "isolate": n["isolate"],
+                    **{
+                        key: n[key]
+                        for key in ("input_files", "output_files")
+                        if n.get(key) is not None
+                    },
                     **({"output_schema": n["output_schema"]} if n["output_schema"] else {}),
                 }
                 for n in runnable
@@ -398,8 +409,17 @@ def _run_agent_graph(
             # An isolated node's real product is its diff, not its prose. This
             # dict is also a whitelist projection, so the fields have to be
             # named or ``isolate: true`` on a node silently discards the work.
-            for isolation_field in ("isolated", "branch", "diff", "files_touched"):
-                if succ.get(isolation_field):
+            for isolation_field in (
+                "isolated",
+                "branch",
+                "diff",
+                "files_touched",
+                "worktree",
+                "artifacts",
+                "artifact_handoff",
+                "retry_allowed",
+            ):
+                if isolation_field in succ:
                     results[node_id][isolation_field] = succ.get(isolation_field)
             # Record for future resumes. ``put`` refuses anything that is not a
             # completed, non-empty success, so a lane that came back empty or
@@ -420,6 +440,19 @@ def _run_agent_graph(
                 "output": "",
                 "ok": False,
                 "error": str(fail.get("error") or fail.get("error_type") or "unknown failure"),
+                **{
+                    key: fail[key]
+                    for key in (
+                        "isolated",
+                        "worktree",
+                        "artifacts",
+                        "artifact_handoff",
+                        "retry_allowed",
+                        "artifact_reconciliation_error",
+                        "retained_workspace",
+                    )
+                    if key in fail
+                },
             }
 
     ok_count = sum(1 for r in results.values() if r.get("ok"))

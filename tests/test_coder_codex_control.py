@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
@@ -536,7 +537,8 @@ async def test_local_desktop_can_seed_host_chatgpt_login_for_authenticated_princ
 
     seeded = json.loads((service.account_home(scope) / "auth.json").read_text(encoding="utf-8"))
     assert seeded == {"marker": "host-chatgpt"}
-    assert (service.account_home(scope) / "auth.json").stat().st_mode & 0o077 == 0
+    if os.name == "posix":
+        assert (service.account_home(scope) / "auth.json").stat().st_mode & 0o077 == 0
     await service.close_all()
 
 

@@ -13,28 +13,41 @@ const accountMocks = vi.hoisted(() => ({
   unlinkAccount: vi.fn(),
   refetchProfile: vi.fn(),
   refetchPrivacy: vi.fn(),
+  provider: "cloud",
+  profileError: false,
+  privacyError: false,
+  readProfile: vi.fn(),
+  readPrivacy: vi.fn(),
   privacy: undefined as undefined | Record<string, boolean>,
 }));
 
 vi.mock("@/providers/AuthProvider", () => ({
   useAuth: () => ({
-    user: { user_id: "123", username: "123" },
+    user: { user_id: "123", username: "123", provider: accountMocks.provider },
   }),
 }));
 
 vi.mock("@/core/account", () => ({
-  useProfile: () => ({
-    data: undefined,
-    isLoading: false,
-    isError: false,
-    refetch: accountMocks.refetchProfile,
-  }),
-  usePrivacySettings: () => ({
-    data: accountMocks.privacy,
-    isLoading: false,
-    isError: false,
-    refetch: accountMocks.refetchPrivacy,
-  }),
+  useProfile: () => (
+    accountMocks.readProfile(),
+    {
+      data: accountMocks.profileError
+        ? undefined
+        : { username: "123", display_name: "", bio: "", linked_accounts: [] },
+      isLoading: false,
+      isError: accountMocks.profileError,
+      refetch: accountMocks.refetchProfile,
+    }
+  ),
+  usePrivacySettings: () => (
+    accountMocks.readPrivacy(),
+    {
+      data: accountMocks.privacy,
+      isLoading: false,
+      isError: accountMocks.privacyError,
+      refetch: accountMocks.refetchPrivacy,
+    }
+  ),
   useUpdateProfile: () => ({
     mutate: accountMocks.updateProfile,
     isPending: false,
@@ -61,7 +74,35 @@ vi.mock("@/core/oct/hooks", () => ({
 describe("AccountSettingsPage", () => {
   beforeEach(() => {
     accountMocks.privacy = undefined;
+    accountMocks.provider = "cloud";
+    accountMocks.profileError = false;
+    accountMocks.privacyError = false;
     vi.clearAllMocks();
+  });
+
+  it("shows local identity without querying unsupported cloud settings", () => {
+    accountMocks.provider = "local";
+    renderWithProviders(<AccountSettingsPage />, { locale: "zh-CN" });
+    expect(screen.getByText("123")).toBeInTheDocument();
+    expect(screen.getByText("本地账户")).toBeInTheDocument();
+    expect(accountMocks.readProfile).not.toHaveBeenCalled();
+    expect(accountMocks.readPrivacy).not.toHaveBeenCalled();
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("does not expose editable profile or guessed privacy values after a failed read", async () => {
+    accountMocks.profileError = true;
+    accountMocks.privacyError = true;
+    renderWithProviders(<AccountSettingsPage />, { locale: "zh-CN" });
+    expect(screen.getByLabelText("显示名称")).toBeDisabled();
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "重新加载账户信息" }),
+    );
+    expect(accountMocks.refetchProfile).toHaveBeenCalledOnce();
+    expect(accountMocks.refetchPrivacy).toHaveBeenCalledOnce();
   });
 
   it("uses the authenticated identity instead of empty profile placeholders", () => {

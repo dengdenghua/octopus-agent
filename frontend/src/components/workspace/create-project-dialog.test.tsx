@@ -73,6 +73,49 @@ function DialogHarness() {
 }
 
 describe("CreateProjectDialog", () => {
+  it("searches stable IDs and distinguishes roles with the same display name", async () => {
+    const previousAgents = mocks.agentState.agents;
+    mocks.agentState.agents = [
+      previousAgents[0]!,
+      { ...previousAgents[1]!, display_name: "同名助手" },
+      { ...previousAgents[1]!, name: "planner-two", display_name: "同名助手" },
+      previousAgents[0]!,
+    ];
+    try {
+      renderWithProviders(<CreateProjectDialog open onOpenChange={vi.fn()} />, {
+        locale: "zh-CN",
+      });
+      expect(screen.getAllByRole("button", { name: "通用助手" })).toHaveLength(
+        1,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "成员与邀请设置" }));
+      expect(
+        screen.getByRole("button", { name: "同名助手 (planner)" }),
+      ).toBeInTheDocument();
+      fireEvent.change(
+        screen.getByRole("textbox", { name: "搜索成员名称、标识或能力" }),
+        { target: { value: "planner-two" } },
+      );
+      expect(
+        screen.queryByRole("button", { name: "同名助手 (planner)" }),
+      ).not.toBeInTheDocument();
+      fireEvent.click(
+        screen.getByRole("button", { name: "同名助手 (planner-two)" }),
+      );
+      fireEvent.change(screen.getByRole("textbox", { name: "项目名称" }), {
+        target: { value: "测试" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "创建项目" }));
+      expect(
+        mocks.createProject.mock.calls[0]?.[0].initialAgents.map(
+          (agent: { id: string }) => agent.id,
+        ),
+      ).toEqual(["general", "planner-two"]);
+    } finally {
+      mocks.agentState.agents = previousAgents;
+    }
+  });
+
   beforeEach(() => {
     mocks.createProject.mockReset();
     mocks.navigate.mockReset();
@@ -82,8 +125,9 @@ describe("CreateProjectDialog", () => {
     const user = userEvent.setup();
     renderWithProviders(<DialogHarness />, { locale: "zh-CN" });
 
-    const name = screen.getByPlaceholderText("项目名称");
+    const name = screen.getByRole("textbox", { name: "项目名称" });
     await user.type(name, "不会创建的项目");
+    await user.click(screen.getByRole("button", { name: "成员与邀请设置" }));
     await user.click(screen.getByRole("button", { name: "规划师" }));
     await user.click(
       screen.getByRole("switch", { name: "进入工作群后立即邀请" }),
@@ -91,11 +135,15 @@ describe("CreateProjectDialog", () => {
     await user.click(screen.getByRole("button", { name: "取消" }));
     await user.click(screen.getByRole("button", { name: "reopen" }));
 
-    expect(screen.getByPlaceholderText("项目名称")).toHaveValue("");
+    expect(screen.getByRole("textbox", { name: "项目名称" })).toHaveValue("");
     expect(screen.getByRole("button", { name: "通用助手" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
+    expect(
+      screen.queryByRole("button", { name: "规划师" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "成员与邀请设置" }));
     expect(screen.getByRole("button", { name: "规划师" })).toHaveAttribute(
       "aria-pressed",
       "false",
@@ -110,7 +158,7 @@ describe("CreateProjectDialog", () => {
       locale: "zh-CN",
     });
 
-    fireEvent.keyDown(screen.getByPlaceholderText("项目名称"), {
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "项目名称" }), {
       key: "Enter",
     });
 
@@ -123,7 +171,10 @@ describe("CreateProjectDialog", () => {
       locale: "zh-CN",
     });
 
-    await user.type(screen.getByPlaceholderText("项目名称"), "发布新版");
+    await user.type(
+      screen.getByRole("textbox", { name: "项目名称" }),
+      "发布新版",
+    );
     await user.click(screen.getByRole("button", { name: "创建项目" }));
 
     expect(mocks.createProject).toHaveBeenCalledWith(
@@ -158,9 +209,13 @@ describe("CreateProjectDialog", () => {
       "aria-pressed",
       "true",
     );
+    await user.click(screen.getByRole("button", { name: "成员与邀请设置" }));
     await user.click(screen.getByRole("button", { name: "规划师" }));
     expect(screen.getByRole("button", { name: "通用助手" })).toBeDisabled();
-    await user.type(screen.getByPlaceholderText("项目名称"), "增长实验");
+    await user.type(
+      screen.getByRole("textbox", { name: "项目名称" }),
+      "增长实验",
+    );
     await user.click(screen.getByRole("button", { name: "创建项目" }));
 
     expect(mocks.createProject).toHaveBeenCalledWith(
@@ -191,6 +246,7 @@ describe("CreateProjectDialog", () => {
       locale: "zh-CN",
     });
 
+    fireEvent.click(screen.getByRole("button", { name: "成员与邀请设置" }));
     expect(screen.getByText("真人成员")).toBeInTheDocument();
     expect(screen.getByText("创建后邀请")).toBeInTheDocument();
     expect(screen.getByText("项目负责人 · 群主")).toBeInTheDocument();
@@ -208,10 +264,14 @@ describe("CreateProjectDialog", () => {
       locale: "zh-CN",
     });
 
+    await user.click(screen.getByRole("button", { name: "成员与邀请设置" }));
     await user.click(
       screen.getByRole("switch", { name: "进入工作群后立即邀请" }),
     );
-    await user.type(screen.getByPlaceholderText("项目名称"), "协作项目");
+    await user.type(
+      screen.getByRole("textbox", { name: "项目名称" }),
+      "协作项目",
+    );
     await user.click(screen.getByRole("button", { name: "创建项目" }));
     const callbacks = mocks.createProject.mock.calls[0]?.[1] as {
       onSuccess: (home: { threadId: string }) => void;

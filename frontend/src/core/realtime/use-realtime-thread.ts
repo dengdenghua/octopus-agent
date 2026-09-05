@@ -106,6 +106,7 @@ export interface UseRealtimeThreadValue {
     sandboxPolicy?: SandboxPolicy;
     planningMode?: boolean;
     model?: string;
+    executionEngine?: "auto" | "octopus" | "codex";
     effort?: ReasoningEffort;
     metadata?: Record<string, unknown>;
     /** Optional topology id for callers that explicitly need the
@@ -1292,6 +1293,7 @@ export function useRealtimeThread(
           ...(input.planningMode ? { planningMode: input.planningMode } : {}),
           ...(input.effort ? { effort: input.effort } : {}),
           model: input.model,
+          executionEngine: input.executionEngine ?? "auto",
           ...(input.topologyId ? { topologyId: input.topologyId } : {}),
         });
       } catch (err) {

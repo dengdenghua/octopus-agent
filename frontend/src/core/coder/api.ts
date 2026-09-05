@@ -111,6 +111,8 @@ export interface CoderModelProfile {
   compatibility_reason: string | null;
   provider: string | null;
   proxy_required: boolean;
+  execution_available?: boolean;
+  execution_unavailable_reason?: string | null;
 }
 
 export interface UpdateCoderModelProfile {
@@ -428,6 +430,11 @@ function normalizeModelProfile(payload: unknown): CoderModelProfile {
         : null,
     provider: typeof row.provider === "string" ? row.provider : null,
     proxy_required: row.proxy_required === true,
+    execution_available: row.execution_available === true,
+    execution_unavailable_reason:
+      typeof row.execution_unavailable_reason === "string"
+        ? row.execution_unavailable_reason
+        : null,
   };
 }
 

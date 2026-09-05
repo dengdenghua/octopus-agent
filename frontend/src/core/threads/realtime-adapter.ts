@@ -627,6 +627,10 @@ function turnToMessages(turn: Turn): Message[] {
         // the answer lane instead of being reclassified later by text length
         // or Markdown shape. The fallback above keeps old logs compatible.
         kwargs.message_kind = messageKind;
+        if (turn.execution) {
+          kwargs.execution_engine = turn.execution.engine;
+          kwargs.execution = turn.execution;
+        }
         if (turn.outcomeReason) {
           kwargs.outcome_reason = turn.outcomeReason;
         }

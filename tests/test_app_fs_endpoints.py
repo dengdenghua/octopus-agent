@@ -554,3 +554,67 @@ class TestFsAuth:
         # server-owned thread scope.  The direct router has no thread store,
         # so it must fail closed after the 401 boundary.
         assert r.status_code == 403
+
+
+@pytest.mark.parametrize("local_access", [False, True])
+def test_app_wires_local_workspace_selection_before_thread_creation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, local_access: bool,
+) -> None:
+    """Exercise the assembled app: direct-router tests missed this flag drop."""
+    from unittest.mock import Mock
+
+    from runtime.memory.threads import ThreadStateStore
+    from runtime.platform.ui import _app_stack
+    from runtime.safety.auth import Identity, IdentityStore
+    from runtime.sensing.gateway import _fs_router_endpoints as endpoints
+
+    monkeypatch.setenv("OCTOPUS_HOME", str(tmp_path / "runtime"))
+    monkeypatch.chdir(tmp_path)
+    # Supply an isolated thread store without starting model execution workers.
+    wire_stack = _app_stack.wire_stack
+
+    def wire_test_stack(ctx, **kwargs):
+        wire_stack(ctx, **kwargs)
+        ctx.thread_store = ThreadStateStore()
+
+    monkeypatch.setattr(_app_stack, "wire_stack", wire_test_stack)
+    chosen = tmp_path / "selected-project"
+    chosen.mkdir()
+    (chosen / "README.md").write_text("local project", encoding="utf-8")
+    picker = Mock(return_value=str(chosen))
+    for name in ("_pick_directory_windows", "_pick_directory_macos", "_pick_directory_tk"):
+        monkeypatch.setattr(endpoints, name, picker)
+
+    identities = IdentityStore()
+    identities.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    app = create_app(
+        cocoloop_identity_store=identities,
+        cocoloop_require_auth=True,
+        allow_local_workspace_access=local_access,
+    )
+    client = TestClient(app)
+    assert client.get("/api/fs/pick-directory").status_code == 401
+    picker.assert_not_called()
+    headers = {"Authorization": "Bearer sk-alice"}
+    response = client.get("/api/fs/pick-directory", headers=headers)
+    roots = client.get("/api/fs/roots", headers=headers)
+    if not local_access:
+        assert response.status_code == roots.status_code == 403
+        picker.assert_not_called()
+        return
+
+    assert response.status_code == roots.status_code == 200
+    assert response.json()["path"] == str(chosen)
+    picker.assert_called_once_with(None)
+    created = client.post(
+        "/api/threads", headers=headers,
+        json={"metadata": {"workspace_path": str(chosen)}},
+    )
+    assert created.status_code == 200
+    assert created.json()["metadata"]["workspace_path"] == str(chosen)
+    read = client.get(
+        "/api/fs/read", headers=headers,
+        params={"thread_id": created.json()["thread_id"], "path": str(chosen / "README.md")},
+    )
+    assert read.status_code == 200
+    assert read.json()["content"] == "local project"

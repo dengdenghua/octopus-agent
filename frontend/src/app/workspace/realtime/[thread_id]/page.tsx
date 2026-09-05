@@ -173,6 +173,8 @@ import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
 import { useDeferredRouteCommit } from "@/core/router/use-deferred-route-commit";
 import { useThreadSettings } from "@/core/settings";
 import { applyCoderModelProfileBoundary } from "@/core/coder/api";
+import { useExecutionEngine } from "@/core/threads/use-execution-engine";
+import { ExecutionEnginePicker } from "@/components/workspace/execution-engine-picker";
 import {
   useThreadStream,
   type ThreadStreamOptions,
@@ -517,7 +519,7 @@ function RealtimePageContent({
   chatState: ReturnType<typeof useThreadChat>;
 }) {
   const { t } = useI18n();
-  const { authStatus, user } = useAuth();
+  const { authStatus, user, isLoading: authLoading } = useAuth();
   const { threadId, isNewThread, setIsNewThread } = chatState;
   const isMobile = useIsMobile();
   const {
@@ -1053,10 +1055,6 @@ function RealtimePageContent({
     : resolvedThreadOwnerAgentId && resolvedThreadOwnerAgentId !== activeAgentId
       ? threadOwnerAgent
       : activeAgent;
-  const selectedExecutionEngine =
-    displayAgent?.capabilities?.execution_backend === "codex_app_server"
-      ? ("codex" as const)
-      : ("octopus" as const);
   const currentTaskAgentName = displayAgent?.name ?? effectiveAgentId;
   const composerDisplayAgent = useMemo(
     () =>
@@ -1753,6 +1751,15 @@ function RealtimePageContent({
   const streamMode: ReasoningMode | "team" = collaborationEnabled
     ? "team"
     : effectiveMode;
+  const executionSelection = useExecutionEngine({
+    threadId,
+    principal: user?.actor_id || user?.user_id || "local",
+    roleBackend: displayAgent?.capabilities?.execution_backend,
+    codingTask: isProjectCodeMode || personalMode === "build",
+    orchestrated: collaborationEnabled,
+    enabled: !embeddedDesignChat && !authLoading,
+  });
+  const selectedExecutionEngine = executionSelection.engine;
   const threadRouteFor = useCallback(
     (id: string) => {
       const path = `/workspace/realtime/${encodeURIComponent(id)}`;
@@ -2371,11 +2378,10 @@ function RealtimePageContent({
             : undefined,
           project_signals: projectSignals,
           agent_name: effectiveAgentId,
-          // The outer Realtime layer owns transport and lifecycle only for a
-          // Codex role. It must not smart-route a second, purely decorative
-          // system model over the model that the Codex account profile will
-          // actually execute.
+          // A preview controls the model-source UI; the separate preference
+          // is validated by the runtime before an engine starts.
           execution_engine: selectedExecutionEngine,
+          execution_engine_preference: executionSelection.preference,
           // A stable, user-visible browser tab / desktop window reference. The
           // runtime receives structured identity instead of guessing from prose.
           automation_target:
@@ -2397,6 +2403,7 @@ function RealtimePageContent({
         selectedExecutionEngine,
       ),
       onStart: (startedThreadId) => {
+        executionSelection.rememberForThread(startedThreadId);
         if (startedThreadId !== threadId) {
           clearSidebarThreadStatus(threadId);
         }
@@ -2453,6 +2460,8 @@ function RealtimePageContent({
       projectWorkspacePath,
       qc,
       selectedExecutionEngine,
+      executionSelection.preference,
+      executionSelection.rememberForThread,
       setIsNewThread,
       settings.context,
       settings.personal_space.custom_instructions,
@@ -4270,10 +4279,25 @@ function RealtimePageContent({
                           }
                           modelName={settings.context.model_name}
                           // Keep one selector, but project model ownership by
-                          // engine: Codex roles use the server-owned profile;
-                          // native roles serialize the thread's model source.
+                          // engine: Codex uses the server-owned profile;
+                          // Octopus serializes the thread's model source.
                           modelProfileControl={!embeddedDesignChat}
                           executionEngine={selectedExecutionEngine}
+                          executionEngineControl={
+                            !embeddedDesignChat ? (
+                              <ExecutionEnginePicker
+                                value={executionSelection.preference}
+                                onChange={executionSelection.setPreference}
+                                codexAvailable={
+                                  executionSelection.codexAvailable
+                                }
+                                unavailableReason={
+                                  executionSelection.codexUnavailableReason
+                                }
+                                disabled={thread.isLoading}
+                              />
+                            ) : undefined
+                          }
                           mode={effectiveMode}
                           reasoningEffort={effectiveReasoningEffort}
                           threadId={threadId}

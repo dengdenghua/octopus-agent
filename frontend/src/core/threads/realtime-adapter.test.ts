@@ -77,6 +77,18 @@ const agentMsg = (text: string, id = "a1"): AgentMessageItem => ({
   text,
 });
 
+it("projects the actual turn engine onto messages independently of persona", () => {
+  const turn = makeTurn([agentMsg("done")]);
+  turn.execution = {
+    engine: "codex", driver: "codex_app_server", reason: "role_backend",
+    phase: "verification", invocation: 2,
+  };
+  const state = conversationToAgentThreadState(makeConv([turn]));
+  const message = state.messages.find((entry) => entry.type === "ai");
+  expect(message?.additional_kwargs.execution_engine).toBe("codex");
+  expect(message?.additional_kwargs.execution).toEqual(turn.execution);
+});
+
 const reasoning = (content: string, id = "r1"): ReasoningItem => ({
   id,
   type: "reasoning",

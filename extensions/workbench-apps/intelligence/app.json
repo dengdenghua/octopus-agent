@@ -1,0 +1,18 @@
+{
+  "schema": "octopus.workbench_app.v1",
+  "id": "intelligence",
+  "name": "订阅",
+  "description": "持续跟踪主题与情报",
+  "route": "/workspace/intelligence",
+  "module_id": "intelligence",
+  "version": "1.0.0",
+  "host_api": ">=0.2,<0.3",
+  "dependencies": [],
+  "entry": "dist/index.html",
+  "isolation": "iframe",
+  "permissions": [
+    "backend.api",
+    "host.same_origin"
+  ],
+  "data_paths": []
+}

@@ -1428,41 +1428,48 @@ describe("useThreadStreamRealtime permissions", () => {
     expect(onStart).not.toHaveBeenCalledWith("new");
   });
 
-  it("sends default sandbox permissions by default", async () => {
-    const startTurn = mockRealtime();
-    const { result } = renderHook(() =>
-      useThreadStreamRealtime({
-        threadId: "th-test",
-        context: { permission_mode: "default" },
-      }),
-    );
-
-    act(() => {
-      result.current[1]("th-test", { text: "hello", files: [] });
-    });
-
-    await waitFor(() => expect(startTurn).toHaveBeenCalled());
-    const payload = startTurn.mock.calls[0]?.[0];
-    expect(payload).toEqual(
-      expect.objectContaining({
-        approvalPolicy: "on-request",
-        sandboxPolicy: {
-          type: "workspaceWrite",
-          // Default permission mode keeps network denied unless the user
-          // opts in from the sandbox settings page.
-          networkAccess: false,
-        },
-        metadata: {
-          context: expect.objectContaining({
+  it.each(["auto", "octopus", "codex"] as const)(
+    "sends %s engine preference without changing sandbox permissions",
+    async (executionEngine) => {
+      const startTurn = mockRealtime();
+      const { result } = renderHook(() =>
+        useThreadStreamRealtime({
+          threadId: "th-test",
+          context: {
             permission_mode: "default",
-            sandbox_mode: "sandbox",
-            execution_environment: "sandbox",
-          }),
-        },
-      }),
-    );
-    expect(payload).not.toHaveProperty("planningMode");
-  });
+            execution_engine_preference: executionEngine,
+          },
+        }),
+      );
+
+      act(() => {
+        result.current[1]("th-test", { text: "hello", files: [] });
+      });
+
+      await waitFor(() => expect(startTurn).toHaveBeenCalled());
+      const payload = startTurn.mock.calls[0]?.[0];
+      expect(payload).toEqual(
+        expect.objectContaining({
+          executionEngine,
+          approvalPolicy: "on-request",
+          sandboxPolicy: {
+            type: "workspaceWrite",
+            // Default permission mode keeps network denied unless the user
+            // opts in from the sandbox settings page.
+            networkAccess: false,
+          },
+          metadata: {
+            context: expect.objectContaining({
+              permission_mode: "default",
+              sandbox_mode: "sandbox",
+              execution_environment: "sandbox",
+            }),
+          },
+        }),
+      );
+      expect(payload).not.toHaveProperty("planningMode");
+    },
+  );
 
   it("allows attachment-only turns so pasted screenshots still reach the model", async () => {
     const startTurn = mockRealtime();

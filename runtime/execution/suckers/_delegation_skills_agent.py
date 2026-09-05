@@ -50,6 +50,9 @@ def _call_agent(
     timeout_s: int = _DEFAULT_SUBAGENT_TIMEOUT_S,
     session: Any = None,
     output_schema: Any = None,
+    input_files: list[str] | None = None,
+    output_files: list[str] | None = None,
+    isolate: bool = False,
     **_kw: Any,
 ) -> dict[str, Any]:
     """Spawn an isolated subagent turn — escalation when you need
@@ -200,12 +203,24 @@ def _call_agent(
         timeout_s=timeout_s,
         session=session,
         output_schema=schema_arg,
+        **({"isolate": True} if isolate else {}),
+        **(
+            {"input_files": input_files, "output_files": output_files}
+            if input_files is not None or output_files is not None
+            else {}
+        ),
     )
 
     # Retry once on transient failure. Critical: retry does NOT bump
     # the budget counter — that happens in ``_record_delegation`` based
     # on the FINAL result (success vs. repeat-failure vs. first-failure).
-    if _should_auto_retry(result):
+    if (
+        not isolate
+        and input_files is None
+        and output_files is None
+        and result.get("retry_allowed") is not False
+        and _should_auto_retry(result)
+    ):
         if orch_budget is not None and not orch_budget.try_charge():
             result["retry_skipped"] = True
             existing_err = result.get("error") or ""

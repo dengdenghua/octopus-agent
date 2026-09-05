@@ -1,0 +1,18 @@
+{
+  "schema": "octopus.workbench_app.v1",
+  "id": "design",
+  "name": "设计画布",
+  "description": "视觉创作、素材编排与设计工作流",
+  "route": "/workspace/design",
+  "module_id": "design",
+  "version": "1.0.0",
+  "host_api": ">=0.2,<0.3",
+  "dependencies": [],
+  "entry": "dist/index.html",
+  "isolation": "iframe",
+  "permissions": [
+    "backend.api",
+    "host.same_origin"
+  ],
+  "data_paths": []
+}

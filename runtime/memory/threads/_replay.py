@@ -20,6 +20,7 @@ from runtime.protocol.items import (
     ArtifactItem,
     CommandExecutionItem,
     ErrorItem,
+    ExecutionSnapshot,
     FileChange,
     FileChangeItem,
     FileHunk,
@@ -250,6 +251,18 @@ def _order_replayed_timeline(turn: Turn) -> None:
 
 
 def _apply_turn_update(turn: Turn, payload: dict[str, Any]) -> None:
+    execution_raw = payload.get("execution")
+    if isinstance(execution_raw, dict):
+        with contextlib.suppress(TypeError, ValueError):
+            execution = ExecutionSnapshot.model_validate(execution_raw)
+            # Re-delivered or stale updates cannot change engine ownership or
+            # move an invocation backwards during replay.
+            if turn.execution is None or (
+                execution.engine == turn.execution.engine
+                and execution.invocation > turn.execution.invocation
+            ):
+                turn.execution = execution
+                turn.execution_engine = execution.engine
     if isinstance(payload.get("objectiveId"), str):
         turn.objective_id = payload["objectiveId"]
     if isinstance(payload.get("taskId"), str):

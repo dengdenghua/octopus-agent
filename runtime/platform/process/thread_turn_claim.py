@@ -381,7 +381,16 @@ def _write_metadata(
 
 def _read_metadata(path: Path) -> dict[str, Any]:
     try:
-        raw = path.read_bytes()
+        if os.name == "nt":
+            # Windows byte-range locks are mandatory even for another handle
+            # in this process. Byte zero is the ownership lock; all metadata
+            # starts after its sentinel. Reading that byte hides the live
+            # turn/epoch and makes an authorized Stop look like a stale turn.
+            with path.open("rb", buffering=0) as stream:
+                stream.seek(len(_METADATA_SENTINEL))
+                raw = stream.read()
+        else:
+            raw = path.read_bytes()
     except OSError:
         return {}
     if raw.startswith(_METADATA_SENTINEL):

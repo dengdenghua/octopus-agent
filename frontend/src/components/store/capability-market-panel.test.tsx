@@ -187,6 +187,25 @@ const freebuff2apiCommunity = {
 };
 
 describe("CapabilityMarketPanel", () => {
+  it("hides authentication actions for enabled plugins that need no account", async () => {
+    mocks.listCapabilities.mockResolvedValue({
+      capabilities: [{ ...browserPlugin, installed: true, enabled: true }],
+      total: 1,
+    });
+    renderWithProviders(<CapabilityMarketPanel compact />, { locale: "zh-CN" });
+    expect(
+      await screen.findByRole("button", { name: "已启用" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "连接" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("未连接")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "已启用" }));
+    await waitFor(() =>
+      expect(mocks.setCapabilityEnabled).toHaveBeenCalledWith("browser", false),
+    );
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.removeItem("echoai.plugin-category-collapse.v1");
@@ -412,7 +431,7 @@ describe("CapabilityMarketPanel", () => {
     });
     renderWithProviders(<CapabilityMarketPanel />, { locale: "zh-CN" });
 
-    fireEvent.click(await screen.findByRole("button", { name: "连接" }));
+    fireEvent.click(await screen.findByRole("button", { name: "配置模型" }));
 
     expect(screen.getByText(/不安装或检测 OpenCode CLI/)).toBeInTheDocument();
     expect(screen.getByText("big-pickle")).toBeInTheDocument();
@@ -434,6 +453,39 @@ describe("CapabilityMarketPanel", () => {
     );
   });
 
+  it("asks for the model key after permission review before enabling", async () => {
+    mocks.listCapabilities.mockResolvedValue({
+      capabilities: [
+        {
+          ...openCodeZen,
+          permission_review_required: true,
+        },
+      ],
+      total: 1,
+    });
+    mocks.connectCapability.mockResolvedValue({ connected: true });
+    renderWithProviders(<CapabilityMarketPanel />, { locale: "zh-CN" });
+    fireEvent.click(await screen.findByRole("button", { name: "确认权限" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "确认权限并启用" }),
+    );
+    expect(
+      await screen.findByLabelText("OpenCode Zen API Key"),
+    ).toBeInTheDocument();
+    expect(mocks.setCapabilityEnabled).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("OpenCode Zen API Key"), {
+      target: { value: "test-key" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "验证并接入免费模型" }));
+    await waitFor(() =>
+      expect(mocks.connectCapability).toHaveBeenCalledWith("opencode-zen", {
+        tokens: { api_key: "test-key" },
+        run_cli: false,
+        grant_permissions: ["content.read"],
+      }),
+    );
+  });
+
   it("labels Freebuff2API as community and submits an optional self-hosted URL", async () => {
     mocks.listCapabilities.mockResolvedValue({
       capabilities: [freebuff2apiCommunity],
@@ -442,7 +494,7 @@ describe("CapabilityMarketPanel", () => {
     mocks.connectCapability.mockResolvedValue({ connected: true });
     renderWithProviders(<CapabilityMarketPanel />, { locale: "zh-CN" });
 
-    fireEvent.click(await screen.findByRole("button", { name: "连接" }));
+    fireEvent.click(await screen.findByRole("button", { name: "配置模型" }));
 
     expect(screen.getByText(/第三方社区模型网关/)).toBeInTheDocument();
     expect(screen.getByText(/不是 Freebuff 官方服务/)).toBeInTheDocument();

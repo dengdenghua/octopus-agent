@@ -1500,6 +1500,11 @@ export function useThreadStreamRealtime(
           setIsUploading(false);
           await startTurn({
             input: text,
+            executionEngine:
+              rawContext.execution_engine_preference === "codex" ||
+              rawContext.execution_engine_preference === "octopus"
+                ? rawContext.execution_engine_preference
+                : "auto",
             ...(projectCwd ? { cwd: projectCwd } : {}),
             clientItemId: outbound.clientMessageId,
             attachments,

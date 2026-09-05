@@ -33,6 +33,7 @@
 
 import {
   emptyConversation,
+  parseExecutionSnapshot,
   type Conversation,
   type FileHunk,
   type GroundingSource,
@@ -190,6 +191,13 @@ export function normalizeEvent(evt: LoggedEvent): ConversationEvent[] {
     case "turn_updated": {
       if (!turnId) return [];
       const events: ConversationEvent[] = [];
+      const execution = parseExecutionSnapshot(payload.execution);
+      if (execution) {
+        events.push({
+          method: "turn/execution/updated",
+          params: { threadId, turnId, execution },
+        });
+      }
       // Field set mirrors ``_apply_turn_update``: grounding, phases,
       // workspaceFocus, workbenchSnapshot — each applied independently.
       const grounding = Array.isArray(payload.grounding)

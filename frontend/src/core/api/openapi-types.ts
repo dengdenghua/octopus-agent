@@ -14480,6 +14480,13 @@ export interface components {
             /** Effective Model */
             effective_model?: string | null;
             /**
+             * Execution Available
+             * @default false
+             */
+            execution_available: boolean;
+            /** Execution Unavailable Reason */
+            execution_unavailable_reason?: string | null;
+            /**
              * Mode
              * @enum {string}
              */

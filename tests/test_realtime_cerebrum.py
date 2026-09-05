@@ -593,6 +593,17 @@ def test_flatten_preserves_first_class_subagent_item_for_history() -> None:
 
 
 @pytest.fixture()
+def codex_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Driver-contract cases supply readiness; preflight has separate real tests."""
+    from runtime.execution.codex_backend.readiness import CodexReadiness
+
+    monkeypatch.setattr(
+        "runtime.sensing.gateway.realtime_execution.codex_readiness_for_turn",
+        lambda *_a: CodexReadiness(True),
+    )
+
+
+@pytest.fixture()
 def gateway(tmp_path: Path) -> Any:
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
     from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
@@ -674,6 +685,7 @@ def test_text_delta_maps_to_agent_message(gateway: Any) -> None:
 def test_codex_partner_routes_to_app_server_before_legacy_cli(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    codex_ready: None,
 ) -> None:
     """The selected Codex role must enter one and only one inner engine."""
     from types import SimpleNamespace
@@ -742,6 +754,7 @@ def test_codex_partner_routes_to_app_server_before_legacy_cli(
 def test_codex_partner_failure_reports_the_actual_driver(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    codex_ready: None,
 ) -> None:
     from types import SimpleNamespace
 
@@ -789,6 +802,194 @@ def test_codex_partner_failure_reports_the_actual_driver(
     errors = [item for item in turn["items"] if item["type"] == "error"]
     assert errors[-1]["message"] == "codex protocol failed"
     assert errors[-1]["errorInfo"]["driver"] == "codex_app_server"
+
+
+@pytest.mark.parametrize("continuation", ["verification", "steering", "error", "interrupt"])
+def test_codex_engine_binding_survives_gateway_lifecycle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    continuation: str,
+    codex_ready: None,
+) -> None:
+    """Exercise real websocket/lifecycle/journal code with controlled engines."""
+    from types import SimpleNamespace
+
+    from runtime.memory.threads.event_log import EventLog
+    from runtime.platform.runtime_policy import feature_flags
+    from runtime.protocol import FileChangeItem, ItemStatus, TurnStatus, VerificationItem
+    from runtime.protocol.items import FileChange
+    from runtime.sensing.gateway._realtime_cerebrum_steering import _restore_turn_steering
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "local")
+    monkeypatch.delenv("OCTOPUS_CODEX_APP_SERVER_ENABLED", raising=False)
+    feature_flags.reload()
+    # No subprocess or model call; the test verifies engine ownership only.
+    monkeypatch.setattr(
+        "runtime.safety.evolution.auto_verifier.run_verification_plan", lambda *_a, **_k: []
+    )
+    calls = []
+    log_paths = []
+
+    async def fake_codex(runtime, turn, log, emitter, intent, agent, provider, *, text):
+        snapshot = turn.execution
+        assert snapshot is not None
+        # Evidence must already be replayable before any driver effects.
+        assert log.replay()[-1].execution == snapshot
+        calls.append(snapshot.phase)
+        log_paths.append(log.path)
+        if snapshot.phase == "primary":
+            if continuation == "error":
+                raise RuntimeError("controlled engine failure")
+            if continuation == "interrupt":
+                turn.status = TurnStatus.INTERRUPTED
+                return True
+            if continuation == "steering":
+                _restore_turn_steering(runtime, turn.id, ["also check the result"])
+            else:
+                change = FileChangeItem(
+                    status=ItemStatus.COMPLETED,
+                    changes=[FileChange(path="src/example.py", op="update")],
+                )
+                turn.items.append(change)
+                await runtime._emit_item_started(turn, log, emitter, change)
+                await runtime._emit_item_completed(turn, log, emitter, change)
+        elif snapshot.phase == "verification":
+            verification = VerificationItem(
+                command="python -m pytest",
+                kind="test",
+                status=ItemStatus.COMPLETED,
+                exit_code=0,
+                related_files=["src/example.py"],
+            )
+            turn.items.append(verification)
+            await runtime._emit_item_started(turn, log, emitter, verification)
+            await runtime._emit_item_completed(turn, log, emitter, verification)
+        await runtime._emit_agent_message(turn, log, emitter, "controlled result")
+        return True
+
+    async def forbidden_native(*_a, **_k):
+        calls.append("unexpected_native")
+        raise AssertionError("Codex task switched engines")
+
+    monkeypatch.setattr(CerebrumRuntime, "_drive_codex_app_server", fake_codex)
+    monkeypatch.setattr(CerebrumRuntime, "_drive_react", forbidden_native)
+    agent = SimpleNamespace(
+        agent_id="coder", capabilities={"execution_backend": "codex_app_server"}
+    )
+    runtime = CerebrumRuntime(stack=object(), agent=agent, logs_root=str(tmp_path / "threads"))
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-bound-codex",
+                "input": [{"type": "text", "text": "edit and verify"}],
+                "approvalPolicy": "on-request",
+            },
+        )
+    turn = out["response"].result["turn"]
+    expected_phases = (
+        ["primary", continuation] if continuation in {"verification", "steering"} else ["primary"]
+    )
+    assert calls == expected_phases
+    assert turn["status"] == {"error": "failed", "interrupt": "interrupted"}.get(
+        continuation, "completed"
+    )
+    events = [
+        n.params["execution"] for n in out["notifications"] if n.method == "turn/execution/updated"
+    ]
+    assert [event["phase"] for event in events] == expected_phases
+    assert all(event["engine"] == "codex" for event in events)
+    replayed = EventLog(log_paths[0]).replay()[-1]
+    assert replayed.execution.model_dump() == turn["execution"] == events[-1]
+
+
+@pytest.mark.parametrize(
+    ("preference", "role_backend", "mode", "ready", "expected"),
+    [
+        ("codex", None, "chat", True, "codex"),
+        ("octopus", "codex_app_server", "chat", True, "octopus"),
+        ("auto", None, "code", True, "codex"),
+        ("auto", None, "code", False, "octopus"),
+        ("codex", None, "code", False, None),
+        ("auto", "codex_app_server", "code", False, None),
+        ("auto", None, "office", True, "octopus"),
+        ("invalid", None, "chat", True, "invalid"),
+    ],
+)
+def test_explicit_engine_is_independent_of_role_and_checked_before_effects(
+    tmp_path, monkeypatch, preference, role_backend, mode, ready, expected
+):
+    from types import SimpleNamespace
+
+    from runtime.execution.codex_backend.readiness import CodexReadiness
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    monkeypatch.setattr(
+        "runtime.sensing.gateway.realtime_execution.codex_readiness_for_turn",
+        lambda *_a: CodexReadiness(ready, None if ready else "account_required"),
+    )
+    calls = []
+    agent = SimpleNamespace(
+        agent_id="same-persona",
+        soul="Preserved role identity",
+        capabilities={"execution_backend": role_backend},
+    )
+
+    async def native(runtime, turn, log, emitter, intent, provider, selected_agent, **_kw):
+        assert selected_agent is agent
+        calls.append("octopus")
+        await runtime._emit_agent_message(turn, log, emitter, "completed")
+
+    async def codex(runtime, turn, log, emitter, intent, selected_agent, provider, **_kw):
+        assert selected_agent is agent
+        calls.append("codex")
+        await runtime._emit_agent_message(turn, log, emitter, "completed")
+
+    monkeypatch.setattr(CerebrumRuntime, "_drive_react", native)
+    monkeypatch.setattr(CerebrumRuntime, "_drive_codex_app_server", codex)
+    runtime = CerebrumRuntime(stack=object(), agent=agent, logs_root=str(tmp_path / "threads"))
+    app = FastAPI()
+    app.include_router(RealtimeGateway(runtime=runtime).router)
+    context = {"mode": "code" if mode == "office" else mode}
+    if mode == "office":
+        context.update({"capability_mode": "code", "personal_mode": "general"})
+    # Display metadata has no authority to override the task field.
+    context["execution_engine"] = "codex" if preference == "octopus" else "octopus"
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-engine-choice",
+                "executionEngine": preference,
+                "input": [
+                    {"type": "text", "text": "complete the task", "metadata": {"context": context}}
+                ],
+            },
+        )
+    if expected == "invalid":
+        assert out["response"].error.code == JsonRpcErrorCode.INVALID_PARAMS
+        assert calls == []
+        return
+    turn = out["response"].result["turn"]
+    events = [n.params for n in out["notifications"] if n.method == "turn/execution/updated"]
+    if expected is None:
+        assert calls == events == []
+        assert turn["status"] == "failed"
+        assert turn["execution"] is None
+        assert turn["error"]["code"] == "execution_unavailable"
+        assert turn["error"]["reason"] == "account_required"
+        assert turn["error"]["disposition"] == "blocked_on_user"
+    else:
+        assert calls == [expected]
+        assert turn["status"] == "completed"
+        assert turn["execution"]["engine"] == expected
+        assert len(events) == 1
 
 
 def test_user_turn_refills_subagent_wake_budget(gateway: Any, tmp_path: Path) -> None:
@@ -6081,6 +6282,63 @@ def test_turn_interrupt_kills_in_flight_subprocess(
     assert elapsed < 3.0, f"interrupt took {elapsed:.1f}s, expected < 3s"
     assert tool_completed_naturally["flag"] is False
     assert final.result["turn"]["status"] == "cancelled"
+
+
+def test_host_execution_deadline_kills_real_native_subprocess(
+    gateway: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sys
+
+    import runtime.core.cerebrum.react_loop as rl
+    from runtime.execution.request import current_execution_request
+    from runtime.platform.process.session import current_session
+    from runtime.platform.process.streaming import stream_run
+
+    monkeypatch.setenv("OCTOPUS_TURN_WALL_TIME_CAP_S", "0.7")
+    result = {}
+    finished = threading.Event()
+
+    def stream(*_args, **kwargs):
+        request = current_execution_request()
+        assert request is not None
+        assert current_session().metadata["_execution_task"] is request.task
+        assert kwargs["max_tokens_budget"] == request.task.resources.token_target
+        assert kwargs["max_usd_budget"] == request.task.resources.usd_target
+        yield {
+            "type": "tool_start",
+            "tool_name": "wait",
+            "tool_call_id": "deadline-process",
+            "iteration": 1,
+        }
+        try:
+            result.update(
+                stream_run([sys.executable, "-c", "import time; time.sleep(10)"], timeout=15)
+            )
+        finally:
+            finished.set()
+        yield {"type": "react_completed"}
+
+    monkeypatch.setattr(rl, "stream_react_loop", stream)
+    client, _ = gateway
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-deadline",
+                "executionEngine": "octopus",
+                "input": [{"type": "text", "text": "wait for a result"}],
+                "approvalPolicy": "never",
+            },
+        )
+    assert finished.wait(2), "producer remained alive after the host deadline"
+    assert result.get("cancelled") is True
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "failed"
+    errors = [item for item in turn["items"] if item["type"] == "error"]
+    assert any(
+        item.get("errorInfo", {}).get("exception_type") == "ExecutionDeadlineExceeded"
+        for item in errors
+    )
 
 
 def test_thread_resume_closes_stale_in_progress_turn(tmp_path: Path) -> None:

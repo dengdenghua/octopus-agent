@@ -361,6 +361,43 @@ export function isPrivateAgentGroundingSource(
   return path.startsWith("agents/") || path.startsWith("20-backend/26-agents/");
 }
 
+/** Host-recorded engine binding, never inferred from a persona or model. */
+export interface ExecutionSnapshot {
+  engine: "octopus" | "codex";
+  driver: string;
+  reason: string;
+  phase: "primary" | "steering" | "verification" | "repair";
+  invocation: number;
+}
+
+export function parseExecutionSnapshot(value: unknown): ExecutionSnapshot | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  if (
+    (record.engine !== "octopus" && record.engine !== "codex") ||
+    typeof record.driver !== "string" ||
+    typeof record.reason !== "string" ||
+    !["primary", "steering", "verification", "repair"].includes(String(record.phase)) ||
+    typeof record.invocation !== "number" ||
+    !Number.isSafeInteger(record.invocation) ||
+    record.invocation < 1
+  ) return null;
+  return record as unknown as ExecutionSnapshot;
+}
+
+/** Reconnects may replay old events; a turn cannot change its bound engine. */
+export function mergeExecutionSnapshot(
+  current: ExecutionSnapshot | null | undefined,
+  incoming: unknown,
+): ExecutionSnapshot | null | undefined {
+  const next = parseExecutionSnapshot(incoming);
+  if (!next) return current;
+  if (current && (next.engine !== current.engine || next.invocation <= current.invocation)) {
+    return current;
+  }
+  return next;
+}
+
 export interface Turn {
   id: string;
   threadId: string;
@@ -369,6 +406,7 @@ export interface Turn {
   completedAt: string | null;
   items: Item[];
   error: Record<string, unknown> | null;
+  execution?: ExecutionSnapshot | null;
   metaSkillHint?: MetaSkillHint;
   /** Project docs/chunks this turn was grounded on (``turn/grounding``).
    * The realtime adapter folds it onto the AI reply's

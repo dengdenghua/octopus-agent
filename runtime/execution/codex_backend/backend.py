@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol, Self, cast
 
+from runtime.execution.request import ExecutionRequest
 from runtime.safety.approval.approval_gate import ApprovalProvider
 from runtime.safety.sandboxing.sandbox import (
     BackendChoice,
@@ -90,6 +91,7 @@ class CodexExecutionRequest:
     dynamic_tool_handler: Any | None = None
     selected_app_ids: tuple[str, ...] = ()
     app_mentions: tuple[tuple[str, str], ...] = ()
+    execution: ExecutionRequest | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         for field_name in (

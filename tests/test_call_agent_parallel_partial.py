@@ -725,3 +725,22 @@ def test_parallel_no_turn_id_keeps_enforcement_off(monkeypatch):
     assert r["success_count"] == 20
     assert r["total"] == 20
     assert "dropped" not in r
+
+
+def test_failure_keeps_retry_prohibition_and_retained_workspace():
+    from runtime.execution.suckers._delegation_skills_parallel import _build_parallel_envelope
+
+    result = _build_parallel_envelope(
+        [
+            {
+                "agent_id": "coder",
+                "success": False,
+                "error": "export failed",
+                "retry_allowed": False,
+                "retained_workspace": "retained-checkout",
+            }
+        ],
+        total=1,
+    )
+    assert result["failures"][0]["retry_allowed"] is False
+    assert result["failures"][0]["retained_workspace"] == "retained-checkout"

@@ -1,24 +1,9 @@
-"""Deterministic worktree-isolated loop.
+"""Deterministic Git worktree lifecycle and the legacy fixed-worker loop.
 
-Run N tasks, each in its OWN git worktree, concurrently — capture each one's
-diff, then clean up. Isolated parallel file-writing: workers never collide
-because each operates in a separate checkout off ``HEAD``.
-
-This is the real mechanism behind the worktree pattern the
-``vibecoding-general-swarm`` SKILL only described in prose (telling sub-agents
-to manually shell ``git worktree add``). Here the lifecycle is code:
-deterministic, cleaned up in a ``finally``, and unit-tested against a real git
-repo.
-
-Diffs are RETURNED for the caller to review/apply — this never auto-merges,
-because reconciling parallel edits to the same file is a human/lead decision,
-not something to do blindly.
-
-The ``worker`` is an injected callable ``worker(worktree_path, task) -> None``
-that writes files inside the worktree. Wiring a sub-agent as the worker (so it
-runs with ``cwd`` = the worktree) needs per-worker ``workspace_path`` support
-in ``call_subagent`` and is a separate integration step; the loop machinery
-here is agnostic to what the worker is.
+The loop defaults to HEAD and returns candidate diffs. Host-scoped engine
+requests use ``isolated_worktree`` through ``call_subagent(isolate=True)``;
+that integration supplies a working-file snapshot, an approved storage root,
+durable exports and cleanup on the actual child worker thread.
 """
 
 from __future__ import annotations
@@ -31,6 +16,7 @@ import tempfile
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 # ``git worktree add/remove`` mutate the main repo's worktree registry, so
@@ -42,10 +28,11 @@ _MAX_WORKTREE_TASKS = 16
 
 def _git(cwd: str, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["git", "-C", cwd, *args],
+        ["git", "-C", cwd, *_GIT_HARDENING, *args],
         capture_output=True,
         text=True,
         check=check,
+        timeout=60,
     )
 
 
@@ -63,6 +50,8 @@ def _git(cwd: str, *args: str, check: bool = True) -> subprocess.CompletedProces
 #   * --no-textconv on diff so a malicious in-worktree .gitattributes cannot
 #     trigger a configured textconv driver during capture.
 _GIT_HARDENING: tuple[str, ...] = (
+    "-c",
+    "core.longpaths=true",
     "-c",
     "core.fsmonitor=false",
     "-c",
@@ -157,6 +146,11 @@ def _restore_worktree_gitfile(worktree: str, expected_gitdir: str) -> None:
     if not expected_gitdir:
         return
     gitfile = os.path.join(worktree, ".git")
+    if os.path.islink(gitfile):
+        # Replace the link itself; never overwrite its target during cleanup.
+        os.unlink(gitfile)
+        Path(gitfile).write_text(f"gitdir: {expected_gitdir}\n", encoding="utf-8")
+        return
     try:
         with open(gitfile, encoding="utf-8") as fh:
             line = fh.read().strip()
@@ -165,41 +159,61 @@ def _restore_worktree_gitfile(worktree: str, expected_gitdir: str) -> None:
     if line == f"gitdir: {expected_gitdir}":
         return
     try:
-        with open(gitfile, "w", encoding="utf-8") as fh:
+        # Git for Windows marks this pointer hidden. Opening the existing
+        # file avoids CREATE_ALWAYS failing on that attribute.
+        with open(gitfile, "r+", encoding="utf-8") as fh:
             fh.write(f"gitdir: {expected_gitdir}\n")
+            fh.truncate()
     except OSError:  # noqa: BLE001 — best-effort cleanup must never raise
         pass
 
 
 @contextmanager
-def worktree_scope(repo_root: str, name: str) -> Iterator[tuple[str, str]]:
-    """Create an isolated git worktree off HEAD, yield ``(path, branch)``, and
-    remove the worktree + branch on exit (always, even on error)."""
-    base = tempfile.mkdtemp(prefix="octo-wt-")
+def worktree_scope(
+    repo_root: str,
+    name: str,
+    *,
+    base_dir: str | None = None,
+    revision: str = "HEAD",
+    preserve_on_error: bool | Callable[[], bool] = False,
+) -> Iterator[tuple[str, str]]:
+    """Yield a checkout of ``revision`` and remove its temporary branch on exit.
+
+    A host exporting durable results can retain it on error. Cleanup validates
+    its original target, and a failed add never deletes an existing branch.
+    """
+    base = tempfile.mkdtemp(prefix="octo-wt-", dir=base_dir)
+    expected_base = Path(base).resolve(strict=True)
     path = os.path.join(base, "wt")
     branch = f"octo/wt-{name}"
     gitdir = ""
-    with _WORKTREE_LOCK:
-        _git(repo_root, "worktree", "add", "-b", branch, path, "HEAD")
-        # Record the gitdir the worktree was registered with while the .git
-        # pointer is still pristine — cleanup restores it if a worker tampers
-        # with the file (audit F-03). git auto-uniquifies same-basename
-        # worktrees (wt, wt1, ...), so the admin dir name is not predictable;
-        # the pointer is the source of truth.
-        try:
-            with open(os.path.join(path, ".git"), encoding="utf-8") as fh:
-                gitdir = fh.read().strip().split(":", 1)[1].strip()
-        except OSError:
-            gitdir = ""
+    created = False
+    preserve = False
     try:
-        yield path, branch
-    finally:
         with _WORKTREE_LOCK:
-            _restore_worktree_gitfile(path, gitdir)
-            _git(repo_root, "worktree", "remove", "--force", path, check=False)
-            _git(repo_root, "worktree", "prune", check=False)
-            _git(repo_root, "branch", "-D", branch, check=False)
-        shutil.rmtree(base, ignore_errors=True)
+            _git(repo_root, "worktree", "add", "-b", branch, path, revision)
+            created = True
+            gitdir = _resolve_worktree_gitdir(path, repo_root)
+        yield path, branch
+    except BaseException:
+        preserve = created and (
+            preserve_on_error() if callable(preserve_on_error) else preserve_on_error
+        )
+        raise
+    finally:
+        if not preserve:
+            if Path(base).resolve(strict=False) != expected_base or (
+                Path(path).resolve(strict=False) != expected_base / "wt"
+            ):
+                raise RuntimeError("worktree cleanup target changed; retained for inspection")
+            with _WORKTREE_LOCK:
+                if created:
+                    _restore_worktree_gitfile(path, gitdir)
+                    removed = _git(repo_root, "worktree", "remove", "--force", path, check=False)
+                    if removed.returncode:
+                        raise RuntimeError(f"worktree cleanup failed; retained at {path}")
+                    _git(repo_root, "branch", "-D", branch, check=False)
+            shutil.rmtree(base, ignore_errors=True)
 
 
 # Audit F-09: a single oversized diff (e.g. a committed binary or generated

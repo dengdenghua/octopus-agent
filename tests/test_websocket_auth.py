@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 
+import pytest
+
 from runtime.safety.auth.websocket import (
     accepted_auth_subprotocol,
     offered_websocket_subprotocols,
@@ -30,9 +32,11 @@ def _encoded(value: str) -> str:
     return base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii").rstrip("=")
 
 
-def test_websocket_bearer_token_decodes_arbitrary_utf8_without_url_transport() -> None:
+@pytest.mark.parametrize("coalesced", [False, True])
+def test_websocket_bearer_token_decodes_arbitrary_utf8_without_url_transport(coalesced) -> None:
+    protocols = ["bearer.b64", _encoded("令牌 with spaces/(test)")]
     connection = _Connection(
-        subprotocols=["bearer.b64", _encoded("令牌 with spaces/(test)")],
+        subprotocols=[", ".join(protocols)] if coalesced else protocols,
     )
 
     assert websocket_bearer_token(connection) == "令牌 with spaces/(test)"
@@ -54,9 +58,11 @@ def test_websocket_bearer_token_rejects_malformed_base64url() -> None:
     assert accepted_auth_subprotocol(connection) == "bearer.b64"
 
 
-def test_accepted_auth_subprotocol_never_echoes_the_credential() -> None:
+@pytest.mark.parametrize("coalesced", [False, True])
+def test_accepted_auth_subprotocol_never_echoes_the_credential(coalesced) -> None:
     encoded = _encoded("secret")
-    connection = _Connection(subprotocols=["Bearer.B64", encoded])
+    protocols = ["Bearer.B64", encoded]
+    connection = _Connection(subprotocols=[", ".join(protocols)] if coalesced else protocols)
 
     assert accepted_auth_subprotocol(connection) == "Bearer.B64"
     assert accepted_auth_subprotocol(connection) != encoded

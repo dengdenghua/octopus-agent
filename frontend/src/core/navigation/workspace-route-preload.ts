@@ -1,11 +1,9 @@
 /** Lazy workspace route loaders shared by the router and sidebar prefetch. */
 
 export const loadAgentsPage = () => import("@/app/workspace/agents/page");
-export const loadProjectsPage = () => import("@/app/workspace/projects/page");
 
 const loaders: ReadonlyArray<readonly [string, () => Promise<unknown>]> = [
   ["/workspace/agents", loadAgentsPage],
-  ["/workspace/projects", loadProjectsPage],
 ];
 
 /** Warm a route chunk on intent (hover/focus) without delaying navigation. */

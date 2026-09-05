@@ -295,7 +295,13 @@ def create_local_auth_router(
                     identity_store.add(
                         Identity(
                             actor_id=actor_id,
-                            roles=tuple(config.default_roles),
+                            roles=tuple(
+                                dict.fromkeys(
+                                    [*config.default_roles, "admin"]
+                                    if body.username in getattr(config, "admin_usernames", ())
+                                    else config.default_roles
+                                )
+                            ),
                             metadata=meta,
                         ),
                     )

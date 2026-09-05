@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 from contextlib import suppress
 from pathlib import Path
 
@@ -116,7 +117,11 @@ def test_worker_failure_is_isolated_and_cleaned_up(tmp_path: Path):
 def test_shell_worktree_worker_writes_in_isolation(tmp_path: Path):
     repo = _init_repo(tmp_path)
     worker = shell_worktree_worker(
-        ["sh", "-c", 'printf "%s" "$OCTOPUS_WORKTREE_TASK" > note.txt'],
+        [
+            sys.executable,
+            "-c",
+            "import os,pathlib; pathlib.Path('note.txt').write_text(os.environ['OCTOPUS_WORKTREE_TASK'])",
+        ],
     )
     r = run_worktree_loop(str(repo), ["one", "two"], worker)
 
@@ -132,7 +137,7 @@ def test_shell_worktree_worker_writes_in_isolation(tmp_path: Path):
 
 def test_shell_worktree_worker_nonzero_exit_marks_failure(tmp_path: Path):
     repo = _init_repo(tmp_path)
-    worker = shell_worktree_worker(["sh", "-c", "exit 3"])
+    worker = shell_worktree_worker([sys.executable, "-c", "raise SystemExit(3)"])
     r = run_worktree_loop(str(repo), ["x"], worker)
     assert r["succeeded"] == 0
     assert r["results"][0]["ok"] is False
@@ -181,7 +186,9 @@ def test_worktree_scope_cleans_up_on_error(tmp_path: Path):
 
 def _write_fake_gitdir(gitfile: Path, fake_gitdir: Path) -> None:
     """Point a worktree's .git file at an attacker-controlled gitdir."""
-    gitfile.write_text(f"gitdir: {fake_gitdir}\n", encoding="utf-8")
+    with gitfile.open("r+", encoding="utf-8") as handle:
+        handle.write(f"gitdir: {fake_gitdir}\n")
+        handle.truncate()
     (fake_gitdir / "config").write_text(
         "[core]\n\thooksPath = .\n\tfsmonitor = true\n", encoding="utf-8"
     )

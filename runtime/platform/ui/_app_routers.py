@@ -189,11 +189,8 @@ def mount_routers_a(
     ctx.project_model_router = project_model_router
 
     # ─── FS router · extracted to fs_router.py ─────────
-    # The 3 endpoints + 2 helpers that used to live here inline now
-    # sit in runtime/sensing/siphon/fs_router.py. Same contract ·
-    # no auth / no scope (these serve the UI file-browser which
-    # opens user-chosen directories) · test coverage in
-    # tests/test_app_fs_endpoints.py.
+    # Local loopback users can choose a directory before creating a thread.
+    # Shared deployments keep the authenticated, managed-thread boundary.
     from runtime.sensing.gateway.fs_router import create_fs_router
 
     app.include_router(
@@ -201,6 +198,7 @@ def mount_routers_a(
             thread_store=ctx.thread_store,
             identity_store=ctx.identity_store,
             require_auth=ctx.require_auth,
+            allow_local_workspace_access=ctx.allow_local_workspace_access,
             jwt_secret=ctx.jwt_secret,
             jwt_issuer=ctx.jwt_issuer,
             jwt_audience=ctx.jwt_audience,
@@ -716,6 +714,7 @@ def mount_routers_a(
 
         app.include_router(
             create_capability_router(
+                model_provider_plugins=app.state.model_provider_plugins,
                 identity_store=ctx.identity_store,
                 require_auth=ctx.require_auth,
                 jwt_secret=ctx.jwt_secret,

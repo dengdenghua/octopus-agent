@@ -106,10 +106,11 @@ export interface ChatInputBoxProps {
    * independent of the selected role: roles change persona/capabilities, not
    * the user's Octopus vs ChatGPT/Codex model source. */
   modelProfileControl?: boolean;
-  /** Execution kernel for this role. Model source remains independently
+  /** Expected execution kernel for this task. Model source remains independently
    * selectable: Octopus uses per-thread model_name, Codex uses its scoped
    * server profile. */
   executionEngine?: "octopus" | "codex";
+  executionEngineControl?: ReactNode;
   onPermissionModeChange?: (mode: PermissionMode) => void;
   onProjectAgentModeChange?: (mode: AgentModeName) => void;
   onAuditIntensityChange?: (intensity: AuditIntensity) => void;

@@ -1,0 +1,21 @@
+{
+  "schema": "octopus.workbench_app.v1",
+  "id": "narrative_studio",
+  "name": "叙事工坊",
+  "description": "角色、世界观、剧情分支与正典协作",
+  "route": "/workspace/narrative",
+  "module_id": "narrative",
+  "version": "0.2.0",
+  "runtime_plugin": "narrative_studio",
+  "host_api": ">=0.2,<0.3",
+  "dependencies": [],
+  "entry": "dist/index.html",
+  "isolation": "iframe",
+  "permissions": [
+    "backend.api",
+    "host.same_origin"
+  ],
+  "data_paths": [
+    "narrative-studio"
+  ]
+}

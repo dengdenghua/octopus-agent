@@ -33,7 +33,10 @@ allowed roots · they never re-implement the mode ladder.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -359,7 +362,7 @@ def _extra_workspaces_from_metadata(
     return out
 
 
-def resolve_write_scope(session: Session | None) -> WriteScope:
+def _resolve_write_scope(session: Session | None) -> WriteScope:
     """Return the allowed write-scope for the current turn.
 
     The resolver is pure — no side effects, no directory creation. Run
@@ -478,6 +481,73 @@ def resolve_write_scope(session: Session | None) -> WriteScope:
     )
 
 
+_SCOPE_CEILING: ContextVar[ExecutionScope | None] = ContextVar(
+    "execution_scope_ceiling", default=None
+)
+
+
+def _intersect_roots(roots: tuple[Path, ...], ceiling: tuple[Path, ...]) -> tuple[Path, ...]:
+    result: list[Path] = []
+    for root in roots:
+        for allowed in ceiling:
+            if _path_is_same_or_under(root, allowed):
+                candidate = root
+            elif _path_is_same_or_under(allowed, root):
+                candidate = allowed
+            else:
+                continue
+            if candidate not in result:
+                result.append(candidate)
+    return tuple(result)
+
+
+def _restrict_scope(scope: ExecutionScope, ceiling: ExecutionScope) -> ExecutionScope:
+    def policy(requested: str, allowed: str) -> str:
+        order = {"deny": 0, "ask": 1, "allow": 2}
+        return min((requested, allowed), key=lambda value: order.get(value, 0))
+
+    permission_order = {"plan": 0, "default": 1, "acceptEdits": 2, "bypassPermissions": 3}
+    permission = min(
+        (scope.permission_mode, ceiling.permission_mode),
+        key=lambda value: permission_order.get(value, 0),
+    )
+    return replace(
+        scope,
+        readable_roots=_intersect_roots(scope.readable_roots, ceiling.readable_roots),
+        writable_roots=_intersect_roots(scope.writable_roots, ceiling.writable_roots),
+        permission_mode=permission,
+        approval_policy=ceiling.approval_policy,
+        shell_policy=policy(scope.shell_policy, ceiling.shell_policy),
+        network_policy=policy(scope.network_policy, ceiling.network_policy),
+        browser_policy=policy(scope.browser_policy, ceiling.browser_policy),
+        sandbox_mode="sandbox"
+        if "sandbox" in (scope.sandbox_mode, ceiling.sandbox_mode)
+        else "full",
+        execution_environment="sandbox"
+        if "sandbox" in (scope.execution_environment, ceiling.execution_environment)
+        else "local",
+    )
+
+
+@contextmanager
+def execution_scope_ceiling(scope: ExecutionScope) -> Iterator[None]:
+    """Bind a Python-only ceiling; nested workers can only narrow it."""
+    parent = _SCOPE_CEILING.get()
+    token = _SCOPE_CEILING.set(_restrict_scope(scope, parent) if parent else scope)
+    try:
+        yield
+    finally:
+        _SCOPE_CEILING.reset(token)
+
+
+def resolve_write_scope(session: Session | None) -> WriteScope:
+    scope = _resolve_write_scope(session)
+    ceiling = _SCOPE_CEILING.get()
+    if ceiling is None:
+        return scope
+    return replace(scope, roots=_intersect_roots(scope.roots, ceiling.writable_roots))
+
+
 def resolve_execution_scope(session: Session | None) -> ExecutionScope:
     """Return the unified execution scope for a turn.
 
@@ -486,7 +556,8 @@ def resolve_execution_scope(session: Session | None) -> ExecutionScope:
     clearer read/write split and policy fields.
     """
     meta = (session.metadata if session else None) or {}
-    write_scope = resolve_write_scope(session)
+    # Preserve the readable project roots before applying the write ceiling.
+    write_scope = _resolve_write_scope(session)
     permission_mode = _normalize_permission_mode(meta.get("permission_mode"))
     approval_policy = _normalize_approval_policy(
         meta.get("approval_policy"),
@@ -570,7 +641,7 @@ def resolve_execution_scope(session: Session | None) -> ExecutionScope:
         network_policy = "allow"
         browser_policy = "ask"
 
-    return ExecutionScope(
+    scope = ExecutionScope(
         mode=write_scope.mode,
         requested_mode=write_scope.requested_mode,
         readable_roots=readable_roots,
@@ -583,6 +654,8 @@ def resolve_execution_scope(session: Session | None) -> ExecutionScope:
         network_policy=network_policy,
         browser_policy=browser_policy,
     )
+    ceiling = _SCOPE_CEILING.get()
+    return _restrict_scope(scope, ceiling) if ceiling is not None else scope
 
 
 __all__ = [
@@ -594,4 +667,5 @@ __all__ = [
     "team_workspace_root",
     "resolve_execution_scope",
     "resolve_write_scope",
+    "execution_scope_ceiling",
 ]

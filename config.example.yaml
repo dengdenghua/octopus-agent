@@ -261,6 +261,8 @@ local_auth:
   jwt_issuer: octopus-agent
   actor_prefix: "local:"
   default_roles: [user, local]
+  # Explicit local administrators; takes effect after restart and successful login.
+  admin_usernames: []
 
 # ─────────────── Safety: guard kill-switch 安全守卫开关 ─────────────
 # Persistently disable individual ReAct guards by label. Useful when

@@ -46,7 +46,6 @@ import { copyTextToClipboard } from "@/core/clipboard";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
-import { loadProjectsPage } from "@/core/navigation/workspace-route-preload";
 import { WORKBENCH_BUILTIN_APPS } from "@/core/workbench/apps";
 import { RemoteWorkbenchSurface } from "@/core/workbench/remote-surface";
 import { WorkbenchSurfaceProvider } from "@/core/workbench/workbench-surface";
@@ -83,9 +82,7 @@ interface Props {
   renderDevice?: BrowserTab["device"];
 }
 
-const BROWSER_CORE_COMPONENTS: Record<string, ComponentType> = {
-  projects: lazy(loadProjectsPage),
-};
+const BROWSER_CORE_COMPONENTS: Record<string, ComponentType> = {};
 
 /* Implementation note. */
 type CrashInfo = NonNullable<BrowserTab["crash"]>;

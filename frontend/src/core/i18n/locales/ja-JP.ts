@@ -538,6 +538,11 @@ export const jaJP: Translations = {
 
   // Create Project Dialog
   createProjectDialog: {
+    advanced: "メンバーと招待の設定",
+    defaultAssistant: "既定のアシスタント",
+    defaultAssistantHint: "作成後にメンバーの追加や招待ができます。",
+    searchMembers: "名前、ID、能力で検索",
+    noMembersFound: "一致するメンバーがいません",
     title: "新規プロジェクト",
     placeholder: "プロジェクト名",
     quickCategory: "クイックカテゴリー",
@@ -6830,6 +6835,10 @@ export const jaJP: Translations = {
 
   // Account Settings
   accountSettings: {
+    localAccount: "ローカルアカウント",
+    localAccountDescription: "このアカウントは現在の環境へのアクセスに使用します。クラウドプロフィールの編集と外部アカウントの連携は利用できません。",
+    localPrivacyDescription: "この環境にはクラウドのプライバシー設定がありません。データの扱いは接続するモデルやプラグインによって異なります。各設定をご確認ください。",
+    privacyUnavailable: "プライバシー設定を読み取れませんでした。再試行してから変更してください。",
     creditsBalance: "クレジット残高",
     octAccount: "公式アカウント",
     available: "利用可能",

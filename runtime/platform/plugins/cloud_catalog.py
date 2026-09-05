@@ -86,6 +86,21 @@ _REMOTE_SURFACE_PLUGINS: tuple[dict[str, Any], ...] = (
 
 _WORKBENCH_APPS: tuple[dict[str, Any], ...] = (
     {
+        "id": "workbench_projects",
+        "plugin": "projects",
+        "source": "octopus",
+        "kind": "workbench",
+        "name": "Project Management",
+        "name_zh": "项目管理",
+        "description": "里程碑、风险与项目协作",
+        "category": "workbench",
+        "author": "Octopus",
+        "version": "1.0.0",
+        "release_summary": "1.0.0：可独立安装的项目管理视图，项目数据由宿主保管。",
+        "removable": True,
+        "data_policies": ["keep"],
+    },
+    {
         "id": "workbench_paper-trading",
         "plugin": "paper-trading",
         "source": "octopus",

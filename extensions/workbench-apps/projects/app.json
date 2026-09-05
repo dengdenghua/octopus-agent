@@ -1,0 +1,18 @@
+{
+  "schema": "octopus.workbench_app.v1",
+  "id": "projects",
+  "name": "项目管理",
+  "description": "里程碑、风险与项目协作",
+  "route": "/workspace/projects",
+  "module_id": "projects",
+  "version": "1.0.0",
+  "host_api": ">=0.2,<0.3",
+  "dependencies": [],
+  "entry": "dist/index.html",
+  "isolation": "iframe",
+  "permissions": [
+    "backend.api",
+    "host.same_origin"
+  ],
+  "data_paths": []
+}

@@ -106,6 +106,10 @@ class CodexModelPreferenceStore:
     def read(self, scope: TenantScope | None) -> CodexModelPreference:
         path = self.path_for(scope)
         try:
+            # A readiness/profile read must not provision a tenant directory
+            # just to acquire the transactional reader's sidecar lock.
+            if not path.exists():
+                return CodexModelPreference()
             payload = read_json_file(
                 path,
                 default_factory=dict,

@@ -1,0 +1,225 @@
+Browser tab: 1, Title: "新对话 - EchoAI", URL: "http://localhost:3000/#/workspace/projects".
+0 AXWebArea 新对话 - EchoAI, URL: localhost:3000/#/workspace/projects
+	1 container root
+		2 container
+			3 button 关闭窗口
+			4 button 最小化窗口
+			5 button 缩放窗口
+			6 tab group Workspace surface
+				7 tab (selected, settable, boolean) Description: EchoAI, Value: 1
+				8 tab (selectable, settable, boolean) Description: AI 浏览器, Value: 0
+			9 button (expanded) Description: 收起侧栏 (⌘B), Secondary Actions: Collapse
+			10 button 新建任务
+			11 content list
+				12 link Description: HUB, Value: localhost:3000/#/workspace/agents?surface=chat
+				13 link Description: 助手, Value: localhost:3000/#/workspace/realtime/octopus-assistant?agent=octopus
+				14 link Description: 订阅, Value: localhost:3000/#/workspace/intelligence?surface=chat
+				15 link Description: 项目管理, Value: localhost:3000/#/workspace/projects
+				16 link Description: 设计画布, Value: localhost:3000/#/workspace/design
+				17 link Description: 自进化, Value: localhost:3000/#/workspace/evolution?surface=chat
+			18 content list
+				19 link Description: 发现社区, Value: localhost:3000/#/workspace/community
+			20 content list
+				21 button (collapsed) Description: 展开本地数据库, Secondary Actions: Expand
+			22 content list
+				23 button 编辑侧栏
+			24 container
+				25 button (expanded) Description: 收起项目, Secondary Actions: Collapse
+				26 button 选择项目空间
+			27 container
+				28 button (expanded) Description: 收起对话, Secondary Actions: Collapse
+				29 button Description: 对话 · 新建任务, Help: 新建任务
+			30 pop up button (collapsed) Description: Eve, ID: radix-_r_g_, Secondary Actions: Expand, Help: 伊芙（Eve）· 白幽灵小队的联络与协调中枢，代号 Siren（海妖）。能力「情绪黑客 Emotion Hack」能读取并操纵人的情感——她曾是 Ghost 阵营成员，叛逃投奔白幽灵。银白长发夹淡粉、粉色护目镜，把情报、计划、研究、桌面执行和现场变化编成一条能活着走完的行动线。
+				31 text Eve
+				32 text Lv.
+				33 text 1
+				34 text ⭐
+			35 button 设置
+			36 container 项目管理
+				37 AXWebArea 项目管理, URL: localhost:3000/api/workbench-packages/projects/assets/dist/index.html?octopus_host_path=%2Fworkspace%2Fprojects&octopus_host_origin=http%3A%2F%2Flocalhost%3A3000
+					38 container
+						39 container Notifications alt+T
+						40 container 创建项目, ID: radix-_r_0_
+							41 heading 创建项目, Value: 2, ID: radix-_r_1_
+								42 text 创建项目
+							43 text 工作群、项目能力和右侧工作台会一次创建并自动绑定。
+							44 text field (settable)
+							45 text 快速选择分类
+							46 button 📈 投资
+								47 text 📈
+								48 text 投资
+							49 button 📝 作业
+								50 text 📝
+								51 text 作业
+							52 button ✍️ 写作
+								53 text ✍️
+								54 text 写作
+							55 button ✈️ 旅行
+								56 text ✈️
+								57 text 旅行
+							58 container 初始 AI 协作成员
+								59 heading 初始 AI 协作成员, Value: 3, ID: create-project-ai-members
+									60 text 初始 AI 协作成员
+								61 text 创建时直接加入工作群；至少保留一位，之后仍可调整。
+								62 text 已选 1 位
+								63 container
+									64 checkbox Description: Zero, Value: 0
+									65 checkbox Description: Kane, Value: 0
+									66 checkbox Description: 坤候底 · 逆向投资人, Value: 0
+									67 checkbox Description: Raven, Value: 0
+									68 checkbox Description: Eve / Siren, Value: 0
+									69 checkbox Description: Kane / Paladin, Value: 0
+									70 checkbox Description: Leon / Chronos, Value: 0
+									71 checkbox Description: Luna / Dream Walker, Value: 0
+									72 checkbox Description: Mira Voss / Glass Vein, Value: 0
+									73 checkbox Description: Noah / Probability, Value: 0
+									74 checkbox Description: Raven / Night Crow, Value: 0
+									75 checkbox Description: Shion / Virus Queen, Value: 0
+									76 checkbox Description: Zero / White Ghost, Value: 0
+									77 checkbox Description: Shion, Value: 0
+									78 checkbox Description: 固件通, Value: 0
+									79 checkbox Description: 钊审财 · 财报研究员, Value: 0
+									80 checkbox (disabled) Description: Eve, Value: 1
+									81 checkbox Description: 星望远 · 产业策略师, Value: 0
+									82 checkbox Description: Claude Code 伙伴, Value: 0
+									83 checkbox Description: CodeBuddy CLI 伙伴, Value: 0
+									84 checkbox Description: Codex CLI 伙伴, Value: 0
+									85 checkbox Description: OpenCode CLI 伙伴, Value: 0
+									86 checkbox Description: Noah, Value: 0
+									87 checkbox Description: Octopus, Value: 0
+									88 checkbox Description: Claude Code 伙伴, Value: 0
+									89 checkbox Description: Codex CLI 伙伴, Value: 0
+									90 checkbox Description: 吴八哥, Value: 0
+									91 checkbox Description: SEO 内容营销团队, Value: 0
+									92 checkbox Description: 磊追浪 · 短线冲浪手, Value: 0
+									93 checkbox Description: 洲四方 · 信号派首席, Value: 0
+									94 checkbox Description: 腾讯自选股股票投研专家团, Value: 0
+									95 checkbox Description: 声学工程师分身, Value: 0
+									96 checkbox Description: 声学-结构专家分身, Value: 0
+									97 checkbox Description: AI 工程师分身, Value: 0
+									98 checkbox Description: AI 硬件系统专家分身, Value: 0
+									99 checkbox Description: AI 产品经理分身, Value: 0
+									100 checkbox Description: 算法工程师分身, Value: 0
+									101 checkbox Description: Android 系统工程师分身, Value: 0
+									102 checkbox Description: 天线工程师分身, Value: 0
+									103 checkbox Description: 音频工程师分身, Value: 0
+									104 checkbox Description: 审计分身, Value: 0
+									105 checkbox Description: 电池工程师分身, Value: 0
+									106 checkbox Description: 蓝牙工程师分身, Value: 0
+									107 checkbox Description: BSP 工程师分身, Value: 0
+									108 checkbox Description: 经营助理 / 总经理助理分身, Value: 0
+									109 checkbox Description: CAE 仿真工程师分身, Value: 0
+									110 checkbox Description: 摄像头工程师分身, Value: 0
+									111 checkbox Description: 蜂窝通信工程师分身, Value: 0
+									112 checkbox Description: CMF 设计师分身, Value: 0
+									113 checkbox Description: 通信协议工程师分身, Value: 0
+									114 checkbox Description: 连接器工程师分身, Value: 0
+									115 checkbox Description: DFM/DFx 专家分身, Value: 0
+									116 checkbox Description: 显示工程师分身, Value: 0
+									117 checkbox Description: 显示测试工程师分身, Value: 0
+									118 checkbox Description: 电气工程师分身, Value: 0
+									119 checkbox Description: 电子工程师分身, Value: 0
+									120 checkbox Description: 嵌入式工程师分身, Value: 0
+									121 checkbox Description: 嵌入式-硬件联调专家分身, Value: 0
+									122 checkbox Description: EMC/EMI 工程师分身, Value: 0
+									123 checkbox Description: 工厂交付专家分身, Value: 0
+									124 checkbox Description: FAE 应用工程师分身, Value: 0
+									125 checkbox Description: 失效分析工程师 / FA分身, Value: 0
+									126 checkbox Description: 财务分身, Value: 0
+									127 checkbox Description: 固件工程师分身, Value: 0
+									128 checkbox Description: 创始人/CEO 分身, Value: 0
+									129 checkbox Description: GNSS/GPS 工程师分身, Value: 0
+									130 checkbox Description: 硬件质量闭环专家分身, Value: 0
+									131 checkbox Description: 硬件系统架构专家分身, Value: 0
+									132 checkbox Description: 硬件系统工程师分身, Value: 0
+									133 checkbox Description: 硬件技术员分身, Value: 0
+									134 checkbox Description: 硬件测试工程师分身, Value: 0
+									135 checkbox Description: 医疗健康协作分身, Value: 0
+									136 checkbox Description: 人力资源分身, Value: 0
+									137 checkbox Description: 硬件工程师分身, Value: 0
+									138 checkbox Description: 硬件产品经理分身, Value: 0
+									139 checkbox Description: 图像质量工程师 / IQ Engineer分身, Value: 0
+									140 checkbox Description: 工业设计师分身, Value: 0
+									141 checkbox Description: 红外工程师分身, Value: 0
+									142 checkbox Description: 注塑工程师分身, Value: 0
+									143 checkbox Description: 投融资分析师分身, Value: 0
+									144 checkbox Description: 律师分身, Value: 0
+									145 checkbox Description: 法务合规分身, Value: 0
+									146 checkbox Description: 激光/雷达工程师分身, Value: 0
+									147 checkbox Description: Linux 驱动工程师分身, Value: 0
+									148 checkbox Description: 机器视觉算法工程师分身, Value: 0
+									149 checkbox Description: 生产制造工程师分身, Value: 0
+									150 checkbox Description: 材料工程师分身, Value: 0
+									151 checkbox Description: 机械工程师分身, Value: 0
+									152 checkbox Description: 机电一体化专家分身, Value: 0
+									153 checkbox Description: NPI 量产导入分身, Value: 0
+									154 checkbox Description: 护理协作分身, Value: 0
+									155 checkbox Description: 运营管理分身, Value: 0
+									156 checkbox Description: 光学工程师分身, Value: 0
+									157 checkbox Description: 光机工程师分身, Value: 0
+									158 checkbox Description: 光机系统专家分身, Value: 0
+									159 checkbox Description: 光电工程师分身, Value: 0
+									160 checkbox Description: 包装工程师分身, Value: 0
+									161 checkbox Description: PCB 工程师分身, Value: 0
+									162 checkbox Description: PCB Layout 工程师分身, Value: 0
+									163 checkbox Description: PMO 经理分身, Value: 0
+									164 checkbox Description: 电源工程师分身, Value: 0
+									165 checkbox Description: 电源完整性工程师 / PI分身, Value: 0
+									166 checkbox Description: 电源-热专家分身, Value: 0
+									167 checkbox Description: 售前解决方案专家分身, Value: 0
+									168 checkbox Description: 工艺工程师分身, Value: 0
+									169 checkbox Description: 采购经理 / Buyer分身, Value: 0
+									170 checkbox Description: 产品经理分身, Value: 0
+									171 checkbox Description: 产品合规认证专家分身, Value: 0
+									172 checkbox Description: 产品设计工程师分身, Value: 0
+									173 checkbox Description: 产品完整性工程师分身, Value: 0
+									174 checkbox Description: 项目经理分身, Value: 0
+									175 checkbox Description: 样机工程师 / Prototype Engineer分身, Value: 0
+									176 checkbox Description: 心理咨询师分身, Value: 0
+									177 checkbox Description: 质量工程师分身, Value: 0
+									178 checkbox Description: 可靠性工程师分身, Value: 0
+									179 checkbox Description: 射频工程师分身, Value: 0
+									180 checkbox Description: 射频-结构专家分身, Value: 0
+									181 checkbox Description: 机器人系统专家分身, Value: 0
+									182 checkbox Description: 销售与商务分身, Value: 0
+									183 checkbox Description: 传感器工程师分身, Value: 0
+									184 checkbox Description: 钣金工程师分身, Value: 0
+									185 checkbox Description: 信号完整性工程师 / SI分身, Value: 0
+									186 checkbox Description: 智能硬件产品架构专家分身, Value: 0
+									187 checkbox Description: 智能制造自动化专家分身, Value: 0
+									188 checkbox Description: 结构工程师分身, Value: 0
+									189 checkbox Description: 供应商质量专家分身, Value: 0
+									190 checkbox Description: 供应链与采购分身, Value: 0
+									191 checkbox Description: 供应链工程专家分身, Value: 0
+									192 checkbox Description: 税务分身, Value: 0
+									193 checkbox Description: 技术项目经理 / TPM分身, Value: 0
+									194 checkbox Description: 测试工程师分身, Value: 0
+									195 checkbox Description: 热设计工程师分身, Value: 0
+									196 checkbox Description: 热仿真工程师分身, Value: 0
+									197 checkbox Description: 热-结构联合专家分身, Value: 0
+									198 checkbox Description: 热测试工程师分身, Value: 0
+									199 checkbox Description: 模具工程师分身, Value: 0
+									200 checkbox Description: 触控工程师分身, Value: 0
+									201 checkbox Description: 用户研究员分身, Value: 0
+									202 checkbox Description: 振动工程师分身, Value: 0
+									203 checkbox Description: 视觉工程师分身, Value: 0
+									204 checkbox Description: Wi-Fi 工程师分身, Value: 0
+									205 checkbox Description: 无线通信工程师分身, Value: 0
+									206 checkbox Description: 文衡价 · 估值分析师, Value: 0
+									207 checkbox Description: Luna, Value: 0
+									208 checkbox Description: 小台, Value: 0
+							209 text 真人成员
+							210 text 创建后邀请
+							211 text 创建完成会直接进入工作群，再通过安全邀请链接选择成员或访客。
+							212 container
+								213 text 进入工作群后立即邀请
+								214 switch Description: 进入工作群后立即邀请, Value: 0
+							215 text 你的项目角色
+							216 text 项目负责人 · 群主
+							217 text 你拥有项目管理、AI 编排和真人邀请权限。
+							218 button 取消
+							219 button (disabled) 创建项目
+							220 button Close
+		221 container Notifications alt+T
+
+The focused UI element is 44 text field (settable)

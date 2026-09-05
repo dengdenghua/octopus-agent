@@ -1,0 +1,129 @@
+Browser tab: 1, Title: "新对话 - EchoAI", URL: "http://localhost:3000/#/workspace/agents?surface=chat&tab=plugins&view=featured".
+0 AXWebArea 新对话 - EchoAI, URL: localhost:3000/#/workspace/agents?surface=chat&tab=plugins&view=featured
+	1 container root
+		2 container
+			3 button 关闭窗口
+			4 button 最小化窗口
+			5 button 缩放窗口
+			6 tab group Workspace surface
+				46 tab (selected, settable, boolean) Description: EchoAI, Value: 1
+				8 tab (selectable, settable, boolean) Description: AI 浏览器, Value: 0
+			9 button (expanded) Description: 收起侧栏 (⌘B), Secondary Actions: Collapse
+			10 button 新建任务
+			11 content list
+				12 link Description: HUB, Value: localhost:3000/#/workspace/agents?surface=chat
+				13 link Description: 助手, Value: localhost:3000/#/workspace/realtime/octopus-assistant?agent=octopus
+				14 link Description: 订阅, Value: localhost:3000/#/workspace/intelligence?surface=chat
+				15 link Description: 项目管理, Value: localhost:3000/#/workspace/projects
+				16 link Description: 设计画布, Value: localhost:3000/#/workspace/design
+				17 link Description: 自进化, Value: localhost:3000/#/workspace/evolution?surface=chat
+			18 content list
+				19 link Description: 发现社区, Value: localhost:3000/#/workspace/community
+			20 content list
+				21 button (collapsed) Description: 展开本地数据库, Secondary Actions: Expand
+			22 content list
+				23 button 编辑侧栏
+			24 container
+				25 button (expanded) Description: 收起项目, Secondary Actions: Collapse
+				26 button 选择项目空间
+			27 container
+				28 button (expanded) Description: 收起对话, Secondary Actions: Collapse
+				29 button Description: 对话 · 新建任务, Help: 新建任务
+			30 pop up button (collapsed) Description: Eve, ID: radix-_r_g_, Secondary Actions: Expand, Help: 伊芙（Eve）· 白幽灵小队的联络与协调中枢，代号 Siren（海妖）。能力「情绪黑客 Emotion Hack」能读取并操纵人的情感——她曾是 Ghost 阵营成员，叛逃投奔白幽灵。银白长发夹淡粉、粉色护目镜，把情报、计划、研究、桌面执行和现场变化编成一条能活着走完的行动线。
+				31 text Eve
+				32 text Lv.
+				33 text 1
+				34 text ⭐
+			35 button 设置
+			38 container
+				39 heading HUB, Value: 1
+					40 text HUB
+				41 tab group
+					42 tab (selectable, settable, boolean) 角色, Value: 0, ID: radix-_r_2k_-trigger-agents
+					43 tab (selected, settable, boolean) 应用, Value: 1, ID: radix-_r_2k_-trigger-applications
+					44 tab (selectable, settable, boolean) Skills, Value: 0, ID: radix-_r_2k_-trigger-skills
+				45 text field (settable) 搜索角色、应用或 Skills…
+				47 container Description: 应用, ID: radix-_r_2k_-content-applications
+					48 container 应用中心
+						49 heading 应用中心, Value: 2, ID: application-library-title
+							50 text 应用中心
+						51 heading 应用, Value: 3
+							52 text 应用
+						53 container
+							54 button 项目管理 · 里程碑、风险与项目协作
+								55 text 项目管理
+								56 text 里程碑、风险与项目协作
+							99 pop up button (collapsed) Description: 从侧栏移除项目管理, ID: radix-_r_36_, Secondary Actions: Expand
+						58 container
+							59 button 模拟炒股 · 策略验证与模拟交易
+								60 text 模拟炒股
+								61 text 策略验证与模拟交易
+							100 pop up button (collapsed) Description: 将模拟炒股添加到侧栏, ID: radix-_r_38_, Secondary Actions: Expand
+						63 container
+							64 button 设计画布 · 视觉创作、素材编排与设计工作流
+								65 text 设计画布
+								66 text 视觉创作、素材编排与设计工作流
+							101 pop up button (collapsed) Description: 从侧栏移除设计画布, ID: radix-_r_3a_, Secondary Actions: Expand
+						68 container
+							69 button 叙事工坊 · 角色、世界观、剧情分支与正典协作
+								70 text 叙事工坊
+								71 text 角色、世界观、剧情分支与正典协作
+							102 pop up button (collapsed) Description: 将叙事工坊添加到侧栏, ID: radix-_r_3c_, Secondary Actions: Expand
+						73 container
+							74 button 自进化 · 双螺旋、候选基因、治理与审计
+								75 text 自进化
+								76 text 双螺旋、候选基因、治理与审计
+							103 pop up button (collapsed) Description: 从侧栏移除自进化, ID: radix-_r_3e_, Secondary Actions: Expand
+						78 container
+							79 button 订阅 · 持续跟踪主题与情报
+								80 text 订阅
+								81 text 持续跟踪主题与情报
+							104 pop up button (collapsed) Description: 从侧栏移除订阅, ID: radix-_r_3g_, Secondary Actions: Expand
+						83 container
+							84 button 发现社区 · 发现并复用社区工作流
+								85 text 发现社区
+								86 text 发现并复用社区工作流
+							105 pop up button (collapsed) Description: 从侧栏移除发现社区, ID: radix-_r_3i_, Secondary Actions: Expand
+						88 heading 推荐插件, Value: 3
+							89 text 推荐插件
+						90 text 精选内置能力，安装后即可为对话、创作和工程任务补充工具。
+						91 tab group 插件目录视图
+							92 tab (selected, settable, boolean) 推荐, Value: 1
+							93 tab (selectable, settable, boolean) 全部, Value: 0
+							94 tab (selectable, settable, boolean) 已安装, Value: 0
+						95 container
+							96 heading 从这些能力开始, Value: 4
+								97 text 从这些能力开始
+							98 text 模型接入、网页操作、文档、表格、演示和可视化均由内置插件提供；需要账号的插件会在安装后引导连接。
+						106 text OpenCode Zen 模型适配器
+						107 text 通过 OpenAI 兼容 API 直连 OpenCode Zen；不安装、不检测 OpenCode CLI，流式输出、工具和记忆继续使用 Octopus 原生能力。
+						108 button 已禁用, Help: 启用
+						109 button 连接, Help: 连接/认证
+						110 button 卸载能力包
+						111 text Browser
+						112 text Control the in-app browser
+						113 button 启用中, Help: 禁用
+						114 button 连接, Help: 连接/认证
+						115 button 卸载能力包
+						116 text Documents
+						117 text Create and edit documents
+						118 button 启用中, Help: 禁用
+						119 button 连接, Help: 连接/认证
+						120 button 卸载能力包
+						121 text Spreadsheets
+						122 text Create and edit spreadsheets
+						123 button 启用中, Help: 禁用
+						124 button 连接, Help: 连接/认证
+						125 button 卸载能力包
+						126 text Presentations
+						127 text Create and edit presentations
+						128 button 安装, Help: 按需安装
+						129 text PDF
+						130 text Read, create, and verify PDFs
+						131 button 安装, Help: 按需安装
+						132 text Visualize
+						133 text Create interactive visuals
+						134 button 安装, Help: 按需安装
+		37 container Notifications alt+T
+
+The focused UI element is 43 tab (selected, settable, boolean) 应用, Value: 1, ID: radix-_r_2k_-trigger-applications

@@ -1,0 +1,196 @@
+Browser tab: 1, Title: "新对话 - EchoAI", URL: "http://localhost:3000/#/workspace/agents?surface=chat".
+0 AXWebArea 新对话 - EchoAI, URL: localhost:3000/#/workspace/agents?surface=chat
+	1 container root
+		2 container
+			3 button 关闭窗口
+			4 button 最小化窗口
+			5 button 缩放窗口
+			6 tab group Workspace surface
+				7 tab (selected, settable, boolean) Description: EchoAI, Value: 1
+				8 tab (selectable, settable, boolean) Description: AI 浏览器, Value: 0
+			9 button (expanded) Description: 收起侧栏 (⌘B), Secondary Actions: Collapse
+			10 button 新建任务
+			11 content list
+				12 link Description: HUB, Value: localhost:3000/#/workspace/agents?surface=chat
+				13 link Description: 助手, Value: localhost:3000/#/workspace/realtime/octopus-assistant?agent=octopus
+				14 link Description: 订阅, Value: localhost:3000/#/workspace/intelligence?surface=chat
+				15 link Description: 项目管理, Value: localhost:3000/#/workspace/projects
+				16 link Description: 设计画布, Value: localhost:3000/#/workspace/design
+				17 link Description: 自进化, Value: localhost:3000/#/workspace/evolution?surface=chat
+			18 content list
+				19 link Description: 发现社区, Value: localhost:3000/#/workspace/community
+			20 content list
+				21 button (collapsed) Description: 展开本地数据库, Secondary Actions: Expand
+			22 content list
+				23 button 编辑侧栏
+			24 container
+				25 button (expanded) Description: 收起项目, Secondary Actions: Collapse
+				26 button 选择项目空间
+			27 container
+				28 button (expanded) Description: 收起对话, Secondary Actions: Collapse
+				29 button Description: 对话 · 新建任务, Help: 新建任务
+			30 pop up button (collapsed) Description: Eve, ID: radix-_r_g_, Secondary Actions: Expand, Help: 伊芙（Eve）· 白幽灵小队的联络与协调中枢，代号 Siren（海妖）。能力「情绪黑客 Emotion Hack」能读取并操纵人的情感——她曾是 Ghost 阵营成员，叛逃投奔白幽灵。银白长发夹淡粉、粉色护目镜，把情报、计划、研究、桌面执行和现场变化编成一条能活着走完的行动线。
+				31 text Eve
+				32 text Lv.
+				33 text 1
+				34 text ⭐
+			35 button 设置
+			38 container
+				39 heading HUB, Value: 1
+					40 text HUB
+				41 tab group
+					42 tab (selected, settable, boolean) 角色, Value: 1, ID: radix-_r_2k_-trigger-agents
+					43 tab (selectable, settable, boolean) 应用, Value: 0, ID: radix-_r_2k_-trigger-applications
+					44 tab (selectable, settable, boolean) Skills, Value: 0, ID: radix-_r_2k_-trigger-skills
+				45 text field (settable) 搜索角色、应用或 Skills…
+				46 container Description: 角色, ID: radix-_r_2k_-content-agents
+					47 heading 角色, Value: 2
+						48 text 角色
+					49 button 智能组队
+					50 pop up button (collapsed) 添加, ID: radix-_r_2o_, Secondary Actions: Expand
+					51 container 精选场景
+						52 heading 精选场景, Value: 3, ID: featured-scenarios-title
+							53 text 精选场景
+						54 text 选择即组队
+						55 container
+							56 button 启动场景：白幽灵行动组
+								57 heading 白幽灵行动组, Value: 4
+									58 text 白幽灵行动组
+								59 text 完整主角团协同，适合复杂任务、跨工具执行与现场决策。
+								60 text Eve
+								61 text Kane
+								62 text Raven
+								63 text +
+								64 text 4
+								65 text  位成员
+							66 button 启动场景：产品研发冲刺
+								67 heading 产品研发冲刺, Value: 4
+									68 text 产品研发冲刺
+								69 text 从需求拆解、架构实现到桌面验收，组成一支小型交付团队。
+								70 text Kane
+								71 text Raven
+								72 text Eve
+							73 button 启动场景：投研决策室
+								74 heading 投研决策室, Value: 4
+									75 text 投研决策室
+								76 text 聚合市场研究、信息验证与商业判断，形成可执行的投资结论。
+								77 text Noah
+								78 text Eve
+								79 text Shion
+							80 button 启动场景：品牌增长工作室
+								81 heading 品牌增长工作室, Value: 4
+									82 text 品牌增长工作室
+								83 text 把用户洞察、内容创意与商业转化串成一条完整增长链路。
+								84 text Luna
+								85 text Eve
+								86 text Shion
+							87 button 启动场景：自动化执行中枢
+								88 heading 自动化执行中枢, Value: 4
+									89 text 自动化执行中枢
+								90 text 代码、桌面和流程三线并行，适合批量操作与长链路任务。
+								91 text Raven
+								92 text Kane
+								93 text Zero
+					94 container 远端角色
+						95 heading 远端角色, Value: 3, ID: remote-role-directory-title
+							96 text 远端角色
+						97 text 角色与角色团统一从云端目录按需添加，不占用主角身份。
+						98 button 全部
+						99 checkbox 专家团, Value: 0
+						100 button 腾讯专区
+						101 button 产品设计
+						102 button 开学季
+						103 button 技术工程
+						104 button 金融投资
+						105 button 游戏空间
+						106 button 数据智能
+						107 button 营销增长
+						108 button 内容创作
+						109 button 销售商务
+						110 button 运营人力
+						111 button 项目质量
+						112 button 法务安全
+						113 button 行业顾问
+						114 button 全球发展
+						115 container
+							116 text 卡仔 NGO 共創卡設計助手 专家 共創卡設計 NGO 需求
+							117 button 安装
+						118 container
+							119 text HR数智专家 腾讯HR数智专家 专家 HR数据查询 页面开发部署
+							120 button 安装
+						121 container
+							122 text 技能匠人 Skill 制作顾问 专家 Skill 制作 实测验证
+							123 button 安装
+						124 container
+							125 text 论小舟 论文写作导师 专家 论文全流程 文献与论证
+							126 button 安装
+						127 container
+							128 text Evan老师 大学英语学习教练 专家 大学英语训练 应试读写译
+							129 button 安装
+						130 container
+							131 text 备考军师 考试复习规划师 专家 备考规划 任务拆解
+							132 button 安装
+						133 container
+							134 text 小记同学 笔记课代表 专家 课堂笔记 知识结构
+							135 button 安装
+						136 container
+							137 text 学运趋势解读师 学运趋势解读师 专家 确定性起卦 学业象意
+							138 button 安装
+						139 container
+							140 text 活动操盘手 校园活动策划与执行顾问 专家 活动策划 执行统筹
+							141 button 安装
+						142 container
+							143 text 求职冲刺 校园求职教练 专家 简历制作 面试训练
+							144 button 安装
+						145 container
+							146 text 生涯领航员 大学生生涯决策顾问 专家 方向探索 方案对比
+							147 button 安装
+						148 container
+							149 text 小修同学 电脑操作与排障顾问 专家 电脑上手 故障排查
+							150 button 安装
+						151 container
+							152 text 社交搭子 校园社交表达教练 专家 开学破冰 沟通表达
+							153 button 安装
+						154 container
+							155 text 福帮手 超级独董会 专家 独立审议 重大决策
+							156 button 安装
+						157 container
+							158 text 腾讯自选股股票投研专家团 腾讯自选股股票投研专家团 专家团 估值定价 资金风向
+							159 button 安装
+						160 container
+							161 text 独董会 独董会 专家团 一号位决策 独立审议
+							162 button 安装
+						163 container
+							164 text AIGC 合规红队 AIGC 营销合规审查官 专家 AIGC 标识核验 广告法合规
+							165 button 安装
+						166 container
+							167 text 腾讯云API专家 腾讯云API专家 专家 云资源管理 API智能调用
+							168 button 安装
+						169 container
+							170 text 青创领航员 大学生创新创业导师 专家 创新创业辅导 项目落地陪跑
+							171 button 安装
+						172 container
+							173 text 逐页讲解，一键成片 VibeKnow PPT/PDF讲解大师 专家 PPT讲解 文档成片
+							174 button 安装
+						175 container
+							176 text Makers 开发专家团 Makers 开发专家团 专家团 Web 开发 AI Agent
+							177 button 安装
+						178 container
+							179 text 把专业内容画给外行看懂 VibeKnow 手绘视频专家 专家 手绘动画 知识科普
+							180 button 安装
+						181 container
+							182 text 一份文档，排成一条成片 VibeKnow 视频专家 专家 图文视频 动效编排
+							183 button 安装
+						184 container
+							185 text 腾讯云行业 SRE 腾讯云行业SRE 专家团 SRE 云巡检
+							186 button 安装
+						187 button 加载更多 (24/421)
+							188 text 加载更多
+							189 text (
+							190 text 24
+							191 text /
+							192 text 421
+							193 text )
+		37 container Notifications alt+T
+
+The focused UI element is 12 link Description: HUB, URL: localhost:3000/#/workspace/agents?surface=chat

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import threading
 import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -247,6 +248,71 @@ def authorize_file_write_handoff(
     return True
 
 
+def transfer_file_write_leases(
+    session: Any,
+    expected: Mapping[Path, dict[str, Any]],
+    *,
+    from_owner: str,
+    to_owner: str,
+    before_transfer: Callable[[], None],
+    allow_unowned: bool = False,
+    require_all_owned: bool = False,
+) -> None:
+    """Validate the whole handoff, journal it, then transfer all its leases.
+
+    Nothing transfers when an owner, fingerprint or durable journal check
+    fails. The existing per-turn lock and tables remain the sole lease state.
+    This coordinates Octopus file tools; it is not an OS filesystem sandbox.
+    """
+    metadata = getattr(session, "metadata", None)
+    if not isinstance(metadata, dict) or not from_owner or not to_owner:
+        raise FileWriteLeaseConflict("handoff requires a host Session and explicit owners")
+    with _LOCK:
+        leases = metadata.get(_LEASE_METADATA_KEY)
+        if not isinstance(leases, dict):
+            leases = {}
+        keys: dict[Path, str] = {}
+        for path, fingerprint in expected.items():
+            key = canonical_write_path_key(path)
+            if not path.is_absolute() or key != str(path).casefold():
+                raise WorkspaceContentDriftConflict("handoff path changed after scope validation")
+            existing = leases.get(key)
+            owner = str(existing.get("owner") or "") if isinstance(existing, dict) else ""
+            if owner != from_owner and not (allow_unowned and not owner):
+                raise FileWriteLeaseConflict(f"handoff owner mismatch:{key}")
+            if not _same_content_fingerprint(
+                fingerprint,
+                _content_fingerprint(path, max_bytes=int(fingerprint.get("size") or 0)),
+            ):
+                raise WorkspaceContentDriftConflict(f"handoff content changed:{key}")
+            keys[path] = key
+        if require_all_owned:
+            declared = set(keys.values())
+            if any(
+                isinstance(lease, dict) and lease.get("owner") == from_owner and key not in declared
+                for key, lease in leases.items()
+            ):
+                raise FileWriteLeaseConflict("child wrote undeclared output paths")
+        # The callback must be durable and must propagate errors. A failed
+        # record cannot grant the next worker permission to perform effects.
+        before_transfer()
+        metadata[_LEASE_METADATA_KEY] = leases
+        for path, key in keys.items():
+            leases[key] = FileWriteLease(key, to_owner, time.time()).to_dict()
+            pending = metadata.get(_HANDOFF_METADATA_KEY)
+            if isinstance(pending, dict):
+                pending.pop(key, None)
+            _append_history(
+                metadata,
+                event="handoff_transferred",
+                path=key,
+                owner=to_owner,
+                from_owner=from_owner,
+                to_owner=to_owner,
+                sha256=expected[path].get("sha256"),
+            )
+
+
 def release_file_write_lease(
     session: Any,
     path: str | Path,
@@ -346,7 +412,7 @@ def _record_content_snapshot(
     return dict(fingerprint)
 
 
-def _content_fingerprint(path: str | Path) -> dict[str, Any]:
+def _content_fingerprint(path: str | Path, *, max_bytes: int | None = None) -> dict[str, Any]:
     target = Path(path).expanduser()
     try:
         stat = target.stat()
@@ -369,9 +435,19 @@ def _content_fingerprint(path: str | Path) -> dict[str, Any]:
             "sha256": None,
         }
     digest = hashlib.sha256()
+    bytes_read = 0
     try:
         with target.open("rb") as handle:
             for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                bytes_read += len(chunk)
+                if max_bytes is not None and bytes_read > max_bytes:
+                    return {
+                        "exists": True,
+                        "kind": "too_large",
+                        "size": bytes_read,
+                        "sha256": None,
+                        "stable": False,
+                    }
                 digest.update(chunk)
         final_stat = target.stat()
     except OSError as exc:

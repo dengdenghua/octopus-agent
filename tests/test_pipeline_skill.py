@@ -55,6 +55,34 @@ def unlimited_budget():
 # ── Guard conditions ───────────────────────────────────────────────────────
 
 
+def test_pipeline_preserves_file_contract_and_candidate_patch(mock_subagent, unlimited_budget):
+    from runtime.execution.suckers.delegation_skills import _run_pipeline
+
+    receipt = {"patch": {"path": "candidate.patch"}, "applied": False}
+    mock_subagent.return_value = {
+        "success": True,
+        "output": "candidate",
+        "worktree": receipt,
+        "retry_allowed": False,
+    }
+    result = _run_pipeline(
+        items=["feature"],
+        stages=[
+            {
+                "prompt_template": "build {item}",
+                "isolate": True,
+                "input_files": ["brief.txt"],
+                "output_files": ["out.txt"],
+            }
+        ],
+    )
+    assert mock_subagent.call_args.kwargs["isolate"] is True
+    assert mock_subagent.call_args.kwargs["input_files"] == ["brief.txt"]
+    assert mock_subagent.call_args.kwargs["output_files"] == ["out.txt"]
+    stage = result["results"][0]["stages"][0]
+    assert stage["worktree"] == receipt and stage["retry_allowed"] is False
+
+
 def test_empty_items_returns_error(unlimited_budget):
     from runtime.execution.suckers.delegation_skills import _run_pipeline
 

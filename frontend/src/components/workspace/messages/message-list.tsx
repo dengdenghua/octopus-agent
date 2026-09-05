@@ -58,6 +58,7 @@ import {
 } from "../agent-workbench-events";
 import type { LiveToolEvent } from "../live-tool-timeline";
 import { PublicThinkingStatus } from "../public-thinking-status";
+import { ExecutionEngineBadge } from "../execution-engine-picker";
 import {
   type AgentRunState,
   agentRunStatusLightClass,
@@ -1850,6 +1851,7 @@ export function MessageList({
 
   const renderAssistantFrame = ({
     key,
+    executionEngine,
     agentName,
     agentAvatar,
     agentIcon,
@@ -1858,6 +1860,7 @@ export function MessageList({
     children,
   }: {
     key: string;
+    executionEngine?: unknown;
     agentName?: string;
     agentAvatar?: string;
     agentIcon?: string | null;
@@ -1902,6 +1905,7 @@ export function MessageList({
               )}
             </div>
           )}
+          <ExecutionEngineBadge engine={executionEngine} />
           {children}
         </div>
       </div>
@@ -1976,6 +1980,7 @@ export function MessageList({
     const { name, avatar, icon, role } = resolveAgentIdentity(msg);
     return renderAssistantFrame({
       key,
+      executionEngine: msg.additional_kwargs?.execution_engine,
       agentName: name,
       agentAvatar: avatar,
       agentIcon: icon,
@@ -2031,6 +2036,7 @@ export function MessageList({
     if (!agentName) return content;
     return renderAssistantFrame({
       key: `agent-frame/${group.id ?? agentName}`,
+      executionEngine: aiMessage?.additional_kwargs?.execution_engine,
       agentName,
       agentAvatar,
       agentIcon,

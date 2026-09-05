@@ -364,6 +364,10 @@ class LocalAuthConfig(BaseModel):
     jwt_audience: str | None = None
     actor_prefix: str = "local:"
     default_roles: list[str] = Field(default_factory=lambda: ["user", "local"])
+    admin_usernames: list[str] = Field(
+        default_factory=list,
+        description="Explicit local usernames granted the admin role after successful login",
+    )
 
     @model_validator(mode="after")
     def _reject_weak_jwt_secret(self) -> LocalAuthConfig:

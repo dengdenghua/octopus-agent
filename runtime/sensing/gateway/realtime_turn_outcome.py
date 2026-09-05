@@ -405,6 +405,8 @@ def _turn_model(turn: Turn) -> str | None:
 
 
 def _turn_execution_engine(turn: Turn) -> str:
+    if turn.execution is not None:
+        return turn.execution.engine
     value = str(getattr(turn, "execution_engine", None) or "").strip().lower()
     return value if value in {"codex", "octopus"} else "octopus"
 
