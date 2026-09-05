@@ -434,7 +434,10 @@ class CandidateRegistry:
                 # Candidate files are low-volume control-plane state, so a
                 # read-side durability fence is preferable to returning a
                 # possibly page-cache-only lifecycle state.
-                with target.open("rb") as handle:
+                # ``FlushFileBuffers`` (used by ``os.fsync`` on Windows)
+                # requires a writable handle even though this is a read-side
+                # durability fence. POSIX accepts the same mode.
+                with target.open("r+b") as handle:
                     os.fsync(handle.fileno())
                 _fsync_directory(target.parent)
                 return out

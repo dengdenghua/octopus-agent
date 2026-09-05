@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 import pytest
 
@@ -172,6 +173,70 @@ def test_auto_load_empty_input_short_circuits() -> None:
     report = auto_load_pinned_plugins([])
     assert report.activations == ()
     assert report.render_observation() == ""
+
+
+def test_same_id_codex_prompt_plugin_does_not_shadow_plugin_hub_module() -> None:
+    from runtime.core.cerebrum.plugin_auto_load import select_plugin_hub_activations
+
+    class _DiscoveringHub:
+        @staticmethod
+        def discover() -> list[dict[str, str]]:
+            return [{"id": "documents"}]
+
+    selected = select_plugin_hub_activations(
+        ["documents", "codex-only", "native-only"],
+        codex_handled={"documents", "codex-only"},
+        hub=_DiscoveringHub(),
+    )
+
+    assert selected == ("documents", "native-only")
+
+
+def test_prompt_activation_uses_the_stack_owned_plugin_hub(monkeypatch) -> None:
+    from runtime.core.cerebrum._react_prompt_assembly_guidance import (
+        _assemble_tool_sections,
+    )
+    from runtime.core.cerebrum._react_prompt_assembly_state import _AssemblyState
+    from runtime.execution.suckers import SkillRegistry
+    from runtime.platform.models import ParsedIntent
+
+    hub = _StubHub()
+    registry = SkillRegistry()
+    state = _AssemblyState(
+        intent=ParsedIntent(
+            raw="Use @plugin:documents",
+            intent_type="task",
+            normalized_goal="Use @plugin:documents",
+            user_context={},
+        ),
+        agent=None,
+        stack=SimpleNamespace(plugin_hub=hub),
+        executor=SimpleNamespace(registry=registry),
+        approval_provider=None,
+        resume_task_id=None,
+        planning_mode=False,
+        tools_active=True,
+        native_mode=True,
+        no_tool_turn=False,
+        strict_explicit_reads=False,
+        camouflage_suffix="",
+        max_iterations=2,
+        max_tokens_budget=None,
+        max_usd_budget=None,
+    )
+    monkeypatch.setattr(
+        "runtime.execution.suckers.codex_plugin_skills.load_codex_plugin_skills",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            handled_plugin_ids=(),
+            render_observation=lambda: "",
+        ),
+    )
+
+    _assemble_tool_sections(state)
+
+    assert hub.load_calls == ["documents"]
+    assert hub.start_calls == ["documents"]
+    assert "Activated pinned plugins" in "\n".join(state.volatile_parts)
 
 
 # ── 3. Agent auto-delegate ────────────────────────────────

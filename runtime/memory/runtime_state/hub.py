@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
 
+from runtime.memory.semantics import fact_semantics, memory_data_notice, memory_file_type
 from runtime.safety.auth.scope import TenantScope
 
 MemoryKind = Literal[
@@ -30,6 +32,8 @@ class MemoryRecord:
     created_at: str = ""
     evidence_refs: list[str] = field(default_factory=list)
     score: float = 0.0
+    memory_type: str = "unclassified"
+    assurance: str = "unverified"
 
 
 @dataclass(frozen=True)
@@ -139,6 +143,7 @@ class MemoryHub:
             kind: MemoryKind = (
                 "intelligence_report" if category == "intelligence_report" else "fact"
             )
+            semantics = fact_semantics(fact)
             out.append(
                 MemoryRecord(
                     id=str(fact.get("id") or f"user_store:{len(out)}"),
@@ -154,6 +159,8 @@ class MemoryHub:
                     tags=[category],
                     created_at=str(fact.get("createdAt") or ""),
                     evidence_refs=[str(fact.get("source") or "manual")],
+                    memory_type=semantics.memory_type,
+                    assurance=semantics.assurance,
                 )
             )
         return out
@@ -224,6 +231,7 @@ class MemoryHub:
                         scope_key=scope_key,
                         confidence=0.7,
                         evidence_refs=[str(path)],
+                        memory_type=memory_file_type(line, scope=scope),
                     )
                 )
         return out
@@ -251,25 +259,14 @@ class MemoryHub:
                         source=source,
                         scope="global",
                         confidence=0.78,
+                        memory_type="model_summary",
                     )
                 )
         return records
 
     def _with_score(self, record: MemoryRecord, query: str) -> MemoryRecord:
         score = _score(query, record.content, record.tags)
-        return MemoryRecord(
-            id=record.id,
-            kind=record.kind,
-            content=record.content,
-            source=record.source,
-            scope=record.scope,
-            scope_key=record.scope_key,
-            confidence=record.confidence,
-            tags=list(record.tags),
-            created_at=record.created_at,
-            evidence_refs=list(record.evidence_refs),
-            score=score,
-        )
+        return replace(record, score=score)
 
 
 def retrieve_relevant(
@@ -298,22 +295,30 @@ def format_records_for_prompt(
 ) -> str:
     if not records:
         return ""
-    lines = ["RELEVANT LONG-TERM MEMORY:"]
-    total = len(lines[0]) + 1
+    lines = ["RELEVANT LONG-TERM MEMORY:", memory_data_notice()]
+    total = len("\n".join(lines)) + 1
+    has_record = False
     for record in records:
         content = _clean_text(record.content)
         if not content:
             continue
-        prefix = f"- [{record.scope}/{record.kind}/{record.source}] "
-        line = prefix + content
+        prefix = (
+            f"- [{record.scope}/{record.kind}/{record.source}] "
+            f"[{record.memory_type}/{record.assurance}] "
+        )
         remaining = max_chars - total
-        if remaining <= 0:
+        if remaining < len(prefix) + 3:
             break
-        if len(line) > remaining:
-            line = line[: max(0, remaining - 1)].rstrip() + "..."
+        encoded = json.dumps(content, ensure_ascii=False)
+        keep = len(content)
+        while len(prefix) + len(encoded) > remaining:
+            keep = max(0, keep - (len(prefix) + len(encoded) - remaining) - 1)
+            encoded = json.dumps(content[:keep] + "…", ensure_ascii=False)
+        line = prefix + encoded
         lines.append(line)
         total += len(line) + 1
-    return "\n".join(lines) if len(lines) > 1 else ""
+        has_record = True
+    return "\n".join(lines) if has_record else ""
 
 
 def _fact_visible(fact: dict[str, Any], query: MemoryQuery) -> bool:
@@ -422,13 +427,16 @@ def _float_between(value: Any, *, default: float) -> float:
 
 
 def _dedupe(records: list[MemoryRecord]) -> list[MemoryRecord]:
-    seen: set[tuple[str, str, str]] = set()
+    seen: set[tuple[str, ...]] = set()
     out: list[MemoryRecord] = []
     for record in records:
         key = (
             record.kind,
             re.sub(r"\s+", " ", record.content).casefold(),
             record.scope,
+            record.scope_key,
+            record.memory_type,
+            record.assurance,
         )
         if key in seen:
             continue

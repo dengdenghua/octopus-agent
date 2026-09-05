@@ -276,6 +276,8 @@ def mount_agents(
             delete_task(task_id)
 
     team_tasks_router = create_team_tasks_router(
+        workspace_root=ctx.thread_workspace_root,
+        logs_root=(ctx.paths.data_dir / "threads" if ctx.paths is not None else None),
         identity_store=ctx.identity_store,
         require_auth=ctx.require_auth,
         jwt_secret=ctx.jwt_secret,

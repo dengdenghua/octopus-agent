@@ -22,6 +22,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from runtime.core.cerebrum.react_goal_analysis import _goal_requests_code_mutation
 from runtime.core.cerebrum.react_guards import _explicit_source_paths
 from runtime.core.cerebrum.react_parsing import _parse_action
 from runtime.core.cerebrum.react_types import ReActStep
@@ -236,6 +237,12 @@ def _bound_explicit_large_reads(
 def _explicit_read_only_goal(value: str | None) -> bool:
     """Whether the current user turn explicitly forbids workspace mutation."""
     text = str(value or "").lower()
+    # A bounded write request often carries a negative scope clause such as
+    # "create report.docx; do not write any other file". The positive mutation
+    # remains authoritative; the prohibition narrows the write set instead of
+    # converting the entire turn into read-only mode.
+    if _goal_requests_code_mutation(text):
+        return False
     return bool(
         re.search(r"\bread[- ]only\b", text)
         or re.search(

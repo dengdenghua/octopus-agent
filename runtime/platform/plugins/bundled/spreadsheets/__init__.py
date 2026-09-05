@@ -10,6 +10,7 @@ from runtime.execution.suckers.registry import Skill
 from runtime.platform.plugins.bundled._office_io import (
     atomic_package_save,
     create_versioned_backup,
+    resolve_office_path,
     scoped_path_denial,
 )
 from runtime.platform.plugins.plugin_base import ModulePlugin
@@ -42,7 +43,7 @@ def _resolve_xlsx(path: Any, *, write: bool = False) -> tuple[Path | None, dict[
     if not isinstance(path, (str, Path)) or not str(path).strip():
         return None, {"ok": False, "error": "path 不能为空"}
     try:
-        resolved = Path(str(path)).expanduser().resolve()
+        resolved = resolve_office_path(path, write=write)
     except Exception as exc:
         return None, {"ok": False, "error": f"无效路径: {exc}"}
     if resolved.suffix.lower() not in {".xlsx", ".xlsm"}:

@@ -1201,8 +1201,8 @@ async def _start_turn(
             await execution.execute(TurnExecutionRequest(intent, text, validated.model))
         except Exception as exc:
             _logger.exception("CerebrumRuntime: turn driver crashed: %s", turn_driver)
-            selection_error = isinstance(exc, EngineSelectionError)
-            if selection_error:
+            if isinstance(exc, EngineSelectionError):
+                selection_error = True
                 turn.error = {
                     "code": "execution_unavailable",
                     "engine": exc.engine.value,
@@ -1212,6 +1212,7 @@ async def _start_turn(
                 }
                 turn_driver = "engine_selection"
             else:
+                selection_error = False
                 turn.execution_engine = "codex" if turn_driver == "codex_app_server" else "octopus"
             context = intent.user_context if isinstance(intent.user_context, dict) else {}
             err = ErrorItem(

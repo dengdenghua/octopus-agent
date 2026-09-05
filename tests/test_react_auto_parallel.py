@@ -8,14 +8,77 @@ _skipped events and synthetic observation injection).
 from __future__ import annotations
 
 import contextlib
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 from unittest.mock import patch
 
 from runtime.core.cerebrum.agent_auto_parallel import (
+    _subagent_task_runner,
     plan_auto_parallel,
     run_auto_parallel,
 )
+
+
+def test_subagent_task_runner_preserves_host_boundary_and_cancel(monkeypatch) -> None:
+    from runtime.execution.host_boundary import create_host_execution_boundary
+    from runtime.safety.approval.cancellation import (
+        CancellationSource,
+        current_cancellation_token,
+    )
+
+    boundary = create_host_execution_boundary(
+        task_id="parent",
+        thread_id="thread",
+        goal="goal",
+        timeout_s=30,
+    )
+    parent_cancel = CancellationSource()
+    orchestrator_cancel = threading.Event()
+    started = threading.Event()
+    observed: dict[str, Any] = {}
+    poll = threading.Event()
+
+    def fake_call_subagent(*_args, **kwargs):
+        observed.update(kwargs)
+        token = current_cancellation_token()
+        started.set()
+        for _ in range(300):
+            if token.is_cancelled:
+                observed["cancel_reason"] = token.reason
+                return {"success": True, "output": "stopped"}
+            poll.wait(0.01)
+        return {"success": False, "output": "", "error": "not cancelled"}
+
+    monkeypatch.setattr(
+        "runtime.execution.subagents.bridge.call_subagent",
+        fake_call_subagent,
+    )
+    result: list[str] = []
+    worker = threading.Thread(
+        target=lambda: result.append(
+            _subagent_task_runner(
+                "inspect",
+                context={
+                    "visible": "yes",
+                    "_host_execution_session": boundary.session,
+                    "_host_cancellation_token": parent_cancel.token,
+                },
+                cancel_event=orchestrator_cancel,
+            )
+        )
+    )
+    worker.start()
+    assert started.wait(2.0)
+    orchestrator_cancel.set()
+    worker.join(timeout=5.0)
+
+    assert not worker.is_alive()
+    assert result == ["stopped"]
+    assert observed["session"] is boundary.session
+    assert observed["context"] == {"visible": "yes"}
+    assert observed["cancel_reason"] == "parallel task cancelled"
+
 
 # ─── plan gate · unit tests ──────────────────────────────────
 

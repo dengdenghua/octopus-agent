@@ -32,6 +32,16 @@ class ArtifactContract:
 
 @dataclass(frozen=True, slots=True)
 class HandoffRecorder:
-    """A host-installed durable writer, never a deserialized callback."""
+    """Host-installed durable journal access, never deserialized callbacks.
+
+    ``read`` is intentionally optional for compatibility with older direct
+    callers that only produce handoffs.  Operations that consume a durable
+    coordinate (for example, applying an isolated candidate patch) require a
+    reader and fail closed when the host did not install one.
+    """
 
     write: Callable[[dict[str, Any]], None] = field(repr=False)
+    read: Callable[[], tuple[dict[str, Any], ...]] | None = field(
+        default=None,
+        repr=False,
+    )

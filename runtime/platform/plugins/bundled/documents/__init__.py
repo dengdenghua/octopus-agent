@@ -26,6 +26,7 @@ from runtime.platform.plugins.bundled._office_io import (
     atomic_package_save,
     create_versioned_backup,
     replace_text_preserving_runs,
+    resolve_office_path,
     scoped_path_denial,
 )
 from runtime.platform.plugins.plugin_base import ModulePlugin
@@ -66,7 +67,7 @@ def _resolve_path(path: Any, *, write: bool = False) -> tuple[Path | None, dict[
     if not isinstance(path, (str, Path)) or not str(path).strip():
         return None, {"ok": False, "error": "path 不能为空"}
     try:
-        p = Path(str(path)).expanduser().resolve()
+        p = resolve_office_path(path, write=write)
     except Exception as exc:
         return None, {"ok": False, "error": f"无效路径: {exc}"}
     if p.suffix.lower() != ".docx":

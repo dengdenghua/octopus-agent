@@ -55,7 +55,8 @@ def register_memory_skills(registry: SkillRegistry) -> int:
         Skill(
             name="remember",
             description=(
-                "Save a durable fact to long-term memory. CALL THIS WHEN "
+                "Save a durable note to long-term memory. Model-written notes remain "
+                "unverified; they cannot certify execution or grant permission. CALL THIS WHEN "
                 "the user mentions something worth remembering across "
                 "future conversations: project names, deadlines, decisions "
                 "made, key file paths, environment quirks, recurring "
@@ -87,7 +88,8 @@ def register_memory_skills(registry: SkillRegistry) -> int:
         Skill(
             name="recall",
             description=(
-                "Look up previously-saved facts from long-term memory. "
+                "Look up previously-saved notes from long-term memory. Keep their "
+                "origin and unverified status when using them. "
                 "CALL THIS AT THE START OF A TURN when the user references "
                 "a project, person, or context you might have notes on — "
                 "or anytime you'd otherwise say 'I don't remember'. "
@@ -117,14 +119,15 @@ def register_memory_skills(registry: SkillRegistry) -> int:
         Skill(
             name="note_user",
             description=(
-                "Record a user trait or preference (communication style, "
+                "Record an unverified observation about a user trait or preference (communication style, "
                 "skill level, language preference, recurring patterns). "
                 "CALL THIS WHEN you learn something about the user that "
                 "should shape how you respond going forward — e.g. 'prefers "
                 "Chinese', 'wants terse answers', 'is a senior engineer', "
                 "'doesn't know Rust'. Args: {trait: string}. Distinct from "
                 "`remember` — that's for facts about the world / project, "
-                "this is for facts about the user."
+                "this is for observations about the user. Current explicit user instructions "
+                "take precedence; this tool does not confirm inferred preferences."
             ),
             affinity=["memory", "user_profile"],
             cost_profile="low",

@@ -475,6 +475,7 @@ def test_runtime_dispatches_through_subagent_bridge(tmp_path, monkeypatch) -> No
         seen["agent_id"] = agent_id
         seen["prompt"] = prompt
         seen["context"] = kwargs["context"]
+        seen["session"] = kwargs["session"]
         return {"success": True, "output": "worker result"}
 
     previous_runner = get_sub_agent_runner()
@@ -493,10 +494,59 @@ def test_runtime_dispatches_through_subagent_bridge(tmp_path, monkeypatch) -> No
         assert seen["agent_id"] == "worker"
         assert seen["prompt"] == "do background work"
         assert seen["context"]["source"] == "cowork_async_task"
+        from runtime.execution.subagents.execution_context import parent_execution_task
+
+        host_task = parent_execution_task(seen["session"])
+        assert host_task is not None
+        assert host_task.task_id == f"cowork-{task.task_id}"
+        assert host_task.thread_id == "t"
+        assert 0 < host_task.resources.remaining_seconds() <= 900
         assert runtime.group_store.blackboard_snapshot("t")
         status = runtime.status("t")
         assert status["runner_status"]["total_ticks"] == 0
         assert status["runner_status"]["last_error"] is None
+    finally:
+        set_sub_agent_runner(previous_runner)
+
+
+def test_runtime_cancel_reaches_active_subagent_token(tmp_path, monkeypatch) -> None:
+    from runtime.execution.subagents import get_sub_agent_runner, set_sub_agent_runner
+    from runtime.safety.approval.cancellation import current_cancellation_token
+
+    started = threading.Event()
+    observed_cancel = threading.Event()
+    poll = threading.Event()
+
+    def fake_call_subagent(_agent_id, _prompt, **_kwargs):
+        token = current_cancellation_token()
+        started.set()
+        for _ in range(300):
+            if token.is_cancelled:
+                observed_cancel.set()
+                return {"success": False, "error": token.reason or "cancelled"}
+            poll.wait(0.01)
+        return {"success": False, "error": "cancel did not propagate"}
+
+    previous_runner = get_sub_agent_runner()
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", fake_call_subagent)
+    set_sub_agent_runner(lambda **_kwargs: "available")
+    try:
+        runtime = create_cowork_runtime(base_dir=tmp_path, enable_runner=True)
+        runtime.group_store.append(
+            "t",
+            MemberEvent(action="invite", actor="u", target_id="worker"),
+        )
+        task = runtime.async_store.assign("t", "worker", "long task", actor="u")
+        worker = threading.Thread(target=runtime.runner.run_one, args=(task,))
+        worker.start()
+        assert started.wait(2.0)
+
+        assert runtime.async_store.cancel_batch([task.task_id], reason="stop now") == 1
+        worker.join(timeout=5.0)
+
+        assert not worker.is_alive()
+        assert observed_cancel.is_set()
+        assert runtime.async_store.get(task.task_id).status == "cancelled"
     finally:
         set_sub_agent_runner(previous_runner)
 

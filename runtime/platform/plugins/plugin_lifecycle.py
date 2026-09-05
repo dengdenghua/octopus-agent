@@ -132,6 +132,7 @@ def install_local_plugin(
             "destination": str(destination),
             "backup": str(backup) if backup.exists() else "",
             "smoke_ok": True,
+            "content_digest": str(provenance.get("digest") or ""),
             "publisher_verified": bool(publisher.get("verified")),
             "migration_ready": bool(migration.get("ready")),
             "rollback_available": operation == "install" or backup.exists(),

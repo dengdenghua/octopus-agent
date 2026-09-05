@@ -450,6 +450,18 @@ class CodexDynamicToolBroker:
         # Never interpret privilege-looking client metadata as authority.  The
         # caller can opt in only through the explicit server-resolved flag.
         self._metadata.pop("auto_approve", None)
+        # Dynamic tool requests arrive as separate App Server callbacks, but
+        # read-before-write evidence and file leases are turn-scoped. Seed only
+        # those executor-owned containers once and share them across callbacks.
+        # Policy metadata remains copied per call, so a tool cannot persist an
+        # approval or permission override into the next callback.
+        self._turn_execution_state: dict[str, Any] = {
+            "_read_file_paths_this_turn": [],
+            "_file_write_leases": {},
+            "_file_write_lease_handoffs": {},
+            "_file_write_lease_history": [],
+            "_file_read_snapshots": {},
+        }
         inherited_taint = (
             str(
                 metadata.get("_inherited_injection_taint")
@@ -714,6 +726,7 @@ class CodexDynamicToolBroker:
 
     def _execution_session(self, *, auto_approve: bool) -> Session:
         metadata = dict(self._metadata)
+        metadata.update(self._turn_execution_state)
         if auto_approve:
             # The broker has already performed the exact-call approval above.
             # This lets the executor's independent governance check distinguish

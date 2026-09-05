@@ -64,6 +64,7 @@ def test_plugin_lifecycle_installs_upgrades_and_rolls_back(tmp_path: Path) -> No
     )
     assert first["operation"] == "install"
     assert first["rollback_available"] is True
+    assert len(first["content_digest"]) == 64
     assert _installed_version(managed) == "1.0.0"
 
     second = install_local_plugin(
@@ -74,6 +75,8 @@ def test_plugin_lifecycle_installs_upgrades_and_rolls_back(tmp_path: Path) -> No
     assert second["operation"] == "upgrade"
     assert second["previous_version"] == "1.0.0"
     assert second["migration_ready"] is True
+    assert len(second["content_digest"]) == 64
+    assert second["content_digest"] != first["content_digest"]
     assert Path(second["backup"]).is_dir()
     assert _installed_version(managed) == "1.1.0"
 

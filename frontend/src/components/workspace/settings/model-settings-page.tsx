@@ -48,6 +48,7 @@ import {
   saveLocalSettings,
 } from "@/core/settings/local";
 import { registerPageAgentCapability } from "@/core/page-agent-bridge";
+import { useLocalSettings } from "@/core/settings/hooks";
 import { ModelCookbook } from "@/components/workspace/model-cookbook";
 import { CoderEngineSettings } from "@/components/workspace/coder-engine-control";
 
@@ -714,9 +715,9 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     overviewTitle: "当前模型",
     overviewSubtitle:
       "选择对话与自动路由使用的模型；新的服务可通过 API 连接或本地扫描接入。",
-    currentDefault: "默认模型",
+    currentDefault: "对话默认模型",
     noDefault: "未设置",
-    configuredModels: "可用资源",
+    configuredModels: "已接入 API 资源",
     configuredSummary: (connections, models) =>
       `${connections} 个连接 · ${models} 个模型`,
     connectionsTitle: "API 模型连接",
@@ -769,7 +770,7 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     overviewTitle: "Model setup overview",
     overviewSubtitle:
       "Manage models used by Octopus chat and automatic routing here. Add hosted providers through explicitly installed API model adapters or scan local models; external CLIs are not auto-detected.",
-    currentDefault: "Current default",
+    currentDefault: "Chat default model",
     noDefault: "Not set",
     configuredModels: "API model connections",
     configuredSummary: (connections, models) =>
@@ -1378,7 +1379,8 @@ export default function ModelSettingsPage() {
   }, [scrollToSection]);
 
   // Implementation note.
-  const defaultModelName = getLocalSettings().context.model_name;
+  const [localSettings] = useLocalSettings();
+  const defaultModelName = localSettings.context.model_name;
 
   useEffect(() => {
     const unregisters = [
@@ -1634,7 +1636,10 @@ export default function ModelSettingsPage() {
         }
       />
 
-      <CoderEngineSettings />
+      <CoderEngineSettings
+        conversationDefaultModel={defaultModelName}
+        conversationDefaultLabel={visibleDefaultModel}
+      />
 
       {/* ── Models Section ── */}
       <SettingsSection

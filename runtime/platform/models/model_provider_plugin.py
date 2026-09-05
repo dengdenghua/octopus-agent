@@ -15,6 +15,27 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 
+def model_provider_responses_models(entry: dict[str, Any], models: list[str]) -> list[str]:
+    """Resolve reviewed Responses families, including older saved Zen entries."""
+
+    explicit = set(entry.get("responses_models") or [])
+    prefixes = tuple(
+        value.strip()
+        for value in (entry.get("responses_model_prefixes") or [])
+        if isinstance(value, str) and value.strip()
+    )
+    # Before family rules were persisted, automatic discovery could add a new
+    # Muse version while leaving it on Chat Completions. Repair only the known
+    # Zen plugin endpoint; a similarly named model on another relay is distinct.
+    if (
+        "responses_model_prefixes" not in entry
+        and entry.get("managed_by_plugin") == "opencode-zen"
+        and str(entry.get("base_url") or "").rstrip("/") == "https://opencode.ai/zen/v1"
+    ):
+        prefixes = ("muse-spark-",)
+    return [model for model in models if model in explicit or model.startswith(prefixes)]
+
+
 def model_provider_credential_ref(connector_id: str, key: str = "api_key") -> str:
     """Return a non-secret reference stored in ``custom_models.json``."""
 
@@ -258,11 +279,8 @@ class ModelProviderPluginManager:
             "supports_tool_use": bool(descriptor.get("supports_tool_use", True)),
             "is_free": bool(descriptor.get("models_are_free", False)),
             "compat_profile": str(descriptor.get("compat_profile") or "openai_compat"),
-            "responses_models": [
-                str(model).strip()
-                for model in (descriptor.get("responses_models") or [])
-                if str(model or "").strip() in selected
-            ],
+            "responses_model_prefixes": list(descriptor.get("responses_model_prefixes") or []),
+            "responses_models": model_provider_responses_models(descriptor, selected),
             "default_reasoning_effort": None,
             "default_headers": {},
         }
@@ -307,5 +325,6 @@ __all__ = [
     "ModelProviderPluginManager",
     "model_provider_credential_ref",
     "model_provider_entry_has_key",
+    "model_provider_responses_models",
     "resolve_model_provider_api_key",
 ]

@@ -1,5 +1,6 @@
 name: pdf
 version: 0.1.0
+activation: on_demand
 display_name: PDF
 description: 本地创建、提取、合并和拆分 PDF。
 author: Octopus

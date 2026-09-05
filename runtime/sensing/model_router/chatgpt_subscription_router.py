@@ -16,18 +16,23 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import os
-import stat
+import re
 import threading
 import time
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Never, Protocol
 from uuid import uuid4
 
 from runtime.adapters.instrumentation import record_gen_ai_cost, trace_stage
+from runtime.execution.codex_backend._security_support import (
+    CodexSecurityError,
+    _read_owned_private_file,
+)
 from runtime.execution.codex_backend.account import (
     codex_account_home,
     refresh_codex_execution_auth_home,
@@ -63,6 +68,7 @@ _MAX_AUTH_BYTES = 1024 * 1024
 _MODEL_PREFIXES = ("chatgpt/", "chatgpt:")
 _MAX_STREAM_ATTEMPTS = 2
 _STREAM_RETRY_DELAY_SECONDS = 0.15
+_WIRE_TOOL_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
 
 class ChatGPTSubscriptionRouterError(LLMResponseFormatError):
@@ -168,7 +174,12 @@ class ChatGPTSubscriptionModelRouter(Provider, ModelRouter):
 
     def call_stream(self, request: ModelRequest) -> Iterator[ModelStreamEvent]:
         model = _upstream_model(request.model or self.default_model)
-        payload = _build_responses_payload(request, model=model)
+        local_name_by_wire_name: dict[str, str] = {}
+        payload = _build_responses_payload(
+            request,
+            model=model,
+            local_name_by_wire_name=local_name_by_wire_name,
+        )
         with trace_stage(
             "eyes.chatgpt_subscription_router.stream",
             **{
@@ -200,7 +211,11 @@ class ChatGPTSubscriptionModelRouter(Provider, ModelRouter):
                             _safe_http_error(response.status_code, response.text)
                         )
                     final: ModelResponse | None = None
-                    for event in _iter_responses_sse(response, model=model):
+                    for event in _iter_responses_sse(
+                        response,
+                        model=model,
+                        local_name_by_wire_name=local_name_by_wire_name,
+                    ):
                         # Once anything became visible, replaying the request
                         # could duplicate prose or execute a tool twice. Retry
                         # is therefore limited to a clean pre-output failure.
@@ -273,7 +288,9 @@ def _current_tenant_scope() -> TenantScope | None:
     session = current_session()
     mode = _deployment_mode()
     if session is None:
-        return None if mode == "local" else _missing_scope()
+        if mode == "local":
+            return None
+        _missing_scope()
     metadata = session.metadata if isinstance(session.metadata, Mapping) else {}
     tenant = str(metadata.get("tenant_id") or "local").strip() or "local"
     principal = str(session.actor or metadata.get("principal_id") or "local").strip() or "local"
@@ -282,7 +299,7 @@ def _current_tenant_scope() -> TenantScope | None:
     return TenantScope(tenant_id=tenant, actor_id=principal)
 
 
-def _missing_scope() -> None:
+def _missing_scope() -> Never:
     raise ChatGPTSubscriptionRouterError(
         "共享部署中的 ChatGPT 模型调用缺少租户身份，已拒绝使用本机登录。"
     )
@@ -304,20 +321,14 @@ def _deployment_mode() -> str:
 
 def _read_credentials(path: Path) -> _ChatGPTCredentials:
     try:
-        metadata = path.stat()
-    except OSError as exc:
+        data = _read_owned_private_file(path, max_bytes=_MAX_AUTH_BYTES)
+    except CodexSecurityError as exc:
         raise ChatGPTSubscriptionRouterError("ChatGPT 登录凭据不可用，请重新登录。") from exc
-    if (
-        not stat.S_ISREG(metadata.st_mode)
-        or metadata.st_size <= 0
-        or metadata.st_size > _MAX_AUTH_BYTES
-        or metadata.st_mode & (stat.S_IRWXG | stat.S_IRWXO)
-        or (hasattr(os, "getuid") and metadata.st_uid != os.getuid())
-    ):
-        raise ChatGPTSubscriptionRouterError("ChatGPT 登录凭据文件权限不安全。")
+    if not data:
+        raise ChatGPTSubscriptionRouterError("ChatGPT 登录凭据不可用，请重新登录。")
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, ValueError) as exc:
+        payload = json.loads(data.decode("utf-8"))
+    except (UnicodeError, ValueError) as exc:
         raise ChatGPTSubscriptionRouterError("ChatGPT 登录凭据文件无效。") from exc
     tokens = payload.get("tokens") if isinstance(payload, Mapping) else None
     if not isinstance(tokens, Mapping):
@@ -367,14 +378,26 @@ def _upstream_model(model: str) -> str:
     return normalized
 
 
-def _build_responses_payload(request: ModelRequest, *, model: str) -> dict[str, Any]:
+def _build_responses_payload(
+    request: ModelRequest,
+    *,
+    model: str,
+    local_name_by_wire_name: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    wire_name_by_local_name = _wire_tool_names(request.tools)
+    if local_name_by_wire_name is not None:
+        local_name_by_wire_name.update(
+            (wire_name, local_name) for local_name, wire_name in wire_name_by_local_name.items()
+        )
     instructions: list[str] = []
     input_items: list[dict[str, Any]] = []
     for message in request.messages:
         if message.role == "system":
             instructions.append(_flatten_content(message.content))
             continue
-        input_items.extend(_message_to_input_items(message))
+        input_items.extend(
+            _message_to_input_items(message, wire_name_by_local_name=wire_name_by_local_name)
+        )
     if request.images_b64:
         image_parts = [
             {
@@ -397,7 +420,7 @@ def _build_responses_payload(request: ModelRequest, *, model: str) -> dict[str, 
     tools = [
         {
             "type": "function",
-            "name": tool.name,
+            "name": wire_name_by_local_name[tool.name],
             "description": tool.description,
             "parameters": tool.input_schema,
             "strict": False,
@@ -419,7 +442,32 @@ def _build_responses_payload(request: ModelRequest, *, model: str) -> dict[str, 
     }
 
 
-def _message_to_input_items(message: Message) -> list[dict[str, Any]]:
+def _wire_tool_names(tools: Sequence[Any]) -> dict[str, str]:
+    mapped: dict[str, str] = {}
+    claimed: dict[str, str] = {}
+    for tool in tools:
+        local_name = str(tool.name)
+        if _WIRE_TOOL_NAME_PATTERN.fullmatch(local_name):
+            candidate = local_name
+        else:
+            readable = re.sub(r"[^a-zA-Z0-9_-]", "_", local_name).strip("_") or "tool"
+            digest = hashlib.sha256(local_name.encode("utf-8")).hexdigest()[:16]
+            available = 64 - len("octopus__") - len(digest)
+            candidate = f"octopus_{readable[:available]}_{digest}"
+        previous = claimed.get(candidate)
+        if previous is not None and previous != local_name:
+            digest = hashlib.sha256(local_name.encode("utf-8")).hexdigest()
+            candidate = f"octopus_{digest[:56]}"
+        claimed[candidate] = local_name
+        mapped[local_name] = candidate
+    return mapped
+
+
+def _message_to_input_items(
+    message: Message,
+    *,
+    wire_name_by_local_name: Mapping[str, str] | None = None,
+) -> list[dict[str, Any]]:
     text_type = "output_text" if message.role == "assistant" else "input_text"
     if isinstance(message.content, str):
         return [
@@ -438,7 +486,10 @@ def _message_to_input_items(message: Message) -> list[dict[str, Any]]:
                 {
                     "type": "function_call",
                     "call_id": str(part.get("id") or f"call_{uuid4().hex}"),
-                    "name": str(part.get("name") or "tool"),
+                    "name": (wire_name_by_local_name or {}).get(
+                        str(part.get("name") or "tool"),
+                        str(part.get("name") or "tool"),
+                    ),
                     "arguments": json.dumps(
                         part.get("input") if isinstance(part.get("input"), Mapping) else {},
                         ensure_ascii=False,
@@ -491,6 +542,7 @@ def _iter_responses_sse(
     model: str,
     provider: str = "chatgpt_subscription",
     service_name: str = "ChatGPT Responses",
+    local_name_by_wire_name: Mapping[str, str] | None = None,
 ) -> Iterator[ModelStreamEvent]:
     text_parts: list[str] = []
     thinking_parts: list[str] = []
@@ -522,7 +574,10 @@ def _iter_responses_sse(
                 yield ModelStreamEvent(type="thinking_delta", delta=delta)
         elif event_type == "response.output_item.done":
             item = event.get("item")
-            call = _tool_call_from_output(item)
+            call = _tool_call_from_output(
+                item,
+                local_name_by_wire_name=local_name_by_wire_name,
+            )
             if call is not None and all(existing.id != call.id for existing in tool_calls):
                 tool_calls.append(call)
                 yield ModelStreamEvent(type="tool_use", tool_call=call)
@@ -553,11 +608,15 @@ def _iter_responses_sse(
         if not text_parts:
             text_parts.extend(_text_from_output(output))
         for item in output:
-            call = _tool_call_from_output(item)
+            call = _tool_call_from_output(
+                item,
+                local_name_by_wire_name=local_name_by_wire_name,
+            )
             if call is not None and all(existing.id != call.id for existing in tool_calls):
                 tool_calls.append(call)
                 yield ModelStreamEvent(type="tool_use", tool_call=call)
-    usage = completed.get("usage") if isinstance(completed.get("usage"), Mapping) else {}
+    raw_usage = completed.get("usage")
+    usage: Mapping[str, Any] = raw_usage if isinstance(raw_usage, Mapping) else {}
     input_tokens = _safe_int(usage.get("input_tokens"))
     output_tokens = _safe_int(usage.get("output_tokens"))
     final = ModelResponse(
@@ -590,12 +649,17 @@ def _text_from_output(output: Sequence[Any]) -> list[str]:
     return parts
 
 
-def _tool_call_from_output(raw: Any) -> ToolCall | None:
+def _tool_call_from_output(
+    raw: Any,
+    *,
+    local_name_by_wire_name: Mapping[str, str] | None = None,
+) -> ToolCall | None:
     if not isinstance(raw, Mapping) or raw.get("type") != "function_call":
         return None
-    name = raw.get("name")
-    if not isinstance(name, str) or not name:
+    wire_name = raw.get("name")
+    if not isinstance(wire_name, str) or not wire_name:
         return None
+    name = (local_name_by_wire_name or {}).get(wire_name, wire_name)
     arguments = raw.get("arguments", "{}")
     try:
         parsed = json.loads(arguments) if isinstance(arguments, str) else arguments

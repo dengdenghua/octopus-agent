@@ -231,7 +231,7 @@ tier: "core"
 
 ## Who imports this
 
-**26** file(s) reference this package:
+**28** file(s) reference this package:
 
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
@@ -256,11 +256,11 @@ tier: "core"
 - **`runtime/safety/`** · 2 file(s)
   - `runtime/safety/auth/path_guard.py`
   - `runtime/safety/recovery/skill_forge.py`
-- **`runtime/sensing/`** · 8 file(s)
+- **`runtime/sensing/`** · 10 file(s)
   - `runtime/sensing/gateway/_observability_rollback_panels.py`
   - `runtime/sensing/gateway/_realtime_react_stream_helpers.py`
+  - `runtime/sensing/gateway/_team_stream_topology.py`
   - `runtime/sensing/gateway/_tool_bridge_exec.py`
   - `runtime/sensing/gateway/_tool_bridge_policy.py`
-  - `runtime/sensing/gateway/_tool_bridge_session.py`
-  - _… and 3 more_
+  - _… and 5 more_
 

@@ -37,6 +37,7 @@ def create_memory_router(
 
     from runtime.memory import user_store
     from runtime.memory.assets import asset_trace, can_read_asset, fact_to_asset
+    from runtime.memory.semantics import MemoryAuthor, fact_origin
     from runtime.safety.auth.scope import scope_from_principal
 
     def _auth_dep(request: Request) -> None:
@@ -204,6 +205,7 @@ def create_memory_router(
             title=str(body.get("title") or "") or None,
             tags=body.get("tags"),
             tenant_scope=_scope(request),
+            author=MemoryAuthor.USER,
         )
         return await asyncio.to_thread(user_store.read_memory, _scope(request))
 
@@ -250,6 +252,14 @@ def create_memory_router(
                 except Exception:
                     confidence = float(fact.get("confidence", 0.8))
                 fact["confidence"] = max(0.0, min(1.0, confidence))
+            if "content" in body or "category" in body or "scope" in body:
+                # An owner's explicit edit is an assertion, not execution proof.
+                # Visibility/confidence edits alone do not confirm model notes.
+                fact["origin"] = fact_origin(
+                    MemoryAuthor.USER,
+                    category=str(fact.get("category") or ""),
+                    scope=str(fact.get("scope") or "global"),
+                )
             fact["asset_version"] = int(fact.get("asset_version") or 1) + 1
             fact["updatedAt"] = user_store.now_iso()
             found = True

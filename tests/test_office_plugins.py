@@ -15,7 +15,11 @@ from runtime.platform.models import ArmId, Budget, BudgetLimits, SkillId, TaskId
 from runtime.platform.plugins.bundled import pdf as pdf_module
 from runtime.platform.plugins.bundled import presentations as presentations_module
 from runtime.platform.plugins.bundled import spreadsheets as spreadsheets_module
-from runtime.platform.plugins.bundled._office_io import atomic_package_save, scoped_path_denial
+from runtime.platform.plugins.bundled._office_io import (
+    atomic_package_save,
+    resolve_office_path,
+    scoped_path_denial,
+)
 from runtime.platform.plugins.bundled.pdf import PdfPlugin
 from runtime.platform.plugins.bundled.presentations import PresentationsPlugin
 from runtime.platform.plugins.bundled.spreadsheets import SpreadsheetsPlugin
@@ -120,6 +124,20 @@ def test_office_writes_cannot_escape_the_active_workspace(tmp_path: Path) -> Non
     assert "escapes" in denied["error"]
     assert not outside.exists()
     assert allowed["ok"] is True
+
+
+def test_relative_office_paths_use_the_active_workspace(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    session = Session(
+        thread_id="office-relative",
+        metadata={"mode": "code", "workspace_path": str(workspace)},
+    )
+
+    with session_scope(session):
+        resolved = resolve_office_path("acceptance.docx", write=True)
+
+    assert resolved == (workspace / "acceptance.docx").resolve()
 
 
 @pytest.mark.parametrize("plugin_id", ["spreadsheets", "presentations", "pdf"])

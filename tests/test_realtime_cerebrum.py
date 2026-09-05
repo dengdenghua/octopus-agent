@@ -3726,7 +3726,19 @@ def test_authenticated_explicit_project_command_owns_project_and_subagent_worksp
     dispatched: list[dict[str, Any]] = []
 
     def fake_call_subagent(_agent: str, _prompt: str, **kwargs: Any) -> dict[str, Any]:
-        dispatched.append(dict(kwargs.get("context") or {}))
+        from runtime.execution.request import current_execution_request
+        from runtime.platform.process.session import current_session
+        from runtime.safety.approval.cancellation import current_cancellation_token
+
+        dispatched.append(
+            {
+                "context": dict(kwargs.get("context") or {}),
+                "session": kwargs.get("session"),
+                "ambient_session": current_session(),
+                "request": current_execution_request(),
+                "cancellation": current_cancellation_token(),
+            }
+        )
         return {"success": True, "output": "delivered"}
 
     monkeypatch.setattr(
@@ -3842,7 +3854,8 @@ def test_authenticated_explicit_project_command_owns_project_and_subagent_worksp
     assert persisted["owner_actor_id"] == "alice"
     assert persisted["tenant_id"] == "tenant-a"
     assert dispatched
-    dispatch = dispatched[0]
+    dispatch_record = dispatched[0]
+    dispatch = dispatch_record["context"]
     assert dispatch["thread_id"] == thread_id
     assert dispatch["actor"] == "alice"
     assert dispatch["tenant_id"] == "tenant-a"
@@ -3850,6 +3863,17 @@ def test_authenticated_explicit_project_command_owns_project_and_subagent_worksp
     runtime_metadata = dispatch["runtime_session_metadata"]
     assert runtime_metadata["workspace_path"] == str(expected)
     assert runtime_metadata["_artifact_output_root"] == str(expected / "output" / "final")
+    from runtime.execution.subagents.execution_context import parent_execution_task
+
+    host_task = parent_execution_task(dispatch_record["session"])
+    assert host_task is not None
+    assert host_task is parent_execution_task(dispatch_record["ambient_session"])
+    assert host_task is dispatch_record["request"].task
+    assert host_task.thread_id == thread_id
+    assert host_task.actor_id == "alice"
+    assert host_task.tenant_id == "tenant-a"
+    assert host_task.permissions.allows_write(expected)
+    assert dispatch_record["cancellation"].is_cancelled is False
 
 
 def test_explicit_project_command_unhandled_failure_reports_driver_source(

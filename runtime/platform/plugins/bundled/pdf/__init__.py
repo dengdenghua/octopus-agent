@@ -8,7 +8,11 @@ from pathlib import Path
 from typing import Any
 
 from runtime.execution.suckers.registry import Skill
-from runtime.platform.plugins.bundled._office_io import atomic_package_save, scoped_path_denial
+from runtime.platform.plugins.bundled._office_io import (
+    atomic_package_save,
+    resolve_office_path,
+    scoped_path_denial,
+)
 from runtime.platform.plugins.plugin_base import ModulePlugin
 
 PLUGIN_NAME = "pdf"
@@ -48,7 +52,7 @@ def _resolve_pdf(path: Any, *, write: bool = False) -> tuple[Path | None, dict[s
     if not isinstance(path, (str, Path)) or not str(path).strip():
         return None, {"ok": False, "error": "path 不能为空"}
     try:
-        resolved = Path(str(path)).expanduser().resolve()
+        resolved = resolve_office_path(path, write=write)
     except Exception as exc:
         return None, {"ok": False, "error": f"无效路径: {exc}"}
     if resolved.suffix.lower() != ".pdf":
@@ -359,7 +363,7 @@ class PdfPlugin(ModulePlugin):
         if not isinstance(output_raw, (str, Path)) or not str(output_raw).strip():
             return {"ok": False, "error": "output_dir 不能为空"}
         try:
-            output_dir = Path(str(output_raw)).expanduser().resolve()
+            output_dir = resolve_office_path(output_raw, write=True)
         except Exception as exc:
             return {"ok": False, "error": f"无效 output_dir: {exc}"}
         denial = scoped_path_denial(output_dir, write=True)

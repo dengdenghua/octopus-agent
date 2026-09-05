@@ -704,6 +704,7 @@ def _assert_team_scope(calls: list[dict], explicit_runner) -> None:
             "project_id": "P-managed",
             "task_id": "T-managed",
             "tenant_id": "tenant-a",
+            "mode": "code",
         }
         assert call["ambient_session"] is None
         trusted = call["session"]
@@ -711,7 +712,17 @@ def _assert_team_scope(calls: list[dict], explicit_runner) -> None:
         assert trusted.actor == "alice"
         assert trusted.thread_id == "thread-managed"
         assert trusted.conversation_id == "thread-managed"
-        assert trusted.metadata == context["runtime_session_metadata"]
+        for key, value in context["runtime_session_metadata"].items():
+            assert trusted.metadata[key] == value
+        from runtime.execution.subagents.execution_context import parent_execution_task
+
+        host_task = parent_execution_task(trusted)
+        assert host_task is not None
+        assert host_task.thread_id == "thread-managed"
+        assert host_task.actor_id == "alice"
+        assert host_task.tenant_id == "tenant-a"
+        assert host_task.permissions.mode == "code"
+        assert 0 < host_task.resources.remaining_seconds() <= 900
         from runtime.execution.codex_backend.role_runner import resolve_codex_sandbox_mode
 
         # A legacy review workflow guides how the agent works; it is not a

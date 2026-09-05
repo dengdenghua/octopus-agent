@@ -157,6 +157,15 @@ def create_plugin_hub_router(
             return {"ok": True, "name": name}
         raise HTTPException(400, f"Failed to load plugin: {name}")
 
+    @router.post("/plugins/{name}/activate", dependencies=[Depends(_operator_dep)])
+    def activate_plugin(name: str):
+        """Load and start a discovered plugin in one transactional step."""
+
+        try:
+            return hub.activate_plugin(name)
+        except (KeyError, ValueError, RuntimeError) as exc:
+            raise _lifecycle_error(exc) from exc
+
     @router.post("/plugins/{name}/start", dependencies=[Depends(_operator_dep)])
     def start_plugin(name: str):
         """Start a loaded plugin."""

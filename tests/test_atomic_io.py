@@ -13,6 +13,7 @@ import pytest
 
 from runtime.platform.io.atomic import (
     AtomicWriteError,
+    _cross_process_lock,
     atomic_write_bytes,
     atomic_write_json,
     atomic_write_text,
@@ -49,6 +50,22 @@ def test_write_bytes_creates_file(tmp_path: Path) -> None:
     target = tmp_path / "out.bin"
     atomic_write_bytes(target, b"hello")
     assert target.read_bytes() == b"hello"
+
+
+def test_mode_argument_is_portable(tmp_path: Path) -> None:
+    target = tmp_path / "private.bin"
+    atomic_write_bytes(target, b"private", mode=0o600)
+    assert target.read_bytes() == b"private"
+
+
+def test_required_cross_process_lock_fails_closed(tmp_path: Path) -> None:
+    target = tmp_path / "transaction"
+    with (
+        patch("runtime.platform.io.atomic.os.open", side_effect=OSError("unavailable")),
+        pytest.raises(AtomicWriteError, match="cross-process lock unavailable"),
+        _cross_process_lock(target, required=True),
+    ):
+        pytest.fail("required lock entered without an OS lock")
 
 
 @pytest.mark.skipif(

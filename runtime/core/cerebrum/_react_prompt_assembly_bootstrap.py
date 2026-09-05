@@ -124,12 +124,11 @@ def _resolve_turn_bootstrap(
     # advertised capability; otherwise the text protocol + its regex fallback
     # run byte-identically to before. Specs are built once per turn.
     from runtime.core.cerebrum.react_native import (
-        build_loop_tool_specs,
+        build_loop_tool_spec_views,
         native_tool_use_active,
-        require_public_update_on_tool_specs,
     )
 
-    _native_mode = bool(tools_active) and native_tool_use_active(router, effective_model)
+    _native_eligible = bool(tools_active) and native_tool_use_active(router, effective_model)
     _native_goal = getattr(intent, "normalized_goal", "") or getattr(intent, "raw", "") or ""
     _strict_explicit_reads = bool(
         _explicit_read_only_goal(_native_goal)
@@ -141,41 +140,18 @@ def _resolve_turn_bootstrap(
         and _explicit_observed_read_sequence(_native_goal)
     )
     _native_observed_read_sequence = bool(_strict_explicit_reads and _ordered_result_handoffs)
-    _native_tool_specs = (
-        build_loop_tool_specs(
-            executor,
-            agent=agent,
-            goal=_native_goal,
-            user_context=intent.user_context,
-            strict_explicit_reads=_strict_explicit_reads,
-        )
-        if _native_mode
-        else []
+    _native_views = build_loop_tool_spec_views(
+        executor,
+        enabled=_native_eligible,
+        agent=agent,
+        goal=_native_goal,
+        user_context=intent.user_context,
+        strict_explicit_reads=_strict_explicit_reads,
+        observed_read_sequence=_native_observed_read_sequence,
     )
-    if _native_mode and not _native_tool_specs:
-        # Spec build came back empty — nothing to call natively, so stay on
-        # the proven text protocol rather than passing an empty tools list.
-        _native_mode = False
-    _native_public_update_tool_specs = (
-        require_public_update_on_tool_specs(_native_tool_specs)
-        if (
-            _native_mode
-            and bool(
-                (intent.user_context or {}).get("realtime_public_orientation")
-                or (intent.user_context or {}).get("realtime_public_narrative")
-                or _native_observed_read_sequence
-            )
-        )
-        else _native_tool_specs
-    )
-    _native_evidence_update_tool_specs = (
-        require_public_update_on_tool_specs(
-            _native_tool_specs,
-            evidence_round=True,
-        )
-        if _native_public_update_tool_specs is not _native_tool_specs
-        else _native_tool_specs
-    )
+    _native_mode = _native_views.enabled
+    _native_public_update_tool_specs = _native_views.public_update
+    _native_evidence_update_tool_specs = _native_views.evidence_update
 
     # Expose the live approval provider through the session so the
     # ``exit_plan_mode`` skill can issue an interactive approval

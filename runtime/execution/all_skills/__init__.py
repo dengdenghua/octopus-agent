@@ -294,6 +294,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
     # to each other. Counts as 1 against the per-turn delegation
     # budget regardless of N.
     "call_agent_parallel": {"group": "delegation", "atomic": False},
+    "inspect_candidate_patch": {"group": "delegation", "atomic": False},
+    "apply_candidate_patch": {"group": "delegation", "atomic": False},
+    "reconcile_candidate_patch": {"group": "delegation", "atomic": False},
     # ``workflow`` runs a model-authored orchestration script that fans out
     # subagents (agent/phase/log/parallel/pipeline) and returns a JSON value.
     "workflow": {"group": "workflow", "atomic": False},

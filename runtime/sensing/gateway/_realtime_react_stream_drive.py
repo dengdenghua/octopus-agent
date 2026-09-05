@@ -15,7 +15,7 @@ import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import CancelledError as FutureCancelledError
 from concurrent.futures import Future, InvalidStateError
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from runtime.execution.subagents._ambient import react_stack_scope
 from runtime.memory.threads.event_log import EventLog
@@ -66,6 +66,11 @@ from runtime.sensing.gateway.realtime_turn_input import (
 if TYPE_CHECKING:
     from runtime.protocol import Turn
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+
+
+class _ReactBudgetKwargs(TypedDict, total=False):
+    max_tokens_budget: int
+    max_usd_budget: float
 
 
 # Give cooperative providers a brief chance to unwind their stream after an
@@ -693,6 +698,12 @@ async def _drive_react(
                         with contextlib.suppress(RuntimeError):
                             asyncio.run_coroutine_threadsafe(_spawn(), loop)
 
+                    budget_kwargs: _ReactBudgetKwargs = {}
+                    if shared_request is not None:
+                        budget_kwargs = {
+                            "max_tokens_budget": shared_request.task.resources.token_target,
+                            "max_usd_budget": shared_request.task.resources.usd_target,
+                        }
                     events: Iterator[dict[str, Any]] = stream_react_loop(
                         runtime._stack,
                         intent,
@@ -711,14 +722,7 @@ async def _drive_react(
                         ),
                         steering_drain=lambda: runtime._drain_turn_steering(turn.id),
                         on_auto_parallel_batch=_on_auto_parallel_batch,
-                        **(
-                            {
-                                "max_tokens_budget": shared_request.task.resources.token_target,
-                                "max_usd_budget": shared_request.task.resources.usd_target,
-                            }
-                            if shared_request is not None
-                            else {}
-                        ),
+                        **budget_kwargs,
                     )
                     for evt in events:
                         if (

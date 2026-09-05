@@ -244,8 +244,8 @@ def test_relevant_memory_texts_passes_viewer(memory_home: Path) -> None:
         limit=8,
         viewer=_viewer(actor_id="bob", team_ids=frozenset({"room-a"})),
     )
-    assert "团队排期 7 月" in texts
-    assert "alice 的排期" not in texts
+    assert '[unclassified/unverified] "团队排期 7 月"' in texts
+    assert all("alice 的排期" not in text for text in texts)
 
 
 def test_visible_facts_for_viewer_returns_shared_context(memory_home: Path) -> None:

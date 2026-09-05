@@ -649,26 +649,47 @@ def _has_verification_requiring_code_write(steps: list[ReActStep]) -> bool:
     return any(_is_verification_requiring_code_write_step(step) for step in steps)
 
 
+# First-party artifact plugins write files through the same governed executor
+# as text/code editors. They count as durable mutations for completion, while
+# their package formats do not require source-code lint/test verification.
+_ARTIFACT_WRITE_TOOLS: frozenset[str] = frozenset(
+    {
+        "documents.create_docx",
+        "documents.replace_text",
+        "presentations.create_pptx",
+        "presentations.replace_text",
+        "spreadsheets.create_xlsx",
+        "spreadsheets.update_cells",
+        "pdf.create",
+        "pdf.merge",
+        "pdf.split",
+    }
+)
+
+
 # Canonical write-tool set. Kept as a module-level constant so the
 # completion guard, the post-write verification guard, and the public
 # ``_has_code_write`` helper all stay aligned. Adding a new edit-style
 # skill (e.g. ``patch_file_v2``) needs exactly one update here.
-_CODE_WRITE_TOOLS: frozenset[str] = frozenset(
-    {
-        # Legacy text writers
-        "write_text_file",
-        "append_text_file",
-        "edit_text_file",
-        # Newer Edit-style skills (octopus optimisation §2.1 / §2.2)
-        "edit_file",
-        "multi_edit_file",
-        # Aliases used by other registries / external integrations
-        "edit_code",
-        "str_replace",
-        "write_file",
-        "create_file",
-        "apply_patch",
-    }
+_CODE_WRITE_TOOLS: frozenset[str] = (
+    frozenset(
+        {
+            # Legacy text writers
+            "write_text_file",
+            "append_text_file",
+            "edit_text_file",
+            # Newer Edit-style skills (octopus optimisation §2.1 / §2.2)
+            "edit_file",
+            "multi_edit_file",
+            # Aliases used by other registries / external integrations
+            "edit_code",
+            "str_replace",
+            "write_file",
+            "create_file",
+            "apply_patch",
+        }
+    )
+    | _ARTIFACT_WRITE_TOOLS
 )
 
 
@@ -691,8 +712,13 @@ def _is_code_write_step(step: ReActStep) -> bool:
 _NON_CODE_ARTIFACT_SUFFIXES: frozenset[str] = frozenset(
     {
         ".adoc",
+        ".docx",
+        ".xlsm",
+        ".xlsx",
         ".markdown",
         ".md",
+        ".pdf",
+        ".pptx",
         ".rst",
         ".txt",
     }
@@ -712,6 +738,8 @@ def _is_verification_requiring_code_write_step(step: ReActStep) -> bool:
         if parsed is None or parsed[0] not in _CODE_WRITE_TOOLS:
             continue
         _name, args = parsed
+        if _name in _ARTIFACT_WRITE_TOOLS:
+            continue
         path = args.get("path") or args.get("file") or args.get("file_path")
         if not isinstance(path, str) or not path.strip():
             return True

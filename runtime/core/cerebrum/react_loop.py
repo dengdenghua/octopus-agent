@@ -321,6 +321,28 @@ def _stream_react_loop_impl(
         if _effective_goal != intent.normalized_goal:
             intent = intent.model_copy(update={"normalized_goal": _effective_goal})
 
+        # Prompt assembly may have activated an on-demand plugin and added its
+        # executable skills to the shared registry. Refresh the native catalog
+        # now so an explicitly requested plugin action is callable in this same
+        # turn instead of appearing only in the textual capability catalog.
+        from runtime.core.cerebrum.react_native import (
+            build_loop_tool_spec_views,
+            native_tool_use_active,
+        )
+
+        _native_views = build_loop_tool_spec_views(
+            executor,
+            enabled=bool(tools_active) and native_tool_use_active(router, effective_model),
+            agent=agent,
+            goal=_effective_goal,
+            user_context=intent.user_context,
+            strict_explicit_reads=_strict_explicit_reads,
+            observed_read_sequence=bool(_strict_explicit_reads and _ordered_result_handoffs),
+        )
+        _native_mode = _native_views.enabled
+        _native_public_update_tool_specs = _native_views.public_update
+        _native_evidence_update_tool_specs = _native_views.evidence_update
+
         # ── PHASE 4/4.5 · start events + auto-delegation ───────────────
         # Moved verbatim to react_prompt_assembly._emit_turn_start_events.
         yield from _emit_turn_start_events(

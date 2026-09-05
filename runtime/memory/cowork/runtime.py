@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from dataclasses import dataclass
 from typing import Any
 
@@ -74,6 +75,8 @@ def create_cowork_runtime(
     *,
     base_dir: Any = None,
     thread_store: Any = None,
+    workspace_root: Any = None,
+    logs_root: Any = None,
     enable_runner: bool = True,
 ) -> CoworkRuntime:
     """Build the shared cowork runtime used by app wiring and tests."""
@@ -117,6 +120,10 @@ def create_cowork_runtime(
                 task,
                 context,
                 collaboration_store=collaboration_store,
+                async_store=async_store,
+                thread_store=thread_store,
+                workspace_root=workspace_root,
+                logs_root=logs_root,
             ),
             competence=CompetenceStore(base_dir=group_store.base_dir),
             history_provider=_history_provider(thread_store),
@@ -185,8 +192,69 @@ def _execute_subagent_task(
     context: dict[str, Any],
     *,
     collaboration_store: CollaborationStore | None = None,
+    async_store: AsyncWorkStore | None = None,
+    thread_store: Any = None,
+    workspace_root: Any = None,
+    logs_root: Any = None,
 ) -> str:
     from runtime.execution.subagents import call_subagent
+
+    actor: str | None = None
+    tenant: str | None = None
+    metadata: dict[str, Any] = {"source": "cowork_async_task"}
+    if thread_store is not None and hasattr(thread_store, "get"):
+        thread = thread_store.get(task.thread_id)
+        raw_thread_metadata = thread.get("metadata") if isinstance(thread, dict) else None
+        thread_metadata = raw_thread_metadata if isinstance(raw_thread_metadata, dict) else {}
+        owner = str(thread_metadata.get("owner_actor_id") or "").strip()
+        stored_tenant = str(thread_metadata.get("tenant_id") or "").strip()
+        if owner and stored_tenant:
+            actor, tenant = owner, stored_tenant
+        if workspace_root is not None:
+            from runtime.sensing.gateway.thread_workspace import verified_managed_workspace
+
+            workspace = verified_managed_workspace(
+                workspace_root,
+                thread_id=task.thread_id,
+                metadata=thread_metadata,
+            )
+            if workspace is not None:
+                metadata.update(
+                    workspace_path=str(workspace),
+                    _artifact_output_root=str(workspace / "output" / "final"),
+                )
+
+    recorder = None
+    if logs_root is not None:
+        from runtime.execution.artifact_contracts import HandoffRecorder
+        from runtime.memory.threads.event_log import EventLog, thread_log_path
+
+        log = EventLog(thread_log_path(logs_root, task.thread_id))
+
+        def read_handoffs() -> tuple[dict[str, Any], ...]:
+            return tuple(
+                dict(event.payload)
+                for event in log.iter_events()
+                if event.event == "execution_handoff" and event.thread_id == task.thread_id
+            )
+
+        def write_handoff(receipt: dict[str, Any]) -> None:
+            log.execution_handoff(task.thread_id, task.task_id, receipt)
+
+        recorder = HandoffRecorder(write_handoff, read_handoffs)
+
+    from runtime.execution.host_boundary import create_host_execution_boundary
+
+    host_session = create_host_execution_boundary(
+        task_id=f"cowork-{task.task_id}",
+        thread_id=task.thread_id,
+        goal=task.prompt,
+        timeout_s=900.0,
+        actor_id=actor,
+        tenant_id=tenant,
+        metadata=metadata,
+        handoff_recorder=recorder,
+    ).session
 
     binding = (
         collaboration_store.collaboration_collector_retry_task(task.task_id)
@@ -218,35 +286,61 @@ def _execute_subagent_task(
             + "\n".join(f"- {text}" for text in corrections)
             + "\n</user-steering>"
         )
+    from runtime.safety.approval.cancellation import CancellationSource, scoped_cancellation
+
+    cancellation = CancellationSource()
+    monitor_stop = threading.Event()
+
+    def monitor_cancelled_task() -> None:
+        if async_store is None:
+            return
+        while not monitor_stop.wait(0.1):
+            current = async_store.get(task.task_id)
+            if current is not None and current.status == "cancelled":
+                cancellation.cancel(reason=current.result or "cowork task cancelled")
+                return
+
+    monitor = threading.Thread(
+        target=monitor_cancelled_task,
+        name=f"cowork-cancel-{task.task_id}",
+        daemon=True,
+    )
+    monitor.start()
     result: dict[str, Any] = {}
     continuation_id: str | None = None
-    for restart in range(3):
-        result = call_subagent(
-            task.assignee,
-            prompt,
-            context={
-                "thread_id": task.thread_id,
-                "parent_task_id": task.task_id,
-                "source": "cowork_async_task",
-                "cowork": context,
-                "steering_drain": drain_steering,
-            },
-            timeout_s=900,
-            timeout_seconds=900.0,
-            continue_session_id=continuation_id,
-        )
-        arrived_during_call = drain_steering()
-        if not arrived_during_call:
-            break
-        corrections.extend(arrived_during_call)
-        prompt = base_prompt + (
-            "\n\n<user-steering>Apply these newer user corrections before completing:\n"
-            + "\n".join(f"- {text}" for text in corrections)
-            + "\n</user-steering>"
-        )
-        continuation_id = str(result.get("session_id") or "").strip() or None
-        if restart == 2:
-            raise RuntimeError("member steering restart limit exceeded; retry the member")
+    try:
+        with scoped_cancellation(cancellation.token):
+            for restart in range(3):
+                result = call_subagent(
+                    task.assignee,
+                    prompt,
+                    context={
+                        "thread_id": task.thread_id,
+                        "parent_task_id": task.task_id,
+                        "source": "cowork_async_task",
+                        "cowork": context,
+                        "steering_drain": drain_steering,
+                    },
+                    session=host_session,
+                    timeout_s=900,
+                    timeout_seconds=900.0,
+                    continue_session_id=continuation_id,
+                )
+                arrived_during_call = drain_steering()
+                if not arrived_during_call:
+                    break
+                corrections.extend(arrived_during_call)
+                prompt = base_prompt + (
+                    "\n\n<user-steering>Apply these newer user corrections before completing:\n"
+                    + "\n".join(f"- {text}" for text in corrections)
+                    + "\n</user-steering>"
+                )
+                continuation_id = str(result.get("session_id") or "").strip() or None
+                if restart == 2:
+                    raise RuntimeError("member steering restart limit exceeded; retry the member")
+    finally:
+        monitor_stop.set()
+        monitor.join(timeout=1.0)
     if not result.get("success"):
         raise RuntimeError(str(result.get("error") or "subagent failed"))
     output = result.get("output")

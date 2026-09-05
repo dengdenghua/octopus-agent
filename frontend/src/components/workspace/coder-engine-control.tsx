@@ -85,6 +85,19 @@ const COPY = {
     retry: "重试",
     compatible: "可由 Codex 引擎运行",
     incompatible: "当前系统模型与 Codex 不兼容",
+    unavailable: "暂不可执行",
+    backendDefault: "跟随后端默认模型",
+    backendDefaultHint:
+      "使用服务端配置的默认模型，与上方对话默认模型分别保存。",
+    accountConnected: "账号已连接",
+    pendingModel: "待选择可执行模型",
+    aliasHint:
+      "后端默认值是自动路由入口，尚未指定可供 Codex 执行的模型。请选择具体模型，或使用已连接的 ChatGPT / Codex 账号。",
+    routeHint:
+      "所选模型尚未接入后端路由。请接入该模型，或使用 ChatGPT / Codex 账号。",
+    proxyHint: "系统模型服务暂不可用，请检查后端模型连接。",
+    savedUnavailable: "配置已保存，当前尚不可执行",
+    useChatDefault: (model: string) => `使用对话默认模型 · ${model}`,
     provider: "Provider",
     effectiveModel: "实际模型",
     systemModel: "系统模型",
@@ -146,8 +159,8 @@ const COPY = {
     accountSummary: (email: string, plan: string) =>
       [email, plan].filter(Boolean).join(" · ") || "Codex 账号",
     openSettings: "管理登录与模型",
-    activeSummary: (model: string) => `当前通过 Codex 引擎运行 ${model}`,
-    technicalDetails: "运行详情",
+    activeSummary: (model: string) => `已选模型 · ${model}`,
+    technicalDetails: "配置详情",
   },
   en: {
     triggerFallback: "Coder model",
@@ -165,6 +178,20 @@ const COPY = {
     retry: "Retry",
     compatible: "Compatible with the Codex engine",
     incompatible: "The system model is not compatible with Codex",
+    unavailable: "Execution unavailable",
+    backendDefault: "Follow backend default model",
+    backendDefaultHint:
+      "Use the server default, saved separately from the chat default above.",
+    accountConnected: "Account connected",
+    pendingModel: "Select an executable model",
+    aliasHint:
+      "The backend default is an automatic routing entry, not an executable Codex model. Select a specific model or use your connected ChatGPT / Codex account.",
+    routeHint:
+      "The selected model has no backend route. Connect that model or use a ChatGPT / Codex account.",
+    proxyHint:
+      "The system model service is unavailable. Check the backend model connection.",
+    savedUnavailable: "Configuration saved; execution is still unavailable",
+    useChatDefault: (model: string) => `Use chat default · ${model}`,
     provider: "Provider",
     effectiveModel: "Effective model",
     systemModel: "System model",
@@ -231,9 +258,8 @@ const COPY = {
     accountSummary: (email: string, plan: string) =>
       [email, plan].filter(Boolean).join(" · ") || "Codex account",
     openSettings: "Manage sign-in and models",
-    activeSummary: (model: string) =>
-      `Currently running ${model} with the Codex engine`,
-    technicalDetails: "Runtime details",
+    activeSummary: (model: string) => `Selected model · ${model}`,
+    technicalDetails: "Configuration details",
   },
 };
 
@@ -334,14 +360,65 @@ function isCoderSystemModel(model: PickerModel) {
   ]
     .filter((value): value is string => Boolean(value))
     .map((value) => value.trim().toLowerCase());
-  return !identifiers.some(
-    (value) => value === "mix" || value === "octopus-mix",
-  );
+  return !identifiers.some((value) => isSystemOrchestratorModel(value));
 }
 
 function isSystemOrchestratorModel(value: string | null | undefined) {
   const normalized = value?.trim().toLowerCase();
-  return normalized === "mix" || normalized === "octopus-mix";
+  return ["mix", "octopus-mix", "octopus-agent"].includes(normalized || "");
+}
+
+function profileCanExecute(profile: CoderModelProfile) {
+  return profile.compatible && profile.execution_available !== false;
+}
+
+function profileProblem(profile: CoderModelProfile, locale: string) {
+  const copy = copyForLocale(locale);
+  if (!profile.compatible) {
+    if (
+      isSystemOrchestratorModel(
+        profile.effective_model ||
+          profile.selected_model ||
+          profile.system_model,
+      )
+    ) {
+      return copy.aliasHint;
+    }
+    if (
+      profile.compatibility_reason?.includes(
+        "no exact Octopus ModelRouter route",
+      )
+    )
+      return copy.routeHint;
+    if (
+      profile.compatibility_reason?.includes("Responses proxy is unavailable")
+    )
+      return copy.proxyHint;
+    return profile.compatibility_reason || copy.incompatible;
+  }
+  if (profile.execution_available !== false) return null;
+  const zh = locale.toLowerCase().startsWith("zh");
+  const reasons: Record<string, [string, string]> = {
+    disabled: ["Codex 引擎尚未启用。", "The Codex engine is disabled."],
+    executable_unavailable: [
+      "未找到 Codex 程序，请检查本地安装。",
+      "Codex executable not found. Check the local installation.",
+    ],
+    tools_unavailable: [
+      "执行工具尚未就绪，请检查后端服务。",
+      "Execution tools are not ready. Check the backend service.",
+    ],
+    account_required: [
+      "请先连接 ChatGPT / Codex 账号。",
+      "Connect a ChatGPT / Codex account first.",
+    ],
+    account_unavailable: [
+      "账号凭据暂不可用，请重新连接。",
+      "Account credentials are unavailable. Reconnect your account.",
+    ],
+  };
+  const reason = reasons[profile.execution_unavailable_reason || ""];
+  return reason ? reason[zh ? 0 : 1] : copy.unavailable;
 }
 
 function ProfileCompatibility({
@@ -353,27 +430,28 @@ function ProfileCompatibility({
 }) {
   const { locale } = useI18n();
   const copy = copyForLocale(locale);
+  const available = profileCanExecute(profile);
   return (
     <div
       className={cn(
         "flex gap-2 rounded-lg border px-3 py-2 text-xs",
-        profile.compatible
+        available
           ? "border-success/20 bg-success/[0.06] text-success"
           : "border-warning/25 bg-warning/[0.06] text-warning",
       )}
     >
-      {profile.compatible ? (
+      {available ? (
         <CheckCircle2Icon className="mt-0.5 size-3.5 shrink-0" />
       ) : (
         <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
       )}
       <div className="min-w-0">
         <div className="font-medium">
-          {profile.compatible ? copy.compatible : copy.incompatible}
+          {available ? copy.compatible : copy.unavailable}
         </div>
-        {!compact && profile.compatibility_reason ? (
+        {!compact && profileProblem(profile, locale) ? (
           <div className="mt-0.5 break-words text-current/80">
-            {profile.compatibility_reason}
+            {profileProblem(profile, locale)}
           </div>
         ) : null}
       </div>
@@ -1006,7 +1084,7 @@ export function CoderEngineControl({
               />
             ) : null}
 
-            {!profile.compatible ? (
+            {!nativeKernel && !profileCanExecute(profile) ? (
               <div className="mt-1">
                 <ProfileCompatibility profile={profile} compact />
               </div>
@@ -1030,7 +1108,13 @@ export function CoderEngineControl({
   );
 }
 
-export function CoderEngineSettings() {
+export function CoderEngineSettings({
+  conversationDefaultModel,
+  conversationDefaultLabel,
+}: {
+  conversationDefaultModel?: string;
+  conversationDefaultLabel?: string;
+} = {}) {
   const { locale } = useI18n();
   const copy = copyForLocale(locale);
   const queryClient = useQueryClient();
@@ -1123,9 +1207,15 @@ export function CoderEngineSettings() {
   const saveProfile = useMutation({
     scope: { id: "coder-model-profile" },
     mutationFn: updateCoderModelProfile,
+    onMutate: () => {
+      setLoginError(null);
+      setLoginNotice(null);
+    },
     onSuccess: (profile) => {
       queryClient.setQueryData(queryKeys.profile, profile);
-      setLoginNotice(copy.saved);
+      setLoginNotice(
+        profileCanExecute(profile) ? copy.saved : copy.savedUnavailable,
+      );
     },
     onError: (error) => {
       setLoginError(error instanceof Error ? error.message : String(error));
@@ -1296,6 +1386,26 @@ export function CoderEngineSettings() {
   const reasoningOptions = currentModel?.reasoning_efforts ?? [];
   const busy = saveProfile.isPending || loginBusy !== null;
   const loginPending = Boolean(accountQuery.data?.login_pending || activeLogin);
+  const chatDefault = conversationDefaultModel?.trim() || "";
+  const chatDefaultUsesAccount = /^chatgpt[/:]/i.test(chatDefault);
+  const chatDefaultModel = chatDefaultUsesAccount
+    ? chatDefault.replace(/^chatgpt[/:]/i, "")
+    : chatDefault;
+  const chatDefaultSource = chatDefaultUsesAccount
+    ? "codex_account"
+    : "follow_system";
+  const canUseChatDefault = Boolean(
+    chatDefaultModel &&
+    !["auto", "default", "inherit", "follow_system"].includes(
+      chatDefaultModel.toLowerCase(),
+    ) &&
+    !isSystemOrchestratorModel(chatDefaultModel) &&
+    (!chatDefaultUsesAccount || account?.type === "chatgpt"),
+  );
+  const matchesChatDefault =
+    profile?.source === chatDefaultSource &&
+    (profile?.selected_model || profile?.effective_model) === chatDefaultModel;
+  const executionAvailable = profile ? profileCanExecute(profile) : false;
 
   return (
     <section
@@ -1317,7 +1427,7 @@ export function CoderEngineSettings() {
               )}
             >
               {account
-                ? copy.connected
+                ? copy.accountConnected
                 : loginPending
                   ? copy.pending
                   : copy.notConnected}
@@ -1391,10 +1501,10 @@ export function CoderEngineSettings() {
                 <ShieldCheckIcon className="size-4 shrink-0 text-primary" />
                 <span className="min-w-0">
                   <span className="block text-sm font-medium">
-                    {copy.followSystem}
+                    {copy.backendDefault}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    {copy.followSystemDescription}
+                    {copy.backendDefaultHint}
                   </span>
                 </span>
               </button>
@@ -1425,20 +1535,27 @@ export function CoderEngineSettings() {
 
           <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-background/45 px-3 py-2 text-xs">
             <span className="min-w-0 flex-1 truncate font-medium text-foreground">
-              {copy.activeSummary(profile.effective_model || "—")}
+              {profile.compatible
+                ? copy.activeSummary(
+                    profile.effective_model ||
+                      (profile.source === "codex_account"
+                        ? currentModel?.id || copy.modelDefault
+                        : copy.systemDefault),
+                  )
+                : copy.pendingModel}
             </span>
             <span
               className={cn(
                 "ml-auto inline-flex items-center gap-1.5 font-medium",
-                profile.compatible ? "text-success" : "text-warning",
+                executionAvailable ? "text-success" : "text-warning",
               )}
             >
-              {profile.compatible ? (
+              {executionAvailable ? (
                 <CheckCircle2Icon className="size-3.5" />
               ) : (
                 <AlertTriangleIcon className="size-3.5" />
               )}
-              {profile.compatible ? copy.compatible : copy.incompatible}
+              {executionAvailable ? copy.compatible : copy.unavailable}
             </span>
             <details className="basis-full text-muted-foreground">
               <summary className="cursor-pointer select-none text-xs hover:text-foreground">
@@ -1460,10 +1577,29 @@ export function CoderEngineSettings() {
               </div>
             </details>
           </div>
-          {!profile.compatible && profile.compatibility_reason ? (
+          {profileProblem(profile, locale) ? (
             <p className="text-xs text-warning">
-              {profile.compatibility_reason}
+              {profileProblem(profile, locale)}
             </p>
+          ) : null}
+          {canUseChatDefault && !matchesChatDefault ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-auto max-w-full whitespace-normal text-left"
+              disabled={busy}
+              onClick={() =>
+                saveProfile.mutate({
+                  source: chatDefaultSource,
+                  model: chatDefaultModel,
+                })
+              }
+            >
+              {copy.useChatDefault(
+                conversationDefaultLabel || chatDefaultModel,
+              )}
+            </Button>
           ) : null}
 
           {account ? (
@@ -1837,9 +1973,18 @@ export function CoderEngineSettings() {
           {loginNotice ? (
             <div
               role="status"
-              className="flex gap-2 rounded-lg border border-success/20 bg-success/[0.04] p-3 text-xs text-success"
+              className={cn(
+                "flex gap-2 rounded-lg border p-3 text-xs",
+                loginNotice === copy.savedUnavailable
+                  ? "border-warning/20 bg-warning/[0.04] text-warning"
+                  : "border-success/20 bg-success/[0.04] text-success",
+              )}
             >
-              <CheckCircle2Icon className="mt-0.5 size-3.5 shrink-0" />{" "}
+              {loginNotice === copy.savedUnavailable ? (
+                <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
+              ) : (
+                <CheckCircle2Icon className="mt-0.5 size-3.5 shrink-0" />
+              )}
               {loginNotice}
             </div>
           ) : null}

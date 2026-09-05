@@ -135,6 +135,30 @@ def test_read_only_ceiling_preserves_project_reads(tmp_path):
         assert not scope.allows_write(tmp_path / "source.py")
 
 
+def test_host_workspace_read_grant_rejects_json_and_preserves_parent_ceiling(tmp_path):
+    from runtime.platform.process.scope import execution_scope_ceiling
+
+    workspace = tmp_path / "workspace"
+    child = workspace / "child"
+    child.mkdir(parents=True)
+    session = Session(
+        thread_id="thread",
+        metadata={"mode": "chat", "_host_workspace_read_root": str(workspace)},
+    )
+    assert not resolve_execution_scope(session).allows_read(workspace)
+
+    session.metadata["_host_workspace_read_root"] = workspace
+    scope = resolve_execution_scope(session)
+    assert scope.allows_read(workspace)
+    assert not scope.allows_write(workspace)
+    ceiling = replace(scope, readable_roots=(child,), writable_roots=())
+    with execution_scope_ceiling(ceiling):
+        restricted = resolve_execution_scope(session)
+        assert restricted.allows_read(child)
+        assert not restricted.allows_read(workspace)
+        assert restricted.writable_roots == ()
+
+
 def test_json_metadata_cannot_install_a_scope_ceiling(tmp_path):
     session = Session(
         thread_id="thread",

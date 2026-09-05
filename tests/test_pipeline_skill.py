@@ -349,17 +349,18 @@ def test_stages_clamped_to_4(mock_subagent, unlimited_budget, mock_builtins):
 # ── Registration count ─────────────────────────────────────────────────────
 
 
-def test_register_delegation_skills_returns_8():
-    """register_delegation_skills exposes only the eight native tools.
+def test_register_delegation_skills_returns_11():
+    """register_delegation_skills exposes the native orchestration tools.
 
     call_agent, call_agent_parallel, call_agent_vote, run_orchestration,
-    verdict_repair, tournament, run_pipeline, call_agent_graph. External CLI
-    auto-detection is intentionally not a registered capability.
+    verdict_repair, tournament, run_pipeline, call_agent_graph, and the three
+    candidate-patch transaction tools. External CLI auto-detection is not a
+    registered capability.
     """
 
     from runtime.execution.suckers.delegation_skills import register_delegation_skills
 
     registry = MagicMock()
     count = register_delegation_skills(registry)
-    assert count == 8
-    assert registry.register.call_count == 8
+    assert count == 11
+    assert registry.register.call_count == 11

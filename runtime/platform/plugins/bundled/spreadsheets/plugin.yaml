@@ -1,5 +1,6 @@
 name: spreadsheets
 version: 0.1.0
+activation: on_demand
 display_name: 表格
 description: 本地创建、读取和原位修改 Excel 工作簿，保留公式与样式。
 author: Octopus

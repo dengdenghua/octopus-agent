@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import shlex
+from contextvars import copy_context
 from typing import TYPE_CHECKING, Any
 
 from runtime.platform.models import ParsedIntent
@@ -530,8 +531,13 @@ async def _drive_project_os(
         )
 
     loop = asyncio.get_running_loop()
+    # Project OS is intentionally synchronous, but the unified Session,
+    # execution request and cancellation token are ContextVars. Copy the
+    # current context into its worker so delegated members remain children of
+    # this realtime turn instead of starting a second authority boundary.
+    worker_context = copy_context()
     try:
-        state = await loop.run_in_executor(None, _run)
+        state = await loop.run_in_executor(None, worker_context.run, _run)
     except ValueError:
         await runtime._emit_agent_message(
             turn,

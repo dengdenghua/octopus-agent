@@ -450,29 +450,20 @@ def create_config_router(
         provider = (entry.get("provider") or "openai").lower()
         base_url = entry.get("base_url") or ""
         api_key = entry.get("api_key") or ""
-        if not api_key and entry.get("credential_ref"):
-            from runtime.platform.models.model_provider_plugin import (
-                resolve_model_provider_api_key,
-            )
-
-            api_key = resolve_model_provider_api_key(
-                entry,
-                credential_store=credential_store,
-            )
+        deferred_credentials = not api_key and bool(entry.get("credential_ref"))
         upstreams = _entry_upstreams(entry, model_id)
         if not upstreams:
             return {"ok": False, "error": "models list is empty"}
         primary_model = upstreams[0]
-        responses_models = {
-            str(model).strip()
-            for model in (entry.get("responses_models") or [])
-            if str(model or "").strip() in upstreams
-        }
-        responses_router: Any | None = None
+        from runtime.platform.models.model_provider_plugin import model_provider_responses_models
+
+        responses_models = set(model_provider_responses_models(entry, upstreams))
         default_headers = entry.get("default_headers") or {}
         if not isinstance(default_headers, dict):
             default_headers = {}
-        try:
+
+        def _build_provider_routers(api_key: str) -> tuple[Any, Any | None]:
+            responses_router: Any | None = None
             if provider in ("anthropic", "claude"):
                 from runtime.sensing.model_router.anthropic_router import (
                     AnthropicModelRouter,
@@ -500,10 +491,7 @@ def create_config_router(
                 )
 
                 if not base_url:
-                    return {
-                        "ok": False,
-                        "error": "base_url required for openai-compat",
-                    }
+                    raise ValueError("base_url required for openai-compat")
                 sub_router = OpenAIModelRouter(
                     base_url=base_url,
                     api_key=api_key or "dummy",
@@ -523,6 +511,10 @@ def create_config_router(
                         extra_headers=default_headers,
                         provider_name=str(entry.get("compat_profile") or model_id),
                     )
+            return sub_router, responses_router
+
+        try:
+            sub_router, responses_router = _build_provider_routers(api_key)
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "error": f"router init failed: {e}"}
 
@@ -580,12 +572,31 @@ def create_config_router(
             def call(self, request: _MR):
                 resolved = self._resolve(request)
                 rewritten = request.model_copy(update={"model": resolved})
-                inner = (
-                    self._responses_inner
-                    if self._responses_inner is not None and resolved in self._responses_models
-                    else self._inner
-                )
+                inner = self._request_router(resolved)
                 return inner.call(rewritten)
+
+            def _request_router(self, resolved: str) -> _MRR:
+                inner, responses = self._inner, self._responses_inner
+                if deferred_credentials:
+                    from runtime.platform.models.model_provider_plugin import (
+                        resolve_model_provider_api_key,
+                    )
+                    from runtime.sensing.model_router.models import LLMResponseFormatError
+
+                    # Resolve within the active HTTP/turn tenant context. Never
+                    # capture one user's secret in the shared dispatcher at
+                    # startup/connect time or mutate its shared router instance.
+                    key = resolve_model_provider_api_key(entry, credential_store=credential_store)
+                    if not key:
+                        raise LLMResponseFormatError(
+                            "当前用户尚未连接模型插件，请在插件设置中连接。"
+                        )
+                    inner, responses = _build_provider_routers(key)
+                return (
+                    responses
+                    if responses is not None and resolved in self._responses_models
+                    else inner
+                )
 
             def call_stream(self, request: _MR):
                 # Mirror ``call`` · route to the right upstream slot,
@@ -596,11 +607,7 @@ def create_config_router(
                 # to the cheap one.
                 resolved = self._resolve(request)
                 rewritten = request.model_copy(update={"model": resolved})
-                inner = (
-                    self._responses_inner
-                    if self._responses_inner is not None and resolved in self._responses_models
-                    else self._inner
-                )
+                inner = self._request_router(resolved)
                 yield from inner.call_stream(rewritten)
 
             @property

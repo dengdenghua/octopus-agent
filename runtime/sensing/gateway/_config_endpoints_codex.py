@@ -315,7 +315,9 @@ def _register_coder_codex(router: Any, ctx: _ConfigCtx) -> None:
         scope = scope_from_request(request)
         if body.mode == "follow_system":
             if is_disallowed_coder_system_model(body.model):
-                raise HTTPException(400, "mix is not available to the Coder engine")
+                raise HTTPException(
+                    400, "Choose an executable model instead of an orchestration alias"
+                )
             # The system and Codex-account model domains are disjoint, but
             # both are user-selectable.  Persist an optional system-side model
             # and effort here; a missing model still means inherit the Octopus

@@ -259,7 +259,7 @@ def _run_tournament(
     ) as exc:
         return {**response, "error": str(exc), "status": "preflight_failed"}
 
-    def _patch_unchanged(candidate: Candidate) -> None:
+    def _patch_unchanged(candidate: Candidate) -> dict[str, Any]:
         receipt = candidate.meta.get("worktree")
         if not isinstance(receipt, dict) or receipt.get("contract_valid") is not True:
             raise ArtifactHandoffError("candidate has no valid host-exported patch")
@@ -272,16 +272,20 @@ def _run_tournament(
         actual = _fingerprint(path, required=True)
         if (actual["sha256"], actual["size"]) != (patch.get("sha256"), patch.get("size")):
             raise ArtifactHandoffError("candidate patch changed after export")
+        return patch
 
     def _judge(viable: list[Candidate]) -> str | None:
         _check_active()
         blocks: list[str] = []
         for c in viable:
-            _patch_unchanged(c)
-            files = ", ".join(str(f) for f in (c.meta.get("files") or [])) or "(no files)"
+            patch = _patch_unchanged(c)
+            file_names = c.meta.get("files")
+            files = (
+                ", ".join(str(f) for f in file_names)
+                if isinstance(file_names, (list, tuple))
+                else ""
+            ) or "(no files)"
             diff = (c.output or "")[:2000]
-            receipt = c.meta["worktree"]
-            patch = receipt["patch"]
             blocks.append(
                 f"### {c.id} — files: {files}\n"
                 f"Full patch: {patch['path']}\nSHA-256: {patch['sha256']}\n"

@@ -11,6 +11,36 @@ from pathlib import Path
 from typing import Any
 
 
+def resolve_office_path(path: str | Path, *, write: bool) -> Path:
+    """Resolve an Office path relative to the active execution workspace.
+
+    A long-lived server cannot change its process CWD for each concurrent
+    turn. Relative plugin paths therefore use the session-derived primary
+    read/write root, which also preserves sandbox-mode confinement. Absolute
+    paths remain explicit and are still checked by :func:`scoped_path_denial`.
+    """
+
+    candidate = Path(str(path)).expanduser()
+    if candidate.is_absolute():
+        return candidate.resolve()
+
+    try:
+        from runtime.platform.process.scope import resolve_execution_scope
+        from runtime.platform.process.session import current_session
+
+        session = current_session()
+        if session is not None:
+            scope = resolve_execution_scope(session)
+            root = scope.primary_write if write else scope.primary_read
+            if root is not None:
+                candidate = root / candidate
+    except (ImportError, AttributeError, RuntimeError):
+        # The scope check below remains authoritative and fails closed when a
+        # session exists but its permission domain cannot be resolved.
+        pass
+    return candidate.resolve()
+
+
 def atomic_package_save(target: Path, save: Callable[[Path], None]) -> None:
     """Save a package/PDF beside *target* and atomically replace it.
 
@@ -153,5 +183,6 @@ __all__ = [
     "atomic_package_save",
     "create_versioned_backup",
     "replace_text_preserving_runs",
+    "resolve_office_path",
     "scoped_path_denial",
 ]

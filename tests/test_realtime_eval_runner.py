@@ -269,6 +269,7 @@ async def test_realtime_trial_runner_captures_turn_and_approval(tmp_path) -> Non
         runner = RealtimeTrialRunner(
             url=f"ws://127.0.0.1:{port}/api/realtime",
             approval_action="decline",
+            execution_engine="octopus",
             workspace=tmp_path,
             topology_id="research_swarm_v1",
             timeout_seconds=5,
@@ -287,6 +288,7 @@ async def test_realtime_trial_runner_captures_turn_and_approval(tmp_path) -> Non
         "workspace_path": str(tmp_path.resolve()),
     }
     assert start["params"]["cwd"] == str(tmp_path.resolve())
+    assert start["params"]["executionEngine"] == "octopus"
     assert start["params"]["topologyId"] == "research_swarm_v1"
     assert received["approval"] == {
         "jsonrpc": "2.0",

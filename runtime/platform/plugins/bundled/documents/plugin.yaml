@@ -1,5 +1,6 @@
 name: documents
 version: 0.2.0
+activation: on_demand
 description: >-
   本地 docx 文档处理插件(创建 / 提取 / 修改 / 转 Markdown / 元信息)。基于
   python-docx 独立自研,能力对标 OpenAI codex documents 插件,但实现完全

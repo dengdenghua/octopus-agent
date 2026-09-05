@@ -179,6 +179,7 @@ def mount_routers_a(
             team_rooms_router=ctx.team_rooms_router,
             thread_store=ctx.thread_store,
             workspace_root=ctx.thread_workspace_root,
+            logs_root=(ctx.paths.data_dir / "threads" if ctx.paths is not None else None),
             model_router=project_model_router,
             subagent_runner=ctx.subagent_runner,
             identity_store=ctx.identity_store,

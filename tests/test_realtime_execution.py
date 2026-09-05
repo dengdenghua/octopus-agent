@@ -125,6 +125,8 @@ def test_replay_rejects_stale_engine_changes_and_malformed_evidence(tmp_path):
 @pytest.mark.parametrize("engine", ["octopus", "codex"])
 def test_continuations_share_host_identity_permissions_budget_and_leases(tmp_path, engine):
     from runtime.execution.misc.file_write_leases import acquire_file_write_lease
+    from runtime.platform.capabilities.tenant_context import current_capability_scope
+    from runtime.safety.auth.scope import TenantScope
 
     turn = Turn(
         threadId="thread",
@@ -154,6 +156,8 @@ def test_continuations_share_host_identity_permissions_budget_and_leases(tmp_pat
         received.append(request)
         assert session.actor == "alice"
         assert session.metadata["tenant_id"] == "tenant"
+        assert session.metadata["owner_actor_id"] == "alice"
+        assert current_capability_scope() == TenantScope(tenant_id="tenant", actor_id="alice")
         assert "codex_thread_id" not in session.metadata
         assert request.task.goal == "Create a report"
         assert request.task.resources.token_target == 1234
@@ -198,6 +202,59 @@ def test_continuations_share_host_identity_permissions_budget_and_leases(tmp_pat
     asyncio.run(scenario())
     assert received[0].task is received[1].task
     assert [request.instruction for request in received] == ["Create a report", "Verify it"]
+
+
+@pytest.mark.parametrize("engine", ["octopus", "codex"])
+@pytest.mark.parametrize("mode", ["react", "chat", "plan"])
+def test_personal_workspace_is_readable_without_granting_workspace_writes(tmp_path, engine, mode):
+    from runtime.execution.codex_backend.role_runner import resolve_codex_sandbox_mode
+    from runtime.platform.process.scope import resolve_execution_scope
+    from runtime.platform.runtime_policy.workspaces import WorkspaceManager
+
+    manager = WorkspaceManager(tmp_path / "workspaces")
+    workspace = manager.layout("research-thread")
+    turn = Turn(threadId="research-thread")
+    turn.execution_workspace_path = str(workspace.root)
+    outside = tmp_path / "another-thread"
+    outside.mkdir()
+    intent = ParsedIntent(
+        raw="调研智能睡眠",
+        intent_type="task",
+        normalized_goal="调研智能睡眠",
+        user_context={
+            "mode": mode,
+            "_host_workspace_read_root": str(outside),
+            "metadata": {"_host_workspace_read_root": str(outside)},
+        },
+    )
+    received = []
+
+    async def driver(*_args, **_kwargs):
+        request = current_execution_request()
+        permissions = request.task.permissions
+        received.append(request)
+        assert permissions.allows_read(workspace.root)
+        assert not permissions.allows_read(outside)
+        assert not permissions.allows_write(workspace.root)
+        assert permissions.allows_write(workspace.final / "report.md") is (mode != "plan")
+        assert resolve_execution_scope(current_session()) == permissions
+        assert resolve_codex_sandbox_mode({"workspace_path": str(workspace.root)}) == "read-only"
+
+    runtime = SimpleNamespace(
+        _drive_react=driver, _drive_codex_app_server=driver, _workspaces=manager
+    )
+    emitter = SimpleNamespace(notify=AsyncMock(), is_turn_interrupted=lambda _id: False)
+    execution = bind_turn_execution(
+        runtime,
+        turn,
+        EventLog(tmp_path / "events.jsonl"),
+        emitter,
+        object(),
+        object(),
+        select_execution_route(codex_partner=engine == "codex"),
+    )
+    asyncio.run(execution.execute(TurnExecutionRequest(intent, intent.raw, None)))
+    assert len(received) == 1
 
 
 def test_host_deadline_cancels_driver_and_seals_continuations(tmp_path, monkeypatch):

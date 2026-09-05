@@ -26,6 +26,7 @@ factory registry defined in ``runtime.execution.arms.presets``.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from collections.abc import Callable
@@ -45,6 +46,7 @@ from runtime.execution.arms.presets import (
     make_web_read_arm,
 )
 from runtime.memory.runtime_state.scope_paths import visible_memory_tier_paths
+from runtime.memory.semantics import memory_data_notice
 
 from .base import Agent
 
@@ -157,15 +159,6 @@ def _read_or_empty(path: Path) -> str:
 _MAX_MEMORY_TIER_CHARS = 2000
 
 
-def _bounded_memory_text(text: str) -> str:
-    """Trim one memory tier to ``_MAX_MEMORY_TIER_CHARS`` with a marker."""
-    text = (text or "").strip()
-    if len(text) <= _MAX_MEMORY_TIER_CHARS:
-        return text
-    head = text[:_MAX_MEMORY_TIER_CHARS].rstrip()
-    return f"{head}\n\n…(记忆过长，已截断为前 {_MAX_MEMORY_TIER_CHARS} 字符，原文 {len(text)} 字符)"
-
-
 def _compose_soul(
     agent_dir: Path,
     shared_dir: Path,
@@ -229,7 +222,7 @@ def _compose_soul(
     if flags.get("includeUserMd", True):
         txt = _read_or_empty(core / "USER.md")
         if txt and not _is_template_only(txt):
-            parts.append("## User Profile\n\n" + txt)
+            parts.append("## User Profile\n\n" + _memory_data_payload("user_profile", txt))
 
     # Memory · three-tier layering:
     #   1. ~/.octopus/MEMORY.md       (global · user-wide)
@@ -245,7 +238,7 @@ def _compose_soul(
             txt = _read_or_empty(tier_path)
             if txt and not _is_template_only(txt):
                 parts.append(
-                    f"## Long-term Memory ({tier_name})\n\n{_bounded_memory_text(txt)}",
+                    _render_memory_tier(tier_name, txt),
                 )
 
     # Constitution summary · internalize the five principles. On by
@@ -346,10 +339,41 @@ def render_runtime_memory_sections(
     ):
         txt = _read_or_empty(tier_path)
         if txt and not _is_template_only(txt):
-            parts.append(
-                f"## Long-term Memory ({tier_name})\n\n{_bounded_memory_text(txt)}",
-            )
+            parts.append(_render_memory_tier(tier_name, txt))
     return "\n\n".join(parts)
+
+
+def _render_memory_tier(tier_name: str, content: str) -> str:
+    return f"## Long-term Memory ({tier_name})\n\n{_memory_data_payload(tier_name, content)}"
+
+
+def _memory_data_payload(scope: str, content: str) -> str:
+    """Budget the notice and JSON escaping together, keeping the boundary intact."""
+    text = content.strip()
+
+    def render(keep: int) -> str:
+        excerpt = text[:keep]
+        if keep < len(text):
+            excerpt += f"\n…(记忆过长，已截断；原文 {len(text)} 字符)"
+        return (
+            memory_data_notice()
+            + "\n"
+            + json.dumps(
+                {"scope": scope, "assurance": "unverified", "content": excerpt}, ensure_ascii=False
+            )
+        )
+
+    low, high = 0, min(len(text), _MAX_MEMORY_TIER_CHARS)
+    complete = render(high)
+    if len(complete) <= _MAX_MEMORY_TIER_CHARS:
+        return complete
+    while low < high:
+        keep = (low + high + 1) // 2
+        if len(render(keep)) <= _MAX_MEMORY_TIER_CHARS:
+            low = keep
+        else:
+            high = keep - 1
+    return render(low)
 
 
 def compose_runtime_soul(

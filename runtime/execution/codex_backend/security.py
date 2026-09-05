@@ -530,10 +530,9 @@ class CodexSidecarSecurity:
             state_root=state_root,
         )
 
-        thread_root = (
-            state_root / "realms" / realm_key / "tenants" / tenant_key / "threads" / thread_key
+        thread_root, task_root = _sidecar_state_paths(
+            state_root, realm_key, tenant_key, thread_key, task_key
         )
-        task_root = thread_root / "tasks" / task_key
         codex_home = thread_root / "codex-home"
         app_home = task_root / "app-home"
         scratch_id = secrets.token_hex(24)
@@ -867,6 +866,24 @@ def _require_server_authority(authority: str) -> None:
         raise CodexSecurityError("Codex thread bindings and auth seeding are server-only APIs")
 
 
+def _sidecar_state_paths(
+    state_root: Path, realm_key: str, tenant_key: str, thread_key: str, task_key: str
+) -> tuple[Path, Path]:
+    if os.name == "nt":
+        # SQLite in the Windows App Server cannot open the old four-level
+        # 64-character hash tree under packaged LOCALAPPDATA. Hash the full
+        # identity tuple once per scope; retain all 256 bits and domain
+        # separation, with the same private markers and cleanup boundary.
+        identity = f"{realm_key}\0{tenant_key}\0{thread_key}"
+        thread_root = state_root / "realms" / _opaque_id("thread-state", identity)
+        task_root = state_root / "realms" / _opaque_id("task-state", f"{identity}\0{task_key}")
+        return thread_root, task_root
+    thread_root = (
+        state_root / "realms" / realm_key / "tenants" / tenant_key / "threads" / thread_key
+    )
+    return thread_root, thread_root / "tasks" / task_key
+
+
 def _validate_context_layout(
     context: CodexSidecarContext,
     policy: CodexSecurityPolicy,
@@ -885,18 +902,16 @@ def _validate_context_layout(
     ):
         if len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
             raise CodexSecurityError(f"invalid {label} hash in Codex sidecar context")
-    expected_thread_root = (
-        context.state_root
-        / "realms"
-        / context.realm_key
-        / "tenants"
-        / context.tenant_key
-        / "threads"
-        / context.thread_key
+    expected_thread_root, expected_task_root = _sidecar_state_paths(
+        context.state_root,
+        context.realm_key,
+        context.tenant_key,
+        context.thread_key,
+        context.task_key,
     )
     if context.thread_root != expected_thread_root:
         raise CodexSecurityError("Codex sidecar thread_root does not match its identity hashes")
-    if context.task_root != expected_thread_root / "tasks" / context.task_key:
+    if context.task_root != expected_task_root:
         raise CodexSecurityError("Codex sidecar task_root does not match its identity hashes")
     if context.codex_home != expected_thread_root / "codex-home":
         raise CodexSecurityError("Codex sidecar CODEX_HOME is not thread-scoped")

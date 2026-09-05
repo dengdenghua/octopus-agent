@@ -57,6 +57,7 @@ from runtime.memory.runtime_state.scope_paths import (
     scoped_memory_path,
     visible_memory_tier_paths,
 )
+from runtime.memory.semantics import memory_data_notice, model_note
 
 # ═══════════════════════════════════════════════════════════
 # Path resolution
@@ -158,8 +159,7 @@ def _append_memory_line(
             )
             path.write_text(cleaned, encoding="utf-8")
 
-    tag_str = ",".join(str(t) for t in tags)
-    line = f"- [{_iso_now()} · {tag_str}] {fact}\n"
+    line = model_note(fact, recorded_at=_iso_now(), tags=[str(tag) for tag in tags])
     with path.open("a", encoding="utf-8") as fh:
         fh.write(line)
 
@@ -173,65 +173,13 @@ def _iso_now() -> str:
 # ═══════════════════════════════════════════════════════════
 
 
-def _remember(fact: str, tags: list[str] | None = None, **_kw: Any) -> dict[str, Any]:
-    """Append a fact line to MEMORY.md.
-
-    On the first real write, strip the ``_No memories yet._`` placeholder
-    line so the file cleanly transitions from "scaffold" to "live". Keep
-    the header comment (starts with ``#`` / ``<!--``) intact so the file
-    still reads like a document.
-    """
-    tags = tags or []
-    core = _agent_core_dir()
-    core.mkdir(parents=True, exist_ok=True)
-    path = core / "MEMORY.md"
-
-    # First-real-write cleanup · drop the "_No memories yet._" placeholder
-    if path.exists():
-        existing = path.read_text(encoding="utf-8")
-        if "_No memories yet._" in existing:
-            cleaned = (
-                "\n".join(
-                    ln for ln in existing.splitlines() if ln.strip() != "_No memories yet._"
-                ).rstrip()
-                + "\n"
-            )
-            path.write_text(cleaned, encoding="utf-8")
-
-    tag_str = ",".join(str(t) for t in tags)
-    line = f"- [{_iso_now()} · {tag_str}] {fact}\n"
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(line)
-    return {"ok": True, "path": str(path), "appended": fact}
-
-
-def _recall(query: str = "", limit: int = 20, **_kw: Any) -> dict[str, Any]:
-    """Read MEMORY.md · return last N lines or substring matches."""
-    core = _agent_core_dir()
-    path = core / "MEMORY.md"
-    if not path.exists():
-        return {"ok": True, "entries": [], "count": 0}
-
-    text = path.read_text(encoding="utf-8")
-    lines = [ln.rstrip("\n") for ln in text.splitlines() if ln.strip()]
-
-    if query:
-        q = query.lower()
-        matches = [ln for ln in lines if q in ln.lower()]
-        entries = matches[:limit]
-    else:
-        entries = lines[-limit:] if limit > 0 else []
-
-    return {"ok": True, "entries": entries, "count": len(entries)}
-
-
 def _remember(
     fact: str,
     tags: list[str] | None = None,
     scope: str = "agent",
     **_kw: Any,
 ) -> dict[str, Any]:
-    """Append a fact line to a scoped MEMORY.md."""
+    """Append an explicitly unverified model note to a scoped MEMORY.md."""
     tags = tags or []
     resolved_scope, path = _memory_path_for_scope(scope)
     _append_memory_line(path, fact=fact, tags=tags)
@@ -240,6 +188,8 @@ def _remember(
         "scope": resolved_scope,
         "path": str(path),
         "appended": fact,
+        "memory_type": "model_summary",
+        "assurance": "unverified",
     }
 
 
@@ -275,6 +225,8 @@ def _recall(
         "paths": paths,
         "entries": entries,
         "count": len(entries),
+        "assurance": "unverified",
+        "notice": memory_data_notice(),
     }
 
 
@@ -287,7 +239,7 @@ def _note_user(trait: str, **_kw: Any) -> dict[str, Any]:
     core.mkdir(parents=True, exist_ok=True)
     path = core / "USER.md"
 
-    entry = f"- [{_iso_now()}] {trait}"
+    entry = model_note(trait, recorded_at=_iso_now(), tags=["user_observation"]).rstrip("\n")
 
     if not path.exists():
         path.write_text(

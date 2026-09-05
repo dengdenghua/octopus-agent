@@ -54,6 +54,15 @@ _WRITE_TOOLS: frozenset[str] = frozenset(
         "str_replace",
         "write_file",
         "create_file",
+        "documents.create_docx",
+        "documents.replace_text",
+        "presentations.create_pptx",
+        "presentations.replace_text",
+        "spreadsheets.create_xlsx",
+        "spreadsheets.update_cells",
+        "pdf.create",
+        "pdf.merge",
+        "pdf.split",
     }
 )
 

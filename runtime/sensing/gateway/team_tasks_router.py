@@ -90,6 +90,8 @@ from runtime.sensing._fastapi_guard import require_fastapi  # noqa: E402, I001 â
 def create_team_tasks_router(
     *,
     state_path: Path | None = None,
+    workspace_root: Path | None = None,
+    logs_root: Path | None = None,
     identity_store: Any = None,
     require_auth: bool = False,
     jwt_secret: str | None = None,
@@ -372,11 +374,99 @@ def create_team_tasks_router(
         except TypeError:
             return runner_factory()
 
+    def _host_execution_boundary(
+        task: TeamTaskWire,
+        *,
+        actor: str | None,
+        tenant_id: str,
+        goal: str,
+    ) -> Any:
+        """Create one server-owned task shared by every role in this run."""
+
+        from runtime.execution.artifact_contracts import HandoffRecorder
+        from runtime.execution.host_boundary import create_host_execution_boundary
+
+        normalized_tenant = tenant_id.strip() if actor else ""
+        execution_thread_id = f"team-{task.id}"
+        execution_task_id = f"team-run-{uuid4().hex}"
+        metadata: dict[str, Any] = {
+            "source": "team_tasks_http",
+            "mode": "team",
+            "team_id": task.room_id,
+        }
+
+        if workspace_root is not None:
+            from runtime.platform.runtime_policy.workspaces import (
+                WorkspaceManager,
+                managed_workspace_metadata,
+                managed_workspace_path,
+            )
+
+            manager = WorkspaceManager(Path(workspace_root))
+            if actor and normalized_tenant:
+                managed = managed_workspace_path(
+                    workspace_root,
+                    tenant_id=normalized_tenant,
+                    actor_id=actor,
+                    thread_id=execution_thread_id,
+                )
+                layout = manager.bind_managed(execution_thread_id, managed)
+                metadata.update(
+                    managed_workspace_metadata(
+                        workspace_root,
+                        tenant_id=normalized_tenant,
+                        actor_id=actor,
+                        thread_id=execution_thread_id,
+                    )
+                )
+            else:
+                layout = manager.layout(execution_thread_id)
+                metadata["workspace_path"] = str(layout.root)
+            metadata["_host_workspace_read_root"] = layout.root
+            metadata["_artifact_output_root"] = str(layout.final)
+
+        recorder = None
+        if logs_root is not None:
+            from runtime.memory.threads.event_log import EventLog, thread_log_path
+
+            event_log = EventLog(thread_log_path(logs_root, execution_thread_id))
+
+            def read_handoffs() -> tuple[dict[str, Any], ...]:
+                return tuple(
+                    dict(event.payload)
+                    for event in event_log.iter_events()
+                    if event.event == "execution_handoff" and event.thread_id == execution_thread_id
+                )
+
+            def write_handoff(receipt: dict[str, Any]) -> None:
+                event_log.execution_handoff(
+                    execution_thread_id,
+                    execution_task_id,
+                    receipt,
+                )
+
+            recorder = HandoffRecorder(
+                write_handoff,
+                read_handoffs,
+            )
+
+        return create_host_execution_boundary(
+            task_id=execution_task_id,
+            thread_id=execution_thread_id,
+            goal=goal,
+            timeout_s=900.0,
+            actor_id=actor,
+            tenant_id=normalized_tenant or None,
+            metadata=metadata,
+            handoff_recorder=recorder,
+        )
+
     def _run_task_worker(
         task: TeamTaskWire,
         prepared: dict[str, Any],
         source: CancellationSource,
         loop: asyncio.AbstractEventLoop | None,
+        host_boundary: Any,
     ) -> None:
         topology = prepared["topology"]
         completed_roles: set[str] = set()
@@ -527,7 +617,14 @@ def create_team_tasks_router(
                 return
 
             runner = _runner_instance(_emit_runner_event)
-            with scoped_cancellation(source.token):
+            from runtime.execution.request import execution_request_scope
+            from runtime.platform.process.session import session_scope
+
+            with (
+                execution_request_scope(host_boundary.request),
+                session_scope(host_boundary.session),
+                scoped_cancellation(source.token),
+            ):
                 result = runner.run(
                     topology,
                     prepared["task_input"],
@@ -675,6 +772,16 @@ def create_team_tasks_router(
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
 
+        try:
+            host_boundary = _host_execution_boundary(
+                current,
+                actor=actor,
+                tenant_id=tenant_id,
+                goal=prepared["task_input"],
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise HTTPException(409, "team task execution workspace is unavailable") from exc
+
         now = _now()
         source = CancellationSource()
         metadata = {
@@ -734,7 +841,7 @@ def create_team_tasks_router(
         loop = asyncio.get_running_loop()
         thread = threading.Thread(
             target=_run_task_worker,
-            args=(updated, prepared, source, loop),
+            args=(updated, prepared, source, loop, host_boundary),
             name=f"team-task-run-{task_id}",
             daemon=True,
         )

@@ -34,6 +34,9 @@
     "run_orchestration",
     "verdict_repair",
     "tournament",
-    "run_pipeline"
+    "run_pipeline",
+    "inspect_candidate_patch",
+    "apply_candidate_patch",
+    "reconcile_candidate_patch"
   ]
 }

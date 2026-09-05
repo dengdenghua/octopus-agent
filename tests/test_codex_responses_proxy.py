@@ -565,6 +565,7 @@ async def test_proxy_token_allows_multi_round_idempotent_retry_cross_scope_and_e
 @pytest.mark.asyncio
 async def test_concurrent_failed_retry_gets_sanitized_http_response_and_can_retry(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     router = _BlockingFailRouter()
     async with ScopedResponsesProxy(
@@ -597,6 +598,8 @@ async def test_concurrent_failed_retry_gets_sanitized_http_response_and_can_retr
     assert router.calls == 2
     assert b"private provider failure" not in first_result[2]
     assert b"private provider failure" not in duplicate_result[2]
+    assert "private provider failure" not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
 
 
 @pytest.mark.asyncio

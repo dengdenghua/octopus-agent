@@ -323,6 +323,7 @@ tier: "core"
 | class | `class PluginActivation` | Outcome of trying to load + start a single pinned plugin. |
 | class | `class PluginActivationReport` | Aggregate report rendered for the model's next observation. |
 | func | `def auto_load_pinned_plugins(plugin_ids, hub)` | Try to load + start each plugin in ``plugin_ids``. |
+| func | `def select_plugin_hub_activations(plugin_ids, codex_handled, hub)` | Keep PluginHub plugins even when a same-id Codex prompt plugin exists. |
 
 ### `prompt_persistence.py`
 
@@ -389,11 +390,13 @@ tier: "core"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
+| class | `class NativeToolSpecViews` | The base and commentary-aware native tool catalogs for one turn. |
 | func | `def native_tool_use_flag_enabled()` | Read ``OCTOPUS_NATIVE_TOOLUSE`` fresh each call (operator can flip without a restart). |
 | func | `def model_supports_tool_use(router, model)` | Whether ``router`` can serve ``model`` via native tool-use. |
 | func | `def native_tool_use_active(router, model)` | Combined gate: flag on AND the resolved model advertises tool-use. |
 | func | `def build_loop_tool_specs(executor, agent, goal, user_context, strict_explicit_reads)` | Build the native ``ToolSpec`` catalog from the loop's skill registry. |
 | func | `def require_public_update_on_tool_specs(specs, evidence_round)` | Require one model-authored public sentence on every native tool round. |
+| func | `def build_loop_tool_spec_views(executor, enabled, agent, goal, user_context, strict_explicit_reads, observed_read_sequence)` | Build every native tool view from the executor's current registry. |
 | func | `def step_from_tool_calls(tool_calls, text, thinking, iteration, evidence_round)` | Synthesise a ``ReActStep`` from native ``tool_calls``. |
 | func | `def trim_text_protocol_for_native(system_prompt)` | Phase 1: drop the redundant text-protocol scaffolding for native mode. |
 
@@ -520,7 +523,7 @@ tier: "core"
 
 ## Who imports this
 
-**61** file(s) reference this package:
+**63** file(s) reference this package:
 
 - **`runtime/cli_code.py/`** · 1 file(s)
   - `runtime/cli_code.py`
@@ -536,6 +539,8 @@ tier: "core"
   - `runtime/cli_serve.py`
 - **`runtime/core/`** · 1 file(s)
   - `runtime/core/graph_runtime/runtime.py`
+- **`runtime/evals/`** · 1 file(s)
+  - `runtime/evals/multi_agent_benchmark.py`
 - **`runtime/execution/`** · 9 file(s)
   - `runtime/execution/codex_backend/dynamic_tools.py`
   - `runtime/execution/codex_backend/role_context.py`
@@ -560,13 +565,13 @@ tier: "core"
   - `runtime/safety/recovery/gepa_bridge.py`
   - `runtime/safety/recovery/workflow_applier.py`
   - `runtime/safety/validation/trust_signal.py`
-- **`runtime/sensing/`** · 27 file(s)
+- **`runtime/sensing/`** · 28 file(s)
   - `runtime/sensing/gateway/_agents_endpoints.py`
   - `runtime/sensing/gateway/_agents_endpoints_conversations.py`
   - `runtime/sensing/gateway/_agents_endpoints_tasks.py`
   - `runtime/sensing/gateway/_config_endpoints_system.py`
   - `runtime/sensing/gateway/_observability_journal.py`
-  - _… and 22 more_
+  - _… and 23 more_
 - **`runtime/tentacle/`** · 2 file(s)
   - `runtime/tentacle/coordinator.py`
   - `runtime/tentacle/mobile/cerebrum_adapter.py`

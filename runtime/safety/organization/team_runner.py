@@ -119,10 +119,31 @@ def _default_role_caller(
     """Run one role via the existing subagent bridge."""
     from runtime.execution.subagents.bridge import call_subagent
 
+    run_context = dict(context or {})
+    host_session = run_context.pop("_host_execution_session", None)
+    host_cancellation = run_context.pop("_host_cancellation_token", None)
+    if host_cancellation is not None:
+        from runtime.safety.approval.cancellation import (
+            CancellationToken,
+            scoped_cancellation,
+        )
+
+        if isinstance(host_cancellation, CancellationToken):
+            with scoped_cancellation(host_cancellation):
+                return call_subagent(
+                    agent_id=agent_id,
+                    prompt=prompt,
+                    context=run_context,
+                    session=host_session,
+                    timeout_seconds=timeout_seconds,
+                    use_cheap_model=use_cheap_model,
+                    event_emitter=event_emitter,
+                )
     return call_subagent(
         agent_id=agent_id,
         prompt=prompt,
-        context=context or {},
+        context=run_context,
+        session=host_session,
         timeout_seconds=timeout_seconds,
         use_cheap_model=use_cheap_model,
         event_emitter=event_emitter,
@@ -318,6 +339,18 @@ class TeamRunner:
     ) -> TeamRunResult:
         """Execute ``topology`` for ``task`` and return aggregated result."""
         started = time.monotonic()
+        run_context = dict(context or {})
+        try:
+            from runtime.execution.subagents.execution_context import parent_execution_task
+            from runtime.platform.process.session import current_session
+            from runtime.safety.approval.cancellation import current_cancellation_token
+
+            parent = current_session()
+            if parent is not None and parent_execution_task(parent) is not None:
+                run_context["_host_execution_session"] = parent
+                run_context["_host_cancellation_token"] = current_cancellation_token()
+        except (ImportError, AttributeError, LookupError):
+            pass
         result = TeamRunResult(
             topology_name=topology.name,
             topology_fingerprint=topology.fingerprint,
@@ -328,16 +361,16 @@ class TeamRunner:
 
         try:
             if topology.protocol == CoordinationProtocol.SEQUENTIAL:
-                self._run_sequential(topology, task, context or {}, result)
+                self._run_sequential(topology, task, run_context, result)
             elif topology.protocol == CoordinationProtocol.EVALUATOR_OPTIMIZER:
                 self._run_evaluator_optimizer(
                     topology,
                     task,
-                    context or {},
+                    run_context,
                     result,
                 )
             elif topology.protocol == CoordinationProtocol.PARALLEL:
-                self._run_parallel(topology, task, context or {}, result)
+                self._run_parallel(topology, task, run_context, result)
             else:  # pragma: no cover - guard for future protocols
                 raise ValueError(f"unknown protocol: {topology.protocol}")
             # Mark success when no role recorded an error and we have output.
@@ -658,7 +691,9 @@ class TeamRunner:
         merged_ctx["subagent_route_decision"] = route_decision
         if route_decision.get("action") == "block":
             duration = (time.monotonic() - start) * 1000.0
-            error = str(route_decision.get("reason") or "subagent blocked by routing policy")
+            blocked_error = str(
+                route_decision.get("reason") or "subagent blocked by routing policy"
+            )
             self._emit(
                 {
                     "type": "team_role_blocked",
@@ -667,14 +702,14 @@ class TeamRunner:
                     "agent_id": spec.agent_id,
                     "duration_ms": duration,
                     "route_decision": route_decision,
-                    "error": error,
+                    "error": blocked_error,
                 }
             )
             return RoleOutput(
                 role=role,
                 agent_id=spec.agent_id,
                 output="",
-                error=error,
+                error=blocked_error,
                 duration_ms=duration,
                 metadata={"subagent_route_decision": route_decision},
             )

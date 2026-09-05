@@ -74,7 +74,12 @@ def _lock_for(path: Path) -> threading.Lock:
 
 
 @contextlib.contextmanager
-def _cross_process_lock(target: Path):
+def _cross_process_lock(
+    target: Path,
+    *,
+    required: bool = False,
+    timeout_s: float | None = None,
+):
     """Best-effort cross-process lock for ``target`` using a sidecar.
 
     ``_lock_for`` serialises writers within a single Python process.
@@ -89,13 +94,18 @@ def _cross_process_lock(target: Path):
     processes can re-acquire cleanly.
 
     If the locking primitive is unavailable (or a platform doesn't
-    support it), the context manager is a no-op — same behaviour
-    as before this change, no regression.
+    support it), the context manager is a no-op by default. Callers that
+    guard a multi-file transaction can pass ``required=True`` and fail
+    before effects when the OS lock cannot be established. ``timeout_s``
+    uses non-blocking lock attempts so a contended transaction has a bounded
+    wait; existing callers that omit it retain the blocking behaviour.
     """
     lock_path = target.parent / (target.name + ".lock")
     try:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
-    except OSError:
+    except OSError as exc:
+        if required:
+            raise AtomicWriteError(f"cross-process lock directory unavailable: {target}") from exc
         yield
         return
     try:
@@ -104,27 +114,55 @@ def _cross_process_lock(target: Path):
             os.O_CREAT | os.O_RDWR,
             0o644,
         )
-    except OSError:
+    except OSError as exc:
+        if required:
+            raise AtomicWriteError(f"cross-process lock unavailable: {target}") from exc
         yield
         return
     locked = False
     try:
+        deadline = time.monotonic() + max(0.0, float(timeout_s)) if timeout_s is not None else None
         if os.name == "nt":
             try:
                 import msvcrt as _msvcrt
 
-                _msvcrt.locking(fd, _msvcrt.LK_LOCK, 1)
-                locked = True
+                # Windows locks a byte range from the current file pointer.
+                # Give a new sidecar one byte and always seek to its start.
+                if os.fstat(fd).st_size < 1:
+                    os.write(fd, b"\0")
+                while True:
+                    try:
+                        os.lseek(fd, 0, 0)
+                        mode = _msvcrt.LK_NBLCK if deadline is not None else _msvcrt.LK_LOCK
+                        _msvcrt.locking(fd, mode, 1)
+                        locked = True
+                        break
+                    except OSError:
+                        if deadline is None or time.monotonic() >= deadline:
+                            break
+                        time.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
             except OSError:
                 locked = False
         else:
             try:
                 import fcntl as _fcntl
 
-                _fcntl.flock(fd, _fcntl.LOCK_EX)
-                locked = True
+                while True:
+                    try:
+                        operation = _fcntl.LOCK_EX  # type: ignore[attr-defined]
+                        if deadline is not None:
+                            operation |= _fcntl.LOCK_NB  # type: ignore[attr-defined]
+                        _fcntl.flock(fd, operation)  # type: ignore[attr-defined]
+                        locked = True
+                        break
+                    except OSError:
+                        if deadline is None or time.monotonic() >= deadline:
+                            break
+                        time.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
             except (OSError, ImportError):
                 locked = False
+        if required and not locked:
+            raise AtomicWriteError(f"cross-process lock unavailable: {target}")
         yield
     finally:
         if locked:
@@ -140,7 +178,7 @@ def _cross_process_lock(target: Path):
                 else:
                     import fcntl as _fcntl
 
-                    _fcntl.flock(fd, _fcntl.LOCK_UN)
+                    _fcntl.flock(fd, _fcntl.LOCK_UN)  # type: ignore[attr-defined]
             except OSError:  # noqa: BLE001 — atomic write cleanup best-effort
                 pass
         with contextlib.suppress(OSError):
@@ -247,7 +285,7 @@ def atomic_write_bytes(
             # O_CREAT mode is masked by umask, so for a secret file force
             # the exact bits before writing — the temp (and the target it
             # is renamed onto) is thus never wider than requested.
-            if mode is not None:
+            if mode is not None and hasattr(os, "fchmod"):
                 with contextlib.suppress(OSError):
                     os.fchmod(fd, mode)
             # fd ownership transfers to fdopen context; if the open

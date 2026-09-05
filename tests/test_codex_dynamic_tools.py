@@ -10,8 +10,13 @@ import pytest
 
 from runtime.execution.codex_backend.dynamic_tools import CodexDynamicToolBroker
 from runtime.execution.codex_backend.types import ApprovalRequest
+from runtime.execution.suckers.builtins import _read_file
 from runtime.execution.suckers.registry import Skill, SkillRegistry
+from runtime.execution.suckers.write_skills import _write_text_file
+from runtime.execution.tool_engine import ToolExecutor
+from runtime.memory.journal import InMemoryJournal
 from runtime.safety.approval.approval_gate import AutoDenyProvider
+from runtime.safety.auth import TrustEngine
 
 
 def _agent(*names: str) -> SimpleNamespace:
@@ -398,3 +403,79 @@ async def test_selected_codex_plugin_is_loaded_on_demand_without_ambient_surface
     # turn selection withdraws the action from the next App Server catalog.
     revoked = _broker(tmp_path, registry, names=("base_read",), context={})
     assert "demo-plugin__hello" not in revoked.catalog.names
+
+
+@pytest.mark.asyncio
+async def test_read_before_write_evidence_survives_dynamic_tool_callbacks(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "calculator.py"
+    target.write_text("value = 'old'\n", encoding="utf-8")
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="read_file",
+            description="Read a file.",
+            affinity=["file", "read"],
+            trusted_source="skill://public/read_file",
+            handler=_read_file,
+        )
+    )
+    registry.register(
+        Skill(
+            name="write_text_file",
+            description="Write a file.",
+            affinity=["file", "write"],
+            trusted_source="skill://public/write_text_file",
+            handler=_write_text_file,
+        )
+    )
+    executor = ToolExecutor(
+        registry=registry,
+        immunity=TrustEngine(trusted_sources=["skill://public/*"]),
+        journal=InMemoryJournal(),
+    )
+    broker = CodexDynamicToolBroker(
+        SimpleNamespace(executor=executor),
+        _agent("read_file", "write_text_file"),
+        context={
+            "mode": "code",
+            "workspace_path": str(tmp_path),
+            "allowed_write_paths": ["calculator.py"],
+        },
+        goal="read and update calculator.py",
+        outer_thread_id="outer-thread",
+        outer_turn_id="outer-turn",
+        workspace=str(tmp_path),
+        tenant_id="tenant-a",
+        principal_id="actor-a",
+        approval_provider=AutoDenyProvider(),
+        is_interrupted=lambda: False,
+        server_auto_approve=True,
+    )
+    broker.bind_inner_scope(thread_id="inner-thread", turn_id="inner-turn")
+
+    blocked = await broker(
+        _request(
+            "write_text_file",
+            {"path": "calculator.py", "content": "value = 'blocked'\n", "overwrite": True},
+            call_id="write-before-read",
+        )
+    )
+    assert blocked["success"] is False
+    assert "must read_file" in blocked["contentItems"][0]["text"]
+
+    read = await broker(
+        _request("read_file", {"path": "calculator.py"}, call_id="read-current-content")
+    )
+    written = await broker(
+        _request(
+            "write_text_file",
+            {"path": "calculator.py", "content": "value = 'new'\n", "overwrite": True},
+            call_id="write-after-read",
+        )
+    )
+
+    assert read["success"] is True
+    assert written["success"] is True
+    assert target.read_text(encoding="utf-8") == "value = 'new'\n"

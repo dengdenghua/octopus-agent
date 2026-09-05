@@ -22,6 +22,12 @@ from __future__ import annotations
 # ``_check_absolute_cap`` / ``_record_delegation``) are kept visible here so a
 # monkeypatch is still observed at call time by the submodules that resolve
 # them lazily via ``delegation_skills``.
+from runtime.execution.subagents.candidate_patch import (
+    apply_candidate_patch,
+    inspect_candidate_patch,
+    reconcile_candidate_patch,
+)
+
 from ._delegation_skills_agent import (
     _call_agent,
 )
@@ -797,16 +803,75 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         ),
         replace=True,
     )
-    # 8 delegation/orchestration skills registered above (call_agent,
+
+    registry.register(
+        Skill(
+            name="inspect_candidate_patch",
+            summary="Inspect a host-exported isolated patch before application.",
+            description=(
+                "Inspect an isolated candidate patch previously returned by call_agent or "
+                "tournament. Pass only candidate_sha256 from the worktree receipt. The host "
+                "resolves the actual patch, baseline and project from its durable journal, "
+                "checks every path and exact before/after state, and returns an inspection_id "
+                "plus a bounded diff. This does not modify project files."
+            ),
+            affinity=["delegation", "candidate", "read", "inspect", "diff"],
+            cost_profile="low",
+            trusted_source="skill://public/inspect_candidate_patch",
+            handler=inspect_candidate_patch,
+        ),
+        replace=True,
+    )
+    registry.register(
+        Skill(
+            name="apply_candidate_patch",
+            summary="Apply an inspected candidate through the host transaction boundary.",
+            description=(
+                "Apply a candidate only after inspect_candidate_patch. Pass its opaque "
+                "inspection_id; never pass a filesystem path. The host revalidates the source, "
+                "takes all file leases, journals before effects, verifies exact output bytes, "
+                "and rolls back on failure. A candidate whose artifact contract failed is "
+                "blocked unless allow_invalid_contract=true is explicitly supplied after diff "
+                "review."
+            ),
+            affinity=["delegation", "candidate", "write", "dangerous"],
+            cost_profile="mid",
+            trusted_source="skill://public/apply_candidate_patch",
+            handler=apply_candidate_patch,
+        ),
+        replace=True,
+    )
+    registry.register(
+        Skill(
+            name="reconcile_candidate_patch",
+            summary="Reconcile an interrupted candidate patch transaction.",
+            description=(
+                "Reconcile a patch_apply_started operation after interruption or an uncertain "
+                "journal result. Pass only its host-issued operation_id. The host compares every "
+                "file with durable old/new fingerprints, settles a fully applied transaction, "
+                "restores known partial changes, and leaves externally changed files untouched."
+            ),
+            affinity=["delegation", "candidate", "write", "dangerous", "reconcile"],
+            cost_profile="mid",
+            trusted_source="skill://public/reconcile_candidate_patch",
+            handler=reconcile_candidate_patch,
+        ),
+        replace=True,
+    )
+    # 11 delegation/orchestration skills registered above (call_agent,
     # call_agent_parallel, call_agent_vote, run_orchestration,
-    # verdict_repair, tournament, run_pipeline, call_agent_graph).
+    # verdict_repair, tournament, run_pipeline, call_agent_graph, and the
+    # inspect/apply/reconcile candidate-patch transaction tools).
     # External CLI auto-detection is intentionally not exposed here.
-    return 8
+    return 11
 
 
 __all__ = [
     # entrypoint
     "register_delegation_skills",
+    "apply_candidate_patch",
+    "inspect_candidate_patch",
+    "reconcile_candidate_patch",
     # shared helpers
     "_DYNAMIC_SKILL_PACKS",
     "_VOTE_MAX",

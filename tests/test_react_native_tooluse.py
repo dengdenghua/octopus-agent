@@ -511,6 +511,42 @@ def test_native_mode_passes_tools_and_consumes_tool_calls() -> None:
     assert "已读取配置" in (result.final_answer or "")
 
 
+def test_native_specs_refresh_after_prompt_assembly_activation() -> None:
+    from runtime.core.cerebrum.react_loop import run_react_loop
+
+    router = _Router([("Final Answer: 已创建文档。", [])])
+    initial_spec = ToolSpec(name="query_capability", description="Inspect capabilities")
+    activated_spec = ToolSpec(
+        name="documents.create_docx",
+        description="Create a Word document",
+    )
+
+    with (
+        patch(
+            "runtime.core.cerebrum.react_native.native_tool_use_active",
+            return_value=True,
+        ),
+        patch(
+            "runtime.core.cerebrum.react_native.build_loop_tool_specs",
+            side_effect=[
+                [initial_spec],
+                [initial_spec, activated_spec],
+            ],
+        ),
+    ):
+        result = run_react_loop(
+            _Stack(router),
+            _intent("Use documents.create_docx to create acceptance.docx"),
+            agent=None,
+            max_iterations=2,
+        )
+
+    advertised_names = {getattr(spec, "name", "") for spec in (router.requests[0].tools or [])}
+    assert "documents.create_docx" in advertised_names
+    assert result is not None
+    assert result.final_answer == "已创建文档。"
+
+
 def test_native_mixed_text_and_tool_call_is_atomic_and_not_replayed_as_answer() -> None:
     from runtime.core.cerebrum.react_loop import stream_react_loop
 

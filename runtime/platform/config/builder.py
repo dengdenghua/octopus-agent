@@ -50,6 +50,7 @@ class StackProtocol(Protocol):
     runtime: GraphRuntime
     planner: Planner
     mcp_clients: list[Any]
+    plugin_hub: Any | None
 
     @property
     def is_llm_planner(self) -> bool: ...
@@ -69,6 +70,10 @@ class BuiltStack:
     runtime: GraphRuntime
     planner: Planner
     mcp_clients: list[Any] = field(default_factory=list)
+    # Host-owned PluginHub instance. The web composition layer binds this
+    # after constructing the hub so turn orchestration activates plugins in
+    # the same registry exposed by the operator API.
+    plugin_hub: Any | None = None
 
     @property
     def is_llm_planner(self) -> bool:

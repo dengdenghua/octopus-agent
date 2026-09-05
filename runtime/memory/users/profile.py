@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from runtime.memory.semantics import memory_data_notice
 from runtime.platform.process.utils import message_text as _message_text
 
 _MAX_MEMORY_CHARS = 500
@@ -80,18 +81,18 @@ def render_profile_memories(
     clean = merge_profile_memories([], [m for m in memories or [] if isinstance(m, str)])
     if not clean:
         return ""
-    lines = ["USER PROFILE MEMORY:"]
-    total = len(lines[0]) + 1
+    lines = ["USER PROFILE MEMORY:", memory_data_notice()]
+    total = len("\n".join(lines)) + 1
     for memory in clean[-max_memories:]:
         line = f"- {memory}"
         remaining = max_chars - total
-        if remaining <= 0:
+        if remaining < 4:
             break
         if len(line) > remaining:
             line = line[: max(0, remaining - 3)] + "..."
         lines.append(line)
         total += len(line) + 1
-    return "\n".join(lines)
+    return "\n".join(lines) if len(lines) > 2 else ""
 
 
 def _clean_memory_text(text: str) -> str:

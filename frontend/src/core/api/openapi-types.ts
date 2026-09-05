@@ -4236,6 +4236,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/collab/{thread_id}/collectors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Collaboration Collectors
+         * @description Cross-run collector operations view for long-lived projects.
+         */
+        get: operations["list_collaboration_collectors_api_collab__thread_id__collectors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/collectors/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive Collaboration Collectors
+         * @description Compact selected terminal collectors while retaining audit metadata.
+         */
+        post: operations["archive_collaboration_collectors_api_collab__thread_id__collectors_archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/collectors/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Collaboration Collectors
+         * @description Stop selected active collector generations across a long project.
+         */
+        post: operations["cancel_collaboration_collectors_api_collab__thread_id__collectors_cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/collectors/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Collaboration Collectors
+         * @description Atomically reserve and retry failed lanes across collaboration runs.
+         */
+        post: operations["retry_collaboration_collectors_api_collab__thread_id__collectors_retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/collab/{thread_id}/deliveries": {
         parameters: {
             query?: never;
@@ -4474,6 +4554,146 @@ export interface paths {
         get: operations["get_collaboration_run_api_collab__thread_id__runs__run_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/runs/{run_id}/collector": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Collaboration Collector
+         * @description Revision-aware long poll for durable child results.
+         */
+        get: operations["get_collaboration_collector_api_collab__thread_id__runs__run_id__collector_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/runs/{run_id}/collector/attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Collaboration Collector Attempts
+         * @description Append-only attempt history retained across member retries.
+         */
+        get: operations["get_collaboration_collector_attempts_api_collab__thread_id__runs__run_id__collector_attempts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/runs/{run_id}/collector/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Collaboration Collector
+         * @description Stop one collector generation; repeated calls are idempotent.
+         */
+        post: operations["cancel_collaboration_collector_api_collab__thread_id__runs__run_id__collector_cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/runs/{run_id}/collector/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Collaboration Collector
+         * @description Re-dispatch selected failed lanes through the durable cowork queue.
+         */
+        post: operations["retry_collaboration_collector_api_collab__thread_id__runs__run_id__collector_retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/runs/{run_id}/collector/steering": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Collaboration Collector Steering
+         * @description Ordered correction history for one collector generation.
+         */
+        get: operations["get_collaboration_collector_steering_api_collab__thread_id__runs__run_id__collector_steering_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/runs/{run_id}/collector/{child_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Collaboration Collector Child
+         * @description Stop exactly one active member while the rest of the group continues.
+         */
+        post: operations["cancel_collaboration_collector_child_api_collab__thread_id__runs__run_id__collector__child_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collab/{thread_id}/runs/{run_id}/collector/{child_id}/steer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Steer Collaboration Collector Child
+         * @description Persist a user correction for exactly one still-running member.
+         */
+        post: operations["steer_collaboration_collector_child_api_collab__thread_id__runs__run_id__collector__child_id__steer_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10800,6 +11020,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/plugin-hub/plugins/{name}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activate Plugin
+         * @description Load and start a discovered plugin in one transactional step.
+         */
+        post: operations["activate_plugin_api_plugin_hub_plugins__name__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/plugin-hub/plugins/{name}/config": {
         parameters: {
             query?: never;
@@ -12035,6 +12275,23 @@ export interface paths {
         post?: never;
         /** Remove Backend */
         delete: operations["remove_backend_api_remote_backends__backend_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/remote-backends/{backend_id}/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Backend Credentials */
+        put: operations["update_backend_credentials_api_remote_backends__backend_id__credentials_put"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -16250,6 +16507,44 @@ export interface components {
              */
             use_browser: boolean;
         };
+        /** CollectorBatchArchiveBody */
+        CollectorBatchArchiveBody: {
+            /**
+             * Reason
+             * @default collector archived by user
+             */
+            reason: string;
+            /** Run Ids */
+            run_ids: string[];
+        };
+        /** CollectorBatchCancelBody */
+        CollectorBatchCancelBody: {
+            /**
+             * Reason
+             * @default collaboration cancelled by user
+             */
+            reason: string;
+            /** Run Ids */
+            run_ids?: string[];
+        };
+        /** CollectorBatchRetryBody */
+        CollectorBatchRetryBody: {
+            /** Run Ids */
+            run_ids?: string[];
+        };
+        /** CollectorChildCancelBody */
+        CollectorChildCancelBody: {
+            /**
+             * Reason
+             * @default member cancelled by user
+             */
+            reason: string;
+        };
+        /** CollectorRetryBody */
+        CollectorRetryBody: {
+            /** Child Ids */
+            child_ids?: string[];
+        };
         /** ComfyCustomNodeAction */
         ComfyCustomNodeAction: {
             /** Node Id */
@@ -16874,15 +17169,27 @@ export interface components {
         /** DualHelixShadowRunBody */
         DualHelixShadowRunBody: {
             /**
+             * Automatic
+             * @default false
+             */
+            automatic: boolean;
+            /**
              * Candidate Id
              * @default
              */
             candidate_id: string;
+            /** Confidence */
+            confidence?: number | string | null;
             /**
              * Experiment Id
              * @default
              */
             experiment_id: string;
+            /**
+             * Failure Count
+             * @default 0
+             */
+            failure_count: number;
             /** Goal */
             goal: string;
             /** Primary Engine */
@@ -16892,6 +17199,11 @@ export interface components {
              * @default
              */
             primary_output: string;
+            /**
+             * Risk Level
+             * @default
+             */
+            risk_level: string;
             /**
              * Source Message Id
              * @default
@@ -18285,6 +18597,11 @@ export interface components {
             /** Thread Id */
             thread_id: string;
         };
+        /** SteeringBody */
+        SteeringBody: {
+            /** Text */
+            text: string;
+        };
         /** StopRecordingRequest */
         StopRecordingRequest: {
             /** Model Name */
@@ -18307,8 +18624,21 @@ export interface components {
             continue_session_id?: string | null;
             /** Extra Tools */
             extra_tools?: string[] | null;
+            /** Input Files */
+            input_files?: string[] | null;
+            /**
+             * Isolate
+             * @default false
+             */
+            isolate: boolean;
             /** Name */
             name?: string | null;
+            /** Output Files */
+            output_files?: string[] | null;
+            /** Output Schema */
+            output_schema?: {
+                [key: string]: unknown;
+            } | null;
             /** Parent Task Id */
             parent_task_id?: string | null;
             /** Prompt */
@@ -18317,6 +18647,11 @@ export interface components {
             requires_capabilities?: string[] | null;
             /** Run Id */
             run_id?: string | null;
+            /**
+             * Schema Max Retries
+             * @default 1
+             */
+            schema_max_retries: number;
             /**
              * Share History
              * @default true
@@ -27213,6 +27548,154 @@ export interface operations {
             };
         };
     };
+    list_collaboration_collectors_api_collab__thread_id__collectors_get: {
+        parameters: {
+            query?: {
+                retryable_only?: boolean;
+                include_archived?: boolean;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_collaboration_collectors_api_collab__thread_id__collectors_archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectorBatchArchiveBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_collaboration_collectors_api_collab__thread_id__collectors_cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectorBatchCancelBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_collaboration_collectors_api_collab__thread_id__collectors_retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectorBatchRetryBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_collaboration_deliveries_api_collab__thread_id__deliveries_get: {
         parameters: {
             query?: {
@@ -27687,6 +28170,269 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_collaboration_collector_api_collab__thread_id__runs__run_id__collector_get: {
+        parameters: {
+            query?: {
+                after_revision?: number;
+                wait_ms?: number;
+            };
+            header?: never;
+            path: {
+                thread_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_collaboration_collector_attempts_api_collab__thread_id__runs__run_id__collector_attempts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_collaboration_collector_api_collab__thread_id__runs__run_id__collector_cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectorBatchCancelBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_collaboration_collector_api_collab__thread_id__runs__run_id__collector_retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectorRetryBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_collaboration_collector_steering_api_collab__thread_id__runs__run_id__collector_steering_get: {
+        parameters: {
+            query?: {
+                child_id?: string;
+                generation?: number | null;
+                after_seq?: number;
+            };
+            header?: never;
+            path: {
+                thread_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_collaboration_collector_child_api_collab__thread_id__runs__run_id__collector__child_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                run_id: string;
+                child_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectorChildCancelBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    steer_collaboration_collector_child_api_collab__thread_id__runs__run_id__collector__child_id__steer_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                run_id: string;
+                child_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SteeringBody"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -39764,6 +40510,37 @@ export interface operations {
             };
         };
     };
+    activate_plugin_api_plugin_hub_plugins__name__activate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_config_api_plugin_hub_plugins__name__config_get: {
         parameters: {
             query?: never;
@@ -42098,6 +42875,45 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_backend_credentials_api_remote_backends__backend_id__credentials_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                backend_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                } | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

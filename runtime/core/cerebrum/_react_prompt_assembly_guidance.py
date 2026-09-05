@@ -756,15 +756,25 @@ def _assemble_tool_sections(state: _AssemblyState) -> None:
 
                     from runtime.core.cerebrum.plugin_auto_load import (
                         auto_load_pinned_plugins,
+                        select_plugin_hub_activations,
                     )
 
-                    legacy_plugins = tuple(
-                        plugin_id
-                        for plugin_id in _capability_activation.pinned_plugins
-                        if plugin_id.lower() not in _codex_handled_plugins
+                    # The app owns a configured PluginHub whose registrations
+                    # target this stack's SkillRegistry. Using the legacy
+                    # process singleton here can create an unconfigured second
+                    # hub, making logs report activation while the turn's
+                    # executor receives no tools.
+                    runtime_plugin_hub = getattr(state.stack, "plugin_hub", None)
+                    plugin_hub_plugins = select_plugin_hub_activations(
+                        _capability_activation.pinned_plugins,
+                        codex_handled=_codex_handled_plugins,
+                        hub=runtime_plugin_hub,
                     )
-                    if legacy_plugins:
-                        plugin_report = auto_load_pinned_plugins(legacy_plugins)
+                    if plugin_hub_plugins:
+                        plugin_report = auto_load_pinned_plugins(
+                            plugin_hub_plugins,
+                            hub=runtime_plugin_hub,
+                        )
                         obs = plugin_report.render_observation()
                         if obs:
                             state.volatile_parts.append(

@@ -222,6 +222,8 @@ tier: "standard"
 | `realtime_codex_backend.py` | Realtime driver for the isolated Codex App Server execution backend. |
 | `realtime_echo.py` | Echo runtime — reference :class:`RealtimeRuntime` implementation. |
 | `realtime_event_bridge.py` | React-event → ``item/*`` bridge state for the realtime runtime. |
+| `realtime_execution.py` | Realtime adapters for the engine-neutral execution supervisor. |
+| `realtime_execution_context.py` | Project a validated realtime turn into the shared engine request. |
 | `realtime_frame_bounds.py` | Last-resort frame bounding for realtime WebSocket notifications. |
 | `realtime_gateway.py` | Realtime gateway — JSON-RPC 2.0 over WebSocket. |
 | `realtime_interrupt_control.py` | Authoritative cross-worker interrupt control for realtime turns. |
@@ -1101,7 +1103,7 @@ tier: "standard"
 | class | `class TaskInterventionBody(BaseModel)` |  |
 | class | `class FromGroupBody(BaseModel)` |  |
 | class | `class DetachFromGroupBody(BaseModel)` |  |
-| func | `def create_projects_router(store, group_store, collaboration_store, team_rooms_router, thread_store, workspace_root, model_router, subagent_runner, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` | Create the ``/api/projects/*`` router. |
+| func | `def create_projects_router(store, group_store, collaboration_store, team_rooms_router, thread_store, workspace_root, logs_root, model_router, subagent_runner, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` | Create the ``/api/projects/*`` router. |
 
 ### `prompts_router.py`
 
@@ -1133,6 +1135,24 @@ tier: "standard"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | class | `class EchoRuntime` | Single-process runtime with file-backed event logs. |
+
+### `realtime_execution.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| func | `def is_coding_task(intent)` | Use explicit work modes and parsed intent, not an extra model hop. |
+| func | `def codex_readiness_for_turn(runtime, turn, agent)` |  |
+| func | `async def select_turn_execution(runtime, turn, agent, intent, project_command, group_fanout, topology_id, codex_partner, reflection_fast_path, coordinated)` |  |
+| class | `class TurnExecutionRequest` |  |
+| class | `class NativeExecutionAdapter` |  |
+| class | `class CodexExecutionAdapter` |  |
+| func | `def bind_turn_execution(runtime, turn, log, emitter, provider, agent, route, topology_id)` | Bind an authenticated turn and persist every invocation before dispatch. |
+
+### `realtime_execution_context.py`
+
+| Kind | Symbol | Doc |
+| --- | --- | --- |
+| class | `class RealtimeExecutionContext` | One task and Session per bound turn; no additional lifecycle store. |
 
 ### `realtime_gateway.py`
 
@@ -1270,7 +1290,7 @@ tier: "standard"
 | Kind | Symbol | Doc |
 | --- | --- | --- |
 | class | `class SubagentDispatchRequest(BaseModel)` |  |
-| func | `def create_subagents_router(registry, thread_store, workspace_root, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
+| func | `def create_subagents_router(registry, thread_store, workspace_root, logs_root, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience)` |  |
 
 ### `system_router.py`
 
@@ -1354,7 +1374,7 @@ tier: "standard"
 
 | Kind | Symbol | Doc |
 | --- | --- | --- |
-| func | `def create_team_tasks_router(state_path, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, reset_callback, team_event_broadcaster, task_projection, task_delete_projection, runner_factory, room_membership_resolver, room_participant_resolver, max_concurrent_runs)` | Create ``/api/team-tasks/*`` routes. |
+| func | `def create_team_tasks_router(state_path, workspace_root, logs_root, identity_store, require_auth, jwt_secret, jwt_issuer, jwt_audience, reset_callback, team_event_broadcaster, task_projection, task_delete_projection, runner_factory, room_membership_resolver, room_participant_resolver, max_concurrent_runs)` | Create ``/api/team-tasks/*`` routes. |
 
 ### `tentacle_join_router.py`
 
@@ -1482,7 +1502,7 @@ tier: "standard"
 
 ## Who imports this
 
-**19** file(s) reference this package:
+**20** file(s) reference this package:
 
 - **`runtime/_cli_commands.py/`** · 1 file(s)
   - `runtime/_cli_commands.py`
@@ -1492,6 +1512,8 @@ tier: "standard"
   - `runtime/evals/multi_agent_benchmark.py`
 - **`runtime/kernel/`** · 1 file(s)
   - `runtime/kernel/kernel.py`
+- **`runtime/memory/`** · 1 file(s)
+  - `runtime/memory/cowork/runtime.py`
 - **`runtime/platform/`** · 14 file(s)
   - `runtime/platform/plugins/bundled/comfyui_bridge/__init__.py`
   - `runtime/platform/plugins/cloud_expert_store.py`

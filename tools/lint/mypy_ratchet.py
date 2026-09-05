@@ -32,6 +32,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _BASELINE_PATH = REPO_ROOT / "tools" / "lint" / "mypy_baseline.txt"
+_MYPY_PLATFORM = "linux"
 
 # The packages under the ratchet. Widen as typing coverage grows — a
 # newly-added path just contributes its current errors to the baseline.
@@ -55,8 +56,21 @@ _ERROR_RE = re.compile(r"^(?P<path>[^:]+):\d+: error: (?P<msg>.*?)(?:  \[(?P<cod
 
 
 def _run_mypy() -> tuple[int, str]:
+    # The committed baseline was produced against Linux, while mypy changes
+    # stdlib availability based on the machine running the check. Pinning the
+    # target keeps the ratchet deterministic on Windows and macOS developers'
+    # machines; platform-specific runtime tests cover their guarded branches.
     proc = subprocess.run(
-        [sys.executable, "-m", "mypy", *_CHECK_PATHS, "--no-error-summary", "--no-color-output"],
+        [
+            sys.executable,
+            "-m",
+            "mypy",
+            *_CHECK_PATHS,
+            "--platform",
+            _MYPY_PLATFORM,
+            "--no-error-summary",
+            "--no-color-output",
+        ],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -138,15 +152,15 @@ def main() -> int:
     fixed = baseline - current  # in baseline but gone now — good, ratchet down
 
     if fixed:
-        print(f"✓ {sum(fixed.values())} baseline error(s) fixed — run --write-baseline to lock in:")
+        print(f"OK: {sum(fixed.values())} baseline error(s) fixed; update the baseline to lock in:")
         for key in sorted(set(fixed.elements()))[:10]:
             print(_fmt(key))
         if len(set(fixed.elements())) > 10:
-            print(f"  … and {len(set(fixed.elements())) - 10} more")
+            print(f"  ... and {len(set(fixed.elements())) - 10} more")
         print()
 
     if new:
-        print(f"✗ {sum(new.values())} NEW mypy error(s) on checked packages:")
+        print(f"ERROR: {sum(new.values())} NEW mypy error(s) on checked packages:")
         for key in sorted(new.elements()):
             print(_fmt(key))
         print(
@@ -156,7 +170,7 @@ def main() -> int:
         return 1
 
     print(
-        f"OK · no new mypy errors ({sum(baseline.values())} baseline, {sum(current.values())} now)"
+        f"OK - no new mypy errors ({sum(baseline.values())} baseline, {sum(current.values())} now)"
     )
     return 0
 

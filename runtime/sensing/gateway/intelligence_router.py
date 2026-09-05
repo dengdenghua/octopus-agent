@@ -591,6 +591,7 @@ def _build_report(
 
 def _remember_report(report: dict[str, Any]) -> bool:
     try:
+        from runtime.memory.semantics import MemoryAuthor
         from runtime.memory.users.user_store import add_fact
 
         fact = add_fact(
@@ -599,6 +600,7 @@ def _remember_report(report: dict[str, Any]) -> bool:
             source="intelligence",
             scope="global",
             confidence=0.74,
+            author=MemoryAuthor.MODEL,
         )
         return fact is not None
     except (OSError, TypeError, ValueError):

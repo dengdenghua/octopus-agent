@@ -503,10 +503,12 @@ def test_native_codex_native_handoff_through_real_bridge_and_executor(tmp_path, 
         )
         assert result["success"], result
         trace.append("octopus:verify")
+        parent = current_session()
+        recorder = parent.metadata["_execution_handoff_recorder"]
+        assert [row["phase"] for row in recorder.read()] == ["assigned", "accepted"]
         namespace = {}
         exec((tmp_path / "code.py").read_text(encoding="utf-8"), namespace)
         assert namespace["add"](2, 3) == 5
-        parent = current_session()
         assert acquire_file_write_lease(
             parent, tmp_path / "code.py", owner=current_execution_request().task.task_id
         ).reentrant

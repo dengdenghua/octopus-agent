@@ -37,7 +37,7 @@ runtime.execution.all_skills · unified skill catalog.
 | `agnes-video-generate/scripts/agnes_video_generate.py` | AI video generation skill (async) — dual-provider (Volcano / Agnes). |
 | `agnes-video-poll/scripts/agnes_video_poll.py` | Standalone skill entry for polling an Agnes video task. |
 | `api-doc-gen/scripts/generate_api_doc.py` | Generate OpenAPI 3.0 spec from source code route definitions. |
-| `auto-hypothesis-test/scripts/statistical_test_suite.py` | statistical_test_suite.py — 根据数据自动选择统计检验并输出通俗解读 |
+| `auto-hypothesis-test/scripts/statistical_test_suite.py` | — |
 | `auto-stat-test/scripts/statistical_test_suite.py` | statistical_test_suite.py — 根据数据自动选择统计检验并输出通俗解读 |
 | `cn-finance-data/scripts/api_client.py` | Tushare API 客户端 |
 | `code-mentor/scripts/analyze_code.py` | Code Analyzer - Static analysis tool for code review |
@@ -145,28 +145,6 @@ runtime.execution.all_skills · unified skill catalog.
 | func | `def detect_framework(source_dir)` |  |
 | func | `def scan_and_extract(source_dir, framework)` |  |
 | func | `def to_yaml(obj, indent)` | Minimal YAML serializer sufficient for OpenAPI specs. |
-| func | `def main()` |  |
-
-### `auto-hypothesis-test/scripts/statistical_test_suite.py`
-
-| Kind | Symbol | Doc |
-| --- | --- | --- |
-| func | `def load_data(path)` |  |
-| func | `def is_categorical(series, max_unique_abs, max_unique_ratio)` |  |
-| func | `def check_normality(data, alpha)` |  |
-| func | `def check_equal_variance(groups, alpha)` |  |
-| func | `def round_p(p)` |  |
-| func | `def format_p_text(p)` |  |
-| func | `def significance_label(p)` |  |
-| func | `def run_independent_ttest(groups, group_names, alpha)` |  |
-| func | `def run_mann_whitney(groups, group_names)` |  |
-| func | `def run_one_way_anova(groups, group_names)` |  |
-| func | `def run_kruskal_wallis(groups, group_names)` |  |
-| func | `def run_chi_square(df, col1, col2)` |  |
-| func | `def run_paired_ttest(d1, d2, name1, name2)` |  |
-| func | `def run_wilcoxon(d1, d2, name1, name2)` |  |
-| func | `def interpret(result, alpha)` |  |
-| func | `def auto_select_and_run(df, group_col, value_col, col1, col2, paired, force_test, alpha)` |  |
 | func | `def main()` |  |
 
 ### `auto-stat-test/scripts/statistical_test_suite.py`

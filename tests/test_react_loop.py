@@ -2614,6 +2614,8 @@ def test_explicit_read_only_turn_injects_non_mutation_contract() -> None:
     assert _explicit_read_only_goal("读取两个项目文件，不修改文件")
     assert _explicit_read_only_goal("Research this read-only; do not create files")
     assert not _explicit_read_only_goal("Implement and test the coding agent UI")
+    assert not _explicit_read_only_goal("Create acceptance.docx and do not write any other file.")
+    assert not _explicit_read_only_goal("创建验收报告.docx，不要修改其他文件")
 
     router = _CapturingRouter(["Final Answer: read-only report complete"])
     intent = _intent("只读调研 coding agent，严禁修改任何文件")
@@ -8397,8 +8399,13 @@ def test_parallel_react_reads_keep_selected_workspace_scope(tmp_path) -> None:
     observation, results = dispatched
     assert len(results) == 2
     assert all(result["ok"] is True for result in results)
-    assert str((tmp_path / "a.txt").resolve()) in observation
-    assert str((tmp_path / "b.txt").resolve()) in observation
+    observed_paths = [
+        json.loads(str(result["observation"]).rsplit("\n", 1)[-1])["path"] for result in results
+    ]
+    assert observed_paths == [
+        str((tmp_path / "a.txt").resolve()),
+        str((tmp_path / "b.txt").resolve()),
+    ]
     assert "not found" not in observation
     # ``react`` describes the model protocol, not the filesystem permission
     # tier. Tool dispatch must neither mutate nor demote the bound code scope.
@@ -8424,7 +8431,9 @@ def test_parallel_react_reads_keep_selected_workspace_scope(tmp_path) -> None:
     serial_observation, serial_results = serial_dispatched
     assert len(serial_results) == 1
     assert serial_results[0]["ok"] is True
-    assert str((tmp_path / "a.txt").resolve()) in serial_observation
+    serial_payload = json.loads(str(serial_results[0]["observation"]).rsplit("\n", 1)[-1])
+    assert serial_payload["path"] == str((tmp_path / "a.txt").resolve())
+    assert "not found" not in serial_observation
     assert session.metadata["mode"] == "code"
 
 
@@ -8443,7 +8452,7 @@ def test_write_tool_in_parallel_block_forces_serial_dispatch(tmp_path) -> None:
             [
                 "Thought: read+write\nAction:\n"
                 '    read_file({"path": "a"})\n'
-                f'    write_text_file({{"path": "{write_path}", "content": "x"}})\n\n'
+                f'    write_text_file({{"path": {json.dumps(write_path)}, "content": "x"}})\n\n'
                 "Observation:",
                 "Final Answer: done",
             ]

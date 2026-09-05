@@ -32,6 +32,15 @@ _SCOPED_ARTIFACT_WRITE_TOOLS = frozenset(
         "edit_text_file",
         "edit_file",
         "multi_edit_file",
+        "documents.create_docx",
+        "documents.replace_text",
+        "presentations.create_pptx",
+        "presentations.replace_text",
+        "spreadsheets.create_xlsx",
+        "spreadsheets.update_cells",
+        "pdf.create",
+        "pdf.merge",
+        "pdf.split",
     }
 )
 _VERIFICATION_PROBE_ONLY_RE = re.compile(

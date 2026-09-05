@@ -128,6 +128,7 @@ def team_execute_for_group(
         from runtime.execution.subagents import call_subagent
 
         project_context = dict(execution_context or {})
+        host_parent = project_context.pop("_host_execution_session", None)
         thread_id = str(project_context.get("thread_id") or "")
         actor = str(project_context.get("owner_id") or project_context.get("actor") or "")
         tenant_id = str(project_context.get("tenant_id") or "")
@@ -148,7 +149,10 @@ def team_execute_for_group(
         )
         if isinstance(workspace_path, str) and workspace_path:
             runtime_session_metadata.setdefault("workspace_path", workspace_path)
+            runtime_session_metadata.setdefault("mode", "code")
         dispatch_context: dict[str, Any] = dict(role_context or {})
+        dispatch_context.pop("_host_execution_session", None)
+        dispatch_context.pop("_host_cancellation_token", None)
         dispatch_context.update(
             {
                 "source": "projectos_team_task",
@@ -165,19 +169,41 @@ def team_execute_for_group(
             dispatch_context["tenant_id"] = tenant_id
         if isinstance(workspace_path, str) and workspace_path:
             dispatch_context["workspace_path"] = workspace_path
-        # Group fan-out and TeamRunner execute members on worker threads where
-        # the parent ContextVar is intentionally absent.  Carry the authenticated
-        # Project OS principal as an explicit Session so a production Coder can
-        # pass the role runner's trusted-principal gate without treating ordinary
-        # context identity fields as authorization.
+        # Group fan-out and TeamRunner use worker threads. Carry the host task
+        # explicitly so every member inherits its permission ceiling, shared
+        # lease tables and absolute deadline after ContextVars stop propagating.
+        from runtime.execution.host_boundary import (
+            create_host_execution_boundary,
+            inherit_host_execution_session,
+        )
+        from runtime.execution.subagents.execution_context import parent_execution_task
         from runtime.platform.process.session import Session
 
-        project_session = Session(
-            actor=actor or None,
-            thread_id=thread_id or None,
-            conversation_id=thread_id or None,
-            metadata=dict(runtime_session_metadata),
-        )
+        if actor and not tenant_id:
+            tenant_id = f"legacy:{actor}"
+            runtime_session_metadata["tenant_id"] = tenant_id
+            dispatch_context["tenant_id"] = tenant_id
+        project_thread_id = thread_id or f"projectos-team-{uuid4().hex}"
+        if isinstance(host_parent, Session) and parent_execution_task(host_parent) is not None:
+            project_session = inherit_host_execution_session(
+                host_parent,
+                thread_id=project_thread_id,
+                actor_id=actor or None,
+                tenant_id=tenant_id or None,
+                metadata=runtime_session_metadata,
+            )
+        else:
+            if workspace_path:
+                runtime_session_metadata.setdefault("mode", "code")
+            project_session = create_host_execution_boundary(
+                task_id=f"projectos-team-{task_id or uuid4().hex}",
+                thread_id=project_thread_id,
+                goal=prompt,
+                timeout_s=float(timeout_s),
+                actor_id=actor or None,
+                tenant_id=tenant_id or None,
+                metadata=runtime_session_metadata,
+            ).session
         call_kwargs: dict[str, Any] = {
             "context": dispatch_context,
             "session": project_session,
@@ -206,6 +232,32 @@ def team_execute_for_group(
         if milestone_goal:
             prompt = f"Milestone: {milestone_goal}\nTask: {task.goal}"
         execution_context = {**context, "task_id": task.id}
+        from runtime.execution.host_boundary import create_host_execution_boundary
+        from runtime.execution.subagents.execution_context import parent_execution_task
+        from runtime.platform.process.session import current_session
+
+        parent = current_session()
+        if parent is None or parent_execution_task(parent) is None:
+            actor = str(context.get("owner_id") or context.get("actor") or "")
+            tenant_id = str(context.get("tenant_id") or "")
+            if actor and not tenant_id:
+                tenant_id = f"legacy:{actor}"
+            thread_id = str(context.get("thread_id") or "") or f"projectos-{uuid4().hex}"
+            raw_metadata = context.get("runtime_session_metadata")
+            metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
+            if context.get("workspace_path"):
+                metadata.setdefault("mode", "code")
+                metadata.setdefault("workspace_path", str(context["workspace_path"]))
+            parent = create_host_execution_boundary(
+                task_id=f"projectos-team-{task.id}-{uuid4().hex}",
+                thread_id=thread_id,
+                goal=prompt,
+                timeout_s=900.0,
+                actor_id=actor or None,
+                tenant_id=tenant_id or None,
+                metadata=metadata,
+            ).session
+        execution_context["_host_execution_session"] = parent
         if task.team_mode == "swarm":
             return _run_swarm(prompt, execution_context)
         return _run_cluster(task, prompt, execution_context)

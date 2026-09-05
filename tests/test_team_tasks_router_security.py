@@ -122,6 +122,9 @@ def _build_app(
     tmp_path: Path,
     runner_factory=None,
     max_concurrent_runs: int = 16,
+    *,
+    workspace_root: Path | None = None,
+    logs_root: Path | None = None,
 ) -> tuple[TestClient, IdentityStore, dict[str, str]]:
     """Build app with require_auth=True + 2 known identities (alice, bob).
 
@@ -150,6 +153,8 @@ def _build_app(
 
     tasks_router = create_team_tasks_router(
         state_path=tmp_path / "tasks.json",
+        workspace_root=workspace_root,
+        logs_root=logs_root,
         identity_store=store,
         require_auth=True,
         runner_factory=runner_factory,
@@ -160,6 +165,108 @@ def _build_app(
     )
     app.include_router(tasks_router)
     return TestClient(app), store, keys
+
+
+def test_authenticated_team_run_uses_server_owned_execution_boundary(
+    tmp_path: Path,
+) -> None:
+    from runtime.execution.artifact_contracts import HandoffRecorder
+    from runtime.execution.request import current_execution_request
+    from runtime.platform.process.session import current_session
+    from runtime.safety.approval.cancellation import current_cancellation_token
+
+    captured: dict[str, Any] = {}
+
+    class BoundaryRunner:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def run(
+            self,
+            topology: Any,
+            task: str,
+            *,
+            context: dict[str, Any] | None = None,
+        ) -> TeamRunResult:
+            captured["session"] = current_session()
+            captured["request"] = current_execution_request()
+            captured["cancelled"] = current_cancellation_token().is_cancelled
+            role, spec = next(iter(topology.agents.items()))
+            return TeamRunResult(
+                topology_name=topology.name,
+                topology_fingerprint=topology.fingerprint,
+                task_bucket=topology.task_bucket,
+                success=True,
+                final_output="boundary ok",
+                role_outputs=[
+                    RoleOutput(
+                        role=role,
+                        agent_id=spec.agent_id,
+                        output="boundary ok",
+                        duration_ms=1.0,
+                    )
+                ],
+            )
+
+    managed_root = tmp_path / "managed-workspaces"
+    logs_root = tmp_path / "thread-logs"
+    client, _, keys = _build_app(
+        tmp_path,
+        BoundaryRunner,
+        workspace_root=managed_root,
+        logs_root=logs_root,
+    )
+    _create_room(client, keys, "room-boundary", owner="alice")
+    created = client.post(
+        "/api/team-tasks",
+        json={
+            "room_id": "room-boundary",
+            "title": "host boundary",
+            "assignees": [{"kind": "agent", "ref": "planner"}],
+            "metadata": {
+                "workspace_path": "C:\\\\",
+                "_execution_task": {"task_id": "forged"},
+                "_file_write_leases": {"C:\\\\": "mallory"},
+            },
+        },
+        headers=_auth_header(keys["alice"]),
+    )
+    assert created.status_code == 200, created.json()
+    task_id = created.json()["id"]
+    started = client.post(
+        f"/api/team-tasks/{task_id}/run",
+        headers=_auth_header(keys["alice"]),
+    )
+    assert started.status_code == 200, started.json()
+
+    deadline = time.monotonic() + 3.0
+    status = ""
+    while time.monotonic() < deadline:
+        status = client.get(
+            f"/api/team-tasks/{task_id}",
+            headers=_auth_header(keys["alice"]),
+        ).json()["status"]
+        if status == "done":
+            break
+        time.sleep(0.02)
+    assert status == "done"
+
+    session = captured["session"]
+    request = captured["request"]
+    host_task = session.metadata["_execution_task"]
+    assert request.task is host_task
+    assert host_task.task_id.startswith("team-run-")
+    assert host_task.thread_id == f"team-{task_id}"
+    assert host_task.actor_id == "alice"
+    assert host_task.tenant_id == "tenant-acme"
+    assert host_task.resources.deadline is not None
+    assert host_task.permissions.mode == "team"
+    assert session.metadata["_file_write_leases"] == {}
+    assert isinstance(session.metadata["_execution_handoff_recorder"], HandoffRecorder)
+    workspace = Path(session.metadata["workspace_path"])
+    assert workspace.is_relative_to(managed_root.resolve())
+    assert workspace != Path("C:\\\\")
+    assert captured["cancelled"] is False
 
 
 def _auth_header(api_key: str) -> dict[str, str]:

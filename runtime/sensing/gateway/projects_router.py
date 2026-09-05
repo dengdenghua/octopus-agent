@@ -7,7 +7,10 @@ router is available, else deterministic stubs so the endpoints always work.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager, nullcontext
 from typing import Any
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
@@ -136,6 +139,7 @@ def create_projects_router(
     team_rooms_router: Any = None,
     thread_store: Any = None,
     workspace_root: Any = None,
+    logs_root: Any = None,
     model_router: Any = None,
     subagent_runner: Any = None,
     identity_store: Any = None,
@@ -266,6 +270,75 @@ def create_projects_router(
                 409,
                 "project execution requires a verified managed thread workspace",
             ) from exc
+
+    @contextmanager
+    def _thread_execution_scope(
+        request: Request,
+        *,
+        thread_id: str,
+        goal: str,
+    ) -> Iterator[None]:
+        """Bind one HTTP project action to the unified host task boundary."""
+
+        principal = _principal(request)
+        resolver = _execution_context_resolver(principal)
+        resolved = resolver(thread_id) if resolver is not None else {}
+        raw_metadata = resolved.get("runtime_session_metadata")
+        metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
+        workspace = resolved.get("workspace_path")
+        if isinstance(workspace, str) and workspace:
+            metadata.update(mode="code", workspace_path=workspace)
+        metadata["source"] = "projectos_http"
+
+        execution_thread_id = thread_id or f"projectos-{uuid4().hex}"
+        execution_task_id = f"projectos-http-{uuid4().hex}"
+        recorder = None
+        if logs_root is not None:
+            from runtime.execution.artifact_contracts import HandoffRecorder
+            from runtime.memory.threads.event_log import EventLog, thread_log_path
+
+            log = EventLog(thread_log_path(logs_root, execution_thread_id))
+
+            def read_handoffs() -> tuple[dict[str, Any], ...]:
+                return tuple(
+                    dict(event.payload)
+                    for event in log.iter_events()
+                    if event.event == "execution_handoff" and event.thread_id == execution_thread_id
+                )
+
+            def write_handoff(receipt: dict[str, Any]) -> None:
+                log.execution_handoff(execution_thread_id, execution_task_id, receipt)
+
+            recorder = HandoffRecorder(write_handoff, read_handoffs)
+
+        from runtime.execution.host_boundary import create_host_execution_boundary
+        from runtime.execution.request import execution_request_scope
+        from runtime.platform.process.session import session_scope
+
+        boundary = create_host_execution_boundary(
+            task_id=execution_task_id,
+            thread_id=execution_thread_id,
+            goal=goal,
+            timeout_s=900.0,
+            actor_id=(principal.actor_id if principal is not None else None),
+            tenant_id=(principal.tenant_id if principal is not None else None),
+            metadata=metadata,
+            handoff_recorder=recorder,
+        )
+        with execution_request_scope(boundary.request), session_scope(boundary.session):
+            yield
+
+    def _project_execution_scope(request: Request, project_id: str) -> Any:
+        scoped = _scoped_store(request)
+        project = scoped.get_project(project_id)
+        if project is None:
+            raise HTTPException(404, "project not found")
+        thread_id = scoped.thread_for_project(project_id) or ""
+        return _thread_execution_scope(
+            request,
+            thread_id=thread_id,
+            goal=project.goal,
+        )
 
     def _auth_dep(request: Request) -> None:
         _principal(request)
@@ -705,20 +778,26 @@ def create_projects_router(
             resolver = _execution_context_resolver(principal)
             if resolver is not None:
                 hooks["resolve_thread_context"] = resolver
-            result = run_project_from_group(
-                _scoped_store(request),
-                _group_store(),
-                thread_id,
-                name=body.name,
-                goal=body.goal,
-                hooks=hooks,
-                run=body.run,
-                max_ticks=body.max_ticks,
-                subagent_runner=subagent_runner,
-                owner_id=principal.actor_id if principal is not None else "",
-                tenant_id=principal.tenant_id if principal is not None else "",
-                reuse_active=True,
+            execution_scope = (
+                _thread_execution_scope(request, thread_id=thread_id, goal=body.goal)
+                if body.run
+                else nullcontext()
             )
+            with execution_scope:
+                result = run_project_from_group(
+                    _scoped_store(request),
+                    _group_store(),
+                    thread_id,
+                    name=body.name,
+                    goal=body.goal,
+                    hooks=hooks,
+                    run=body.run,
+                    max_ticks=body.max_ticks,
+                    subagent_runner=subagent_runner,
+                    owner_id=principal.actor_id if principal is not None else "",
+                    tenant_id=principal.tenant_id if principal is not None else "",
+                    reuse_active=True,
+                )
             if result.get("recovery_pending"):
                 raise HTTPException(409, result.get("recovery") or result)
             # `run_project_from_group` only returns after `engine.run` has
@@ -884,7 +963,8 @@ def create_projects_router(
         _project_or_404(request, project_id)
         _require_execution_context(request, project_id)
         try:
-            result = _engine(_principal(request)).tick(project_id)
+            with _project_execution_scope(request, project_id):
+                result = _engine(_principal(request)).tick(project_id)
             thread_project = _scoped_store(request).thread_for_project(project_id)
             _project_to_collaboration(request, project_id, thread_id=thread_project or "")
             return result
@@ -897,7 +977,11 @@ def create_projects_router(
         _project_or_404(request, project_id)
         _require_execution_context(request, project_id)
         try:
-            result = _engine(_principal(request)).run(project_id, max_ticks=body.max_ticks)
+            with _project_execution_scope(request, project_id):
+                result = _engine(_principal(request)).run(
+                    project_id,
+                    max_ticks=body.max_ticks,
+                )
             thread_project = _scoped_store(request).thread_for_project(project_id)
             _project_to_collaboration(request, project_id, thread_id=thread_project or "")
             return result
@@ -923,7 +1007,8 @@ def create_projects_router(
         if body.run:
             _require_execution_context(request, project_id)
             try:
-                run_result = engine.run(project_id, max_ticks=body.max_ticks)
+                with _project_execution_scope(request, project_id):
+                    run_result = engine.run(project_id, max_ticks=body.max_ticks)
             except ValueError as exc:
                 raise _bad_request(exc) from exc
             thread_project = _scoped_store(request).thread_for_project(project_id)
@@ -974,7 +1059,8 @@ def create_projects_router(
         if body.run:
             _require_execution_context(request, project_id)
             try:
-                run_result = engine.run(project_id, max_ticks=body.max_ticks)
+                with _project_execution_scope(request, project_id):
+                    run_result = engine.run(project_id, max_ticks=body.max_ticks)
             except ValueError as exc:
                 raise _bad_request(exc) from exc
             thread_project = _scoped_store(request).thread_for_project(project_id)

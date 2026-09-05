@@ -207,6 +207,17 @@ async def _drive_team_topology(
     loop = asyncio.get_running_loop()
     cancel_source = CancellationSource()
 
+    # ``asyncio.to_thread`` copies the caller's context in current Python,
+    # but keeping the host boundary explicit here protects this path from
+    # alternative thread executors and makes the authority handoff auditable.
+    # The producer may enrich ordinary orchestration metadata; it must retain
+    # the exact immutable task, permission ceiling, deadline and handoff log.
+    from runtime.execution.subagents.execution_context import parent_execution_task
+    from runtime.platform.process.session import current_session
+
+    parent_session = current_session()
+    parent_task = parent_execution_task(parent_session)
+
     def _push(event: dict[str, Any]) -> None:
         # Producer side: marshal events back to the asyncio loop.
         # Use ``run_coroutine_threadsafe(...).result()`` so the
@@ -232,23 +243,88 @@ async def _drive_team_topology(
 
     # ── PHASE 3 · producer thread definition ────────────────────
     def producer() -> TeamRunResult:
+        from pathlib import Path
+
+        from runtime.execution.artifact_contracts import HandoffRecorder
+        from runtime.execution.host_boundary import (
+            create_host_execution_boundary,
+            inherit_host_execution_session,
+        )
+        from runtime.execution.request import ExecutionRequest, execution_request_scope
+        from runtime.execution.tool_engine.session_metadata import project_tool_session_metadata
         from runtime.memory.journal.journal_context import journal_context
-        from runtime.platform.process.session import Session, session_scope
+        from runtime.platform.process.session import session_scope
 
         session_metadata = dict(intent.user_context or {})
         params = getattr(turn, "params", None)
         actor = str(getattr(params, "owner_actor_id", None) or "").strip() or None
-        tenant = str(getattr(params, "tenant_id", None) or "").strip()
-        if tenant:
-            session_metadata["tenant_id"] = tenant
-        turn_session = Session(
-            actor=actor,
-            agent=None,
-            thread_id=thread_id,
-            conversation_id=thread_id,
-            turn_id=turn.id,
-            metadata=session_metadata,
-        )
+        tenant = str(getattr(params, "tenant_id", None) or "").strip() or None
+        if bool(actor) != bool(tenant):
+            raise ValueError("authenticated team execution principal is incomplete")
+
+        if parent_session is not None and parent_task is not None:
+            # Do not merge client/model context back into the trusted Session.
+            # TeamRunner receives it below as ordinary prompt context while the
+            # subagent bridge inherits work policy from this host Session.
+            turn_session = inherit_host_execution_session(
+                parent_session,
+                thread_id=thread_id,
+                actor_id=actor,
+                tenant_id=tenant,
+                metadata={
+                    "source": "realtime_team_topology",
+                    "team_id": topology.name,
+                },
+            )
+            host_request = ExecutionRequest(parent_task, text)
+        else:
+            # Compatibility for embedders that call this driver without the
+            # unified realtime adapter. Build the same boundary from validated
+            # Turn coordinates instead of falling back to a plain Session.
+            trusted_metadata = project_tool_session_metadata(
+                {key: value for key, value in session_metadata.items() if key != "metadata"}
+            )
+            trusted_metadata.update(
+                {
+                    "source": "realtime_team_topology",
+                    "team_id": topology.name,
+                }
+            )
+            trusted_metadata.setdefault("mode", "team")
+            if turn.execution_workspace_path:
+                workspace = Path(turn.execution_workspace_path).resolve(strict=False)
+                trusted_metadata["workspace_path"] = str(workspace)
+                trusted_metadata["_host_workspace_read_root"] = workspace
+            workspaces = getattr(runtime, "_workspaces", None)
+            if workspaces is not None:
+                trusted_metadata["_artifact_output_root"] = str(workspaces.layout(thread_id).final)
+
+            def read_handoffs() -> tuple[dict[str, Any], ...]:
+                return tuple(
+                    dict(event.payload)
+                    for event in log.iter_events()
+                    if event.event == "execution_handoff" and event.thread_id == thread_id
+                )
+
+            def write_handoff(receipt: dict[str, Any]) -> None:
+                log.execution_handoff(thread_id, turn.id, receipt)
+
+            recorder = HandoffRecorder(
+                write_handoff,
+                read_handoffs,
+            )
+            boundary = create_host_execution_boundary(
+                task_id=turn.id,
+                thread_id=thread_id,
+                goal=text,
+                timeout_s=float(runner_timeout),
+                actor_id=actor,
+                tenant_id=tenant,
+                metadata=trusted_metadata,
+                handoff_recorder=recorder,
+            )
+            turn_session = boundary.session
+            host_request = boundary.request
         # Install the cancellation scope on the worker thread so
         # ``call_subagent`` inside the runner sees the same token
         # as react_loop does — every long-running subprocess /
@@ -258,6 +334,7 @@ async def _drive_team_topology(
         # contextvar (separate from session_scope) so trace rows
         # carry thread_id instead of None.
         with (
+            execution_request_scope(host_request),
             session_scope(turn_session),
             journal_context(conversation_id=thread_id),
             scoped_cancellation(cancel_source.token),

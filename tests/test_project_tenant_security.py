@@ -122,7 +122,10 @@ def test_authenticated_run_requires_managed_thread_workspace(tmp_path) -> None:
     )
 
 
-def test_authenticated_run_uses_verified_managed_thread_workspace(tmp_path) -> None:
+def test_authenticated_run_uses_verified_managed_thread_workspace(
+    tmp_path,
+    monkeypatch,
+) -> None:
     identities = IdentityStore()
     identities.add(
         Identity(actor_id="alice", metadata={"tenant_id": "tenant-a"}),
@@ -149,12 +152,27 @@ def test_authenticated_run_uses_verified_managed_thread_workspace(tmp_path) -> N
             return {"thread_id": thread_id, "metadata": metadata}
 
     store = ProjectStore(base_dir=tmp_path / "projects")
+    observed = {}
+    from runtime.projectos.engine import ProjectEngine
+
+    original_run = ProjectEngine.run
+
+    def observed_run(self, *args, **kwargs):
+        from runtime.execution.request import current_execution_request
+        from runtime.platform.process.session import current_session
+
+        observed["session"] = current_session()
+        observed["request"] = current_execution_request()
+        return original_run(self, *args, **kwargs)
+
+    monkeypatch.setattr(ProjectEngine, "run", observed_run)
     app = FastAPI()
     app.include_router(
         create_projects_router(
             store=store,
             thread_store=_Threads(),
             workspace_root=workspace_root,
+            logs_root=tmp_path / "logs",
             identity_store=identities,
             require_auth=True,
         )
@@ -183,6 +201,20 @@ def test_authenticated_run_uses_verified_managed_thread_workspace(tmp_path) -> N
 
     assert response.status_code == 200
     assert response.json()["final_status"] == "done"
+    from runtime.execution.artifact_contracts import HandoffRecorder
+    from runtime.execution.subagents.execution_context import parent_execution_task
+
+    host_task = parent_execution_task(observed["session"])
+    assert host_task is observed["request"].task
+    assert host_task is not None
+    assert host_task.thread_id == "thread-managed"
+    assert host_task.actor_id == "alice"
+    assert host_task.tenant_id == "tenant-a"
+    assert host_task.permissions.allows_write(Path(metadata["workspace_path"]))
+    assert isinstance(
+        observed["session"].metadata["_execution_handoff_recorder"],
+        HandoffRecorder,
+    )
 
 
 def test_scoped_store_blocks_cross_tenant_reads_writes_and_bindings(tmp_path) -> None:

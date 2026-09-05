@@ -221,10 +221,20 @@ def bind_turn_execution(
     topology_id: str | None = None,
 ) -> ExecutionSupervisor[TurnExecutionRequest]:
     """Bind an authenticated turn and persist every invocation before dispatch."""
+
+    def read_handoffs() -> tuple[dict[str, Any], ...]:
+        return tuple(
+            dict(event.payload)
+            for event in log.iter_events()
+            if event.event == "execution_handoff" and event.thread_id == turn.thread_id
+        )
+
     context = RealtimeExecutionContext(
         handoff_recorder=HandoffRecorder(
-            lambda receipt: log.execution_handoff(turn.thread_id, turn.id, receipt)
-        )
+            lambda receipt: log.execution_handoff(turn.thread_id, turn.id, receipt),
+            read_handoffs,
+        ),
+        trusted_workspace_mode=("code" if route.driver == "project_os" else None),
     )
     if route.engine is EngineId.CODEX:
         from runtime.sensing.gateway.realtime_codex_backend import _turn_timeout_s

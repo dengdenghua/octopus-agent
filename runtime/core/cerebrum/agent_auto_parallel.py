@@ -34,6 +34,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import re
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -305,16 +306,51 @@ def _subagent_task_runner(
     cancel_event: Any = None,
 ) -> str:
     """Orchestrator task runner that delegates each subtask to a sub-agent."""
-    del cancel_event  # orchestrator cancellation flows through call_subagent
     from runtime.execution.subagents.bridge import call_subagent
 
-    result = call_subagent(
-        agent_id=subagent_name,
-        prompt=description,
-        context=context if isinstance(context, dict) else None,
-        timeout_s=_SUBAGENT_TIMEOUT_S,
+    run_context = dict(context) if isinstance(context, dict) else {}
+    host_session = run_context.pop("_host_execution_session", None)
+    host_cancellation = run_context.pop("_host_cancellation_token", None)
+
+    from runtime.safety.approval.cancellation import CancellationSource, scoped_cancellation
+
+    cancellation = CancellationSource()
+    unlink = None
+    if hasattr(host_cancellation, "on_cancelled"):
+        unlink = host_cancellation.on_cancelled(
+            lambda reason: cancellation.cancel(reason=reason or "parent cancelled")
+        )
+    monitor_stop = threading.Event()
+
+    def monitor_orchestrator_cancel() -> None:
+        if cancel_event is None or not hasattr(cancel_event, "is_set"):
+            return
+        while not monitor_stop.wait(0.05):
+            if cancel_event.is_set():
+                cancellation.cancel(reason="parallel task cancelled")
+                return
+
+    monitor = threading.Thread(
+        target=monitor_orchestrator_cancel,
+        name=f"auto-parallel-cancel-{subagent_name}",
+        daemon=True,
     )
-    return str(result.get("output") or "")
+    monitor.start()
+    try:
+        with scoped_cancellation(cancellation.token):
+            result = call_subagent(
+                agent_id=subagent_name,
+                prompt=description,
+                context=run_context or None,
+                timeout_s=_SUBAGENT_TIMEOUT_S,
+                session=host_session,
+            )
+        return str(result.get("output") or "")
+    finally:
+        monitor_stop.set()
+        monitor.join(timeout=1.0)
+        if unlink is not None:
+            unlink()
 
 
 def run_auto_parallel(
@@ -368,13 +404,30 @@ def run_auto_parallel(
         for t in plan.subtasks
     ]
 
+    dispatch_context = dict(context) if isinstance(context, dict) else {}
+    try:
+        from runtime.execution.subagents.execution_context import parent_execution_task
+        from runtime.platform.process.session import current_session
+        from runtime.safety.approval.cancellation import current_cancellation_token
+
+        parent = current_session()
+        if parent is not None and parent_execution_task(parent) is not None:
+            dispatch_context["_host_execution_session"] = parent
+            dispatch_context["_host_cancellation_token"] = current_cancellation_token()
+            # Host Sessions and durable journal callbacks are Python-owned
+            # authority objects. Keep this batch in process instead of trying
+            # to serialize them across the optional process-worker boundary.
+            dispatch_context["subagent_worker_isolation"] = "thread"
+    except (ImportError, AttributeError, LookupError):
+        pass
+
     try:
         batch = orchestrator.dispatch(
             tasks,
             execution_mode="parallel",
             thread_id=thread_id or None,
             model_name=model_name,
-            context=context,
+            context=dispatch_context or None,
             owner_id=owner_id,
         )
     except Exception as exc:  # noqa: BLE001 — dispatch failures are non-fatal

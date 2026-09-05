@@ -53,6 +53,24 @@ _LOG = logging.getLogger("octopus.platform.plugin_hub")
 _DEFAULT_PLUGIN_DIR = Path.home() / ".octopus" / "plugins"
 _DEFAULT_BUNDLED_PLUGIN_DIR = Path(__file__).resolve().parent / "bundled"
 _EXTERNAL_STATE_SCHEMA = "octopus.external_plugin_runtime_state.v1"
+_ACTIVATION_STARTUP = "startup"
+_ACTIVATION_ON_DEMAND = "on_demand"
+
+
+def _manifest_activation_mode(data: dict[str, Any]) -> str:
+    """Normalize when executable plugin code may enter the host process.
+
+    Existing manifests keep their startup behaviour. An invalid explicit
+    value fails closed to on-demand activation so a typo cannot cause an
+    optional plugin to be imported automatically during host startup.
+    """
+
+    raw = str(data.get("activation") or "").strip().lower().replace("-", "_")
+    if not raw:
+        return _ACTIVATION_STARTUP
+    if raw in {_ACTIVATION_STARTUP, _ACTIVATION_ON_DEMAND}:
+        return raw
+    return _ACTIVATION_ON_DEMAND
 
 
 def _normalize_manifest_identity(data: dict[str, Any]) -> dict[str, Any]:
@@ -219,6 +237,7 @@ class PluginHub:
                         "description": manifest_data.get("description", ""),
                         "author": manifest_data.get("author", ""),
                         "tags": manifest_data.get("tags", []),
+                        "activation": _manifest_activation_mode(manifest_data),
                         "dir": str(item),
                         "bundled": bundled,
                         "loaded": pname in self._plugins,
@@ -472,18 +491,23 @@ class PluginHub:
             )
 
     def load_all(self) -> list[str]:
-        """Discover and load all plugins in the plugin directory.
+        """Discover and load startup plugins in the plugin directory.
 
         With a ServiceBus injected, load order follows each plugin's declared
         ``provides``/``consumes`` (topological); plugins whose dependencies are
         missing are logged as blocked and skipped, and a dependency cycle is a
-        logged error — neither crashes the hub. Without a ServiceBus this is
-        exactly the legacy discovery-order load.
+        logged error — neither crashes the hub. Plugins declaring
+        ``activation: on_demand`` remain discoverable and require an explicit
+        :meth:`activate_plugin` call before their code is imported.
         """
         if self._service_bus is None:
             loaded: list[str] = []
             for item in self.discover():
-                if not item["installed"] or not item["enabled"]:
+                if (
+                    not item["installed"]
+                    or not item["enabled"]
+                    or item["activation"] != _ACTIVATION_STARTUP
+                ):
                     continue
                 pname = item["id"]
                 if self.load(pname):
@@ -497,7 +521,11 @@ class PluginHub:
             resolve_load_order,
         )
 
-        discovered = [item for item in self.discover() if item["installed"] and item["enabled"]]
+        discovered = [
+            item
+            for item in self.discover()
+            if item["installed"] and item["enabled"] and item["activation"] == _ACTIVATION_STARTUP
+        ]
         manifests: list[BlockManifest] = []
         for item in discovered:
             manifest_data = self._read_manifest_file(Path(item["dir"]))
@@ -639,6 +667,27 @@ class PluginHub:
             if self.start(name):
                 started.append(name)
         return started
+
+    def activate_plugin(self, name: str) -> dict[str, Any]:
+        """Load and start one discovered plugin as a single host operation.
+
+        This is the runtime entry point for on-demand plugins. If startup of a
+        newly loaded plugin fails, its registrations and imported external
+        module are removed so callers never observe a half-active capability.
+        """
+
+        with self._lock_internal:
+            was_loaded = name in self._plugins
+            if self.load(name) is None:
+                raise RuntimeError(f"failed to load plugin: {name}")
+            if not self.start(name):
+                if not was_loaded:
+                    self.unload(name)
+                raise RuntimeError(f"failed to start plugin: {name}")
+            detail = self.get_plugin_detail(name)
+            if detail is None:  # Defensive: load succeeded from discovery.
+                raise RuntimeError(f"activated plugin disappeared: {name}")
+            return {"ok": True, **detail}
 
     def stop(self, name: str) -> bool:
         """Stop a started plugin (calls on_stop)."""
@@ -889,10 +938,7 @@ class PluginHub:
             return self._lifecycle_result(name, result)
 
     def _activate_runtime(self, name: str) -> None:
-        if self.load(name) is None:
-            raise RuntimeError(f"failed to load plugin: {name}")
-        if not self.start(name):
-            raise RuntimeError(f"failed to start plugin: {name}")
+        self.activate_plugin(name)
 
     def _require_factory_plugin(self, name: str) -> None:
         if not self._activation_store.is_factory(name):

@@ -6,7 +6,7 @@ first turn. The function:
 
 1. Looks at the mention's plugin id.
 2. Asks the PluginHub whether it's already loaded and started.
-3. If not, calls ``hub.load(name)`` then ``hub.start(name)``.
+3. If not, asks the hub to activate it transactionally.
 4. Records the outcome so we can surface a tool-result-style note in
    the next observation, telling the user (and the model) that a new
    capability has just become available mid-turn.
@@ -128,6 +128,47 @@ def auto_load_pinned_plugins(
     return PluginActivationReport(tuple(activations))
 
 
+def select_plugin_hub_activations(
+    plugin_ids: Iterable[str],
+    *,
+    codex_handled: Iterable[str] = (),
+    hub: Any = None,
+) -> tuple[str, ...]:
+    """Keep PluginHub plugins even when a same-id Codex prompt plugin exists.
+
+    A plugin mention can legitimately refer to both a Codex-format prompt pack
+    and an executable PluginHub module. Only suppress the PluginHub path when
+    Codex handled the mention and PluginHub has no discovered module with that
+    id. This prevents an installed prompt pack from shadowing native tools.
+    """
+
+    requested = tuple(dict.fromkeys(p for p in plugin_ids if p))
+    handled = {str(p).strip().lower() for p in codex_handled if str(p).strip()}
+    if not handled:
+        return requested
+    if hub is None:
+        try:
+            from runtime.platform.plugins.plugin_hub import get_plugin_hub
+
+            hub = get_plugin_hub()
+        except (ImportError, AttributeError, RuntimeError):
+            return tuple(p for p in requested if p.lower() not in handled)
+    try:
+        discovered = hub.discover()
+    except (AttributeError, TypeError, ValueError):
+        discovered = []
+    native_ids = {
+        str(item.get("id") or "").strip().lower()
+        for item in discovered
+        if isinstance(item, dict) and str(item.get("id") or "").strip()
+    }
+    return tuple(
+        plugin_id
+        for plugin_id in requested
+        if plugin_id.lower() not in handled or plugin_id.lower() in native_ids
+    )
+
+
 def _activate_one(plugin_id: str, hub: Any) -> PluginActivation:
     """Load+start a single plugin, capturing errors."""
     was_loaded = False
@@ -139,10 +180,14 @@ def _activate_one(plugin_id: str, hub: Any) -> PluginActivation:
     if existing is not None:
         was_loaded = True
         try:
-            state = str(getattr(existing, "state", "") or "")
+            is_started = getattr(hub, "is_started", None)
+            if callable(is_started):
+                was_started = bool(is_started(plugin_id))
+            else:
+                state = str(getattr(existing, "state", "") or "")
+                was_started = state.lower() in {"started", "running", "active"}
         except (AttributeError, TypeError):
-            state = ""
-        was_started = state.lower() in {"started", "running", "active"}
+            was_started = False
 
     if was_started:
         return PluginActivation(
@@ -156,6 +201,30 @@ def _activate_one(plugin_id: str, hub: Any) -> PluginActivation:
     loaded_now = False
     started_now = False
     error: str | None = None
+
+    # Current PluginHub versions expose one transactional operation that
+    # removes a newly loaded plugin again when its start hook fails. Keep the
+    # split legacy path below for older integrations and focused stubs.
+    activate = getattr(hub, "activate_plugin", None)
+    if callable(activate):
+        try:
+            result = activate(plugin_id)
+            loaded_now = not was_loaded and bool(
+                result.get("loaded", True) if isinstance(result, dict) else True
+            )
+            started_now = not was_started and bool(
+                result.get("started", True) if isinstance(result, dict) else True
+            )
+        except Exception as exc:  # noqa: BLE001 — plugin code is untrusted
+            error = f"{type(exc).__name__}: {exc}"
+        return PluginActivation(
+            plugin_id=plugin_id,
+            was_already_loaded=was_loaded,
+            was_already_started=was_started,
+            loaded_now=loaded_now,
+            started_now=started_now,
+            error=error,
+        )
 
     if not was_loaded:
         try:
@@ -197,4 +266,5 @@ __all__ = [
     "PluginActivation",
     "PluginActivationReport",
     "auto_load_pinned_plugins",
+    "select_plugin_hub_activations",
 ]

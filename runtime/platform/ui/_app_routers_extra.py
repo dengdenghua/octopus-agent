@@ -607,7 +607,7 @@ def mount_routers_b(
         )
 
     # ─── PluginHub (pluggable module architecture) ────────────────
-    # Auto-discovers and loads plugins from ~/.octopus/plugins/.
+    # Discovers every plugin and imports only manifests marked for startup.
     # Each plugin can register skills, channels, routes, and a
     # frontend config UI via plugin.yaml + ModulePlugin subclass.
     try:
@@ -646,10 +646,12 @@ def mount_routers_b(
             hook_registry=get_global_registry(),
             jobs_registry=get_jobs_registry(),
         )
+        if stack is not None:
+            stack.plugin_hub = _hub
         _loaded = _hub.load_all()
         if _loaded:
             logging.getLogger(__name__).info(
-                "PluginHub auto-loaded %d plugins: %s",
+                "PluginHub loaded %d startup plugins: %s",
                 len(_loaded),
                 _loaded,
             )

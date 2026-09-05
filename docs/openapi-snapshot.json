@@ -4013,17 +4013,43 @@
       },
       "DualHelixShadowRunBody": {
         "properties": {
+          "automatic": {
+            "default": false,
+            "title": "Automatic",
+            "type": "boolean"
+          },
           "candidate_id": {
             "default": "",
             "maxLength": 512,
             "title": "Candidate Id",
             "type": "string"
           },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
           "experiment_id": {
             "default": "",
             "maxLength": 512,
             "title": "Experiment Id",
             "type": "string"
+          },
+          "failure_count": {
+            "default": 0,
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Failure Count",
+            "type": "integer"
           },
           "goal": {
             "maxLength": 20000,
@@ -4040,6 +4066,12 @@
             "default": "",
             "maxLength": 50000,
             "title": "Primary Output",
+            "type": "string"
+          },
+          "risk_level": {
+            "default": "",
+            "maxLength": 32,
+            "title": "Risk Level",
             "type": "string"
           },
           "source_message_id": {
@@ -7190,6 +7222,25 @@
             ],
             "title": "Extra Tools"
           },
+          "input_files": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Files"
+          },
+          "isolate": {
+            "default": false,
+            "title": "Isolate",
+            "type": "boolean"
+          },
           "name": {
             "anyOf": [
               {
@@ -7200,6 +7251,32 @@
               }
             ],
             "title": "Name"
+          },
+          "output_files": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Files"
+          },
+          "output_schema": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Schema"
           },
           "parent_task_id": {
             "anyOf": [
@@ -7240,6 +7317,11 @@
               }
             ],
             "title": "Run Id"
+          },
+          "schema_max_retries": {
+            "default": 1,
+            "title": "Schema Max Retries",
+            "type": "integer"
           },
           "share_history": {
             "default": true,
@@ -40670,6 +40752,47 @@
           }
         },
         "summary": "Get Plugin Detail",
+        "tags": [
+          "plugin-hub"
+        ]
+      }
+    },
+    "/api/plugin-hub/plugins/{name}/activate": {
+      "post": {
+        "description": "Load and start a discovered plugin in one transactional step.",
+        "operationId": "activate_plugin_api_plugin_hub_plugins__name__activate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activate Plugin",
         "tags": [
           "plugin-hub"
         ]

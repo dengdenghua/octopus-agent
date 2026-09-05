@@ -1,7 +1,8 @@
 # Unified execution runtime
 
-Status: implementation in progress. This document records the target and the
-acceptance evidence; an unchecked item is not an implemented capability.
+Status: implemented on `codex/unified-execution-runtime` and validated with
+controlled regression suites plus one live coding task and one live document task.
+The production limits recorded below still apply.
 
 ## Target
 
@@ -14,6 +15,34 @@ Biomimetic concepts retain their engineering purpose: reflexes are deterministic
 fast paths, arms are scoped workers, hearts supervise liveness and isolate
 dependencies, immunity constrains effects, and regeneration proposes evaluated
 changes. Organ counts do not set process counts or require extra planning layers.
+
+The recommended three-heart interpretation is operational rather than anatomical:
+
+1. The **control heart** is the Octopus host. It owns identity, permissions,
+   deadlines, cancellation, engine binding, audit, artifact acceptance and final
+   task state.
+2. The **operations heart** is native Octopus. It runs business tools, office
+   artifacts, deterministic workflows and project/team coordination.
+3. The **engineering heart** is Codex. It performs repository inspection, coding,
+   testing, repair and patch production inside the host's approved workspace.
+
+Only the control heart is authoritative. The two execution hearts never maintain
+competing project truth or silently take over a task from one another. When work
+must cross engines, the host transfers a declared artifact or reviewed candidate
+patch with hashes, ownership and a durable receipt.
+
+```mermaid
+flowchart TD
+    U[User or project event] --> H[Octopus host control plane]
+    H --> P{Route before effects}
+    P -->|Office, tools, coordination| N[Native Octopus]
+    P -->|Repository-scale coding| C[Codex]
+    N --> A[Declared artifacts and receipts]
+    C --> A
+    A --> V[Host verification and acceptance]
+    V --> R[Durable task result]
+    V -->|Reviewed follow-up| H
+```
 
 ## Migration and acceptance
 
@@ -44,21 +73,21 @@ changes. Organ counts do not set process counts or require extra planning layers
 
 - [x] Pass task goals, approved project context, permissions and budgets through
       an engine-neutral request. Keep engine-private state opaque and scoped.
-- [ ] Give child tasks explicit inputs, outputs, ownership and cancellation.
+- [x] Give child tasks explicit inputs, outputs, ownership and cancellation.
       Isolate concurrent writers with existing worktrees or write leases.
 - [x] Validate a sequential native -> Codex -> native artifact handoff before
       enabling automatic parallel engine cooperation.
 
 ### 4. Focused delivery and evaluated learning
 
-- [ ] Establish one coding scenario and one office/tool scenario with recorded
+- [x] Establish one coding scenario and one office/tool scenario with recorded
       success, latency, cost and human intervention. Controlled tests establish
       contracts; they do not count as live model performance evidence.
-- [ ] Separate factual execution records, project knowledge, user preferences
+- [x] Separate factual execution records, project knowledge, user preferences
       and unverified model summaries at the memory boundary.
-- [ ] Load optional business plugins only when needed while keeping the local
+- [x] Load optional business plugins only when needed while keeping the local
       desktop installation reproducible.
-- [ ] Keep shadow review and learning opt-in; changes require validation,
+- [x] Keep shadow review and learning opt-in; changes require validation,
       versioning and rollback before promotion. No autonomous permission expansion.
 
 ## Ownership rules
@@ -163,7 +192,7 @@ Windows long-path support was disabled (now enabled and documented in
 Auth parsing now accepts both coalesced and split representations while still
 validating the credential and echoing only the non-secret protocol marker.
 
-## Shared task context and child boundaries (in progress)
+## Shared task context and child boundaries
 
 The realtime adapters now install an engine-neutral `ExecutionRequest` with a
 frozen host task identity, original goal, approved filesystem scope and resource
@@ -201,8 +230,8 @@ user account. This detects conflicting writes through the Octopus executor;
 it is not an OS sandbox for arbitrary shell or built-in Codex writes. The
 explicit artifact handoff section below records subsequent implementation of
 manifests and verified ownership transfer. The isolated-worker section records
-the new worktree integration. Completing the remaining orchestration surfaces
-and reviewed application of partial/candidate outputs remains open for phase 3.
+the worktree integration. The later host-boundary and candidate-application
+sections record completion across the remaining orchestration surfaces.
 
 Validation on Windows: 287 tests passed across request/scope contracts, the
 gateway, Codex routing, stack workers, child timeout/threading/schema/slot
@@ -210,8 +239,8 @@ isolation and real subprocess cancellation. The new gateway deadline test runs
 a real Python subprocess and verifies it is cancelled before it can complete.
 Child bridge tests use real worker threads to check distinct ownership, retained
 scope and parent cancellation. Ruff, mypy for the three new runtime modules and
-invariant lint passed. These are controlled driver tests, not live model quality
-or cost evidence; phase 3 and phase 4 acceptance items remain open.
+invariant lint passed. These are controlled driver tests; the live evidence is
+recorded in the final acceptance section.
 
 The follow-up batch passed 89 tests for nested-metadata rejection, tool bridge
 scope, Codex dynamic tools/role context and file leases (some request cases
@@ -249,8 +278,8 @@ after the parent's deadline; it does not accept artifacts or enable an automatic
 retry. Timed-out workers keep their leases until their future finishes. Changed
 outputs and journal failures retain child ownership for explicit reconciliation.
 Reviewed partial-output reconciliation and lifecycle-managed worktree cleanup
-still need to be wired for the full parallel-worker acceptance item. Legacy
-callers without an artifact contract retain their existing interface.
+are completed by the host-owned candidate patch transaction described below.
+Legacy callers without an artifact contract retain their existing interface.
 
 `tests/test_artifact_handoff.py` exercises native preparation, a dispatched
 Codex-role child and native verification through the actual supervisor,
@@ -264,9 +293,8 @@ The handoff/delegation/journal regression batch passed 93 tests on Windows.
 It includes journal failures before assignment and acceptance, changing inputs,
 edits during acceptance, required-output absence, schema failure, timeout/late
 completion, existing-file updates, ownership conflicts, resource bounds and
-prevention of a retry that would drop the artifact contract. Phase 3 remains
-open for concurrent writer isolation and integration across orchestration
-surfaces; all phase 4 acceptance requirements remain open.
+prevention of a retry that would drop the artifact contract. Later batches add
+concurrent writer isolation, host-bound orchestration and live acceptance.
 
 The failure-reconciliation follow-up passed 265 tests on Windows, covering the
 handoff and delegation batches above plus OpenAPI parity, the realtime gateway,
@@ -278,7 +306,7 @@ only after it unwinds; its late result is never accepted. Ruff, mypy for five
 shared-context modules and invariant lint passed. This remains controlled-driver
 evidence; it does not close the concurrent-isolation or live-model requirements.
 
-## Scoped isolated workers (in progress)
+## Scoped isolated workers
 
 `call_subagent` and `call_agent` now accept `isolate=true`. The bridge owns the
 worktree on the actual child worker thread, covering preparation, engine
@@ -319,10 +347,8 @@ The parallel, graph and pipeline delegation surfaces forward isolation and file
 contracts and retain artifact/patch records in their result projections. Parallel
 fan-out copies the parent's cancellation context, and file-contract/isolated
 attempts disable transient retries. Graph resume does not replay file ownership
-from cached prose. The remaining acceptance work includes reviewed application
-and reconciliation of candidate/partial outputs, consistent writer admission,
-and the older tournament/CLI and project/team orchestration entrypoints. Phase 3
-remains open, as do all phase 4 requirements.
+from cached prose. Reviewed application, reconciliation and the remaining
+project/team entrypoints are covered by the later host-boundary implementation.
 
 Validation on Windows: 287 tests passed in 81.83s across isolated workers,
 worktree lifecycle, graph/pipeline/parallel delegation, contracts, budgets,
@@ -366,8 +392,105 @@ never promoted into a successful artifact contract.
 Before the concurrent upstream merge began, the tournament, vote, isolated
 worker and child-context batch passed 51 tests in 56.43s. It exercised real Git,
 worker threads, the bridge, builtin reviewer dispatch and disk journals with
-controlled model responses. The tested changes are captured in local checkpoint
-`a4f1c931`. The subsequent upstream merge introduced conflicts in shared runtime
-files, so these results do not validate the merged checkout. Type checking,
-the wider regression batch and local runtime restart must be repeated after
-that merge settles. Phase 3 and phase 4 acceptance remain open.
+controlled model responses. The tested changes were captured in local checkpoint
+`a4f1c931`. The merge was subsequently resolved in `8ac947dd`; the post-merge
+host-boundary, candidate, memory, plugin and live acceptance work below supersedes
+that checkpoint's pending status.
+
+## Host boundary and reviewed candidate application
+
+`runtime/execution/host_boundary.py` creates the same immutable task boundary for
+HTTP dispatchers and durable background orchestration that realtime turns already
+use. Direct subagent HTTP, ProjectOS, cowork, ReAct parallel work, TeamRunner,
+realtime team topology and the persistent team router now carry a server-owned
+task identity, principal, permission ceiling, deadline, cancellation state and
+handoff journal. JSON or model metadata cannot replace the private coordination
+objects.
+
+`runtime/execution/subagents/candidate_patch.py` closes the worktree lifecycle.
+The host resolves a candidate only from its append-only handoff records, checks
+the patch hash, pinned baseline and complete bounded file set, then creates
+byte-for-byte backups before applying it. Cross-process locking, file leases and
+a write-ahead journal serialize application. Exact post-write verification either
+records `patch_applied` or restores the backups and records rollback. Interrupted
+or ambiguous operations remain reconcilable; the engine cannot declare its own
+patch accepted. Candidate inspection and application are separate operator actions.
+
+## Memory, plugins and governed learning
+
+`runtime/memory/semantics.py` labels durable entries by kind, author and
+verification state. Execution evidence, project facts, user-stated preferences
+and model inferences therefore remain distinguishable when normalized, distilled
+or returned through memory APIs. An unverified inference cannot silently become a
+fact or a user preference.
+
+Optional office plugins declare `activation: on_demand`. Discovery exposes their
+metadata without importing executable code; a selected capability activates one
+plugin transactionally, and failed startup removes partial registrations. Prompt
+packs with the same identifier no longer shadow executable modules, and the ReAct
+loop refreshes its native tool view immediately after activation. Install history
+records a content digest so the local installation remains reproducible.
+
+Regeneration and shadow review produce governed candidates. Promotion requires a
+validated, versioned operation with a rollback path and durable state. Tenant
+requests do not expand their own permissions, and model-authored summaries remain
+unverified until the host's acceptance path records evidence.
+
+## Live two-engine acceptance
+
+The reusable runner is `benchmarks/run_unified_runtime_acceptance.py`; the compact
+evidence is
+`docs/architecture/unified-runtime-acceptance-2026-09-05.json`.
+Credentials remained in memory and raw trajectories stayed in the ignored local
+run directory.
+
+On Windows on 2026-09-05:
+
+- Codex completed a scoped repair of `calculator.py` in 39.523 seconds through
+  `codex_app_server`. The host saw one Codex binding and no engine transfer. The
+  verifier checked five boundary values plus the original `ValueError` behavior;
+  only `calculator.py` existed in the fixture. Four approval requests occurred:
+  the exact edit was accepted and broader shell/VCS actions were declined. The
+  provider reported 125,377 cumulative tokens, including 102,144 cached input
+  tokens and 941 output tokens.
+- Native Octopus completed `documents.create_docx` in 23.016 seconds through the
+  ReAct driver with an explicit Octopus binding. The optional `documents` plugin
+  changed from `on_demand/unloaded/stopped` to `loaded/started` during that turn.
+  A host-side DOCX reader verified the exact title and paragraph, and only the
+  requested file existed in the fixture. The workspace-scoped create required no
+  interactive approval under the active policy.
+- Both providers omitted monetary cost, so evidence records `cost_usd: null` and
+  `cost_source: not_reported`; missing cost is never treated as zero. The native
+  route emitted character-throughput telemetry but no token count, which is also
+  recorded as unavailable rather than inferred.
+
+## Final validation
+
+The final Windows validation on 2026-09-05 completed with the following results:
+
+- The focused execution, security, memory, plugin and routing batch passed 322
+  tests with one POSIX-only case skipped.
+- A clean run of all 35 modified or newly added backend test files passed 1,071
+  tests with six documented POSIX-only cases skipped.
+- OpenAPI generation, generated-wiki drift checks and the realtime evaluation
+  runner passed 25 tests. The generated wiki check and protocol-enum check also
+  reported no drift.
+- The frontend suite passed 2,863 tests with two skipped across 386 files. The
+  affected engine-control suite passed all 15 cases; TypeScript checking and the
+  production Vite build passed.
+- Ruff checks, formatting checks for all changed Python files, selected strict
+  mypy checks, the repository mypy ratchet, execution invariants, fixture
+  visibility and `git diff --check` passed.
+- The retained backend and frontend services responded successfully on ports
+  8000 and 3000 after validation. The isolated port-8001 acceptance service was
+  stopped cleanly after its evidence was captured.
+
+## Production limits
+
+Windows currently has no kernel-level process sandbox backend in this project;
+the local run used the documented soft process constraints plus host path scopes,
+tool policy and network denial. File leases cover Octopus tools and candidate
+transactions, while unrestricted external processes require a hard sandbox on a
+supported deployment. Automatic cross-engine continuation after possible effects
+remains prohibited. A future policy may permit it only after durable reconciliation
+and explicit handoff, using the same artifact boundary described here.

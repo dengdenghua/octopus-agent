@@ -20,6 +20,7 @@ import logging
 import re
 from collections.abc import Callable
 from typing import Any
+from uuid import uuid4
 
 from runtime.projectos.model import ROLE_FOR_TASK, Milestone, Task
 
@@ -235,19 +236,42 @@ def subagent_execute_task(
         dispatch_context["workspace_path"] = workspace_path
         runtime_session_metadata["workspace_path"] = workspace_path
 
-    # Project OS is a trusted, non-interactive server orchestrator. Carry its
-    # authenticated project principal as a real Session so production Codex
-    # account selection never falls back to an ordinary context dictionary.
-    # No approval provider is attached: the Coder backend therefore retains
-    # its explicit AutoDeny default for risky actions.
-    from runtime.platform.process.session import Session
-
-    project_session = Session(
-        actor=actor or None,
-        thread_id=thread_id or None,
-        conversation_id=thread_id or None,
-        metadata=dict(runtime_session_metadata),
+    # Reuse an active realtime/HTTP host boundary when present. Standalone
+    # Project OS calls receive the same immutable task shape through the
+    # shared factory, so the bridge always inherits a scope and deadline.
+    from runtime.execution.host_boundary import (
+        create_host_execution_boundary,
+        inherit_host_execution_session,
     )
+    from runtime.execution.subagents.execution_context import parent_execution_task
+    from runtime.platform.process.session import current_session
+
+    if actor and not tenant_id:
+        tenant_id = f"legacy:{actor}"
+        runtime_session_metadata["tenant_id"] = tenant_id
+        dispatch_context["tenant_id"] = tenant_id
+    project_thread_id = thread_id or f"projectos-{uuid4().hex}"
+    parent = current_session()
+    if parent is not None and parent_execution_task(parent) is not None:
+        project_session = inherit_host_execution_session(
+            parent,
+            thread_id=project_thread_id,
+            actor_id=actor or None,
+            tenant_id=tenant_id or None,
+            metadata=runtime_session_metadata,
+        )
+    else:
+        if workspace_path:
+            runtime_session_metadata.setdefault("mode", "code")
+        project_session = create_host_execution_boundary(
+            task_id=f"projectos-{task.id}-{uuid4().hex}",
+            thread_id=project_thread_id,
+            goal=prompt,
+            timeout_s=900.0,
+            actor_id=actor or None,
+            tenant_id=tenant_id or None,
+            metadata=runtime_session_metadata,
+        ).session
 
     call_kwargs: dict[str, Any] = {
         "context": dispatch_context,

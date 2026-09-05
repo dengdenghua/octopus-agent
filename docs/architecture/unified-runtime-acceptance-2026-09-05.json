@@ -1,0 +1,204 @@
+{
+  "schema": "octopus.unified_runtime_acceptance.v1",
+  "generated_at": "2026-09-05T14:02:25.454262+00:00",
+  "source": "retained_live_trajectories",
+  "repository": {
+    "revision": "8ac947dd0378c8b3d17237c87f510c0964846353",
+    "branch": "codex/unified-execution-runtime",
+    "working_tree_dirty": true
+  },
+  "passed": true,
+  "checks": {
+    "codex_task_passed": true,
+    "native_task_passed": true,
+    "optional_plugin_loaded_on_demand": true,
+    "one_host_receipt_per_task": true,
+    "no_cross_engine_transfer_after_start": true
+  },
+  "plugin_transition": {
+    "before": {
+      "activation": "on_demand",
+      "loaded": false,
+      "started": false
+    },
+    "after": {
+      "activation": "on_demand",
+      "loaded": true,
+      "started": true
+    },
+    "passed": true
+  },
+  "scenarios": {
+    "codex_coding": {
+      "passed": true,
+      "checks": {
+        "turn_completed": true,
+        "expected_engine": true,
+        "expected_driver": true,
+        "single_engine_binding": true,
+        "no_cross_engine_transfer": true,
+        "artifact_verified": true
+      },
+      "execution": {
+        "engine": "codex",
+        "driver": "codex_app_server",
+        "reason": "role_backend",
+        "phase": "primary",
+        "invocation": 1
+      },
+      "duration_seconds": 39.523,
+      "event_count": 137,
+      "approval_requests": 4,
+      "approval_decisions": {
+        "accepted": 1,
+        "declined": 3
+      },
+      "tool_calls": [
+        {
+          "command": "exec_shell",
+          "status": "declined",
+          "network_access": false
+        },
+        {
+          "command": "dynamic__read_file",
+          "status": "completed",
+          "network_access": false
+        },
+        {
+          "command": "dynamic__git_status",
+          "status": "failed",
+          "network_access": false
+        },
+        {
+          "command": "dynamic__edit_text_file",
+          "status": "completed",
+          "network_access": false
+        },
+        {
+          "command": "dynamic__exec_shell",
+          "status": "failed",
+          "network_access": false
+        },
+        {
+          "command": "dynamic__read_file",
+          "status": "completed",
+          "network_access": false
+        }
+      ],
+      "usage": {
+        "updates": 6,
+        "last": {
+          "total": {
+            "totalTokens": 125377,
+            "inputTokens": 124436,
+            "cachedInputTokens": 102144,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 941,
+            "reasoningOutputTokens": 228
+          },
+          "last": {
+            "totalTokens": 21687,
+            "inputTokens": 21469,
+            "cachedInputTokens": 20864,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 218,
+            "reasoningOutputTokens": 143
+          },
+          "modelContextWindow": 258400
+        }
+      },
+      "cost_usd": null,
+      "cost_source": "not_reported",
+      "artifact": {
+        "passed": true,
+        "path": ".codex-run/live-codex-workspace/calculator.py",
+        "sha256": "3f44d97f143015a89a0d1838344d8fc153e3a3b94eaf28555beb598ab140930a",
+        "size_bytes": 169,
+        "workspace_files": [
+          "calculator.py"
+        ],
+        "verifier": {
+          "values": [
+            0,
+            0,
+            5,
+            10,
+            10
+          ],
+          "value_error": true
+        },
+        "verifier_stderr": null
+      },
+      "trajectory": {
+        "path": ".codex-run/live-codex-trial.json",
+        "sha256": "162f953387e164d30e0e539895561a8d4abc54f6e72c6de11b2018596aa38206"
+      }
+    },
+    "native_document": {
+      "passed": true,
+      "checks": {
+        "turn_completed": true,
+        "expected_engine": true,
+        "expected_driver": true,
+        "single_engine_binding": true,
+        "no_cross_engine_transfer": true,
+        "artifact_verified": true
+      },
+      "execution": {
+        "engine": "octopus",
+        "driver": "react",
+        "reason": "explicit_engine",
+        "phase": "primary",
+        "invocation": 1
+      },
+      "duration_seconds": 23.016,
+      "event_count": 46,
+      "approval_requests": 0,
+      "approval_decisions": {
+        "accepted": 0,
+        "declined": 0
+      },
+      "tool_calls": [
+        {
+          "command": "documents.create_docx",
+          "status": "completed",
+          "network_access": false
+        }
+      ],
+      "usage": {
+        "updates": 2,
+        "last": {
+          "chars": 104,
+          "elapsedMs": 14860,
+          "charsPerSec": 6.998654104958977
+        }
+      },
+      "cost_usd": null,
+      "cost_source": "not_reported",
+      "artifact": {
+        "passed": true,
+        "path": ".codex-run/live-native-workspace/acceptance.docx",
+        "sha256": "5657966edfdc7fb08d4cb71e52a9c9b092c494dcdc32465e66a2f8f7eb0ab0f9",
+        "size_bytes": 36694,
+        "workspace_files": [
+          "acceptance.docx"
+        ],
+        "paragraphs": [
+          "Unified Runtime Acceptance",
+          "Native engine plugin execution verified."
+        ],
+        "open_error": null
+      },
+      "trajectory": {
+        "path": ".codex-run/live-native-trial.json",
+        "sha256": "e753f7ace5c6631fdb37e079feb379d6b9cff7fa34cb4191fc7e6c0d4bc05f83"
+      }
+    }
+  },
+  "measurement_notes": {
+    "cost_usd": null,
+    "cost_source": "not_reported",
+    "native_token_usage": "The native provider emitted character throughput telemetry but no token count.",
+    "human_intervention": "Approval counts are policy decisions replayed from captured approval requests."
+  }
+}

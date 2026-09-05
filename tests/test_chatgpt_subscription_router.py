@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import httpx
@@ -128,6 +129,39 @@ def test_native_router_streams_subscription_model_without_putting_token_in_body(
     assert payload["input"][0]["content"] == [{"type": "output_text", "text": "上一轮回答"}]
     assert payload["input"][1]["content"] == [{"type": "input_text", "text": "你好"}]
     assert "secret-initial" not in json.dumps(payload)
+
+
+def test_router_round_trips_namespaced_tool_names_through_wire_safe_aliases() -> None:
+    seen_wire_name = ""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal seen_wire_name
+        payload = json.loads(request.content)
+        seen_wire_name = payload["tools"][0]["name"]
+        assert "." not in seen_wire_name
+        assert len(seen_wire_name) <= 64
+        completed = _completed_response(tool=True)
+        completed["output"][1]["name"] = seen_wire_name  # type: ignore[index]
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=_sse({"type": "response.completed", "response": completed}),
+        )
+
+    router = ChatGPTSubscriptionModelRouter(
+        credential_broker=_Broker(),
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    response = router.call(
+        ModelRequest(
+            model="chatgpt/gpt-5.6-sol",
+            messages=[Message(role="user", content="create it")],
+            tools=[ToolSpec(name="documents.create_docx", description="Create a document")],
+        )
+    )
+
+    assert seen_wire_name.startswith("octopus_documents_create_docx_")
+    assert response.tool_calls[0].name == "documents.create_docx"
 
 
 def test_router_refreshes_managed_login_once_after_unauthorized() -> None:
@@ -277,6 +311,22 @@ def test_credentials_must_be_private_and_are_never_returned_as_public_metadata(
     assert credentials.account_id == "account-123"
     assert "top-secret" not in repr(credentials)
 
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX owner-only mode bits")
+def test_credentials_reject_group_or_world_access(tmp_path: Path) -> None:
+    auth = tmp_path / "auth.json"
+    auth.write_text(
+        json.dumps(
+            {
+                "auth_mode": "chatgpt",
+                "tokens": {
+                    "access_token": "top-secret",
+                    "account_id": "account-123",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     auth.chmod(0o644)
-    with pytest.raises(ChatGPTSubscriptionRouterError, match="权限不安全"):
+    with pytest.raises(ChatGPTSubscriptionRouterError, match="不可用"):
         _read_credentials(auth)

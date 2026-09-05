@@ -15,6 +15,12 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from runtime.memory.semantics import (
+    MemoryAuthor,
+    fact_origin,
+    fact_prompt_text,
+    normalize_origin,
+)
 from runtime.platform.io import atomic_write_json
 from runtime.platform.process.paths import app_paths
 from runtime.safety.auth.scope import TenantScope
@@ -110,6 +116,7 @@ def add_fact(
     title: str | None = None,
     tags: list[str] | None = None,
     tenant_scope: TenantScope | None = None,
+    author: MemoryAuthor = MemoryAuthor.UNKNOWN,
 ) -> dict[str, Any] | None:
     if not read_config(tenant_scope).get("enabled", True):
         return None
@@ -120,6 +127,7 @@ def add_fact(
     facts = list(memory.get("facts") or [])
     max_facts = int(read_config(tenant_scope).get("max_facts") or DEFAULT_MAX_FACTS)
     scope = _normalize_scope(scope, agent_id=agent_id, project=project)
+    origin = fact_origin(author, category=category, scope=scope)
     clean_agent = _clean_scope_value(agent_id)
     clean_project = _clean_scope_value(project)
     key = content.casefold()
@@ -129,6 +137,7 @@ def add_fact(
             and str(fact.get("scope") or "global") == scope
             and str(fact.get("agent_id") or "") == clean_agent
             and str(fact.get("project") or "") == clean_project
+            and normalize_origin(fact.get("origin")) == origin
         ):
             return fact
     fact = {
@@ -158,6 +167,7 @@ def add_fact(
         "allowed_roles": _clean_string_list(allowed_roles),
         "allowed_agents": _clean_string_list(allowed_agents),
         "provenance": _normalize_provenance(provenance, fallback_source=source),
+        "origin": origin,
     }
     memory["facts"] = [*facts, fact][-max_facts:]
     write_memory(memory, scope=tenant_scope)
@@ -262,7 +272,7 @@ def relevant_memory_texts(
     if not settings.get("enabled", True) or not settings.get("injection_enabled", True):
         return []
     return [
-        str(fact.get("content") or "").strip()
+        fact_prompt_text(fact)
         for fact in search_facts(
             query,
             limit=limit,
@@ -411,6 +421,7 @@ def normalize_memory(raw: Any, *, scope: TenantScope | None = None) -> dict[str,
                 "createdAt": str(item.get("createdAt") or last_updated),
                 "updatedAt": str(item.get("updatedAt") or item.get("createdAt") or last_updated),
                 "source": _clean_label(item.get("source") or "manual", fallback="manual"),
+                "origin": normalize_origin(item.get("origin")),
                 "scope": _normalize_scope(
                     item.get("scope") or "global",
                     agent_id=item.get("agent_id"),
@@ -490,18 +501,24 @@ def normalize_memory(raw: Any, *, scope: TenantScope | None = None) -> dict[str,
     return base
 
 
-def _section(value: Any, fallback_updated_at: str) -> dict[str, str]:
+def _section(value: Any, fallback_updated_at: str) -> dict[str, Any]:
     if isinstance(value, dict):
         return {
             "summary": _clean_section_summary(value.get("summary") or ""),
             "updatedAt": str(value.get("updatedAt") or fallback_updated_at or ""),
+            "origin": normalize_origin(value.get("origin")),
         }
     if isinstance(value, str):
         return {
             "summary": _clean_section_summary(value),
             "updatedAt": fallback_updated_at or "",
+            "origin": fact_origin(MemoryAuthor.UNKNOWN),
         }
-    return {"summary": "", "updatedAt": fallback_updated_at or ""}
+    return {
+        "summary": "",
+        "updatedAt": fallback_updated_at or "",
+        "origin": fact_origin(MemoryAuthor.UNKNOWN),
+    }
 
 
 def _clean_text(value: Any) -> str:

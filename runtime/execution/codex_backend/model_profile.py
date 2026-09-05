@@ -142,7 +142,9 @@ class CodexModelPreferenceStore:
         if preference.mode == "follow_system" and is_disallowed_coder_system_model(
             preference.model
         ):
-            raise ConfigurationError("mix is not an executable Coder system model")
+            raise ConfigurationError(
+                "An orchestration alias is not an executable Coder system model"
+            )
         path = self.path_for(scope)
         payload = asdict(preference)
 
@@ -165,7 +167,7 @@ class CodexModelPreferenceStore:
 
 def is_disallowed_coder_system_model(model: str | None) -> bool:
     normalized = str(model or "").strip().lower()
-    return normalized in {"mix", "octopus-mix"}
+    return normalized in {"mix", "octopus-mix", "octopus-agent"}
 
 
 def resolve_codex_execution_profile(
@@ -250,6 +252,21 @@ def resolve_codex_execution_profile(
         )
 
     catalog = {str(key): dict(value) for key, value in (custom_models or {}).items()}
+    # Host orchestration aliases are not executable model ids. Do not send
+    # them through the proxy or silently fall back to a different provider.
+    if is_disallowed_coder_system_model(selected_model):
+        return ResolvedCodexExecutionProfile(
+            mode="follow_system",
+            effective_model=None,
+            system_model=normalized_system,
+            reasoning_effort=selected_effort,
+            model_source=source,
+            provider="octopus_responses_proxy",
+            provider_profile=None,
+            compatible=False,
+            compatibility_reason="System model is an orchestration alias; select an executable model or use a Codex account",
+            proxy_required=True,
+        )
     resolved = _resolve_custom_entry(catalog, selected_model)
     effective_model = resolved[2] if resolved is not None else selected_model
     route_available = proxy_available and (

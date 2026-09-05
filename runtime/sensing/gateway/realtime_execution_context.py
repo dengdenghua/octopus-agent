@@ -7,6 +7,7 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Any
 
 from runtime.execution.artifact_contracts import HandoffRecorder
@@ -33,6 +34,7 @@ class RealtimeExecutionContext:
     session: Session | None = None
     maximum_duration_s: float | None = None
     handoff_recorder: HandoffRecorder | None = None
+    trusted_workspace_mode: str | None = None
 
     def _initialize(self, runtime: Any, turn: Turn, agent: Any, intent: ParsedIntent) -> None:
         from runtime.core.cerebrum.pause_control import turn_wall_time_cap_s
@@ -55,8 +57,16 @@ class RealtimeExecutionContext:
             raise ValueError("authenticated execution principal is incomplete")
         if tenant:
             metadata["tenant_id"] = tenant
+            metadata["owner_actor_id"] = actor
         if turn.execution_workspace_path:
             metadata["workspace_path"] = turn.execution_workspace_path
+            # The gateway has resolved this directory for the authenticated
+            # turn. Chat/research still need to read their working directory,
+            # even when only output/final is writable. A Python Path keeps
+            # this grant out of JSON/client metadata projection.
+            metadata["_host_workspace_read_root"] = Path(turn.execution_workspace_path)
+            if self.trusted_workspace_mode is not None and context.get("mode") != "plan":
+                metadata["mode"] = self.trusted_workspace_mode
         workspaces = getattr(runtime, "_workspaces", None)
         if workspaces is not None:
             metadata["_artifact_output_root"] = str(workspaces.layout(turn.thread_id).final)

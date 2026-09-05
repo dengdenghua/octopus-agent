@@ -33,6 +33,7 @@ allowed roots · they never re-implement the mode ladder.
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -61,6 +62,28 @@ _log = logging.getLogger(__name__)
 def _data_root() -> Path:
     """Base directory for workspace state. Respects the shared path contract."""
     return app_paths().data_dir
+
+
+def _local_filesystem_roots() -> tuple[Path, ...]:
+    """Full local access covers mounted Windows drives, not just the cwd drive."""
+    if os.name != "nt":
+        return (Path("/"),)
+    try:
+        if hasattr(os, "listdrives"):
+            return tuple(Path(drive) for drive in os.listdrives())
+        # Python 3.11 predates os.listdrives(). Enumerate root names without
+        # opening directories or probing the contents of removable drives.
+        import ctypes
+
+        windows_dlls = getattr(ctypes, "windll", None)
+        if windows_dlls is None:
+            return (Path(Path.cwd().anchor or "/"),)
+        mask = windows_dlls.kernel32.GetLogicalDrives()
+        if mask:
+            return tuple(Path(f"{chr(65 + bit)}:\\") for bit in range(26) if mask & (1 << bit))
+    except OSError:
+        pass
+    return (Path(Path.cwd().anchor or "/"),)
 
 
 def agent_workspace_root(agent_id: str) -> Path:
@@ -592,6 +615,17 @@ def resolve_execution_scope(session: Session | None) -> ExecutionScope:
             *tuple(root for root in write_scope.roots if root != workspace_path),
         )
 
+    # Root hosts may bind a working directory independently of the task's
+    # write mode. Only accept the Python-owned grant, never a JSON path from
+    # tool/client context. The active parent ceiling still applies below.
+    host_workspace = meta.get("_host_workspace_read_root")
+    if isinstance(host_workspace, Path) and host_workspace.is_absolute():
+        host_workspace = host_workspace.resolve(strict=False)
+        readable_roots = (
+            host_workspace,
+            *tuple(root for root in readable_roots if root != host_workspace),
+        )
+
     # Uploaded attachments are a separate, server-owned read domain.  The
     # gateway derives these roots from WorkspaceManager rather than trusting
     # attachment paths supplied by the browser.  Keep them read-only even in
@@ -633,11 +667,11 @@ def resolve_execution_scope(session: Session | None) -> ExecutionScope:
     # task/workspace roots first so relative paths still land in the expected
     # place, and append the filesystem root for explicitly absolute paths.
     if permission_mode == "bypassPermissions" and execution_environment == "local":
-        filesystem_root = Path(Path.cwd().anchor or "/").resolve(strict=False)
-        if filesystem_root not in readable_roots:
-            readable_roots = (*readable_roots, filesystem_root)
-        if filesystem_root not in writable_roots:
-            writable_roots = (*writable_roots, filesystem_root)
+        for filesystem_root in _local_filesystem_roots():
+            if filesystem_root not in readable_roots:
+                readable_roots = (*readable_roots, filesystem_root)
+            if filesystem_root not in writable_roots:
+                writable_roots = (*writable_roots, filesystem_root)
 
     if permission_mode == "bypassPermissions" or execution_environment == "local":
         shell_policy = "allow"

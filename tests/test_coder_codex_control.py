@@ -288,6 +288,39 @@ def test_follow_system_provider_is_always_isolated_behind_host_proxy() -> None:
     assert secret_profile.provider_profile is None
 
 
+@pytest.mark.parametrize("alias", ["octopus-agent", "octopus-mix", "mix"])
+def test_orchestration_alias_is_not_an_executable_codex_model(alias: str) -> None:
+    routes_probed = []
+    profile = resolve_codex_execution_profile(
+        system_model=alias,
+        proxy_available=True,
+        proxy_route_available=lambda model: routes_probed.append(model) or True,
+    )
+    assert profile.compatible is False
+    assert profile.effective_model is None
+    assert profile.system_model == alias
+    assert "orchestration alias" in profile.compatibility_reason
+    assert routes_probed == []
+
+    selected = resolve_codex_execution_profile(
+        preference=CodexModelPreference(model="real-model"),
+        system_model=alias,
+        proxy_available=True,
+        proxy_route_available=lambda model: model == "real-model",
+    )
+    assert selected.compatible is True
+    assert selected.effective_model == "real-model"
+
+    account = resolve_codex_execution_profile(
+        preference=CodexModelPreference(mode="chatgpt", model="gpt-5.6-sol"),
+        system_model=alias,
+    )
+    assert account.compatible is True
+    assert account.effective_model == "gpt-5.6-sol"
+    assert account.provider == "codex_account"
+    assert account.proxy_required is False
+
+
 def test_proxy_profile_fails_closed_when_dispatcher_has_no_exact_model_route() -> None:
     class _Dispatcher:
         default_model = "configured-default"

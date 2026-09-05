@@ -108,6 +108,16 @@ def test_subagent_execute_task_propagates_project_scope(monkeypatch) -> None:
         "source": "projectos_task",
         "project_id": "P1",
         "tenant_id": "acme",
+        "mode": "code",
         "workspace_path": "/managed/thread-1",
         "_artifact_output_root": "/managed/thread-1/output/final",
     }
+    from runtime.execution.subagents.execution_context import parent_execution_task
+
+    host_task = parent_execution_task(captured["session"])
+    assert host_task is not None
+    assert host_task.thread_id == "thread-1"
+    assert host_task.actor_id == "alice"
+    assert host_task.tenant_id == "acme"
+    assert host_task.goal == "Milestone: deliver\nTask: implement"
+    assert 0 < host_task.resources.remaining_seconds() <= 900

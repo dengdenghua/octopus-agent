@@ -127,6 +127,66 @@ def _stub_caller(scripts: dict[str, dict[str, Any]]):
     return caller
 
 
+def test_default_team_role_caller_preserves_host_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.execution.host_boundary import create_host_execution_boundary
+    from runtime.execution.request import current_execution_request, execution_request_scope
+    from runtime.platform.process.session import session_scope
+    from runtime.safety.approval.cancellation import (
+        CancellationSource,
+        current_cancellation_token,
+        scoped_cancellation,
+    )
+
+    captured: dict[str, Any] = {}
+
+    def fake_call_subagent(**kwargs: Any) -> dict[str, Any]:
+        captured.update(kwargs)
+        captured["request"] = current_execution_request()
+        captured["cancellation"] = current_cancellation_token()
+        return {"output": "planned", "success": True}
+
+    monkeypatch.setattr(
+        "runtime.execution.subagents.bridge.call_subagent",
+        fake_call_subagent,
+    )
+    boundary = create_host_execution_boundary(
+        task_id="turn-team-host",
+        thread_id="thread-team-host",
+        goal="plan the change",
+        timeout_s=30,
+        actor_id="alice",
+        tenant_id="tenant-a",
+        metadata={"mode": "code"},
+    )
+    source = CancellationSource()
+    topology = TeamTopology(
+        name="host-boundary",
+        protocol=CoordinationProtocol.SEQUENTIAL,
+        agents={Role.PLANNER: AgentSpec(agent_id="planner")},
+    )
+
+    with (
+        execution_request_scope(boundary.request),
+        session_scope(boundary.session),
+        scoped_cancellation(source.token),
+    ):
+        result = TeamRunner().run(
+            topology,
+            "plan the change",
+            context={"_host_execution_session": "forged", "visible": "yes"},
+        )
+
+    assert result.success is True
+    assert captured["session"] is boundary.session
+    assert captured["request"] is boundary.request
+    assert captured["cancellation"] is source.token
+    assert captured["context"]["visible"] == "yes"
+    assert "_host_execution_session" not in captured["context"]
+    assert "_host_cancellation_token" not in captured["context"]
+
+
 def _seed_subagent_reviews(queue: Any, *, role: str, statuses: list[str]) -> None:
     for idx, status in enumerate(statuses):
         added = queue.add_from_task_run_review(

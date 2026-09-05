@@ -1,5 +1,6 @@
 name: presentations
 version: 0.1.0
+activation: on_demand
 display_name: 演示文稿
 description: 本地创建、提取和原位修改 PowerPoint 演示文稿。
 author: Octopus

@@ -304,6 +304,7 @@ def create_openai_router(
         ):
             agent_name_for_memory = ""
         try:
+            from runtime.memory.semantics import MemoryAuthor
             from runtime.memory.users.user_store import (
                 add_fact,
                 read_config,
@@ -332,6 +333,7 @@ def create_openai_router(
                             agent_id=agent_name_for_memory or None,
                             project=project_for_memory or None,
                             tenant_scope=memory_tenant_scope,
+                            author=MemoryAuthor.USER,
                         )
                         is not None
                     ):

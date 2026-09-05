@@ -47,7 +47,12 @@ def _host(tmp_path):
     parent.metadata["_artifact_output_root"] = str(artifacts)
     log = EventLog(tmp_path / "events.jsonl")
     parent.metadata["_execution_handoff_recorder"] = HandoffRecorder(
-        lambda receipt: log.execution_handoff(task.thread_id, task.task_id, receipt)
+        lambda receipt: log.execution_handoff(task.thread_id, task.task_id, receipt),
+        lambda: tuple(
+            dict(event.payload)
+            for event in log.iter_events()
+            if event.event == "execution_handoff" and event.thread_id == task.thread_id
+        ),
     )
     return repo, parent, log
 

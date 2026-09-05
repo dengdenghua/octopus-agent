@@ -402,6 +402,8 @@ def wire_stack(
 
         cowork_runtime = create_cowork_runtime(
             thread_store=thread_store,
+            workspace_root=thread_workspace_root,
+            logs_root=_paths.data_dir / "threads",
             enable_runner=stack is not None,
         )
         app.state.cowork_runtime = cowork_runtime

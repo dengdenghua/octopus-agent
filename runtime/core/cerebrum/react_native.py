@@ -36,6 +36,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from dataclasses import dataclass
 from typing import Any
 
 from runtime.core.cerebrum.react_types import ReActStep
@@ -54,6 +55,16 @@ _PUBLIC_UPDATE_FROM_THINKING_RE = re.compile(
     r"(?=\n\s*(?:Action|Observation|Thought|Final)\s*:|\n\n|$)",
     re.IGNORECASE | re.DOTALL,
 )
+
+
+@dataclass(frozen=True)
+class NativeToolSpecViews:
+    """The base and commentary-aware native tool catalogs for one turn."""
+
+    enabled: bool
+    base: list[Any]
+    public_update: list[Any]
+    evidence_update: list[Any]
 
 
 def _explicit_public_update_from_thinking(value: str) -> str:
@@ -230,6 +241,54 @@ def require_public_update_on_tool_specs(
         except AttributeError:
             augmented.append(spec)
     return augmented
+
+
+def build_loop_tool_spec_views(
+    executor: Any,
+    *,
+    enabled: bool,
+    agent: Any = None,
+    goal: str = "",
+    user_context: dict[str, Any] | None = None,
+    strict_explicit_reads: bool = False,
+    observed_read_sequence: bool = False,
+) -> NativeToolSpecViews:
+    """Build every native tool view from the executor's current registry.
+
+    Prompt assembly can activate an on-demand plugin and register new skills.
+    Calling this helper again after assembly makes those actions callable in
+    the same turn while keeping all native-mode and public-update rules in one
+    place.
+    """
+
+    if not enabled:
+        return NativeToolSpecViews(False, [], [], [])
+
+    specs = build_loop_tool_specs(
+        executor,
+        agent=agent,
+        goal=goal,
+        user_context=user_context,
+        strict_explicit_reads=strict_explicit_reads,
+    )
+    if not specs:
+        return NativeToolSpecViews(False, [], [], [])
+
+    context = user_context or {}
+    requires_public_update = bool(
+        context.get("realtime_public_orientation")
+        or context.get("realtime_public_narrative")
+        or observed_read_sequence
+    )
+    if not requires_public_update:
+        return NativeToolSpecViews(True, specs, specs, specs)
+
+    return NativeToolSpecViews(
+        True,
+        specs,
+        require_public_update_on_tool_specs(specs),
+        require_public_update_on_tool_specs(specs, evidence_round=True),
+    )
 
 
 def step_from_tool_calls(

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -16,6 +19,7 @@ from runtime.platform.connectors.credential_store import CredentialStore
 from runtime.platform.models.model_provider_plugin import (
     ModelProviderPluginManager,
     model_provider_entry_has_key,
+    model_provider_responses_models,
     resolve_model_provider_api_key,
 )
 from runtime.safety.auth import Identity, IdentityStore
@@ -58,6 +62,7 @@ def _item() -> dict[str, Any]:
             ],
             "excluded_models": [],
             "responses_models": ["muse-spark-1.2-contributor-free"],
+            "responses_model_prefixes": ["muse-spark-"],
             "compat_profile": "opencode_zen",
             "supports_tool_use": True,
             "models_are_free": True,
@@ -218,20 +223,27 @@ def test_configure_and_remove_hot_model_routes() -> None:
 
     configured = manager.configure(
         _item(),
-        models=["big-pickle", "muse-spark-1.2-contributor-free"],
+        models=["big-pickle", "muse-spark-1.2-contributor-free", "muse-spark-1.3-contributor-free"],
     )
 
     assert configured == {
         "configured": True,
         "entry_id": "opencode-zen",
-        "models": ["big-pickle", "muse-spark-1.2-contributor-free"],
+        "models": [
+            "big-pickle",
+            "muse-spark-1.2-contributor-free",
+            "muse-spark-1.3-contributor-free",
+        ],
     }
     entry = state["opencode-zen"]
     assert entry["api_key"] == ""
     assert entry["credential_ref"] == "connector:opencode-zen:api_key"
     assert entry["supports_tool_use"] is True
     assert entry["is_free"] is True
-    assert entry["responses_models"] == ["muse-spark-1.2-contributor-free"]
+    assert entry["responses_models"] == [
+        "muse-spark-1.2-contributor-free",
+        "muse-spark-1.3-contributor-free",
+    ]
     assert "zen-secret" not in repr(entry)
 
     removed = manager.remove(_item())
@@ -240,6 +252,96 @@ def test_configure_and_remove_hot_model_routes() -> None:
     assert state == {}
     assert unregistered == ["opencode-zen"]
     assert saved == ["opencode-zen", "opencode-zen"]
+
+
+@pytest.mark.parametrize(
+    ("overrides", "uses_responses"),
+    [
+        ({}, True),
+        ({"base_url": "https://relay.example/v1"}, False),
+        ({"managed_by_plugin": "other-provider"}, False),
+        ({"responses_model_prefixes": []}, False),
+    ],
+)
+def test_legacy_zen_protocol_repair_is_scoped_to_provider(overrides, uses_responses) -> None:
+    model = "muse-spark-1.3-contributor-free"
+    entry = {
+        "managed_by_plugin": "opencode-zen",
+        "base_url": "https://opencode.ai/zen/v1",
+        "responses_models": ["muse-spark-1.2-contributor-free"],
+        **overrides,
+    }
+    resolved = model_provider_responses_models(entry, [model, "big-pickle"])
+    assert resolved == ([model] if uses_responses else [])
+
+
+def test_restart_routes_discovered_muse_through_responses(tmp_path, monkeypatch) -> None:
+    from runtime.platform.capabilities.tenant_context import use_capability_scope
+    from runtime.platform.models.llm import (
+        LLMResponseFormatError,
+        ModelRequest,
+        ModelResponse,
+        ModelStreamEvent,
+    )
+    from runtime.safety.auth.scope import TenantScope
+    from runtime.sensing.model_router.openai_responses_router import OpenAIResponsesModelRouter
+    from runtime.sensing.model_router.openai_router import OpenAIModelRouter
+
+    model = "muse-spark-1.3-contributor-free"
+    entry = {
+        "id": "opencode-zen",
+        "managed_by_plugin": "opencode-zen",
+        "provider": "openai-compatible",
+        "base_url": "https://opencode.ai/zen/v1",
+        "credential_ref": "connector:opencode-zen:api_key",
+        "models": [model, "big-pickle"],
+        "responses_models": ["muse-spark-1.2-contributor-free"],
+    }
+    path = tmp_path / "custom-models.json"
+    path.write_text(json.dumps({"opencode-zen": entry}), encoding="utf-8")
+    credentials = CredentialStore(root=tmp_path / "credentials")
+    scopes = [TenantScope(tenant_id="tenant-a", actor_id=name) for name in ("alice", "bob")]
+    for scope in scopes:
+        with use_capability_scope(scope):
+            credentials.set_secret("opencode-zen", "api_key", f"test-key-{scope.actor_id}")
+    routes = {}
+    dispatcher = SimpleNamespace(register=lambda key, router: routes.__setitem__(key, router))
+    create_config_router(
+        stack=SimpleNamespace(planner=SimpleNamespace(router=dispatcher)),
+        custom_models_path=path,
+        credential_store=credentials,
+    )
+    monkeypatch.setattr(
+        OpenAIResponsesModelRouter,
+        "call",
+        lambda router, _: ModelResponse(text=f"responses:{router._api_key}"),
+    )
+    monkeypatch.setattr(
+        OpenAIModelRouter,
+        "call",
+        lambda router, _: ModelResponse(text=f"chat_completions:{router.api_key}"),
+    )
+    for cls in (OpenAIModelRouter, OpenAIResponsesModelRouter):
+        monkeypatch.setattr(
+            cls,
+            "call_stream",
+            lambda router, request: iter(
+                [ModelStreamEvent(type="done", final=router.call(request))]
+            ),
+        )
+    for selected, expected in [(model, "responses"), ("big-pickle", "chat_completions")]:
+        request = ModelRequest(model=selected, messages=[{"role": "user", "content": "OK"}])
+        for scope in [*scopes, scopes[0]]:
+            with use_capability_scope(scope):
+                response = routes[selected].call(request)
+                assert response.text == f"{expected}:test-key-{scope.actor_id}"
+                streamed = list(routes[selected].call_stream(request))
+                assert streamed[-1].final == response
+        with use_capability_scope(TenantScope(tenant_id="tenant-b", actor_id="alice")):
+            with pytest.raises(LLMResponseFormatError, match="尚未连接"):
+                routes[selected].call(request)
+            with pytest.raises(LLMResponseFormatError, match="尚未连接"):
+                list(routes[selected].call_stream(request))
 
 
 def test_plugin_connect_hot_registers_and_disconnect_removes_routes(

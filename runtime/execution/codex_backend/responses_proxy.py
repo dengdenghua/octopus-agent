@@ -16,7 +16,9 @@ import binascii
 import hashlib
 import hmac
 import json
+import logging
 import os
+import re
 import secrets
 import time
 from collections.abc import Callable, Mapping, Sequence
@@ -341,7 +343,20 @@ class ScopedResponsesProxy:
             )
         except (ConnectionError, OSError, asyncio.IncompleteReadError, asyncio.LimitOverrunError):
             return
-        except Exception:  # noqa: BLE001 - provider details must never cross the proxy boundary
+        except Exception as exc:  # noqa: BLE001 - provider details must never cross the proxy boundary
+            # Keep diagnostics useful without logging payloads, credentials,
+            # provider bodies or exception text from an untrusted upstream.
+            status_match = re.search(r"(?:HTTP[ _]|http_)([1-5][0-9]{2})\b", str(exc))
+            trace = exc.__traceback__
+            while trace is not None and trace.tb_next is not None:
+                trace = trace.tb_next
+            logging.getLogger(__name__).warning(
+                "Scoped Responses request failed: error_type=%s http_status=%s source=%s:%s",
+                type(exc).__name__,
+                status_match.group(1) if status_match else "unknown",
+                trace.tb_frame.f_code.co_name if trace else "unknown",
+                trace.tb_lineno if trace else 0,
+            )
             status, headers, payload = (
                 502,
                 {"Content-Type": "application/json"},

@@ -454,6 +454,130 @@ describe("CoderEngineControl", () => {
 });
 
 describe("CoderEngineSettings", () => {
+  it("distinguishes a connected account from an unusable model and applies the chat default explicitly", async () => {
+    const user = userEvent.setup();
+    let profile = {
+      ...systemProfile,
+      selected_model: null as string | null,
+      effective_model: null as string | null,
+      system_model: "octopus-agent",
+      provider: "octopus_responses_proxy",
+      compatible: false,
+      compatibility_reason:
+        "System model is an orchestration alias; select an executable model or use a Codex account" as
+          | string
+          | null,
+      execution_available: false,
+      execution_unavailable_reason: "model_incompatible" as string | null,
+    };
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = urlOf(input);
+        if (url.includes("/model-profile")) {
+          if (init?.method === "PUT") {
+            const body = JSON.parse(String(init.body));
+            profile = {
+              ...profile,
+              mode: body.mode,
+              selected_model: body.model,
+              effective_model: body.model,
+              compatible: true,
+              compatibility_reason: null,
+              execution_available: true,
+              execution_unavailable_reason: null,
+              provider: "codex_account",
+            };
+          }
+          return jsonResponse(profile);
+        }
+        if (url.includes("/account"))
+          return jsonResponse({
+            account: { type: "chatgpt" },
+            login_pending: false,
+          });
+        if (url.includes("/models")) return jsonResponse(models);
+        return jsonResponse({});
+      },
+    );
+    renderWithProviders(
+      <CoderEngineSettings conversationDefaultModel="chatgpt/gpt-5.6-sol" />,
+      { locale: "zh-CN" },
+    );
+    expect(await screen.findByText("账号已连接")).toBeVisible();
+    expect(screen.getByText("待选择可执行模型")).toBeVisible();
+    expect(screen.getByText("暂不可执行")).toBeVisible();
+    expect(screen.getByText(/后端默认值是自动路由入口/)).toBeVisible();
+    expect(
+      screen.queryByText(/当前通过 Codex 引擎运行/),
+    ).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === "PUT"),
+    ).toBe(false);
+    await user.click(
+      screen.getByRole("button", { name: "使用对话默认模型 · gpt-5.6-sol" }),
+    );
+    expect(await screen.findByText("已选模型 · gpt-5.6-sol")).toBeVisible();
+    expect(screen.getByText("可由 Codex 引擎运行")).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/model-profile"),
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ mode: "chatgpt", model: "gpt-5.6-sol" }),
+      }),
+    );
+    expect(
+      screen.queryByRole("button", { name: /使用对话默认模型/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows missing executable readiness even when the model is compatible and the account is connected", async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = urlOf(input);
+      if (url.includes("/model-profile"))
+        return jsonResponse({
+          ...accountProfile,
+          execution_available: false,
+          execution_unavailable_reason: "executable_unavailable",
+        });
+      if (url.includes("/account"))
+        return jsonResponse({
+          account: { type: "chatgpt" },
+          login_pending: false,
+        });
+      if (url.includes("/models")) return jsonResponse(models);
+      return jsonResponse({});
+    });
+    renderWithProviders(<CoderEngineSettings />, { locale: "zh-CN" });
+    expect(await screen.findByText("暂不可执行")).toBeVisible();
+    expect(screen.getByText("账号已连接")).toBeVisible();
+    expect(
+      screen.getByText("未找到 Codex 程序，请检查本地安装。"),
+    ).toBeVisible();
+    expect(screen.queryByText("可由 Codex 引擎运行")).not.toBeInTheDocument();
+  });
+
+  it("does not apply a ChatGPT subscription default through an API key account", async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = urlOf(input);
+      if (url.includes("/model-profile")) return jsonResponse(accountProfile);
+      if (url.includes("/account"))
+        return jsonResponse({
+          account: { type: "apiKey" },
+          login_pending: false,
+        });
+      if (url.includes("/models")) return jsonResponse(models);
+      return jsonResponse({});
+    });
+    renderWithProviders(
+      <CoderEngineSettings conversationDefaultModel="chatgpt/gpt-5.6-sol" />,
+      { locale: "zh-CN" },
+    );
+    await screen.findByText("账号已连接");
+    expect(
+      screen.queryByRole("button", { name: /使用对话默认模型/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("starts and explicitly cancels a device-code login without persisting the auth URL", async () => {
     const user = userEvent.setup();
     const openExternal = vi.fn().mockResolvedValue(undefined);

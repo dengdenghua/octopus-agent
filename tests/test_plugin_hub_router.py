@@ -23,6 +23,10 @@ class _FakeHub:
     def start(self, _name: str):
         return True
 
+    def activate_plugin(self, name: str):
+        self.calls.append(("activate", name, {}))
+        return {"ok": True, "plugin_id": name, "loaded": True, "started": True}
+
     def stop(self, _name: str):
         return True
 
@@ -114,6 +118,10 @@ def test_persistent_lifecycle_route_contract() -> None:
 
     assert client.post("/api/plugin-hub/plugins/narrative_studio/enable").status_code == 200
     assert client.post("/api/plugin-hub/plugins/narrative_studio/disable").status_code == 200
+
+    activated = client.post("/api/plugin-hub/plugins/documents/activate")
+    assert activated.status_code == 200
+    assert hub.calls[-1] == ("activate", "documents", {})
 
     removed = client.delete(
         "/api/plugin-hub/plugins/narrative_studio/install",

@@ -28,6 +28,46 @@ def _make_plugin(root: Path, name: str = "testplug") -> Path:
     return d
 
 
+def _make_on_demand_plugin(root: Path, marker: Path) -> Path:
+    plugin = root / "lazyplug"
+    plugin.mkdir(parents=True)
+    (plugin / "plugin.yaml").write_text(
+        "name: lazyplug\nversion: 1.0.0\nactivation: on_demand\n",
+        encoding="utf-8",
+    )
+    marker_literal = repr(str(marker))
+    (plugin / "__init__.py").write_text(
+        "from pathlib import Path\n"
+        "from runtime.platform.plugins.plugin_base import ModulePlugin\n"
+        f"MARKER = Path({marker_literal})\n"
+        "MARKER.write_text('imported', encoding='utf-8')\n"
+        "class LazyPlugin(ModulePlugin):\n"
+        "    name = 'lazyplug'\n"
+        "    def on_start(self, ctx):\n"
+        "        del ctx\n"
+        "        MARKER.write_text('started', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    return plugin
+
+
+def test_on_demand_plugin_is_discovered_without_import_until_activation(tmp_path: Path) -> None:
+    marker = tmp_path / "activation-marker.txt"
+    _make_on_demand_plugin(tmp_path, marker)
+    hub = PluginHub(plugin_dir=tmp_path)
+
+    discovered = next(item for item in hub.discover() if item["id"] == "lazyplug")
+    assert discovered["activation"] == "on_demand"
+    assert hub.load_all() == []
+    assert not marker.exists()
+
+    activated = hub.activate_plugin("lazyplug")
+    assert activated["ok"] is True
+    assert activated["loaded"] is True
+    assert activated["started"] is True
+    assert marker.read_text(encoding="utf-8") == "started"
+
+
 def _make_octopus_plugin(root: Path, *, fail_after_register: bool = False) -> Path:
     plugin = root / "octopusplug"
     plugin.mkdir(parents=True)

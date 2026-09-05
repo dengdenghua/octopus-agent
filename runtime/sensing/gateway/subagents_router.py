@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 from typing import Any
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict
 
@@ -63,6 +64,14 @@ class SubagentDispatchRequest(BaseModel):
     # the prior transcript is injected and the new turn appends to the same
     # session; unknown session ids fail loudly before any runner work.
     continue_session_id: str | None = None
+    # Explicit file contracts are resolved against the host-owned task scope.
+    # ``isolate`` gives a writer a private Git worktree and returns a candidate
+    # patch; the direct API never applies that patch implicitly.
+    isolate: bool = False
+    input_files: list[str] | None = None
+    output_files: list[str] | None = None
+    output_schema: dict[str, Any] | None = None
+    schema_max_retries: int = 1
 
 
 _MIN_DISPATCH_TIMEOUT_S = 1
@@ -112,6 +121,7 @@ def create_subagents_router(
     registry: Any = None,
     thread_store: Any = None,
     workspace_root: Any = None,
+    logs_root: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
     jwt_secret: str | None = None,
@@ -277,6 +287,74 @@ def create_subagents_router(
         )
         return context, workspace_str, principal
 
+    def _host_dispatch_session(
+        context: dict[str, Any],
+        body: SubagentDispatchRequest,
+        *,
+        timeout_s: int,
+        principal: Any,
+    ) -> Any:
+        """Create the immutable host task used by both direct dispatch routes."""
+
+        from runtime.execution.artifact_contracts import HandoffRecorder
+        from runtime.execution.host_boundary import create_host_execution_boundary
+
+        actor = str(getattr(principal, "actor_id", "") or "").strip() or None
+        tenant = str(getattr(principal, "tenant_id", "") or "").strip() or None
+        raw_thread_id = str(context.get("thread_id") or body.thread_id or "").strip()
+        thread_id = raw_thread_id or f"direct-{uuid4().hex}"
+        if raw_thread_id:
+            try:
+                from runtime.memory.threads.event_log import validate_thread_id
+
+                thread_id = validate_thread_id(raw_thread_id)
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
+
+        task_id = f"direct-{uuid4().hex}"
+        raw_metadata = context.get("runtime_session_metadata")
+        metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
+        metadata["source"] = "subagents_http_dispatch"
+        if require_auth:
+            # Authenticated dispatch is confined to the re-verified managed
+            # workspace. This explicit code mode lets the unified scope see
+            # that workspace instead of falling back to chat artifacts only.
+            metadata["mode"] = "code"
+
+        recorder = None
+        if logs_root is not None:
+            from runtime.memory.threads.event_log import EventLog, thread_log_path
+
+            log = EventLog(thread_log_path(logs_root, thread_id))
+
+            def read_handoffs() -> tuple[dict[str, Any], ...]:
+                return tuple(
+                    dict(event.payload)
+                    for event in log.iter_events()
+                    if event.event == "execution_handoff" and event.thread_id == thread_id
+                )
+
+            def write_handoff(receipt: dict[str, Any]) -> None:
+                log.execution_handoff(thread_id, task_id, receipt)
+
+            recorder = HandoffRecorder(
+                write_handoff,
+                read_handoffs,
+            )
+
+        boundary = create_host_execution_boundary(
+            task_id=task_id,
+            thread_id=thread_id,
+            goal=body.prompt,
+            timeout_s=float(timeout_s),
+            actor_id=actor,
+            tenant_id=tenant,
+            metadata=metadata,
+            handoff_recorder=recorder,
+        )
+        context["host_task_id"] = task_id
+        return boundary.session
+
     def _registry() -> Any:
         if registry is not None:
             return registry
@@ -380,7 +458,7 @@ def create_subagents_router(
 
     @router.post("/api/subagents/dispatch")
     def dispatch_subagent(request: Request, body: SubagentDispatchRequest) -> dict[str, Any]:
-        ctx, workspace_path, _principal = _authenticated_dispatch_context(request, body)
+        ctx, workspace_path, principal = _authenticated_dispatch_context(request, body)
         target = (body.subagent_type or body.name or "").strip()
         if not target:
             raise HTTPException(400, "subagent_type is required")
@@ -389,6 +467,12 @@ def create_subagents_router(
         from runtime.execution.subagents import call_subagent
 
         timeout_s = _bounded_dispatch_timeout(body.timeout_s)
+        host_session = _host_dispatch_session(
+            ctx,
+            body,
+            timeout_s=timeout_s,
+            principal=principal,
+        )
         result = call_subagent(
             target,
             body.prompt,
@@ -396,6 +480,12 @@ def create_subagents_router(
             timeout_s=timeout_s,
             timeout_seconds=float(timeout_s),
             workspace_path=workspace_path or "",
+            session=host_session,
+            isolate=body.isolate,
+            input_files=body.input_files,
+            output_files=body.output_files,
+            output_schema=body.output_schema,
+            schema_max_retries=max(0, min(3, int(body.schema_max_retries))),
             requires_capabilities=body.requires_capabilities,
             continue_session_id=body.continue_session_id,
         )
@@ -426,7 +516,7 @@ def create_subagents_router(
         The terminal ``result`` event always fires last so consumers can
         treat it as the canonical end-of-stream marker.
         """
-        stream_ctx, workspace_path, _principal = _authenticated_dispatch_context(request, body)
+        stream_ctx, workspace_path, principal = _authenticated_dispatch_context(request, body)
         target = (body.subagent_type or body.name or "").strip()
         if not target:
             raise HTTPException(400, "subagent_type is required")
@@ -438,6 +528,14 @@ def create_subagents_router(
         import threading
 
         from runtime.execution.subagents import call_subagent
+
+        timeout_s = _bounded_dispatch_timeout(body.timeout_s)
+        host_session = _host_dispatch_session(
+            stream_ctx,
+            body,
+            timeout_s=timeout_s,
+            principal=principal,
+        )
 
         event_queue: queue.Queue[dict[str, Any] | None] = queue.Queue(
             maxsize=1024,
@@ -451,7 +549,6 @@ def create_subagents_router(
 
         def _runner() -> None:
             try:
-                timeout_s = _bounded_dispatch_timeout(body.timeout_s)
                 result = call_subagent(
                     target,
                     body.prompt,
@@ -459,6 +556,12 @@ def create_subagents_router(
                     timeout_s=timeout_s,
                     timeout_seconds=float(timeout_s),
                     workspace_path=workspace_path or "",
+                    session=host_session,
+                    isolate=body.isolate,
+                    input_files=body.input_files,
+                    output_files=body.output_files,
+                    output_schema=body.output_schema,
+                    schema_max_retries=max(0, min(3, int(body.schema_max_retries))),
                     event_emitter=_emitter,
                     requires_capabilities=body.requires_capabilities,
                     continue_session_id=body.continue_session_id,

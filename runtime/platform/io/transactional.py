@@ -73,7 +73,6 @@ def _os_lock(target: Path) -> Iterator[None]:
 
                 if os.fstat(fd).st_size == 0:
                     os.write(fd, b"\0")
-                    os.fsync(fd)
                 os.lseek(fd, 0, os.SEEK_SET)
                 msvcrt.locking(fd, msvcrt.LK_LOCK, 1)  # type: ignore[attr-defined]
             except (ImportError, OSError) as exc:
@@ -82,7 +81,7 @@ def _os_lock(target: Path) -> Iterator[None]:
             try:
                 import fcntl
 
-                fcntl.flock(fd, fcntl.LOCK_EX)
+                fcntl.flock(fd, fcntl.LOCK_EX)  # type: ignore[attr-defined]
             except (ImportError, OSError) as exc:
                 raise TransactionalFileError(f"cannot lock state file: {target}") from exc
         else:
@@ -100,7 +99,7 @@ def _os_lock(target: Path) -> Iterator[None]:
                 else:
                     import fcntl
 
-                    fcntl.flock(fd, fcntl.LOCK_UN)
+                    fcntl.flock(fd, fcntl.LOCK_UN)  # type: ignore[attr-defined]
         with contextlib.suppress(OSError):
             os.close(fd)
 
@@ -175,7 +174,15 @@ def _atomic_replace_unlocked(path: Path, payload: bytes, *, mode: int | None) ->
         os.replace(temporary, path)
         if mode is not None:
             path.chmod(mode)
-        _fsync_parent(path.parent)
+        if os.name == "nt":
+            # Windows cannot fsync a directory entry. Flush the committed
+            # destination through a writable handle after the atomic replace;
+            # a failure is ambiguous (the rename may already be visible) and
+            # must not be acknowledged as durable.
+            with path.open("r+b") as committed:
+                os.fsync(committed.fileno())
+        else:
+            _fsync_parent(path.parent)
     except Exception:
         if fd >= 0:
             os.close(fd)

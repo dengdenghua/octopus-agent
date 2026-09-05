@@ -249,11 +249,21 @@ def test_team_subagent_lifecycle_maps_to_first_class_item(
         agents={Role.PLANNER: AgentSpec(agent_id="planner_a")},
     )
 
+    captured: dict[str, Any] = {}
+
     class FakeTeamRunner:
         def __init__(self, *args: Any, event_emitter: Any = None, **kwargs: Any) -> None:
             self._emit = event_emitter
 
         def run(self, topology: Any, text: str, context: dict[str, Any]) -> TeamRunResult:
+            from runtime.execution.request import current_execution_request
+            from runtime.platform.process.session import current_session
+            from runtime.safety.approval.cancellation import current_cancellation_token
+
+            captured["session"] = current_session()
+            captured["request"] = current_execution_request()
+            captured["cancellation"] = current_cancellation_token()
+            captured["cancelled_during_run"] = current_cancellation_token().is_cancelled
             assert self._emit is not None
             self._emit(
                 {
@@ -321,6 +331,16 @@ def test_team_subagent_lifecycle_maps_to_first_class_item(
     assert sub_completed[0]["status"] == "completed"
     assert sub_completed[0]["iterationCount"] == 2
     assert sub_completed[0]["filesTouched"] == ["plan.md"]
+
+    host_session = captured["session"]
+    host_request = captured["request"]
+    assert host_session.thread_id == "th-team-subagent"
+    assert host_request.task is host_session.metadata["_execution_task"]
+    assert host_request.task.thread_id == "th-team-subagent"
+    assert host_request.task.resources.deadline is not None
+    assert host_session.metadata["source"] == "realtime_team_topology"
+    assert "_execution_handoff_recorder" in host_session.metadata
+    assert captured["cancelled_during_run"] is False
 
     turn = out["response"].result["turn"]
     sub_items = [it for it in turn["items"] if it["type"] == "subagent"]

@@ -381,6 +381,32 @@ class TestCodeModeMissingWriteGuard:
             is None
         )
 
+    def test_successful_office_artifact_write_allows_completion(self) -> None:
+        step = _step(
+            1,
+            action=(
+                'documents.create_docx({"path":"acceptance.docx",'
+                '"sections":[{"type":"paragraph","text":"verified"}]})'
+            ),
+            observation='{"ok":true,"path":"acceptance.docx"}',
+        )
+        step.action_results = [
+            {
+                "tool_name": "documents.create_docx",
+                "ok": True,
+                "observation": "created acceptance.docx",
+            }
+        ]
+
+        assert (
+            _code_mode_missing_write_guard(
+                [step],
+                "Created acceptance.docx.",
+                goal="Create acceptance.docx with the required paragraph.",
+            )
+            is None
+        )
+
     def test_read_only_review_does_not_require_write(self) -> None:
         assert (
             _code_mode_missing_write_guard(

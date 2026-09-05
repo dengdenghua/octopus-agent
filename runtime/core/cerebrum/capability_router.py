@@ -213,10 +213,10 @@ class CapabilityActivation:
                 pin_lines.append(
                     "User pinned these plugins via @plugin: "
                     + ", ".join(f"`{n}`" for n in self.pinned_plugins)
-                    + ". Treat this as an explicit routing request: use "
-                    "`query_capability` / `use_capability` for the pinned plugin "
-                    "before lower-level tools unless it is unavailable or clearly "
-                    "irrelevant.",
+                    + ". Treat this as an explicit routing request. If the user "
+                    "also named an exact registered action, call that action "
+                    "directly. Otherwise use `query_capability` / "
+                    "`use_capability` before choosing a lower-level tool.",
                 )
             if self.pinned_agents:
                 pin_lines.append(

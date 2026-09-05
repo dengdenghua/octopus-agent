@@ -20,6 +20,7 @@ from websockets.asyncio.client import connect
 from websockets.exceptions import InvalidStatus
 
 ApprovalAction = Literal["accept", "decline"]
+ExecutionEngine = Literal["auto", "octopus", "codex"]
 ApprovalResponder = Callable[[str, dict[str, Any]], dict[str, Any]]
 EventObserver = Callable[[dict[str, Any]], None]
 WorkspaceResolver = str | Path | Callable[[], str | Path]
@@ -119,9 +120,10 @@ class RealtimeTrialRunner:
     approval_policy: str = "never"
     approval_action: ApprovalAction = "decline"
     approval_responder: ApprovalResponder | None = None
-    # Explicit engine selection is expressed as the server-registered agent
-    # identity. A fresh eval thread then follows the production role route.
+    # Agent identity and engine selection stay separate so a benchmark can test
+    # role routing or pin the production execution boundary explicitly.
     agent_id: str | None = None
+    execution_engine: ExecutionEngine | None = None
     model: str | None = None
     topology_id: str | None = None
     workspace: WorkspaceResolver | None = None
@@ -186,6 +188,8 @@ class RealtimeTrialRunner:
             ],
             "approvalPolicy": self.approval_policy,
         }
+        if self.execution_engine is not None:
+            params["executionEngine"] = self.execution_engine
         if self.model:
             params["model"] = self.model
         if self.topology_id:

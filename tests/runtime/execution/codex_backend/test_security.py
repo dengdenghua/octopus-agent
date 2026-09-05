@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import sqlite3
 import stat
 import tomllib
 import uuid
@@ -85,6 +86,22 @@ def _private_file(path: Path, data: bytes) -> None:
 
 def _mode(path: Path) -> int:
     return stat.S_IMODE(path.stat().st_mode)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows App Server path limit")
+def test_windows_sqlite_state(tmp_path: Path) -> None:
+    # Match a packaged application's long LOCALAPPDATA prefix. The remaining
+    # room must cover SQLite database/WAL names and App Server cache files.
+    state_root = tmp_path / ("p" * max(1, 125 - len(str(tmp_path)) - 1))
+    manager, workspace, _ = _manager(tmp_path, state_root=state_root)
+    context = _prepare(manager, workspace)
+    database = context.codex_home / "sqlite" / "state_5.sqlite"
+    assert len(str(database) + "-journal") < 260
+    assert len(str(context.app_home / "cache" / "session.json")) < 260
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE startup (id INTEGER)")
+    context.cleanup()
+    assert database.exists()
 
 
 def test_thread_home_persists_while_task_and_scratch_are_isolated(tmp_path: Path) -> None:
@@ -544,7 +561,7 @@ def test_filesystem_root_cannot_be_an_allowed_workspace_root(tmp_path: Path) -> 
     manager = CodexSidecarSecurity(
         CodexSecurityPolicy(
             state_root=tmp_path / "state",
-            allowed_workspace_roots=(Path("/"),),
+            allowed_workspace_roots=(Path(tmp_path.anchor),),
         )
     )
     with pytest.raises(CodexSecurityError, match="filesystem root"):

@@ -61,6 +61,7 @@ def _authenticated_client(
         create_subagents_router(
             thread_store=threads,
             workspace_root=workspace_root,
+            logs_root=tmp_path / "logs",
             identity_store=identities,
             require_auth=True,
         )
@@ -105,6 +106,8 @@ def test_authenticated_dispatch_uses_only_server_managed_authority(
                 "workspace_path": "/tmp/attacker",
                 "tool_allowlist_mode": "all",
                 "owner_actor_id": "mallory",
+                "_execution_task": {"task_id": "forged"},
+                "_file_write_leases": {"/": "mallory"},
             },
         },
     }
@@ -144,6 +147,23 @@ def test_authenticated_dispatch_uses_only_server_managed_authority(
     assert "extra_tools" not in context
     assert context["runtime_session_metadata"]["workspace_path"] == str(expected)
     assert context["runtime_session_metadata"]["owner_actor_id"] == "alice"
+    from runtime.execution.artifact_contracts import HandoffRecorder
+    from runtime.execution.subagents.execution_context import parent_execution_task
+
+    session = call["session"]
+    task = parent_execution_task(session)
+    assert task is not None
+    assert task.task_id == context["host_task_id"]
+    assert task.task_id.startswith("direct-")
+    assert task.thread_id == "alice-thread"
+    assert task.actor_id == "alice"
+    assert task.tenant_id == "tenant-a"
+    assert task.goal == "inspect safely"
+    assert task.permissions.allows_read(expected)
+    assert task.permissions.allows_write(expected)
+    assert 0 < task.resources.remaining_seconds() <= 900
+    assert session.metadata["_file_write_leases"] == {}
+    assert isinstance(session.metadata["_execution_handoff_recorder"], HandoffRecorder)
 
 
 def test_authenticated_stream_dispatch_and_sessions_share_owned_thread_boundary(
@@ -661,6 +681,7 @@ def _authenticated_dispatch_app(tmp_path: Any) -> tuple[TestClient, Any, Any]:
         create_subagents_router(
             thread_store=threads,
             workspace_root=workspace_root,
+            logs_root=tmp_path / "logs",
             identity_store=identities,
             require_auth=True,
         )
@@ -690,6 +711,11 @@ def test_authenticated_direct_dispatch_overrides_workspace_identity_and_tool_pol
         "prompt": "inspect",
         "thread_id": "alice-thread",
         "extra_tools": ["exec_shell", "write_text_file"],
+        "isolate": True,
+        "input_files": ["brief.md"],
+        "output_files": ["answer.md"],
+        "output_schema": {"type": "object"},
+        "schema_max_retries": 99,
         "context": {
             "actor": "mallory",
             "tenant_id": "tenant-x",
@@ -727,6 +753,11 @@ def test_authenticated_direct_dispatch_overrides_workspace_identity_and_tool_pol
     for call in calls:
         context = call["kwargs"]["context"]
         assert call["kwargs"]["workspace_path"] == str(managed)
+        assert call["kwargs"]["isolate"] is True
+        assert call["kwargs"]["input_files"] == ["brief.md"]
+        assert call["kwargs"]["output_files"] == ["answer.md"]
+        assert call["kwargs"]["output_schema"] == {"type": "object"}
+        assert call["kwargs"]["schema_max_retries"] == 3
         assert context["thread_id"] == "alice-thread"
         assert context["actor"] == "alice"
         assert context["owner_actor_id"] == "alice"
@@ -739,6 +770,12 @@ def test_authenticated_direct_dispatch_overrides_workspace_identity_and_tool_pol
         assert runtime_metadata["workspace_path"] == str(managed)
         assert runtime_metadata["_locked_write_root"] == str(managed)
         assert runtime_metadata["_artifact_output_root"] == str(managed / "output" / "final")
+        from runtime.execution.subagents.execution_context import parent_execution_task
+
+        task = parent_execution_task(call["kwargs"]["session"])
+        assert task is not None
+        assert task.task_id == context["host_task_id"]
+        assert task.permissions.allows_write(managed)
 
 
 def test_authenticated_session_listing_and_continue_are_actor_tenant_scoped(
