@@ -16,6 +16,7 @@ from runtime.projectos.cowork_bridge import full_project_state
 from runtime.projectos.model import Milestone, Project, Task
 from runtime.projectos.pm import (
     build_pm_report,
+    build_portfolio_entry,
     build_retro,
     derive_milestone_pm,
 )
@@ -356,3 +357,98 @@ def test_ready_tasks_respects_dag_dependencies() -> None:
     ordered = ready_tasks([ready_high, waiting_low, standalone, done_dep])
     # 依赖已就绪的 P0 排在 P2 前；依赖未完成的即使 P0 也不进入前沿
     assert [t.id for t in ordered] == ["blocked", "free"]
+
+
+# ── portfolio：跨项目汇总的精简行 ──────────────────────────────
+def test_portfolio_entry_takes_the_worst_milestone_health(tmp_path) -> None:
+    s = _store_with_project(tmp_path)
+    report = build_pm_report(s, "P1", now=NOW)
+    assert report is not None
+
+    row = build_portfolio_entry(s.get_project("P1"), report)
+
+    # M1 有逾期任务 → 项目级健康度不得比项目自己的 PM 视图更乐观
+    assert row["health"] == "overdue"
+    assert row["readable"] is True
+    assert row["progress"] == report["overall_progress"]
+    assert row["counts"] == {
+        "milestones": 2,
+        "risks": len(report["risks"]),
+        "blockers": 0,
+        "overdue": 1,
+        "next_actions": len(report["next_actions"]),
+    }
+    # 逾期任务被拍平成带里程碑上下文的一层，跨项目列表才有得展示
+    assert [t["goal"] for t in row["overdue"]] == ["fix bug"]
+    assert row["overdue"][0]["milestone"] == "build"
+    assert row["overdue"][0]["priority"] == "P1"
+
+
+def test_portfolio_entry_keeps_gantt_fields_and_overdue_counts(tmp_path) -> None:
+    s = _store_with_project(tmp_path)
+    report = build_pm_report(s, "P1", now=NOW)
+
+    row = build_portfolio_entry(s.get_project("P1"), report)
+    build_row = next(m for m in row["milestones"] if m["name"] == "build")
+
+    # 甘特需要计划开始 / 截止与逾期条数，缺一个就画不出时间轴
+    assert set(build_row) == {
+        "id",
+        "name",
+        "status",
+        "health",
+        "priority",
+        "planned_start",
+        "due_at",
+        "done",
+        "total",
+        "failed",
+        "progress",
+        "remaining_estimate",
+        "overdue_count",
+    }
+    assert build_row["due_at"] == "2026-08-25"
+    assert build_row["overdue_count"] == 1
+
+
+def test_portfolio_entry_flags_unreadable_project_instead_of_dropping_it(tmp_path) -> None:
+    s = _store_with_project(tmp_path)
+
+    row = build_portfolio_entry(s.get_project("P1"), None)
+
+    # 读取失败的项目仍要出现在汇总里：丢掉它等于让坏项目从最该暴露它的界面消失
+    assert row["readable"] is False
+    assert row["health"] == "on_track"
+    assert row["counts"] == {
+        "milestones": 0,
+        "risks": 0,
+        "blockers": 0,
+        "overdue": 0,
+        "next_actions": 0,
+    }
+    assert row["milestones"] == []
+    assert row["overdue"] == []
+    assert row["progress"] == 0.0
+    assert row["name"] == "x"
+
+
+def test_portfolio_entry_truncates_lists_but_keeps_true_counts(tmp_path) -> None:
+    s = _store_with_project(tmp_path)
+    report = build_pm_report(s, "P1", now=NOW)
+
+    row = build_portfolio_entry(
+        s.get_project("P1"),
+        report,
+        max_milestones=1,
+        max_overdue=0,
+        max_next_actions=0,
+        max_risks=0,
+    )
+
+    assert len(row["milestones"]) == 1
+    assert row["overdue"] == []
+    assert row["next_actions"] == []
+    assert row["risks"] == []
+    # 计数反映真实总量，UI 才能提示「还有 N 条未展开」
+    assert row["counts"]["overdue"] == 1
+    assert row["counts"]["milestones"] == 2

@@ -3,17 +3,25 @@
 /**
  * 项目管理 · PM 驾驶舱（Project OS 的真实项目管理视图）
  *
- * 在里程碑引擎之上给出 PM 需要读的那一层：
+ * 这一层回答 PM 每天真正会问的问题，而不只是「有哪些项目」：
+ *   - 今天要处理：跨全部项目聚合逾期 / 今日到期 / 有风险里程碑（置顶）
+ *   - 项目列表：搜索 + 筛选 + 进度 / 健康度 / 逾期徽标（窄屏为横向切换条）
  *   - 项目整体进度 / 剩余估时 / 生命周期时间戳
+ *   - 里程碑时间轴（甘特，含今日基准线）
  *   - 里程碑健康度（正常 / 有风险 / 已逾期 / 阻塞 / 完成）
- *   - 风险与阻塞、下一步动作（按优先级排序）、人员指派、燃尽视图
+ *   - 风险与阻塞、下一步动作（按优先级排序）、人员指派、里程碑估时
  *   - 完工项目复盘（交付数 / 失败数 / 重试 / 估时 / 耗时 / 建议）
  *
- * 数据全部来自后端只读模型：GET /api/projects/{id} 一次返回
- * project + milestones + tasks + pm + retro + action_specs。
+ * 数据来源（全部只读）：
+ *   - GET /api/projects            项目列表（导航，恒定可用）
+ *   - GET /api/projects/portfolio  跨项目汇总（今天要处理 / 项目总览）
+ *   - GET /api/projects/{id}       单项目模型 project + milestones + tasks + pm + retro + action_specs
+ *
+ * 降级约定：portfolio 是「锦上添花」的聚合接口，它失败时页面必须仍然可用 ——
+ * 因此列表退回元数据行、聚合块整体不渲染，且不弹 alert、不打断既有错误态。
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
@@ -25,6 +33,7 @@ import {
   CircleIcon,
   ClipboardListIcon,
   FlagIcon,
+  LayersIcon,
   ListChecksIcon,
   MessageSquareIcon,
   PlayIcon,
@@ -49,7 +58,38 @@ import {
 } from "@/components/workspace/workspace-container";
 import { useI18n } from "@/core/i18n/hooks";
 import { CreateProjectDialog } from "@/components/workspace/create-project-dialog";
-import { type Project, useEnsureProjectHome } from "@/core/projects/hooks";
+import {
+  type Project,
+  useEnsureProjectHome,
+  usePortfolio,
+} from "@/core/projects/hooks";
+import {
+  type ProjectRow,
+  type ProjectStatusFilter,
+  buildTodayQueue,
+  countHealth,
+  estimateRows,
+  portfolioTotals,
+  projectRowFromSummary,
+  toProjectRow,
+} from "@/core/projects/portfolio";
+import { TodayQueuePanel } from "@/components/workspace/projects/today-queue";
+import { ProjectSwitcher } from "@/components/workspace/projects/project-switcher";
+import { ProjectTimeline } from "@/components/workspace/projects/project-timeline";
+import {
+  EstimateStack,
+  HealthDonut,
+  ProjectProgressBars,
+} from "@/components/workspace/projects/project-charts";
+import {
+  HEALTH_LABEL,
+  HEALTH_TONE,
+  PRIORITY_TONE,
+  STATUS_LABEL,
+  STATUS_TONE,
+  fmtDate,
+  fmtDateTime,
+} from "@/components/workspace/projects/project-meta";
 
 // ─── types（与 runtime/projectos/pm.py 的返回结构对应）───────────────
 
@@ -281,69 +321,6 @@ function ProjectLoadFailure({
   );
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  planning: "规划中",
-  running: "进行中",
-  blocked: "已阻塞",
-  done: "已完成",
-  failed: "失败",
-};
-
-const HEALTH_LABEL: Record<string, string> = {
-  on_track: "正常",
-  at_risk: "有风险",
-  overdue: "已逾期",
-  blocked: "阻塞",
-  completed: "完成",
-};
-
-const HEALTH_TONE: Record<Health, string> = {
-  on_track: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
-  at_risk: "bg-amber-500/15 text-amber-600 border-amber-500/30",
-  overdue: "bg-orange-500/15 text-orange-600 border-orange-500/30",
-  blocked: "bg-rose-500/15 text-rose-600 border-rose-500/30",
-  completed: "bg-sky-500/15 text-sky-600 border-sky-500/30",
-};
-
-const STATUS_TONE: Record<string, string> = {
-  planning: "bg-muted text-muted-foreground",
-  running: "bg-emerald-500/15 text-emerald-600",
-  blocked: "bg-rose-500/15 text-rose-600",
-  done: "bg-sky-500/15 text-sky-600",
-  failed: "bg-rose-500/15 text-rose-600",
-};
-
-const PRIORITY_TONE: Record<string, string> = {
-  P0: "bg-rose-500/15 text-rose-600",
-  P1: "bg-amber-500/15 text-amber-600",
-  P2: "bg-muted text-muted-foreground",
-  P3: "bg-muted text-muted-foreground/70",
-};
-
-function fmtDate(value: string | undefined | null): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value.slice(0, 10);
-  return d.toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-}
-
-function fmtDateTime(value: string | undefined | null): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function healthIcon(health: Health) {
   if (health === "on_track") return <CheckCircle2Icon className="size-3.5" />;
   if (health === "at_risk") return <AlertTriangleIcon className="size-3.5" />;
@@ -357,12 +334,22 @@ function MetricCard({
   value,
   sub,
   icon,
+  tone,
 }: {
   label: string;
   value: string;
   sub?: string;
   icon: React.ReactNode;
+  tone?: "danger" | "warn" | "ok";
 }) {
+  const toneClass =
+    tone === "danger"
+      ? "text-orange-600"
+      : tone === "warn"
+        ? "text-amber-600"
+        : tone === "ok"
+          ? "text-emerald-600"
+          : "";
   return (
     <Card className="bg-card/60">
       <CardContent className="flex items-start gap-3 p-4">
@@ -371,7 +358,9 @@ function MetricCard({
         </div>
         <div className="min-w-0">
           <div className="text-xs text-muted-foreground">{label}</div>
-          <div className="mt-0.5 truncate text-lg font-semibold">{value}</div>
+          <div className={`mt-0.5 truncate text-lg font-semibold ${toneClass}`}>
+            {value}
+          </div>
           {sub && (
             <div className="mt-0.5 truncate text-xs text-muted-foreground">
               {sub}
@@ -383,12 +372,30 @@ function MetricCard({
   );
 }
 
+/** 空态里的「下一步该做什么」提示 —— 不再只写「暂无 X。」 */
+function EmptyHint({ text }: { text: string }) {
+  return (
+    <div className="rounded-md border border-dashed px-2.5 py-2 text-xs text-muted-foreground">
+      {text}
+    </div>
+  );
+}
+
 export default function ProjectsPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const ensureProjectHome = useEnsureProjectHome();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<ProjectStatusFilter>("all");
+  const [highlightMilestone, setHighlightMilestone] = useState<string | null>(
+    null,
+  );
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // 「今天」在一次挂载内固定：跨零点时重新打开页面即可刷新，避免同一屏内
+  // 分组在渲染过程中跳变。
+  const [nowMs] = useState(() => Date.now());
 
   const projectsQuery = useQuery<ProjectSummary[]>({
     queryKey: ["projects"],
@@ -418,6 +425,29 @@ export default function ProjectsPage() {
       if (first) setSelectedId(first.id);
     }
   }, [projects, selectedId]);
+
+  const portfolioQuery = usePortfolio(projects.length > 0);
+  const portfolio = useMemo(
+    () => portfolioQuery.data ?? [],
+    [portfolioQuery.data],
+  );
+  // 只有真的拿到非空聚合数据时才渲染跨项目区块：接口失败或返回空时，页面
+  // 退回「单项目视图 + 元数据列表」，不显示任何「今天没有逾期」之类的假结论。
+  const portfolioReady = portfolioQuery.isSuccess && portfolio.length > 0;
+
+  const rows = useMemo<ProjectRow[]>(
+    () =>
+      portfolioReady
+        ? portfolio.map(toProjectRow)
+        : projects.map(projectRowFromSummary),
+    [portfolioReady, portfolio, projects],
+  );
+
+  const totals = useMemo(() => portfolioTotals(portfolio), [portfolio]);
+  const todayQueue = useMemo(
+    () => buildTodayQueue(portfolio, nowMs),
+    [portfolio, nowMs],
+  );
 
   const detailQuery = useQuery<ProjectFull>({
     queryKey: ["project", selectedId],
@@ -458,6 +488,7 @@ export default function ProjectsPage() {
       toast.success(`${spec.label} 已执行`);
       detailQuery.refetch();
       projectsQuery.refetch();
+      void portfolioQuery.refetch();
     } catch {
       toast.error(PROJECT_ACTION_ERROR_MESSAGE);
     }
@@ -466,6 +497,19 @@ export default function ProjectsPage() {
   const refresh = () => {
     void detailQuery.refetch();
     void projectsQuery.refetch();
+    void portfolioQuery.refetch();
+  };
+
+  const selectProject = (projectId: string) => {
+    setSelectedId(projectId);
+    setHighlightMilestone(null);
+    scrollRef.current?.scrollTo?.({ top: 0, behavior: "smooth" });
+  };
+
+  const focusMilestone = (milestoneId: string) => {
+    setHighlightMilestone(milestoneId);
+    const target = document.getElementById(`milestone-${milestoneId}`);
+    target?.scrollIntoView?.({ behavior: "smooth", block: "center" });
   };
 
   const openProjectGroup = (project: Project) => {
@@ -483,18 +527,22 @@ export default function ProjectsPage() {
       <WorkspaceBody className="!p-0">
         <div className="flex h-full w-full min-h-0 flex-col items-stretch">
           {/* Header */}
-          <div className="flex h-11 shrink-0 items-center justify-between gap-3 border-b px-4">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <h1>🗂️ {t.sidebar.navProjects}</h1>
-              <span className="text-xs font-normal text-muted-foreground">
-                里程碑健康度 · 风险 · 下一步 · 复盘 —— 真实 PM 视角
-              </span>
+          <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-4 md:px-6 md:py-5">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="min-w-0 space-y-1">
+                <h1 className="text-ui-title font-semibold tracking-tight">
+                  {t.sidebar.navProjects}
+                </h1>
+                <p className="text-ui text-muted-foreground">
+                  规划里程碑，跟进风险与团队进度
+                </p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
                 size="sm"
-                className="gap-1.5 text-xs text-muted-foreground"
+                className="gap-1.5 text-ui text-foreground"
                 onClick={() => setCreateOpen(true)}
               >
                 <PlusIcon className="size-3.5" />
@@ -503,14 +551,14 @@ export default function ProjectsPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="gap-1.5 text-xs text-muted-foreground"
+                className="gap-1.5 text-ui text-muted-foreground"
                 onClick={refresh}
               >
                 <RefreshCwIcon className="size-3.5" />
                 刷新
               </Button>
             </div>
-          </div>
+          </header>
 
           {projectsQuery.isLoading ? (
             <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -539,507 +587,588 @@ export default function ProjectsPage() {
               </Button>
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 items-stretch">
-              {/* Project list */}
-              <aside className="hidden w-60 shrink-0 flex-col border-r md:flex">
-                <div className="flex h-9 items-center justify-between border-b px-3 text-xs text-muted-foreground">
-                  <span>项目列表（{projects.length}）</span>
-                </div>
-                <div className="flex-1 overflow-y-auto py-1">
-                  {projects.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => setSelectedId(p.id)}
-                      className={`flex w-full flex-col gap-0.5 border-l-2 px-3 py-2 text-left transition-colors ${
-                        selectedId === p.id
-                          ? "border-primary bg-muted/40"
-                          : "border-transparent hover:bg-muted/30"
-                      }`}
-                    >
-                      <span className="flex items-center justify-between gap-2 text-sm font-medium">
-                        <span className="truncate">{p.name || p.id}</span>
-                        {p.status && (
-                          <Badge
-                            variant="outline"
-                            className={`shrink-0 text-[10px] ${STATUS_TONE[p.status] ?? ""}`}
-                          >
-                            {STATUS_LABEL[p.status] ?? p.status}
-                          </Badge>
-                        )}
-                      </span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        {p.goal || p.id}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </aside>
+            <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+              <ProjectSwitcher
+                rows={rows}
+                selectedId={selectedId}
+                onSelect={selectProject}
+                query={query}
+                onQueryChange={setQuery}
+                filter={filter}
+                onFilterChange={setFilter}
+              />
 
               {/* Main PM view */}
-              <div className="min-w-0 flex-1 overflow-y-auto">
-                {detailQuery.isLoading ? (
-                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                    加载中…
-                  </div>
-                ) : detailQuery.isError ? (
-                  <ProjectLoadFailure
-                    error={detailQuery.error}
-                    onRetry={() => void detailQuery.refetch()}
-                    className="h-full"
-                  />
-                ) : detail ? (
-                  <div className="mx-auto max-w-5xl space-y-4 p-4">
-                    {/* Project header */}
+              <div ref={scrollRef} className="min-w-0 flex-1 overflow-y-auto">
+                <div className="mx-auto max-w-5xl space-y-4 p-4">
+                  {/* 今天要处理（跨项目，置顶） */}
+                  {portfolioReady && (
+                    <TodayQueuePanel
+                      queue={todayQueue}
+                      onSelectProject={selectProject}
+                    />
+                  )}
+
+                  {/* 项目总览（跨项目，≥2 个项目才有比较意义） */}
+                  {portfolioReady && rows.length > 1 && (
                     <Card>
-                      <CardContent className="space-y-3 p-4">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <h2 className="text-base font-semibold">
-                                {detail.project.name || detail.project.id}
-                              </h2>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
+                          <span className="flex items-center gap-1.5">
+                            <LayersIcon className="size-4 text-indigo-500" />
+                            项目总览
+                          </span>
+                          <span className="flex flex-wrap items-center gap-1.5 text-[11px] font-normal text-muted-foreground">
+                            <Badge variant="outline" className="text-[10px]">
+                              {totals.projects} 个项目
+                            </Badge>
+                            <Badge variant="outline" className="text-[10px]">
+                              {totals.doneTasks}/{totals.tasks} 任务
+                            </Badge>
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] ${
+                                totals.overdue > 0
+                                  ? "border-orange-500/30 bg-orange-500/15 text-orange-600"
+                                  : ""
+                              }`}
+                            >
+                              逾期 {totals.overdue}
+                            </Badge>
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] ${
+                                totals.atRisk > 0
+                                  ? "border-amber-500/30 bg-amber-500/15 text-amber-600"
+                                  : ""
+                              }`}
+                            >
+                              风险里程碑 {totals.atRisk}
+                            </Badge>
+                            <Badge variant="outline" className="text-[10px]">
+                              剩余估时 {totals.remainingEstimate}d
+                            </Badge>
+                            {totals.unreadable > 0 && (
                               <Badge
                                 variant="outline"
-                                className={
-                                  STATUS_TONE[detail.project.status] ?? ""
-                                }
+                                className="border-rose-500/30 bg-rose-500/15 text-[10px] text-rose-600"
                               >
-                                {STATUS_LABEL[detail.project.status] ??
-                                  detail.project.status}
+                                {totals.unreadable} 个读取失败
                               </Badge>
-                              {detail.project.owner && (
-                                <Badge
-                                  variant="outline"
-                                  className="gap-1 bg-muted/40 text-muted-foreground"
-                                >
-                                  <UserRoundIcon className="size-3" />
-                                  PM · {detail.project.owner}
-                                </Badge>
-                              )}
-                            </div>
-                            {detail.project.goal && (
-                              <p className="mt-1 text-sm text-muted-foreground">
-                                {detail.project.goal}
-                              </p>
                             )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="gap-1.5 text-xs"
-                              disabled={ensureProjectHome.isPending}
-                              onClick={() => openProjectGroup(detail.project)}
-                            >
-                              <MessageSquareIcon className="size-3.5" />
-                              进入项目群
-                            </Button>
-                            {detail.action_specs.map((spec) => (
-                              <Button
-                                key={spec.action}
-                                size="sm"
-                                className="gap-1.5 text-xs"
-                                onClick={() => executeAction(spec)}
-                              >
-                                {spec.action.startsWith("recover") ? (
-                                  <RotateCcwIcon className="size-3.5" />
-                                ) : spec.action === "run" ? (
-                                  <PlayIcon className="size-3.5" />
-                                ) : (
-                                  <ArrowRightIcon className="size-3.5" />
-                                )}
-                                {spec.label}
-                              </Button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* lifecycle timestamps */}
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                          <span className="inline-flex items-center gap-1">
-                            <CalendarRangeIcon className="size-3.5" />
-                            创建 {fmtDateTime(detail.project.created_at)}
                           </span>
-                          {detail.project.started_at && (
-                            <span className="inline-flex items-center gap-1">
-                              <PlayIcon className="size-3.5" />
-                              启动 {fmtDateTime(detail.project.started_at)}
-                            </span>
-                          )}
-                          {detail.project.finished_at && (
-                            <span className="inline-flex items-center gap-1">
-                              <CheckCircle2Icon className="size-3.5" />
-                              完成 {fmtDateTime(detail.project.finished_at)}
-                            </span>
-                          )}
-                        </div>
-
-                        {pm && (
-                          <div className="space-y-1.5">
-                            <div className="flex items-center justify-between text-xs text-muted-foreground">
-                              <span className="font-medium text-foreground">
-                                整体进度
-                              </span>
-                              <span>
-                                {pm.done_tasks}/{pm.total_tasks} 任务 · 剩余估时{" "}
-                                {pm.remaining_estimate}d / 共{" "}
-                                {pm.total_estimate}d
-                              </span>
-                            </div>
-                            <Progress
-                              value={Math.round(pm.overall_progress * 100)}
-                              className="h-2"
-                            />
-                            <div className="text-right text-xs text-muted-foreground">
-                              {Math.round(pm.overall_progress * 100)}%
-                            </div>
-                          </div>
-                        )}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ProjectProgressBars
+                          rows={rows}
+                          selectedId={selectedId}
+                          onSelectProject={selectProject}
+                        />
                       </CardContent>
                     </Card>
+                  )}
 
-                    {pm && (
-                      <>
-                        {/* Metrics */}
-                        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                          <MetricCard
-                            label="整体进度"
-                            value={`${Math.round(pm.overall_progress * 100)}%`}
-                            sub={`${pm.done_tasks}/${pm.total_tasks} 任务`}
-                            icon={<ActivityIcon className="size-4" />}
-                          />
-                          <MetricCard
-                            label="剩余估时"
-                            value={`${pm.remaining_estimate}d`}
-                            sub={`总估时 ${pm.total_estimate}d`}
-                            icon={<TimerIcon className="size-4" />}
-                          />
-                          <MetricCard
-                            label="风险"
-                            value={`${pm.risks.length}`}
-                            sub={`${pm.blockers.length} 个阻塞里程碑`}
-                            icon={<AlertTriangleIcon className="size-4" />}
-                          />
-                          <MetricCard
-                            label="下一步动作"
-                            value={`${pm.next_actions.length}`}
-                            sub="就绪待办（按优先级）"
-                            icon={<ListChecksIcon className="size-4" />}
-                          />
-                        </div>
-
-                        {/* Milestones */}
-                        <Card>
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-sm">
-                              里程碑健康度
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-3">
-                            {pm.milestones.length === 0 && (
-                              <div className="text-sm text-muted-foreground">
-                                还没有里程碑 —— 先执行 Run 让引擎拆解计划。
-                              </div>
-                            )}
-                            {pm.milestones.map((m) => (
-                              <div
-                                key={m.id}
-                                className="rounded-lg border bg-card/50 p-3"
-                              >
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium">
-                                      {m.name}
-                                    </span>
-                                    <Badge
-                                      variant="outline"
-                                      className={`gap-1 text-[10px] ${HEALTH_TONE[m.health] ?? ""}`}
-                                    >
-                                      {healthIcon(m.health)}
-                                      {HEALTH_LABEL[m.health] ?? m.health}
-                                    </Badge>
-                                    <Badge
-                                      variant="outline"
-                                      className={`text-[10px] ${PRIORITY_TONE[m.priority] ?? ""}`}
-                                    >
-                                      优先级 {m.priority}
-                                    </Badge>
-                                  </div>
-                                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                                    <span>
-                                      {m.done}/{m.total} 任务
-                                    </span>
-                                    {m.due_at && (
-                                      <span className="inline-flex items-center gap-1">
-                                        <CalendarRangeIcon className="size-3" />
-                                        截止 {fmtDate(m.due_at)}
-                                      </span>
-                                    )}
-                                    {m.planned_start && (
-                                      <span>
-                                        计划 {fmtDate(m.planned_start)}
-                                      </span>
-                                    )}
-                                    <span>剩余 {m.remaining_estimate}d</span>
-                                  </div>
-                                </div>
-                                <div className="mt-2 flex items-center gap-2">
-                                  <Progress
-                                    value={Math.round(m.progress * 100)}
-                                    className="h-1.5 flex-1"
-                                  />
-                                  <span className="w-10 text-right text-xs text-muted-foreground">
-                                    {Math.round(m.progress * 100)}%
-                                  </span>
-                                </div>
-                                {m.overdue_tasks.length > 0 && (
-                                  <div className="mt-3 space-y-2 border-t border-orange-500/15 pt-2.5">
-                                    <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-orange-600/90">
-                                      <TimerIcon className="size-3" />
-                                      逾期任务 · {m.overdue_tasks.length}
-                                    </div>
-                                    {m.overdue_tasks.map((o) => (
-                                      <div
-                                        key={o.id}
-                                        className="rounded-lg bg-orange-500/[0.07] px-3 py-2"
-                                      >
-                                        <div className="text-xs leading-relaxed text-orange-800">
-                                          {o.goal}
-                                        </div>
-                                        <div className="mt-1 flex items-center gap-1 text-[11px] text-orange-600/80">
-                                          <CalendarRangeIcon className="size-3" />
-                                          截止 {fmtDate(o.due_at)} · 已逾期
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </CardContent>
-                        </Card>
-
-                        {/* Risks & Next actions */}
-                        <div className="grid gap-3 lg:grid-cols-2">
-                          <Card>
-                            <CardHeader className="pb-2">
-                              <CardTitle className="flex items-center gap-1.5 text-sm">
-                                <AlertTriangleIcon className="size-4 text-rose-500" />
-                                风险与阻塞
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-2">
-                              {pm.risks.length === 0 && (
-                                <div className="text-sm text-muted-foreground">
-                                  暂无风险。
-                                </div>
-                              )}
-                              {pm.risks.map((r, i) => {
-                                const traceId = traceIdFromDetail(r.detail);
-                                return (
-                                  <div
-                                    key={`${r.type}-${i}`}
-                                    className="flex items-start gap-2 rounded-md border bg-card/50 px-2.5 py-2 text-xs"
-                                  >
-                                    <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
-                                    <div className="min-w-0">
-                                      <div className="font-medium">
-                                        {r.type === "milestone"
-                                          ? r.milestone
-                                          : r.task}
-                                      </div>
-                                      <div className="text-muted-foreground">
-                                        {safeRiskDetail(r)}
-                                      </div>
-                                      {traceId && (
-                                        <div className="mt-0.5 text-muted-foreground">
-                                          追踪 ID：<code>{traceId}</code>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </CardContent>
-                          </Card>
-
-                          <Card>
-                            <CardHeader className="pb-2">
-                              <CardTitle className="flex items-center gap-1.5 text-sm">
-                                <ListChecksIcon className="size-4 text-emerald-500" />
-                                下一步动作
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-2">
-                              {pm.next_actions.length === 0 && (
-                                <div className="text-sm text-muted-foreground">
-                                  当前没有就绪任务。
-                                </div>
-                              )}
-                              {pm.next_actions.map((a) => (
-                                <div
-                                  key={a.task_id}
-                                  className="flex items-start gap-2 rounded-md border bg-card/50 px-2.5 py-2 text-xs"
+                  {detailQuery.isLoading ? (
+                    <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
+                      加载中…
+                    </div>
+                  ) : detailQuery.isError ? (
+                    <ProjectLoadFailure
+                      error={detailQuery.error}
+                      onRetry={() => void detailQuery.refetch()}
+                      className="h-40"
+                    />
+                  ) : detail ? (
+                    <>
+                      {/* Project header */}
+                      <Card>
+                        <CardContent className="space-y-3 p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <h2 className="text-base font-semibold">
+                                  {detail.project.name || detail.project.id}
+                                </h2>
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    STATUS_TONE[detail.project.status] ?? ""
+                                  }
                                 >
+                                  {STATUS_LABEL[detail.project.status] ??
+                                    detail.project.status}
+                                </Badge>
+                                {detail.project.owner && (
                                   <Badge
                                     variant="outline"
-                                    className={`mt-0.5 shrink-0 text-[10px] ${PRIORITY_TONE[a.priority] ?? ""}`}
+                                    className="gap-1 bg-muted/40 text-muted-foreground"
                                   >
-                                    {a.priority}
+                                    <UserRoundIcon className="size-3" />
+                                    PM · {detail.project.owner}
                                   </Badge>
-                                  <div className="min-w-0">
-                                    <div className="font-medium">{a.task}</div>
-                                    <div className="text-muted-foreground">
-                                      {a.milestone}
-                                      {a.estimate > 0 &&
-                                        ` · 估时 ${a.estimate}d`}
-                                      {a.due_at &&
-                                        ` · 截止 ${fmtDate(a.due_at)}`}
-                                    </div>
-                                  </div>
-                                </div>
+                                )}
+                              </div>
+                              {detail.project.goal && (
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                  {detail.project.goal}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1.5 text-xs"
+                                disabled={ensureProjectHome.isPending}
+                                onClick={() => openProjectGroup(detail.project)}
+                              >
+                                <MessageSquareIcon className="size-3.5" />
+                                进入项目群
+                              </Button>
+                              {detail.action_specs.map((spec) => (
+                                <Button
+                                  key={spec.action}
+                                  size="sm"
+                                  className="gap-1.5 text-xs"
+                                  onClick={() => executeAction(spec)}
+                                >
+                                  {spec.action.startsWith("recover") ? (
+                                    <RotateCcwIcon className="size-3.5" />
+                                  ) : spec.action === "run" ? (
+                                    <PlayIcon className="size-3.5" />
+                                  ) : (
+                                    <ArrowRightIcon className="size-3.5" />
+                                  )}
+                                  {spec.label}
+                                </Button>
                               ))}
-                            </CardContent>
-                          </Card>
-                        </div>
+                            </div>
+                          </div>
 
-                        {/* Assignments + Burndown */}
-                        <div className="grid gap-3 lg:grid-cols-2">
-                          <Card>
-                            <CardHeader className="pb-2">
-                              <CardTitle className="flex items-center gap-1.5 text-sm">
-                                <UsersIcon className="size-4 text-sky-500" />
-                                人员指派
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-2">
-                              {Object.keys(pm.assignments).length === 0 && (
-                                <div className="text-sm text-muted-foreground">
-                                  暂无指派。
-                                </div>
-                              )}
-                              {Object.entries(pm.assignments).map(
-                                ([who, taskIds]) => (
-                                  <div
-                                    key={who}
-                                    className="flex items-center justify-between rounded-md border bg-card/50 px-2.5 py-2 text-xs"
-                                  >
-                                    <span className="flex items-center gap-1.5 font-medium">
-                                      <UserRoundIcon className="size-3.5 text-muted-foreground" />
-                                      {who}
-                                    </span>
-                                    <span className="text-muted-foreground">
-                                      {taskIds.length} 个任务
-                                    </span>
-                                  </div>
-                                ),
-                              )}
-                            </CardContent>
-                          </Card>
+                          {/* lifecycle timestamps */}
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                            <span className="inline-flex items-center gap-1">
+                              <CalendarRangeIcon className="size-3.5" />
+                              创建 {fmtDateTime(detail.project.created_at)}
+                            </span>
+                            {detail.project.started_at && (
+                              <span className="inline-flex items-center gap-1">
+                                <PlayIcon className="size-3.5" />
+                                启动 {fmtDateTime(detail.project.started_at)}
+                              </span>
+                            )}
+                            {detail.project.finished_at && (
+                              <span className="inline-flex items-center gap-1">
+                                <CheckCircle2Icon className="size-3.5" />
+                                完成 {fmtDateTime(detail.project.finished_at)}
+                              </span>
+                            )}
+                          </div>
 
-                          <Card>
-                            <CardHeader className="pb-2">
-                              <CardTitle className="text-sm">
-                                燃尽视图（剩余估时）
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-2">
-                              {pm.burndown.length === 0 && (
-                                <div className="text-sm text-muted-foreground">
-                                  暂无数据。
-                                </div>
-                              )}
-                              {pm.burndown.map((b) => (
-                                <div key={b.milestone} className="space-y-1">
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="truncate pr-2">
-                                      {b.milestone}
-                                    </span>
-                                    <span className="shrink-0 text-muted-foreground">
-                                      {b.remaining_estimate}d
-                                    </span>
-                                  </div>
-                                  <Progress
-                                    value={
-                                      b.total > 0
-                                        ? Math.round((b.done / b.total) * 100)
-                                        : 0
-                                    }
-                                    className="h-1.5"
-                                  />
-                                </div>
-                              ))}
-                            </CardContent>
-                          </Card>
-                        </div>
-                      </>
-                    )}
+                          {pm && (
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                <span className="font-medium text-foreground">
+                                  整体进度
+                                </span>
+                                <span>
+                                  {pm.done_tasks}/{pm.total_tasks} 任务 · 剩余估时{" "}
+                                  {pm.remaining_estimate}d / 共{" "}
+                                  {pm.total_estimate}d
+                                </span>
+                              </div>
+                              <Progress
+                                value={Math.round(pm.overall_progress * 100)}
+                                className="h-2"
+                              />
+                              <div className="text-right text-xs text-muted-foreground">
+                                {Math.round(pm.overall_progress * 100)}%
+                              </div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
 
-                    {/* Retro */}
-                    {retro && (
-                      <Card className="border-sky-500/30 bg-sky-500/[0.03]">
-                        <CardHeader className="pb-2">
-                          <CardTitle className="flex items-center gap-1.5 text-sm">
-                            <ClipboardListIcon className="size-4 text-sky-500" />
-                            项目复盘
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
+                      {pm && (
+                        <>
+                          {/* Metrics */}
                           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                             <MetricCard
-                              label="交付任务"
-                              value={`${retro.done_tasks}/${retro.task_count}`}
-                              icon={<CheckCircle2Icon className="size-4" />}
+                              label="整体进度"
+                              value={`${Math.round(pm.overall_progress * 100)}%`}
+                              sub={`${pm.done_tasks}/${pm.total_tasks} 任务`}
+                              icon={<ActivityIcon className="size-4" />}
                             />
                             <MetricCard
-                              label="失败/驳回"
-                              value={`${retro.failed_tasks}/${retro.rejected_tasks}`}
+                              label="剩余估时"
+                              value={`${pm.remaining_estimate}d`}
+                              sub={`总估时 ${pm.total_estimate}d`}
+                              icon={<TimerIcon className="size-4" />}
+                            />
+                            <MetricCard
+                              label="风险"
+                              value={`${pm.risks.length}`}
+                              sub={`${pm.blockers.length} 个阻塞里程碑 · ${
+                                pm.overdue.reduce(
+                                  (sum, group) => sum + group.tasks.length,
+                                  0,
+                                )
+                              } 个逾期任务`}
+                              tone={pm.risks.length > 0 ? "warn" : undefined}
                               icon={<AlertTriangleIcon className="size-4" />}
                             />
                             <MetricCard
-                              label="总重试"
-                              value={`${retro.attempts_total}`}
-                              icon={<RefreshCwIcon className="size-4" />}
-                            />
-                            <MetricCard
-                              label="实际耗时"
-                              value={
-                                retro.duration_days === null
-                                  ? "—"
-                                  : `${retro.duration_days} 天`
-                              }
-                              sub={`估时 ${retro.total_estimate}d`}
-                              icon={<TimerIcon className="size-4" />}
+                              label="下一步动作"
+                              value={`${pm.next_actions.length}`}
+                              sub="就绪待办（按优先级）"
+                              icon={<ListChecksIcon className="size-4" />}
                             />
                           </div>
-                          <div>
-                            <div className="mb-1.5 text-xs font-medium text-muted-foreground">
-                              阻塞里程碑：
-                              {retro.blocked_milestones.length > 0
-                                ? retro.blocked_milestones.join("、")
-                                : "无"}
-                            </div>
-                            <div className="text-xs font-medium text-muted-foreground">
-                              建议：
-                            </div>
-                            <ul className="mt-1 space-y-1">
-                              {retro.recommendations.map((r, i) => (
-                                <li
-                                  key={i}
-                                  className="flex items-start gap-1.5 text-xs"
-                                >
-                                  <ArrowRightIcon className="mt-0.5 size-3 shrink-0 text-sky-500" />
-                                  <span>{r}</span>
-                                </li>
-                              ))}
-                            </ul>
+
+                          {/* 里程碑时间轴（甘特） */}
+                          <Card>
+                            <CardHeader className="pb-2">
+                              <CardTitle className="flex items-center gap-1.5 text-sm">
+                                <CalendarRangeIcon className="size-4 text-indigo-500" />
+                                里程碑时间轴
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <ProjectTimeline
+                                milestones={pm.milestones}
+                                now={nowMs}
+                                onSelectMilestone={focusMilestone}
+                              />
+                            </CardContent>
+                          </Card>
+
+                          {/* Milestones */}
+                          <Card>
+                            <CardHeader className="pb-2">
+                              <CardTitle className="flex items-center justify-between gap-2 text-sm">
+                                <span>里程碑健康度</span>
+                                {pm.milestones.length > 0 && (
+                                  <span className="text-[11px] font-normal text-muted-foreground">
+                                    共 {pm.milestones.length} 个 · 剩余估时{" "}
+                                    {pm.remaining_estimate}d
+                                  </span>
+                                )}
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                              {pm.milestones.length === 0 && (
+                                <div className="text-sm text-muted-foreground">
+                                  还没有里程碑 —— 先执行 Run 让引擎拆解计划。
+                                </div>
+                              )}
+                              {pm.milestones.length > 0 && (
+                                <div className="grid gap-3 lg:grid-cols-[auto_minmax(0,1fr)]">
+                                  <div className="rounded-lg border bg-card/50 p-3 lg:w-52">
+                                    <div className="mb-1 text-[11px] font-medium text-muted-foreground">
+                                      健康度分布
+                                    </div>
+                                    <HealthDonut
+                                      counts={countHealth(
+                                        pm.milestones.map((m) => m.health),
+                                      )}
+                                    />
+                                  </div>
+                                  <div className="space-y-3">
+                                    {pm.milestones.map((m) => (
+                                      <div
+                                        key={m.id}
+                                        id={`milestone-${m.id}`}
+                                        className={`rounded-lg border bg-card/50 p-3 transition-shadow ${
+                                          highlightMilestone === m.id
+                                            ? "ring-2 ring-primary/40"
+                                            : ""
+                                        }`}
+                                      >
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-sm font-medium">
+                                              {m.name}
+                                            </span>
+                                            <Badge
+                                              variant="outline"
+                                              className={`gap-1 text-[10px] ${HEALTH_TONE[m.health] ?? ""}`}
+                                            >
+                                              {healthIcon(m.health)}
+                                              {HEALTH_LABEL[m.health] ?? m.health}
+                                            </Badge>
+                                            <Badge
+                                              variant="outline"
+                                              className={`text-[10px] ${PRIORITY_TONE[m.priority] ?? ""}`}
+                                            >
+                                              优先级 {m.priority}
+                                            </Badge>
+                                          </div>
+                                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                            <span>
+                                              {m.done}/{m.total} 任务
+                                            </span>
+                                            {m.due_at && (
+                                              <span className="inline-flex items-center gap-1">
+                                                <CalendarRangeIcon className="size-3" />
+                                                截止 {fmtDate(m.due_at)}
+                                              </span>
+                                            )}
+                                            {m.planned_start && (
+                                              <span>
+                                                计划{" "}
+                                                {fmtDate(m.planned_start)}
+                                              </span>
+                                            )}
+                                            <span>
+                                              剩余 {m.remaining_estimate}d
+                                            </span>
+                                          </div>
+                                        </div>
+                                        <div className="mt-2 flex items-center gap-2">
+                                          <Progress
+                                            value={Math.round(m.progress * 100)}
+                                            className="h-1.5 flex-1"
+                                          />
+                                          <span className="w-10 text-right text-xs text-muted-foreground">
+                                            {Math.round(m.progress * 100)}%
+                                          </span>
+                                        </div>
+                                        {m.overdue_tasks.length > 0 && (
+                                          <div className="mt-3 space-y-2 border-t border-orange-500/15 pt-2.5">
+                                            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-orange-600/90">
+                                              <TimerIcon className="size-3" />
+                                              逾期任务 ·{" "}
+                                              {m.overdue_tasks.length}
+                                            </div>
+                                            {m.overdue_tasks.map((o) => (
+                                              <div
+                                                key={o.id}
+                                                className="rounded-lg bg-orange-500/[0.07] px-3 py-2"
+                                              >
+                                                <div className="text-xs leading-relaxed text-orange-800">
+                                                  {o.goal}
+                                                </div>
+                                                <div className="mt-1 flex items-center gap-1 text-[11px] text-orange-600/80">
+                                                  <CalendarRangeIcon className="size-3" />
+                                                  截止 {fmtDate(o.due_at)} ·
+                                                  已逾期
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+
+                          {/* Risks & Next actions */}
+                          <div className="grid gap-3 lg:grid-cols-2">
+                            <Card>
+                              <CardHeader className="pb-2">
+                                <CardTitle className="flex items-center gap-1.5 text-sm">
+                                  <AlertTriangleIcon className="size-4 text-rose-500" />
+                                  风险与阻塞
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent className="space-y-2">
+                                {pm.risks.length === 0 && (
+                                  <EmptyHint text="暂无风险。下次 Run 前检查里程碑依赖与指派，可以提前暴露阻塞。" />
+                                )}
+                                {pm.risks.map((r, i) => {
+                                  const traceId = traceIdFromDetail(r.detail);
+                                  return (
+                                    <div
+                                      key={`${r.type}-${i}`}
+                                      className="flex items-start gap-2 rounded-md border bg-card/50 px-2.5 py-2 text-xs"
+                                    >
+                                      <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
+                                      <div className="min-w-0">
+                                        <div className="font-medium">
+                                          {r.type === "milestone"
+                                            ? r.milestone
+                                            : r.task}
+                                        </div>
+                                        <div className="text-muted-foreground">
+                                          {safeRiskDetail(r)}
+                                        </div>
+                                        {traceId && (
+                                          <div className="mt-0.5 text-muted-foreground">
+                                            追踪 ID：<code>{traceId}</code>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </CardContent>
+                            </Card>
+
+                            <Card>
+                              <CardHeader className="pb-2">
+                                <CardTitle className="flex items-center gap-1.5 text-sm">
+                                  <ListChecksIcon className="size-4 text-emerald-500" />
+                                  下一步动作
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent className="space-y-2">
+                                {pm.next_actions.length === 0 && (
+                                  <EmptyHint text="当前没有就绪任务。执行 Run 让引擎推进，或到项目群里补充任务描述。" />
+                                )}
+                                {pm.next_actions.map((a) => (
+                                  <div
+                                    key={a.task_id}
+                                    className="flex items-start gap-2 rounded-md border bg-card/50 px-2.5 py-2 text-xs"
+                                  >
+                                    <Badge
+                                      variant="outline"
+                                      className={`mt-0.5 shrink-0 text-[10px] ${PRIORITY_TONE[a.priority] ?? ""}`}
+                                    >
+                                      {a.priority}
+                                    </Badge>
+                                    <div className="min-w-0">
+                                      <div className="font-medium">
+                                        {a.task}
+                                      </div>
+                                      <div className="text-muted-foreground">
+                                        {a.milestone}
+                                        {a.estimate > 0 &&
+                                          ` · 估时 ${a.estimate}d`}
+                                        {a.due_at &&
+                                          ` · 截止 ${fmtDate(a.due_at)}`}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </CardContent>
+                            </Card>
                           </div>
-                        </CardContent>
-                      </Card>
-                    )}
-                  </div>
-                ) : null}
+
+                          {/* Assignments + Estimate stack */}
+                          <div className="grid gap-3 lg:grid-cols-2">
+                            <Card>
+                              <CardHeader className="pb-2">
+                                <CardTitle className="flex items-center gap-1.5 text-sm">
+                                  <UsersIcon className="size-4 text-sky-500" />
+                                  人员指派
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent className="space-y-2">
+                                {Object.keys(pm.assignments).length === 0 && (
+                                  <EmptyHint text="暂无指派。任务会在执行时按角色路由，也可以在项目群里指定负责人。" />
+                                )}
+                                {Object.entries(pm.assignments).map(
+                                  ([who, taskIds]) => (
+                                    <div
+                                      key={who}
+                                      className="flex items-center justify-between rounded-md border bg-card/50 px-2.5 py-2 text-xs"
+                                    >
+                                      <span className="flex items-center gap-1.5 font-medium">
+                                        <UserRoundIcon className="size-3.5 text-muted-foreground" />
+                                        {who}
+                                      </span>
+                                      <span className="text-muted-foreground">
+                                        {taskIds.length} 个任务
+                                      </span>
+                                    </div>
+                                  ),
+                                )}
+                              </CardContent>
+                            </Card>
+
+                            <Card>
+                              <CardHeader className="pb-2">
+                                <CardTitle className="flex items-center justify-between gap-2 text-sm">
+                                  <span>里程碑估时</span>
+                                  <span className="text-[11px] font-normal text-muted-foreground">
+                                    已完成 / 剩余
+                                  </span>
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <EstimateStack
+                                  rows={estimateRows(pm.milestones)}
+                                />
+                              </CardContent>
+                            </Card>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Retro */}
+                      {retro && (
+                        <Card className="border-sky-500/30 bg-sky-500/[0.03]">
+                          <CardHeader className="pb-2">
+                            <CardTitle className="flex items-center gap-1.5 text-sm">
+                              <ClipboardListIcon className="size-4 text-sky-500" />
+                              项目复盘
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-3">
+                            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                              <MetricCard
+                                label="交付任务"
+                                value={`${retro.done_tasks}/${retro.task_count}`}
+                                icon={<CheckCircle2Icon className="size-4" />}
+                              />
+                              <MetricCard
+                                label="失败/驳回"
+                                value={`${retro.failed_tasks}/${retro.rejected_tasks}`}
+                                tone={
+                                  retro.failed_tasks + retro.rejected_tasks > 0
+                                    ? "warn"
+                                    : undefined
+                                }
+                                icon={<AlertTriangleIcon className="size-4" />}
+                              />
+                              <MetricCard
+                                label="总重试"
+                                value={`${retro.attempts_total}`}
+                                icon={<RefreshCwIcon className="size-4" />}
+                              />
+                              <MetricCard
+                                label="实际耗时"
+                                value={
+                                  retro.duration_days === null
+                                    ? "—"
+                                    : `${retro.duration_days} 天`
+                                }
+                                sub={`估时 ${retro.total_estimate}d`}
+                                icon={<TimerIcon className="size-4" />}
+                              />
+                            </div>
+                            <div>
+                              <div className="mb-1.5 text-xs font-medium text-muted-foreground">
+                                阻塞里程碑：
+                                {retro.blocked_milestones.length > 0
+                                  ? retro.blocked_milestones.join("、")
+                                  : "无"}
+                              </div>
+                              <div className="text-xs font-medium text-muted-foreground">
+                                建议：
+                              </div>
+                              <ul className="mt-1 space-y-1">
+                                {retro.recommendations.map((r, i) => (
+                                  <li
+                                    key={i}
+                                    className="flex items-start gap-1.5 text-xs"
+                                  >
+                                    <ArrowRightIcon className="mt-0.5 size-3 shrink-0 text-sky-500" />
+                                    <span>{r}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
+                    </>
+                  ) : null}
+                </div>
               </div>
             </div>
           )}

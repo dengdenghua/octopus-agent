@@ -4,6 +4,7 @@ import { getAPIClient } from "../api";
 import { authHeaders, jsonAuthHeaders } from "../auth/api";
 import { getBackendBaseURL } from "../config";
 import { isPrimaryPersonaAgentId } from "../agents/persona-policy";
+import { type PortfolioEntry, normalizePortfolio } from "./portfolio";
 import {
   ensureCollabRoom,
   getCoworkGroup,
@@ -495,6 +496,30 @@ export function useMoveThreadToProject() {
       qc.invalidateQueries({ queryKey: ["projects"] });
       qc.invalidateQueries({ queryKey: ["thread-map"] });
       qc.invalidateQueries({ queryKey: ["threads"] });
+    },
+  });
+}
+
+/** 跨项目 PM 汇总：一次请求拿到所有可见项目的进度 / 健康度 / 逾期 / 风险。
+ *
+ * 后端见 `GET /api/projects/portfolio`。查询键挂在 `["projects"]` 之下，
+ * 因此既有的 `invalidateQueries({queryKey:["projects"]})` 会自动带上它，
+ * 新建 / 删除 / 打开项目后无需再补失效逻辑。
+ */
+export function usePortfolio(enabled = true) {
+  return useQuery<PortfolioEntry[]>({
+    queryKey: ["projects", "portfolio"],
+    enabled,
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const res = await fetch(`${BASE()}/portfolio`, {
+        headers: authHeaders(),
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to load project portfolio: ${res.statusText}`);
+      }
+      return normalizePortfolio(await res.json());
     },
   });
 }

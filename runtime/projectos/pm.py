@@ -21,7 +21,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from runtime.projectos.model import Milestone, Task
+from runtime.projectos.model import Milestone, Project, Task
 from runtime.projectos.store import ProjectStore
 
 _HEALTH_ORDER = {"overdue": 0, "blocked": 1, "at_risk": 2, "on_track": 3, "completed": 4}
@@ -45,6 +45,14 @@ def _as_dt(value: str) -> datetime | None:
         return datetime.fromisoformat(str(value))
     except ValueError:
         return None
+
+
+def _s(value: Any, default: str = "") -> str:
+    """Coerce an untrusted store field to a non-empty string, else ``default``."""
+    if value is None:
+        return default
+    text = str(value)
+    return text if text else default
 
 
 def _today(now: datetime | None) -> date:
@@ -265,6 +273,113 @@ def build_pm_report(
         "overdue": overdue,
         "next_actions": next_actions,
         "assignments": assignments,
+    }
+
+
+# Portfolio roll-up caps. The sidebar and the ops drawer read this payload on
+# every project switch, so the unbounded parts (per-task prose, full risk lists)
+# are truncated. The complete totals survive in ``counts`` so the UI can still
+# render "+N more" affordances instead of silently lying about the size.
+_PORTFOLIO_MAX_MILESTONES = 50
+_PORTFOLIO_MAX_OVERDUE = 20
+_PORTFOLIO_MAX_NEXT_ACTIONS = 10
+_PORTFOLIO_MAX_RISKS = 10
+
+
+def _portfolio_health(milestones_pm: list[dict[str, Any]]) -> str:
+    """Worst milestone health wins.
+
+    A portfolio row must never look calmer than the project's own PM console:
+    a single blocked milestone already makes the whole project blocked.
+    """
+    if not milestones_pm:
+        return "on_track"
+    return min(
+        (str(m.get("health") or "on_track") for m in milestones_pm),
+        key=lambda health: _HEALTH_ORDER.get(health, len(_HEALTH_ORDER)),
+    )
+
+
+def build_portfolio_entry(
+    project: Project,
+    report: dict[str, Any] | None,
+    *,
+    max_milestones: int = _PORTFOLIO_MAX_MILESTONES,
+    max_overdue: int = _PORTFOLIO_MAX_OVERDUE,
+    max_next_actions: int = _PORTFOLIO_MAX_NEXT_ACTIONS,
+    max_risks: int = _PORTFOLIO_MAX_RISKS,
+) -> dict[str, Any]:
+    """Compact one-project row for the cross-project (portfolio) view.
+
+    ``report`` is a :func:`build_pm_report` payload, or ``None`` when the
+    project could not be read (dangling record, scope failure). Unreadable
+    projects are still returned, flagged with ``readable=False``: dropping them
+    would hide a broken project from the very surface that exists to surface it.
+    """
+    milestones_pm = list(report.get("milestones") or []) if report else []
+
+    overdue_flat: list[dict[str, Any]] = []
+    for group in (report.get("overdue") or []) if report else []:
+        milestone = str(group.get("milestone") or "")
+        for task in group.get("tasks") or []:
+            overdue_flat.append(
+                {
+                    "milestone": milestone,
+                    "id": _s(task.get("id")),
+                    "goal": _s(task.get("goal")),
+                    "due_at": _s(task.get("due_at")),
+                    "priority": _s(task.get("priority"), "P2"),
+                }
+            )
+
+    risks = list(report.get("risks") or []) if report else []
+    next_actions = list(report.get("next_actions") or []) if report else []
+
+    return {
+        "id": project.id,
+        "name": project.name,
+        "goal": project.goal,
+        "status": project.status,
+        "owner": project.owner,
+        "created_at": project.created_at,
+        "started_at": project.started_at,
+        "finished_at": project.finished_at,
+        "execution_thread_id": project.execution_thread_id,
+        "health": _portfolio_health(milestones_pm),
+        "readable": report is not None,
+        "progress": report.get("overall_progress", 0.0) if report else 0.0,
+        "done_tasks": report.get("done_tasks", 0) if report else 0,
+        "total_tasks": report.get("total_tasks", 0) if report else 0,
+        "total_estimate": report.get("total_estimate", 0.0) if report else 0.0,
+        "remaining_estimate": report.get("remaining_estimate", 0.0) if report else 0.0,
+        "counts": {
+            "milestones": len(milestones_pm),
+            "risks": len(risks),
+            "blockers": len(report.get("blockers") or []) if report else 0,
+            "overdue": len(overdue_flat),
+            "next_actions": len(next_actions),
+        },
+        "milestones": [
+            {
+                "id": _s(m.get("id")),
+                "name": _s(m.get("name")),
+                "status": _s(m.get("status")),
+                "health": _s(m.get("health"), "on_track"),
+                "priority": _s(m.get("priority"), "P2"),
+                "planned_start": _s(m.get("planned_start")),
+                "due_at": _s(m.get("due_at")),
+                "done": m.get("done", 0),
+                "total": m.get("total", 0),
+                "failed": m.get("failed", 0),
+                "progress": m.get("progress", 0.0),
+                "remaining_estimate": m.get("remaining_estimate", 0.0),
+                "overdue_count": len(m.get("overdue_tasks") or []),
+            }
+            for m in milestones_pm[:max_milestones]
+        ],
+        "overdue": overdue_flat[:max_overdue],
+        "next_actions": next_actions[:max_next_actions],
+        "risks": risks[:max_risks],
     }
 
 

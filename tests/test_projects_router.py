@@ -392,3 +392,102 @@ def test_project_process_timeline_endpoint_persists_run_evidence(tmp_path) -> No
     assert {"project.planned", "project.run", "milestone_state", "task_state"} <= kinds
     assert {"project", "milestone", "task"} <= lanes
     assert c.get("/api/projects/nope/process-timeline").status_code == 404
+
+
+def test_portfolio_endpoint_rolls_up_the_same_projects_as_the_list(tmp_path) -> None:
+    client, _store = _client_with_store(tmp_path)
+    created = [
+        client.post("/api/projects", json={"name": name, "goal": name}).json()
+        for name in ("alpha", "beta")
+    ]
+
+    listed = [p["id"] for p in client.get("/api/projects").json()["projects"]]
+    response = client.get("/api/projects/portfolio")
+
+    # 不能被 /api/projects/{project_id} 抢走路由
+    assert response.status_code == 200
+    rows = response.json()["projects"]
+
+    # 与列表接口严格同源：一旦漂移，跨项目汇总就会泄漏或漏掉项目
+    assert [row["id"] for row in rows] == listed
+    assert sorted(row["id"] for row in rows) == sorted(
+        c["project"]["id"] for c in created
+    )
+
+    row = rows[0]
+    assert {
+        "id",
+        "name",
+        "goal",
+        "status",
+        "owner",
+        "created_at",
+        "started_at",
+        "finished_at",
+        "execution_thread_id",
+        "health",
+        "readable",
+        "progress",
+        "done_tasks",
+        "total_tasks",
+        "total_estimate",
+        "remaining_estimate",
+        "counts",
+        "milestones",
+        "overdue",
+        "next_actions",
+        "risks",
+    } <= set(row)
+    assert row["readable"] is True
+    assert set(row["counts"]) == {
+        "milestones",
+        "risks",
+        "blockers",
+        "overdue",
+        "next_actions",
+    }
+    assert row["health"] in {"on_track", "at_risk", "overdue", "blocked", "completed"}
+
+
+def test_portfolio_on_empty_store_returns_empty_list(tmp_path) -> None:
+    client, _store = _client_with_store(tmp_path)
+    assert client.get("/api/projects/portfolio").json() == {"projects": []}
+
+
+def test_portfolio_surfaces_overdue_then_blocked_health(tmp_path) -> None:
+    client, store = _client_with_store(tmp_path)
+    created = client.post(
+        "/api/projects", json={"name": "risky", "goal": "risky"}
+    ).json()
+    pid = created["project"]["id"]
+    ms_id = created["milestones"][0]["id"]
+
+    store.add_task_to_milestone(
+        pid,
+        Task(
+            id="T-overdue",
+            milestone_id=ms_id,
+            type="code",
+            goal="过期的任务",
+            priority="P0",
+            estimate=2.0,
+            due_at="2020-01-01",
+        ),
+    )
+
+    row = client.get("/api/projects/portfolio").json()["projects"][0]
+    assert row["health"] == "overdue"
+    assert row["counts"]["overdue"] == 1
+    assert row["overdue"][0]["goal"] == "过期的任务"
+    assert row["total_tasks"] == 1
+    assert row["done_tasks"] == 0
+    assert row["remaining_estimate"] == 2.0
+
+    milestone = store.get_milestone(ms_id)
+    assert milestone is not None
+    milestone.status = "blocked"
+    store.save_milestone(pid, milestone)
+
+    blocked = client.get("/api/projects/portfolio").json()["projects"][0]
+    assert blocked["health"] == "blocked"
+    assert blocked["counts"]["blockers"] == 1

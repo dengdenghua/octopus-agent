@@ -463,36 +463,70 @@ def create_projects_router(
     _project_group_projections = projections.project_group_projections
     _clear_project_group_projections = projections.clear_project_group_projections
 
-    @router.get("/api/projects")
-    def list_projects(request: Request) -> dict[str, Any]:
+    def _visible_projects(request: Request) -> list[Any]:
+        """Projects the caller may see, using the list-endpoint rules.
+
+        Kept as one helper so ``/api/projects`` and ``/api/projects/portfolio``
+        cannot drift apart — a difference here would leak another tenant's
+        project into the cross-project roll-up.
+        """
         principal = _principal(request)
         projects = (
             project_store.list_projects()
             if principal is not None
             else _scoped_store(request).list_projects()
         )
-        if principal is not None:
-            global_operator = bool(principal.roles.intersection({"admin", "operator"}))
-            visible: list[Any] = []
-            for project in projects:
-                if project.tenant_id and project.tenant_id != principal.tenant_id:
-                    continue
-                if not project.owner_id or not project.tenant_id:
-                    if global_operator:
-                        visible.append(project)
-                    continue
-                if project.owner_id == principal.actor_id or global_operator:
+        if principal is None:
+            return projects
+        global_operator = bool(principal.roles.intersection({"admin", "operator"}))
+        visible: list[Any] = []
+        for project in projects:
+            if project.tenant_id and project.tenant_id != principal.tenant_id:
+                continue
+            if not project.owner_id or not project.tenant_id:
+                if global_operator:
                     visible.append(project)
-                    continue
-                thread_id = project_store.thread_for_project(project.id) or ""
-                if thread_access.resolve(
-                    thread_id,
-                    principal.actor_id,
-                    principal.tenant_id,
-                ).can_read:
-                    visible.append(project)
-            projects = visible
-        return {"projects": [p.to_dict() for p in projects]}
+                continue
+            if project.owner_id == principal.actor_id or global_operator:
+                visible.append(project)
+                continue
+            thread_id = project_store.thread_for_project(project.id) or ""
+            if thread_access.resolve(
+                thread_id,
+                principal.actor_id,
+                principal.tenant_id,
+            ).can_read:
+                visible.append(project)
+        return visible
+
+    @router.get("/api/projects")
+    def list_projects(request: Request) -> dict[str, Any]:
+        return {"projects": [p.to_dict() for p in _visible_projects(request)]}
+
+    @router.get("/api/projects/portfolio")
+    def portfolio(request: Request) -> dict[str, Any]:
+        """Cross-project roll-up: every visible project's PM row in one read.
+
+        Declared before ``/api/projects/{project_id}`` so the literal path is
+        not captured by the parameterised route.
+
+        One project's read failure must not blank the whole portfolio: the
+        entry is still emitted with ``readable=False`` so the sidebar can show
+        the project instead of silently dropping it.
+        """
+        from runtime.projectos.pm import build_pm_report, build_portfolio_entry
+
+        entries: list[dict[str, Any]] = []
+        for project in _visible_projects(request):
+            try:
+                report = build_pm_report(
+                    _project_read_store(request, project),
+                    project.id,
+                )
+            except ValueError:
+                report = None
+            entries.append(build_portfolio_entry(project, report))
+        return {"projects": entries}
 
     @router.get("/api/projects/by-thread/{thread_id}")
     def get_project_by_thread(request: Request, thread_id: str) -> dict[str, Any]:
