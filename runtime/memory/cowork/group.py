@@ -26,12 +26,35 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal, cast
 
-MemberKind = Literal["agent", "human"]
+# Who a roster entry *is* — the accountability axis.
+#
+#   agent  a bare AI. The platform answers for it; nobody owns it personally.
+#   role   a 数字员工: a role-bound AI with a named human owner
+#          (``Member.accountable_owner``), so a person — not the platform —
+#          answers for what it does.
+#   human  a person.
+#
+# Deliberately distinct from ``MemberRole`` (participant/observer), which is the
+# "may it speak" axis. Do not collapse the two.
+MemberKind = Literal["agent", "role", "human"]
+# Who is *currently driving* a member. A 数字员工 can be handed over to its owner
+# (``human``), but never both at once: see ``responders``.
+DriverKind = Literal["ai", "human"]
 MemberRole = Literal["participant", "observer"]
 GrantScope = Literal["all", "from_join", "range", "summary"]
 GroupMode = Literal["chat", "cluster", "swarm"]
 
-EventAction = Literal["invite", "leave", "mute", "unmute", "mode", "room_link", "workspace_link"]
+# What a *recorded message* claims about its sender. Resolved by the server from
+# the roster at write time and never self-reported, because an AI must not be
+# able to label its own output as human work. ``unknown`` is a real, load-bearing
+# state: an unattributable sender stays unattributable rather than being
+# optimistically filed under "agent".
+SenderKind = Literal["agent", "role", "human", "unknown"]
+SenderDriver = Literal["ai", "human", "unknown"]
+
+EventAction = Literal[
+    "invite", "leave", "mute", "unmute", "mode", "room_link", "workspace_link", "drive"
+]
 
 DEFAULT_MODE: GroupMode = "chat"
 VALID_MODES: frozenset[str] = frozenset({"chat", "cluster", "swarm"})
@@ -82,13 +105,51 @@ class ContextGrant:
         )
 
 
+def normalize_member_kind(value: object) -> MemberKind:
+    """Widen a stored/wire member kind onto the three-member accountability axis.
+
+    Unknown values collapse to ``agent`` — the *narrowest* claim. Collapsing the
+    other way (``agent`` → ``role``) would manufacture a 数字员工 that no human
+    answers for, which is precisely the failure this axis exists to prevent.
+    """
+
+    if value == "human":
+        return "human"
+    if value == "role":
+        return "role"
+    return "agent"
+
+
+def normalize_driver_kind(value: object) -> DriverKind | None:
+    """``None`` when absent/invalid so callers can distinguish "not stated"."""
+
+    return value if value in ("ai", "human") else None
+
+
+def sender_identity(
+    state: GroupState | None, member_id: str
+) -> tuple[SenderKind, SenderDriver]:
+    """What a message written by ``member_id`` records about its sender.
+
+    Read off the *roster* at write time, never off the message — a sender must
+    not be able to label its own output. When the sender is not on the roster we
+    return ``("unknown", "unknown")``: guessing ``agent`` here would fabricate an
+    attribution in what is meant to be an audit trail.
+    """
+
+    member = state.member(member_id) if state is not None and member_id else None
+    if member is None:
+        return ("unknown", "unknown")
+    return (member.kind, member.driver)
+
+
 @dataclass
 class MemberEvent:
     """One append-only membership/mode event on a thread's timeline."""
 
     action: EventAction
     actor: str  # who performed it (member id; "" for system)
-    target_id: str = ""  # member affected (invite/leave/mute); "" for mode
+    target_id: str = ""  # member affected (invite/leave/mute/drive); "" for mode
     target_kind: MemberKind = "agent"
     role: MemberRole = "participant"
     grant: ContextGrant = field(default_factory=ContextGrant)
@@ -99,6 +160,11 @@ class MemberEvent:
     # For action="workspace_link": {"id", "name", "mount_type"} describing the
     # bound workspace. ``None`` for all other actions.
     workspace: dict | None = None
+    # For action="invite": the human accountable for a ``role`` (数字员工)
+    # member. Empty for ``agent`` / ``human`` members.
+    owner: str = ""
+    # For action="drive": who now holds the wheel of ``target_id``.
+    driver: DriverKind | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -113,6 +179,8 @@ class MemberEvent:
             "ts": self.ts,
             "seq": self.seq,
             "workspace": self.workspace,
+            "owner": self.owner,
+            "driver": self.driver,
         }
 
     @classmethod
@@ -126,6 +194,7 @@ class MemberEvent:
             "mode",
             "room_link",
             "workspace_link",
+            "drive",
         ):
             raise ValueError(f"unknown member event action: {action!r}")
         mode = normalize_group_mode(raw.get("mode"))
@@ -135,7 +204,7 @@ class MemberEvent:
             action=action,
             actor=str(raw.get("actor") or ""),
             target_id=str(raw.get("target_id") or ""),
-            target_kind="human" if raw.get("target_kind") == "human" else "agent",
+            target_kind=normalize_member_kind(raw.get("target_kind")),
             role="observer" if raw.get("role") == "observer" else "participant",
             grant=ContextGrant.from_dict(raw.get("grant")),
             mode=mode,
@@ -143,6 +212,8 @@ class MemberEvent:
             ts=str(raw.get("ts") or ""),
             seq=int(raw.get("seq") or 0),
             workspace=workspace,
+            owner=str(raw.get("owner") or ""),
+            driver=normalize_driver_kind(raw.get("driver")),
         )
 
 
@@ -157,6 +228,36 @@ class Member:
     grant: ContextGrant
     muted: bool = False
     invited_by: str = ""
+    # The human accountable for a ``role`` (数字员工) member. Empty for
+    # platform-owned ``agent`` members and for ``human`` members (who are their
+    # own anchor). See ``identity_problem``.
+    accountable_owner: str = ""
+    # Who is driving right now. Always "human" for ``kind == "human"``.
+    driver: DriverKind = "ai"
+
+    @property
+    def is_takeover(self) -> bool:
+        """True when a person currently holds the wheel of a non-human member.
+
+        This is the single fact the UI needs to answer "托管的还是真人接管的".
+        """
+
+        return self.kind != "human" and self.driver == "human"
+
+    def identity_problem(self) -> str | None:
+        """Why this member cannot be attributed, or ``None`` if it can.
+
+        A 数字员工 with no named owner is not a 数字员工 — it is a bare AI
+        wearing a role label, i.e. exactly the unattributable middle state this
+        axis exists to forbid. Surfaced (not raised) so a bad historical roster
+        still folds and can be reported, instead of taking the whole thread down.
+        """
+
+        if self.kind == "role" and not self.accountable_owner.strip():
+            return "role member without an accountable owner"
+        if self.kind == "human" and self.driver != "human":
+            return "human member not driven by a human"
+        return None
 
     def to_dict(self) -> dict:
         return {
@@ -167,6 +268,10 @@ class Member:
             "grant": self.grant.to_dict(),
             "muted": self.muted,
             "invited_by": self.invited_by,
+            "accountable_owner": self.accountable_owner,
+            "driver": self.driver,
+            "is_takeover": self.is_takeover,
+            "identity_problem": self.identity_problem(),
         }
 
 
@@ -185,11 +290,25 @@ class GroupState:
 
     @property
     def is_one_to_one(self) -> bool:
-        """A 1:1 is the degenerate group: at most one agent + at most one human.
+        """A 1:1 is the degenerate group: at most one AI-side member + at most
+        one human. 数字员工 (``role``) count on the AI side — a chat with a
+        digital employee and its owner is still a 1:1, not a team.
         The UI uses this to stay lightweight, not to branch the data model."""
-        agents = sum(1 for m in self.roster if m.kind == "agent")
+        ai_members = sum(1 for m in self.roster if m.kind != "human")
         humans = sum(1 for m in self.roster if m.kind == "human")
-        return agents <= 1 and humans <= 1
+        return ai_members <= 1 and humans <= 1
+
+    @property
+    def takeovers(self) -> list[Member]:
+        """Members a person is currently driving (托管 → 接管)."""
+
+        return [m for m in self.roster if m.is_takeover]
+
+    @property
+    def unattributed(self) -> list[Member]:
+        """Members that cannot be attributed to anyone — see ``identity_problem``."""
+
+        return [m for m in self.roster if m.identity_problem() is not None]
 
     def member(self, member_id: str) -> Member | None:
         return next((m for m in self.roster if m.id == member_id), None)
@@ -202,6 +321,8 @@ class GroupState:
             "is_one_to_one": self.is_one_to_one,
             "room_id": self.room_id,
             "workspace": self.workspace,
+            "takeover_ids": [m.id for m in self.takeovers],
+            "unattributed_ids": [m.id for m in self.unattributed],
         }
 
 
@@ -216,9 +337,10 @@ def fold_state(events: list[MemberEvent], until_seq: int | None = None) -> Group
     """Reconstruct the current group by folding the membership event log.
 
     Order is by ``seq``. invite adds (or re-adds — joined_at_message refreshes);
-    leave removes; mute/unmute toggle; mode sets the active overlay. Removed
-    members simply drop from the roster — their past blackboard writes stay
-    (attributed) because the blackboard is a separate, append-only store.
+    leave removes; mute/unmute toggle; drive moves the wheel between the AI and
+    its owner; mode sets the active overlay. Removed members simply drop from the
+    roster — their past blackboard writes stay (attributed) because the blackboard
+    is a separate, append-only store.
 
     ``until_seq`` folds only events up to and including that seq — that's all
     "replay to a point" / "fork at message N" need, for free, because the whole
@@ -240,6 +362,10 @@ def fold_state(events: list[MemberEvent], until_seq: int | None = None) -> Group
                 grant=ev.grant,
                 muted=False,
                 invited_by=ev.actor,
+                accountable_owner=ev.owner,
+                # A person is always their own driver; an AI-side member starts
+                # out on its own unless a drive event says otherwise.
+                driver="human" if ev.target_kind == "human" else "ai",
             )
         elif ev.action == "leave":
             members.pop(ev.target_id, None)
@@ -247,6 +373,15 @@ def fold_state(events: list[MemberEvent], until_seq: int | None = None) -> Group
             m = members.get(ev.target_id)
             if m is not None:
                 m.muted = ev.action == "mute"
+        elif ev.action == "drive":
+            m = members.get(ev.target_id)
+            # Refuse to fold nonsense rather than recording a wrong attribution:
+            # a person is never driven by an AI.
+            if m is None or ev.driver is None:
+                continue
+            if m.kind == "human" and ev.driver == "ai":
+                continue
+            m.driver = ev.driver
         elif ev.action == "mode":
             normalized_mode = normalize_group_mode(ev.mode)
             if normalized_mode is not None:
@@ -295,9 +430,21 @@ def responders(state: GroupState, addressed: list[str] | None = None) -> list[st
                  nobody (wait for an @mention) — like a real group chat.
       - cluster: the leader (first agent participant) orchestrates.
       - swarm:   every unmuted agent participant works in parallel.
-    Observers and muted members never respond; humans aren't auto-driven."""
+    Observers and muted members never respond; humans aren't auto-driven.
+
+    数字员工 (``kind == "role"``) respond exactly like bare agents — they are
+    still AI on the wire. The one thing that removes a member from this list is
+    **a person currently driving it**: while the owner holds the wheel the AI
+    must stand down, or the same mouth would have two drivers and no utterance
+    could be attributed to either. That is a hard rule, not a preference.
+    """
     agents = [
-        m for m in state.roster if m.kind == "agent" and m.role == "participant" and not m.muted
+        m
+        for m in state.roster
+        if m.kind != "human"
+        and m.role == "participant"
+        and not m.muted
+        and m.driver != "human"
     ]
     if addressed:
         targeted = [m.id for m in agents if m.id in set(addressed)]

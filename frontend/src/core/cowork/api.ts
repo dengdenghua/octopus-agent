@@ -88,6 +88,33 @@ export async function removeCoworkMember(
   return data.state;
 }
 
+/**
+ * 接管 / 交还: hand a member's wheel to its AI (`"ai"`, 托管) or to a person
+ * (`"human"`, 接管). While a person holds the wheel the member stops being an
+ * automatic responder — the AI stands down so no utterance has two drivers.
+ */
+export async function setCoworkMemberDriver(
+  threadId: string,
+  memberId: string,
+  driver: "ai" | "human",
+): Promise<CoworkGroupResponse["state"]> {
+  const res = await fetch(
+    `${BASE()}/${encodeURIComponent(threadId)}/members/${encodeURIComponent(
+      memberId,
+    )}/driver`,
+    {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify({ driver }),
+    },
+  );
+  const data = await parseJson<{
+    ok: boolean;
+    state: CoworkGroupResponse["state"];
+  }>(res, "Set cowork member driver");
+  return data.state;
+}
+
 export async function setCoworkMode(
   threadId: string,
   mode: CoworkMode,

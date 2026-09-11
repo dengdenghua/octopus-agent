@@ -123,15 +123,27 @@ class CoworkGroupSessionView:
         *,
         state: Any = None,
     ) -> list[dict[str, Any]]:
+        """Project the canonical roster onto the Team Room read model.
+
+        数字员工 (``kind == "role"``) project exactly like bare agents — they
+        are still AI-side members that speak in the room. Their kind, driver and
+        accountable owner travel along so the room UI can answer "纯 AI 还是绑定
+        角色 / 托管还是接管" without a second lookup, and so a taken-over member
+        can stop being presented as autonomous."""
         state = state or self._group_store.state(thread_id)
         return [
             {
                 "name": member.id,
                 "display_name": member.id,
                 "description": "",
+                "kind": member.kind,
+                "driver": member.driver,
+                "accountable_owner": member.accountable_owner,
+                "is_takeover": member.is_takeover,
+                "identity_problem": member.identity_problem(),
             }
             for member in state.roster
-            if member.kind == "agent" and member.role == "participant" and not member.muted
+            if member.kind != "human" and member.role == "participant" and not member.muted
         ]
 
     def room_members_for_projection(

@@ -26,7 +26,8 @@ function currentParticipantAgentIds(state?: CoworkState | null): string[] {
   return (
     state?.roster
       .filter(
-        (member) => member.kind === "agent" && member.role === "participant",
+        // 数字员工 (kind="role") count as AI-side participants too.
+        (member) => member.kind !== "human" && member.role === "participant",
       )
       .map((member) => member.id)
       .filter(Boolean) ?? []

@@ -27,16 +27,25 @@ class GrantBody(BaseModel):
 
 class InviteBody(BaseModel):
     target_id: str = Field(min_length=1)
-    kind: str = "agent"  # agent | human
+    kind: str = "agent"  # agent | role | human
     role: str = "participant"  # participant | observer
     grant: GrantBody = Field(default_factory=GrantBody)
     at_message: int | None = None
+    # Required when kind="role": the human accountable for this 数字员工.
+    # Rejected as empty for role invites on the server side — an unattributable
+    # 数字员工 must not be creatable through the API.
+    owner: str = ""
 
 
 class ModeBody(BaseModel):
     # Canonical values: chat | cluster | swarm. ``project`` is accepted by the
     # router only as a deprecated compatibility value and normalized to chat.
     mode: str
+
+
+class DriverBody(BaseModel):
+    # ai = 托管 (the member's AI drives); human = 接管 (its owner drives).
+    driver: str
 
 
 class RosterBody(BaseModel):

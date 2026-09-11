@@ -5,6 +5,13 @@ export interface ThreadCollaborationRosterEntry {
   avatar_url?: string | null;
   icon?: string | null;
   role: "tl" | "member";
+  /** Who this entry *is*: a bare AI or a role-bound 数字员工 (never "human"
+   * here — the collaboration roster is the AI-side roster). */
+  kind?: "agent" | "role";
+  /** `ai` = 托管; `human` = 接管 (its owner holds the wheel). */
+  driver?: "ai" | "human";
+  /** The human accountable for a 数字员工 entry. */
+  accountable_owner?: string | null;
 }
 
 export interface CollaborationAgentProfile {

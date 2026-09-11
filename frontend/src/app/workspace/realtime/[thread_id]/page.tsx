@@ -1375,7 +1375,7 @@ function RealtimePageContent({
           event_count: coworkGroupQuery.data?.state.event_count ?? 0,
           is_one_to_one:
             collabSessionQuery.data.roster.filter(
-              (member) => member.kind === "agent",
+              (member) => member.kind !== "human",
             ).length <= 1 &&
             collabSessionQuery.data.roster.filter(
               (member) => member.kind === "human",
@@ -1634,7 +1634,9 @@ function RealtimePageContent({
         avatarUrl: agent.avatar_url ?? null,
         icon: agent.icon ?? null,
         role: agent.role,
-        kind: "agent",
+        kind: agent.kind ?? "agent",
+        driver: agent.driver,
+        accountableOwner: agent.accountable_owner ?? null,
         description: profileDetails?.description ?? null,
         model: profileDetails?.model ?? null,
         toolGroups: profileDetails?.tool_groups ?? null,
@@ -1666,7 +1668,10 @@ function RealtimePageContent({
         name,
         avatarUrl: typeof rawAvatar === "string" ? rawAvatar : null,
         role,
-        kind: participant.kind === "agent" ? "agent" : "human",
+        kind: participant.kind ?? "human",
+        driver:
+          participant.kind === "human" ? "human" : (participant.driver ?? undefined),
+        accountableOwner: participant.accountable_owner ?? null,
       });
     }
     return Array.from(seats.values());
@@ -2404,7 +2409,7 @@ function RealtimePageContent({
           (candidate) => candidate.id === message.participant_id,
         );
         const mention =
-          member?.kind === "agent" && message.participant_id
+          member && member.kind !== "human" && message.participant_id
             ? `@agent:${message.participant_id}`
             : `@${message.display_name || message.participant_id || "成员"}`;
         setComposerSeed(`${mention} `);
@@ -4206,10 +4211,10 @@ function RealtimePageContent({
       closeSpecialUtilityPanels();
       setFocusedWorkbenchEffectKey(null);
       // In a group the main column is the selected role's conversation view.
-      // Clicking any *other* AI seat must therefore open that member's own
-      // workstation on the right, rather than silently throwing away the
-      // identity that the roster strip already supplied.
-      if (seat?.kind === "agent" && seat.id.trim()) {
+      // Clicking any *other* AI seat (including a 数字员工) must therefore open
+      // that member's own workstation on the right, rather than silently
+      // throwing away the identity that the roster strip already supplied.
+      if (seat?.kind && seat.kind !== "human" && seat.id.trim()) {
         setFocusedWorkbenchAgentId(seat.id.trim());
         setFocusedWorkbenchAgentView("screen");
         setFocusedWorkbenchAgentSnapshot(null);
@@ -4868,18 +4873,18 @@ function RealtimePageContent({
                     data-composer-root="true"
                     className={cn(
                       "relative mx-auto w-full transition-[max-width,transform] duration-slow",
-                      isNewThread &&
-                        "-translate-y-[clamp(3rem,12dvh,7rem)] md:-translate-y-[calc(50vh-168px)]",
+                      isNewThread && "workspace-start-composer",
                       isNewThread
                         ? "max-w-3xl"
                         : "max-w-(--container-width-md)",
                     )}
                   >
                     {mounted ? (
-                      <div className="flex flex-col gap-2">
+                      <div className={cn("flex flex-col", isNewThread ? "gap-0" : "gap-2")}>
                         {isNewThread ? (
                           <div data-composer-welcome="true">
                             <Welcome
+                              className="workspace-start-heading"
                               agent={perspectiveDisplayAgent}
                               agentName={mainPerspectiveAgentId}
                             />
@@ -4901,7 +4906,7 @@ function RealtimePageContent({
                           resolveApproval={realtimeApprovals.resolveApproval}
                           className="-mb-1"
                         />
-                        <div className="pt-3">
+                        <div className={isNewThread ? "pt-0" : "pt-3"}>
                           {automationTarget ? (
                             <AutomationControlDock
                               threadId={threadId}

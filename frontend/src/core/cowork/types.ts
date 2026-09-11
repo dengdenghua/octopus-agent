@@ -1,4 +1,13 @@
-export type CoworkMemberKind = "agent" | "human";
+/**
+ * Who a member *is* — the accountability axis.
+ *  - agent: bare AI; the platform answers for it.
+ *  - role:  数字员工, a role-bound AI with a named human owner
+ *           (`accountable_owner`), so a person — not the platform — answers.
+ *  - human: a person.
+ */
+export type CoworkMemberKind = "agent" | "role" | "human";
+/** Who is currently driving a member: its AI (托管) or a person (接管). */
+export type CoworkMemberDriver = "ai" | "human";
 export type CoworkMemberRole = "participant" | "observer";
 export type CoworkMode = "chat" | "cluster" | "swarm" | "project";
 export type CoworkGrantScope = "all" | "from_join" | "range" | "summary";
@@ -17,6 +26,12 @@ export interface CoworkMember {
   grant: CoworkContextGrant;
   muted?: boolean;
   invited_by?: string;
+  /** The human accountable for a `role` (数字员工) member. */
+  accountable_owner?: string;
+  /** `ai` = 托管; `human` = 接管 (its owner holds the wheel). */
+  driver?: CoworkMemberDriver;
+  is_takeover?: boolean;
+  identity_problem?: string | null;
 }
 
 export interface CoworkState {
@@ -25,10 +40,22 @@ export interface CoworkState {
   event_count: number;
   is_one_to_one: boolean;
   room_id?: string | null;
+  workspace?: Record<string, unknown> | null;
+  /** Members a person is currently driving (托管 → 接管). */
+  takeover_ids?: string[];
+  /** Members that cannot be attributed to anyone (see identity_problem). */
+  unattributed_ids?: string[];
 }
 
 export interface CoworkEvent {
-  action: "invite" | "leave" | "mute" | "unmute" | "mode" | "room_link";
+  action:
+    | "invite"
+    | "leave"
+    | "mute"
+    | "unmute"
+    | "mode"
+    | "room_link"
+    | "drive";
   actor: string;
   target_id: string;
   target_kind: CoworkMemberKind;
@@ -38,6 +65,10 @@ export interface CoworkEvent {
   at_message?: number | null;
   ts: string;
   seq: number;
+  /** For action="invite" + kind="role": the accountable owner. */
+  owner?: string;
+  /** For action="drive": who now holds the wheel. */
+  driver?: CoworkMemberDriver | null;
 }
 
 export interface CoworkGroupResponse {
@@ -196,6 +227,9 @@ export interface CoworkRoomMessageMetadata {
   /** Structured parent pointer for threaded replies (kept separate from text quoting). */
   reply_to?: CoworkRoomReplyReference | null;
   project_actions?: CoworkRoomProjectActionReceipt[];
+  /** Server-resolved sender attribution (see `senderAttribution`). */
+  sender_kind?: CoworkSenderKind;
+  sender_driver?: CoworkSenderDriver;
   [key: string]: unknown;
 }
 
@@ -216,16 +250,46 @@ export interface CoworkRoomMessageReceipt {
 }
 
 /** Canonical message returned by GET /api/collab/{thread_id}. */
+/** What a recorded message says about its sender (server-resolved). */
+export type CoworkSenderKind = "agent" | "role" | "human" | "unknown";
+export type CoworkSenderDriver = "ai" | "human" | "unknown";
+
+/** Server-resolved sender attribution stored on the message metadata. */
+export interface CoworkSenderAttribution {
+  sender_kind?: CoworkSenderKind;
+  sender_driver?: CoworkSenderDriver;
+}
+
 export interface CoworkRoomMessage {
   session_id?: string;
   seq: number;
   room_id?: string;
   participant_id?: string;
   display_name?: string;
+  /** Legacy `RoomMessageStore` rows carry the attribution top-level; the
+   * canonical store keeps it inside `metadata`. Prefer `senderAttribution()`. */
+  sender_kind?: CoworkSenderKind;
+  sender_driver?: CoworkSenderDriver;
   text: string;
   ts?: string;
   metadata?: CoworkRoomMessageMetadata;
   receipts?: CoworkRoomMessageReceipt[];
+}
+
+/**
+ * Resolve the sender attribution of a message across both storage shapes:
+ * legacy rows carry `sender_kind` / `sender_driver` top-level, canonical
+ * collaboration rows keep them in `metadata`. Defaults to "unknown" — never to
+ * "agent" — because an unattributable line must stay unattributable.
+ */
+export function senderAttribution(
+  message: Pick<CoworkRoomMessage, "sender_kind" | "sender_driver" | "metadata">,
+): Required<CoworkSenderAttribution> {
+  return {
+    sender_kind: message.sender_kind ?? message.metadata?.sender_kind ?? "unknown",
+    sender_driver:
+      message.sender_driver ?? message.metadata?.sender_driver ?? "unknown",
+  };
 }
 
 export type CoworkProjectTaskType =
@@ -280,6 +344,12 @@ export interface CoworkRoomParticipant {
   name?: string;
   display_name?: string;
   kind?: CoworkMemberKind;
+  /** `ai` = 托管; `human` = 接管 (its owner holds the wheel). */
+  driver?: CoworkMemberDriver;
+  /** The human accountable for a `role` (数字员工) participant. */
+  accountable_owner?: string | null;
+  is_takeover?: boolean;
+  identity_problem?: string | null;
   avatar_url?: string | null;
   icon?: string | null;
   description?: string | null;

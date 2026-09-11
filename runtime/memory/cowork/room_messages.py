@@ -29,6 +29,11 @@ from runtime.memory.cowork.ids import (
 )
 from runtime.platform.io.sqlite import connect_closing
 
+# Server-resolved sender attribution (see ``group.sender_identity``). Empty on
+# legacy rows — the UI must treat empty as "unknown", not as "agent".
+_VALID_SENDER_KINDS = ("agent", "role", "human", "unknown")
+_VALID_SENDER_DRIVERS = ("ai", "human", "unknown")
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS room_messages (
     room_id        TEXT NOT NULL,
@@ -37,6 +42,8 @@ CREATE TABLE IF NOT EXISTS room_messages (
     client_message_id TEXT NOT NULL DEFAULT '',
     participant_id TEXT,
     display_name   TEXT,
+    sender_kind    TEXT NOT NULL DEFAULT '',
+    sender_driver  TEXT NOT NULL DEFAULT '',
     text           TEXT NOT NULL,
     ts             TEXT NOT NULL,
     PRIMARY KEY (room_id, seq)
@@ -96,6 +103,15 @@ class RoomMessageStore:
                     "ALTER TABLE room_messages "
                     "ADD COLUMN client_message_id TEXT NOT NULL DEFAULT ''"
                 )
+            if "sender_kind" not in columns:
+                conn.execute(
+                    "ALTER TABLE room_messages ADD COLUMN sender_kind TEXT NOT NULL DEFAULT ''"
+                )
+            if "sender_driver" not in columns:
+                conn.execute(
+                    "ALTER TABLE room_messages "
+                    "ADD COLUMN sender_driver TEXT NOT NULL DEFAULT ''"
+                )
             conn.executescript(_SCHEMA)
 
     @property
@@ -116,10 +132,17 @@ class RoomMessageStore:
         display_name: str = "",
         message_id: str = "",
         client_message_id: str = "",
+        sender_kind: str = "",
+        sender_driver: str = "",
     ) -> int:
         """Append a line, stamping a per-room monotonic ``seq`` + ``ts``. The
         next ``seq`` is computed inside the INSERT so concurrent appends never
-        collide. Returns the assigned seq."""
+        collide. Returns the assigned seq.
+
+        ``sender_kind`` / ``sender_driver`` are the server-resolved attribution
+        of who this line came from and who was driving them at that moment —
+        resolved from the roster by the caller, never self-reported. Left empty
+        for callers that cannot resolve them; readers treat empty as unknown."""
         room_id = require_cowork_id(room_id, label="room_id")
         participant_id = optional_cowork_id(participant_id, label="participant_id")
         message_id = optional_cowork_id(message_id, label="message_id")
@@ -128,6 +151,12 @@ class RoomMessageStore:
             label="client_message_id",
         )
         display_name = normalize_display_name(display_name)
+        kind = str(sender_kind or "").strip().lower()
+        if kind and kind not in _VALID_SENDER_KINDS:
+            raise ValueError(f"sender_kind must be one of {_VALID_SENDER_KINDS}")
+        driver = str(sender_driver or "").strip().lower()
+        if driver and driver not in _VALID_SENDER_DRIVERS:
+            raise ValueError(f"sender_driver must be one of {_VALID_SENDER_DRIVERS}")
         text = require_message_text(text)
         ts = datetime.now(UTC).isoformat()
         with self._lock, self._connect() as conn:
@@ -152,9 +181,9 @@ class RoomMessageStore:
             cur = conn.execute(
                 "INSERT INTO room_messages("
                 "room_id, seq, message_id, client_message_id, "
-                "participant_id, display_name, text, ts) "
+                "participant_id, display_name, sender_kind, sender_driver, text, ts) "
                 "VALUES (?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM room_messages "
-                "WHERE room_id = ?), ?, ?, ?, ?, ?, ?) RETURNING seq",
+                "WHERE room_id = ?), ?, ?, ?, ?, ?, ?, ?, ?) RETURNING seq",
                 (
                     room_id,
                     room_id,
@@ -162,6 +191,8 @@ class RoomMessageStore:
                     client_message_id,
                     participant_id,
                     display_name,
+                    kind,
+                    driver,
                     text,
                     ts,
                 ),
@@ -179,7 +210,8 @@ class RoomMessageStore:
         with self._lock, self._connect() as conn:
             rows = conn.execute(
                 "SELECT seq, participant_id, display_name, text, ts, "
-                "message_id, client_message_id FROM room_messages "
+                "message_id, client_message_id, sender_kind, sender_driver "
+                "FROM room_messages "
                 "WHERE room_id = ? AND seq > ? ORDER BY seq DESC LIMIT ?",
                 (room_id, int(after_seq), limit),
             ).fetchall()
@@ -207,6 +239,8 @@ class RoomMessageStore:
                 "ts": r[4],
                 "message_id": r[5] or "",
                 "client_message_id": r[6] or "",
+                "sender_kind": r[7] or "unknown",
+                "sender_driver": r[8] or "unknown",
                 "receipts": receipts_by_message.get(str(r[5]), []),
             }
             for r in reversed(rows)
@@ -222,7 +256,8 @@ class RoomMessageStore:
         with self._lock, self._connect() as conn:
             rows = conn.execute(
                 "SELECT seq, participant_id, display_name, text, ts, "
-                "message_id, client_message_id FROM room_messages "
+                "message_id, client_message_id, sender_kind, sender_driver "
+                "FROM room_messages "
                 "WHERE room_id = ? AND lower(text) LIKE ? ORDER BY seq DESC LIMIT ?",
                 (room_id, f"%{q}%", max(1, min(200, limit))),
             ).fetchall()
@@ -235,6 +270,8 @@ class RoomMessageStore:
                 "ts": r[4],
                 "message_id": r[5] or "",
                 "client_message_id": r[6] or "",
+                "sender_kind": r[7] or "unknown",
+                "sender_driver": r[8] or "unknown",
             }
             for r in rows
         ]

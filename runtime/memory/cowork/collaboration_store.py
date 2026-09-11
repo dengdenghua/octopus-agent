@@ -353,6 +353,13 @@ def _normalize_entity_refs(value: Any) -> list[dict[str, Any]]:
     return out
 
 
+# Message-side sender attribution values (see ``runtime.memory.cowork.group``).
+# "unknown" is a real state: never collapse it into "agent" — that would fake an
+# attribution in what is meant to be an audit trail.
+SENDER_KINDS = frozenset({"agent", "role", "human", "unknown"})
+SENDER_DRIVERS = frozenset({"ai", "human", "unknown"})
+
+
 def _normalize_message_metadata(value: Any) -> dict[str, Any]:
     """Validate optional, backwards-compatible room-message metadata.
 
@@ -384,6 +391,19 @@ def _normalize_message_metadata(value: Any) -> dict[str, Any]:
     if message_type:
         metadata["message_type"] = (
             message_type if message_type in {"message", "system_card"} else "message"
+        )
+    # Server-resolved sender identity (see ``group.sender_identity``). Absent on
+    # legacy rows; a bad value degrades to the explicit "unknown" rather than to
+    # any specific attribution.
+    if "sender_kind" in metadata:
+        metadata["sender_kind"] = (
+            metadata.get("sender_kind") if metadata.get("sender_kind") in SENDER_KINDS else "unknown"
+        )
+    if "sender_driver" in metadata:
+        metadata["sender_driver"] = (
+            metadata.get("sender_driver")
+            if metadata.get("sender_driver") in SENDER_DRIVERS
+            else "unknown"
         )
     if "project_actions" in metadata:
         metadata["project_actions"] = _compact_dict_list(metadata.get("project_actions"))

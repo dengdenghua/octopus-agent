@@ -3,11 +3,13 @@ import { Link2Icon, PinIcon, SmilePlusIcon } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MemberProfilePopover } from "@/components/workspace/member-profile-popover";
-import type {
-  CoworkRoomEntityRef,
-  CoworkRoomMessage,
-  CoworkRoomParticipant,
-  CoworkRoomReplyReference,
+import {
+  senderAttribution,
+  type CoworkRoomEntityRef,
+  type CoworkRoomMessage,
+  type CoworkRoomParticipant,
+  type CoworkRoomReplyReference,
+  type CoworkSenderAttribution,
 } from "@/core/cowork";
 import { formatCompactRelativeTimestamp } from "@/core/utils/datetime";
 import { swallow } from "@/core/utils/log";
@@ -102,6 +104,38 @@ function initials(label: string): string {
     .map((part) => part[0])
     .join("")
     .toUpperCase();
+}
+
+/**
+ * Per-message sender attribution: who this line came from and who was driving
+ * them at that moment. Server-resolved at write time (`group.sender_identity`),
+ * so a takeover that happens later cannot rewrite history — each line keeps the
+ * driver it had when it was written. Humans and fully-attributed bare agents
+ * stay unbadged to avoid noise; the badge exists for the cases that matter:
+ * 数字员工 (whose accountability anchor differs), takeovers, and unattributed
+ * legacy rows.
+ */
+function senderAttributionLabel(
+  attribution: Required<CoworkSenderAttribution>,
+  participant?: CoworkRoomParticipant,
+): { label: string; takeover: boolean } | null {
+  const { sender_kind: kind, sender_driver: driver } = attribution;
+  if (kind === "human") return null;
+  if (kind === "unknown") return { label: "来源未标注", takeover: false };
+  const owner = participant?.accountable_owner;
+  if (driver === "human") {
+    return {
+      label: owner ? `真人接管 · ${owner}` : "真人接管",
+      takeover: true,
+    };
+  }
+  if (kind === "role") {
+    return {
+      label: owner ? `数字员工 · ${owner} 负责` : "数字员工 · AI 托管",
+      takeover: false,
+    };
+  }
+  return null; // bare agent, AI-driven: the everyday case, no badge
 }
 
 function renderMessageText(
@@ -289,13 +323,25 @@ function CoworkRoomTimelineEntryContent({
             </AvatarFallback>
           </Avatar>
         }
-        roleLabel={participant?.kind === "agent" ? "AI 成员" : "协作成员"}
+        roleLabel={
+          participant?.kind === "role"
+            ? participant.driver === "human"
+              ? "数字员工 · 真人接管"
+              : "数字员工 · AI 托管"
+            : participant?.kind === "agent"
+              ? "AI 成员"
+              : "协作成员"
+        }
         presenceLabel={own ? "当前视角" : "参与对话"}
         summary={
           participant?.description?.trim() ||
-          (participant?.kind === "agent"
-            ? "正在参与当前协作。"
-            : "该成员正在参与当前对话。")
+          (participant?.kind === "role"
+            ? participant.driver === "human"
+              ? "数字员工正在被真人接管，AI 已停手。"
+              : "数字员工正在由 AI 驱动参与协作。"
+            : participant?.kind === "agent"
+              ? "正在参与当前协作。"
+              : "该成员正在参与当前对话。")
         }
         trigger={
           <button
@@ -329,6 +375,26 @@ function CoworkRoomTimelineEntryContent({
           <span className="truncate font-medium text-foreground/80">
             {displayName}
           </span>
+          {(() => {
+            const badge = senderAttributionLabel(
+              senderAttribution(message),
+              participant,
+            );
+            if (!badge) return null;
+            return (
+              <span
+                title={badge.label}
+                className={cn(
+                  "shrink-0 rounded px-1 py-px text-[9px] font-medium",
+                  badge.takeover
+                    ? "bg-amber-500/15 text-amber-700"
+                    : "bg-violet-500/10 text-violet-600",
+                )}
+              >
+                {badge.label}
+              </span>
+            );
+          })()}
           {message.ts ? (
             <time dateTime={message.ts}>
               {formatCompactRelativeTimestamp(message.ts)}

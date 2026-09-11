@@ -234,4 +234,59 @@ describe("CoworkRoomTimeline", () => {
       ]).map((message) => message.text),
     ).toEqual(["项目卡", "无来源的房间消息"]);
   });
+
+  test("badges 数字员工 lines and their takeovers, not bare agents", () => {
+    renderWithProviders(
+      <CoworkRoomTimeline
+        messages={[
+          {
+            seq: 1,
+            participant_id: "reviewer",
+            display_name: "审校员",
+            text: "托管阶段的产出",
+            metadata: { sender_kind: "role", sender_driver: "ai" },
+          },
+          {
+            seq: 2,
+            participant_id: "reviewer",
+            display_name: "审校员",
+            text: "接管阶段的产出",
+            metadata: { sender_kind: "role", sender_driver: "human" },
+          },
+          {
+            seq: 3,
+            participant_id: "planner",
+            display_name: "规划师",
+            text: "裸 AI 的日常消息",
+            metadata: { sender_kind: "agent", sender_driver: "ai" },
+          },
+          {
+            seq: 4,
+            display_name: "旧库迁移的行",
+            text: "无归属的历史消息",
+          },
+        ]}
+        participants={[
+          {
+            id: "reviewer",
+            display_name: "审校员",
+            kind: "role",
+            accountable_owner: "user-1",
+          },
+          { id: "planner", display_name: "规划师", kind: "agent" },
+        ]}
+      />,
+      { locale: "zh-CN" },
+    );
+
+    // 数字员工 + 托管: the badge names the accountability anchor.
+    expect(screen.getByText("数字员工 · user-1 负责")).toBeInTheDocument();
+    // 接管: the amber badge states who holds the wheel — and the earlier
+    // AI-driven line keeps its own attribution (history is not rewritten).
+    expect(screen.getByText("真人接管 · user-1")).toBeInTheDocument();
+    // Bare agent daily chatter and humans stay unbadged (no noise).
+    expect(screen.queryByText("AI 生成")).not.toBeInTheDocument();
+    // Legacy rows without attribution say so explicitly — never guessed.
+    expect(screen.getByText("来源未标注")).toBeInTheDocument();
+  });
 });

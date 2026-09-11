@@ -210,7 +210,8 @@ export async function ensureProjectHome(
     let roomMembers = (group?.state.roster ?? [])
       .filter(
         (member) =>
-          member.kind === "agent" &&
+          // 数字员工 (kind="role") count as AI-side room members too.
+          member.kind !== "human" &&
           member.role === "participant" &&
           !member.muted,
       )

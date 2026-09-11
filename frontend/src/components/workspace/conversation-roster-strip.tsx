@@ -70,7 +70,7 @@ function ConversationMemberWorkstation({
       name={seat.name}
       avatar={seat.icon ?? null}
       avatarUrl={seat.avatarUrl ?? null}
-      showBotBadge={seat.kind === "agent" && !leader}
+      showBotBadge={seat.kind !== "human" && !leader}
       fallbackInitial={seat.name.charAt(0)}
       dotClassName="bg-success"
       dotLabel={presenceLabel}

@@ -92,7 +92,8 @@ export function coworkSessionToMentionMembers(
       value(participant, "id") ||
       value(participant, "participant_id") ||
       value(participant, "name");
-    add(id, participant.kind === "agent" ? "agent" : "human", participant);
+    // 数字员工 (kind="role") mention like agents — they are AI-side members.
+    add(id, participant.kind && participant.kind !== "human" ? "agent" : "human", participant);
   }
   for (const member of session.roster ?? []) {
     if (member.muted) continue;

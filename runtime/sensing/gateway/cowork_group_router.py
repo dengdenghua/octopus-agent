@@ -26,10 +26,12 @@ from runtime.memory.cowork.group import (
     LEGACY_PROJECT_MODE,
     ContextGrant,
     MemberEvent,
-    MemberKind,
+    normalize_member_kind,
     responders,
+    sender_identity,
 )
 from runtime.memory.cowork.group_store import GroupStore
+from runtime.memory.cowork.service import set_driver
 from runtime.memory.threads.event_log import validate_thread_id
 
 from ._cowork_group_access import CoworkGroupAccess
@@ -47,6 +49,7 @@ from ._cowork_group_models import (
     CollectorChildCancelBody,
     CollectorRetryBody,
     CompleteBody,
+    DriverBody,
     EnsureRoomBody,
     HeartbeatBody,
     InviteBody,
@@ -1558,6 +1561,16 @@ def create_cowork_group_router(
             metadata["entity_refs"] = body.entity_refs
         if body.system_card is not None:
             metadata["system_card"] = body.system_card
+        # Sender attribution is resolved HERE, from the roster — never taken
+        # from the request body. An AI must not be able to label its own output
+        # as human work by posting a metadata field. A sender that is not on the
+        # roster records as ("unknown", "unknown"): unattributable beats a
+        # fabricated "agent".
+        sender_kind, sender_driver = sender_identity(
+            group_store.state(thread_id), str(body.participant_id or "")
+        )
+        metadata["sender_kind"] = sender_kind
+        metadata["sender_driver"] = sender_driver
         try:
             canonical_store = _collaboration_store()
             source_message_id = str(metadata.get("source_message_id") or "")
@@ -1584,6 +1597,8 @@ def create_cowork_group_router(
                     text=body.text,
                     participant_id=body.participant_id,
                     display_name=body.display_name,
+                    sender_kind=sender_kind,
+                    sender_driver=sender_driver,
                 )
         return {"ok": True, "room_id": room_id, "seq": seq, "message": message}
 
@@ -1944,21 +1959,24 @@ def create_cowork_group_router(
 
     @router.post("/api/cowork/{thread_id}/members", dependencies=[Depends(_owner_dep)])
     def invite_member(thread_id: str, body: InviteBody, request: Request) -> dict[str, Any]:
-        """Reference a canonical agent (or human) from this thread.
+        """Reference a canonical agent (or human, or 数字员工) from this thread.
 
         Retrying the same add is a successful no-op.  The group stores only the
         canonical id; it does not clone a role, home, memory, or owner lane.
-        """
-        target_kind: MemberKind = "human" if body.kind == "human" else "agent"
+        ``kind="role"`` requires ``owner`` — the human who answers for it."""
+        member_kind = normalize_member_kind(body.kind)
         ev = MemberEvent(
             action="invite",
             actor=_actor(request),
             target_id=body.target_id,
-            target_kind=target_kind,
+            target_kind=member_kind,
             role="observer" if body.role == "observer" else "participant",
             grant=ContextGrant.from_dict(body.grant.model_dump()),
             at_message=body.at_message,
+            owner=str(body.owner or "").strip() if member_kind == "role" else "",
         )
+        if member_kind == "role" and not ev.owner:
+            raise HTTPException(400, "a role member requires an accountable owner")
         try:
             changed, state = group_store.ensure_member(thread_id, ev)
         except ValueError as exc:
@@ -1989,6 +2007,43 @@ def create_cowork_group_router(
         result: dict[str, Any] = {
             "ok": True,
             "removed": changed is not None,
+            "state": state.to_dict(),
+        }
+        projection = _project_linked_room_roster(thread_id, request, state)
+        if projection is not None:
+            result["room_projection"] = projection
+        return result
+
+    @router.post(
+        "/api/cowork/{thread_id}/members/{member_id}/driver",
+        dependencies=[Depends(_owner_dep)],
+    )
+    def set_member_driver(
+        thread_id: str,
+        member_id: str,
+        body: DriverBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        """接管 / 交还: hand a member's wheel to its AI or to a person.
+
+        While ``driver="human"`` the member is removed from ``responders`` — the
+        AI stands down so no utterance can have two drivers. Takes over a role
+        member only when it has an accountable owner. The event is appended, so
+        the whole takeover history is replayable and auditable."""
+        try:
+            ev = set_driver(
+                group_store,
+                thread_id,
+                actor=_actor(request),
+                target_id=member_id,
+                driver=body.driver,
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        state = group_store.state(thread_id)
+        result: dict[str, Any] = {
+            "ok": True,
+            "event": ev.to_dict(),
             "state": state.to_dict(),
         }
         projection = _project_linked_room_roster(thread_id, request, state)
