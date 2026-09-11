@@ -35,4 +35,6 @@ OpenCode 的模型写回改为保留 Zen 连接的完整模型坐标，使后续
 
 可复用的是当前角色获授权的注册工具和插件动作。没有把任意 OpenCode/Codex 用户配置、插件 MCP 进程、交互式插件界面导入 Echo。工具图片/音频的完整多模态传递、OpenCode 团队编排尚未接入；桌面及外部插件实际效果仍依赖对应能力和模型。
 
+2026-09-12 补充：三个浏览器/电脑截图工具的图片回传现已接入 Codex 动态工具和 OpenCode MCP，见[截图回传验证](automation-image-return-2026-09-12.md)。这不表示任意工具图片、音频或完整桌面视觉操作均已验收。
+
 协议依据：[OpenCode MCP](https://opencode.ai/docs/mcp-servers/)、[官方 1.18.29 MCP 工具转换](https://github.com/anomalyco/opencode/blob/v1.18.29/packages/opencode/src/mcp/catalog.ts)。

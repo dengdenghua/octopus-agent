@@ -15,6 +15,7 @@ from .tool_protocol import (
     normalize_step_tool_result,
     normalize_tool_call,
     normalize_tool_result,
+    output_signals_error,
 )
 
 TOOL_OUTPUT_MAX_CHARS = 16_000
@@ -31,6 +32,7 @@ def execute_native_tool_call(
     step_id: int = 0,
     arm_id: ArmId | None = None,
     budget: Budget | None = None,
+    image_items: list[dict[str, str]] | None = None,
 ) -> tuple[str, bool]:
     """Run one native tool request through the normal executor chokepoint.
 
@@ -110,6 +112,11 @@ def execute_native_tool_call(
             return (f"(TypeError: {exc})", True)
         except (RuntimeError, ValueError, OSError) as exc:
             return (f"(skill error: {type(exc).__name__}: {exc})", True)
+
+    if image_items is not None and not output_signals_error(output):
+        from .tool_images import screenshot_observation
+
+        output = screenshot_observation(normalized.name, output, image_items)
 
     result = normalize_tool_result(
         normalized,

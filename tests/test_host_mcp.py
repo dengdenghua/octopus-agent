@@ -28,7 +28,7 @@ from runtime.safety.approval.approval_gate import AutoDenyProvider
 from runtime.safety.auth import TrustEngine
 
 
-def host(tmp_path):
+def host(tmp_path, *, screenshot=False):
     workspace = tmp_path / "work"
     workspace.mkdir()
     (workspace / "note.txt").write_text("before", encoding="utf-8")
@@ -84,6 +84,33 @@ def host(tmp_path):
         }
 
     registry = SkillRegistry()
+    if screenshot:
+        import base64
+        import io
+
+        from PIL import Image
+
+        buffer = io.BytesIO()
+        Image.new("RGB", (64, 32), "blue").save(buffer, format="PNG")
+
+        def capture():
+            assert current_session().actor == "actor-a"
+            return {
+                "ok": True,
+                "dataUrl": "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode(),
+            }
+
+        agent.arms[0].allowed_skills.append("live_browser_screenshot")
+        session.metadata["browser_operation_mode"] = True
+        registry.register(
+            Skill(
+                name="live_browser_screenshot",
+                description="Capture current page",
+                trusted_source="skill://public/capture",
+                handler=capture,
+            ),
+            verify_tests=False,
+        )
     for name, handler, source in [
         ("read_file", _read_file, "skill://public/read_file"),
         ("write_text_file", _write_text_file, "skill://public/write_text_file"),
@@ -131,6 +158,41 @@ async def rpc(client, request_id, method, params=None):
     data = response.json()
     assert "error" not in data, data
     return data["result"]
+
+
+@pytest.mark.asyncio
+async def test_mcp_screenshot_survives_real_executor_and_http_transport(tmp_path):
+    import base64
+    import io
+
+    from PIL import Image
+
+    bridge, _, _ = host(tmp_path, screenshot=True)
+    async with (
+        bridge.serve() as connection,
+        httpx.AsyncClient(
+            base_url=connection.url,
+            trust_env=False,
+            headers={
+                "Authorization": f"Bearer {connection.token}",
+                "Accept": "application/json, text/event-stream",
+            },
+        ) as client,
+    ):
+        result = await rpc(
+            client,
+            1,
+            "tools/call",
+            {
+                "name": "live_browser_screenshot",
+                "arguments": {},
+            },
+        )
+    assert not result["isError"], result
+    assert [item["type"] for item in result["content"]] == ["text", "image"]
+    assert result["content"][1]["mimeType"] == "image/png"
+    data = base64.b64decode(result["content"][1]["data"], validate=True)
+    assert Image.open(io.BytesIO(data)).size == (64, 32)
 
 
 @pytest.mark.asyncio

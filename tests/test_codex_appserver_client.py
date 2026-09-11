@@ -188,7 +188,7 @@ async def _answer_request(
 
 
 @pytest.mark.asyncio
-async def test_handshake_safe_thread_turn_resume_interrupt_and_stream() -> None:
+async def test_handshake_safe_thread_turn_resume_interrupt_and_stream(tmp_path) -> None:
     config = CodexAppServerConfig(
         source_environment={
             "PATH": "/usr/bin",
@@ -204,14 +204,14 @@ async def test_handshake_safe_thread_turn_resume_interrupt_and_stream() -> None:
         assert launch.stream_limit == config.max_message_bytes + 1
 
         thread_operation = client.start_thread(
-            cwd="/workspace", extra_params={"serviceName": "octopus"}
+            cwd=str(tmp_path), extra_params={"serviceName": "octopus"}
         )
         thread_task = asyncio.ensure_future(thread_operation)
         thread_request = await fake.receive()
         assert thread_request["method"] == "thread/start"
         assert thread_request["params"] == {
             "serviceName": "octopus",
-            "cwd": "/workspace",
+            "cwd": str(tmp_path),
             "approvalPolicy": "on-request",
             "approvalsReviewer": "user",
             "sandbox": "workspace-write",
@@ -233,7 +233,7 @@ async def test_handshake_safe_thread_turn_resume_interrupt_and_stream() -> None:
 
         resume_request, resume_response = await _answer_request(
             fake,
-            client.resume_thread("thr-1", cwd="/workspace", exclude_turns=True),
+            client.resume_thread("thr-1", cwd=str(tmp_path), exclude_turns=True),
             {"thread": {"id": "thr-1", "turns": []}},
         )
         assert resume_request["method"] == "thread/resume"
@@ -282,13 +282,13 @@ async def test_handshake_safe_thread_turn_resume_interrupt_and_stream() -> None:
 
 
 @pytest.mark.asyncio
-async def test_plugin_marketplace_list_install_and_uninstall_wire_contract() -> None:
+async def test_plugin_marketplace_list_install_and_uninstall_wire_contract(tmp_path) -> None:
     client, fake, _ = await _start_client()
     try:
         list_request, listed = await _answer_request(
             fake,
             client.list_plugins(
-                cwds=["/workspace"],
+                cwds=[str(tmp_path)],
                 force_refetch=True,
                 marketplace_kinds=["local", "workspace-directory"],
             ),
@@ -298,7 +298,7 @@ async def test_plugin_marketplace_list_install_and_uninstall_wire_contract() -> 
             "id": list_request["id"],
             "method": "plugin/list",
             "params": {
-                "cwds": ["/workspace"],
+                "cwds": [str(tmp_path)],
                 "forceRefetch": True,
                 "marketplaceKinds": ["local", "workspace-directory"],
             },
@@ -309,7 +309,7 @@ async def test_plugin_marketplace_list_install_and_uninstall_wire_contract() -> 
             fake,
             client.install_plugin(
                 "linear",
-                marketplace_path="/safe/marketplace.json",
+                marketplace_path=str(tmp_path / "marketplace.json"),
                 install_attempt_id="attempt-1",
             ),
             {"authPolicy": "ON_USE", "appsNeedingAuth": []},
@@ -317,7 +317,7 @@ async def test_plugin_marketplace_list_install_and_uninstall_wire_contract() -> 
         assert install_request["method"] == "plugin/install"
         assert install_request["params"] == {
             "pluginName": "linear",
-            "marketplacePath": "/safe/marketplace.json",
+            "marketplacePath": str(tmp_path / "marketplace.json"),
             "installAttemptId": "attempt-1",
         }
         assert installed["authPolicy"] == "ON_USE"
@@ -334,12 +334,12 @@ async def test_plugin_marketplace_list_install_and_uninstall_wire_contract() -> 
 
 
 @pytest.mark.asyncio
-async def test_custom_permissions_profile_omits_legacy_sandbox_fields() -> None:
+async def test_custom_permissions_profile_omits_legacy_sandbox_fields(tmp_path) -> None:
     config = CodexAppServerConfig(experimental_api=True)
     client, fake, _ = await _start_client(config=config)
     try:
         start_operation = client.start_thread(
-            cwd="/workspace",
+            cwd=str(tmp_path),
             sandbox=None,
             permissions="octopus-sidecar",
         )
@@ -354,7 +354,7 @@ async def test_custom_permissions_profile_omits_legacy_sandbox_fields() -> None:
 
         resume_operation = client.resume_thread(
             "thr-permissions",
-            cwd="/workspace",
+            cwd=str(tmp_path),
             sandbox=None,
             permissions="octopus-sidecar",
         )
@@ -369,11 +369,11 @@ async def test_custom_permissions_profile_omits_legacy_sandbox_fields() -> None:
 
         with pytest.raises(ConfigurationError, match="exactly one"):
             await client.start_thread(
-                cwd="/workspace",
+                cwd=str(tmp_path),
                 permissions="octopus-sidecar",
             )
         with pytest.raises(ConfigurationError, match="exactly one"):
-            await client.start_thread(cwd="/workspace", sandbox=None)
+            await client.start_thread(cwd=str(tmp_path), sandbox=None)
     finally:
         await client.close()
 
@@ -381,7 +381,7 @@ async def test_custom_permissions_profile_omits_legacy_sandbox_fields() -> None:
     try:
         with pytest.raises(ConfigurationError, match="experimental_api"):
             await client.start_thread(
-                cwd="/workspace",
+                cwd=str(tmp_path),
                 sandbox=None,
                 permissions="octopus-sidecar",
             )
@@ -844,6 +844,41 @@ async def test_unknown_server_request_gets_method_not_found_without_callback() -
             "id": "server-1",
             "error": {"code": -32601, "message": "unsupported server request: danger/newPrompt"},
         }
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_dynamic_screenshot_image_survives_jsonl_response() -> None:
+    import base64
+    import io
+
+    from PIL import Image
+
+    from runtime.execution.tool_engine.tool_images import screenshot_observation
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (80, 40), "green").save(buffer, format="PNG")
+    items = []
+    screenshot_observation(
+        "live_browser_screenshot",
+        {
+            "dataUrl": "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode(),
+        },
+        items,
+    )
+
+    async def screenshot(_request):
+        return {"success": True, "contentItems": items}
+
+    client, fake, _ = await _start_client(dynamic_tool_handler=screenshot)
+    try:
+        fake.stdout.feed_message({"id": "image-1", "method": "item/tool/call", "params": {}})
+        response = await fake.receive()
+        assert response["result"]["success"]
+        assert response["result"]["contentItems"] == items
+        decoded = base64.b64decode(items[0]["imageUrl"].split(",")[1], validate=True)
+        assert decoded == buffer.getvalue()
     finally:
         await client.close()
 

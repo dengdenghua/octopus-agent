@@ -33,6 +33,7 @@ from runtime.execution.misc.skill_policy import (
 )
 from runtime.execution.tool_engine.native_tool_execution import execute_native_tool_call
 from runtime.execution.tool_engine.session_metadata import project_tool_session_metadata
+from runtime.execution.tool_engine.tool_images import valid_inline_image
 from runtime.execution.tool_spec_builder import build_anthropic_tool_specs
 from runtime.platform.process.session import (
     Session,
@@ -63,6 +64,7 @@ _MAX_TOOL_NAME_CHARS = 128
 _MAX_DESCRIPTION_CHARS = 4_000
 _MAX_FAILURE_CHARS = 8_000
 _MAX_RESULT_CACHE = 256
+_MAX_RESULT_CACHE_CHARS = 8 * 1024 * 1024
 _MAX_ARGUMENT_DEPTH = 16
 _MAX_ARGUMENT_NODES = 2_048
 _MAX_ARGUMENT_CHARS = 65_536
@@ -122,9 +124,8 @@ def dynamic_tool_failure(reason: Any) -> dict[str, Any]:
 def validate_dynamic_tool_response(value: Any) -> dict[str, Any]:
     """Validate and bound a broker response before it crosses JSON-RPC.
 
-    The broker currently emits text only.  The validator accepts the three
-    App Server content variants so future Octopus tools can return media
-    without weakening the transport boundary.
+    Screenshot images are inline and bounded. Media must never be truncated
+    as text, because doing so silently corrupts the encoded payload.
     """
 
     if not isinstance(value, Mapping) or type(value.get("success")) is not bool:
@@ -145,6 +146,10 @@ def validate_dynamic_tool_response(value: Any) -> dict[str, Any]:
         payload = raw.get(field) if field is not None else None
         if field is None or not isinstance(payload, str) or "\x00" in payload:
             return dynamic_tool_failure("invalid Octopus dynamic tool content item")
+        if kind == "inputImage" and not valid_inline_image(payload):
+            return dynamic_tool_failure("invalid Octopus dynamic tool image")
+        if field != "text" and len(payload) > 512_000:
+            return dynamic_tool_failure("Octopus dynamic tool media exceeds limit")
         # Media payloads can be data URLs, so retain a larger but still bounded
         # ceiling than ordinary text. The App Server client's frame ceiling is
         # the independent final transport guard.
@@ -450,6 +455,7 @@ class HostToolBroker:
         self._inner_turn_id: str | None = None
         self._lock = asyncio.Lock()
         self._results: OrderedDict[str, tuple[str, str, dict[str, Any]]] = OrderedDict()
+        self._result_cache_chars = 0
 
         metadata, parent = _metadata_for_bridge(
             self._context,
@@ -721,7 +727,7 @@ class HostToolBroker:
             approval_handled = True
 
         try:
-            output, is_error, observed_taint = await asyncio.to_thread(
+            output, is_error, observed_taint, image_items = await asyncio.to_thread(
                 self._execute_sync,
                 entry,
                 arguments,
@@ -746,15 +752,27 @@ class HostToolBroker:
                             "type": "inputText",
                             "text": output or ("tool failed" if is_error else "tool completed"),
                         }
-                    ],
+                    ]
+                    + (image_items if not is_error else []),
                     "success": not is_error,
                 }
             )
 
         self._results[call_id] = (advertised, fingerprint, result)
+        self._result_cache_chars += sum(
+            len(item.get("text", item.get("imageUrl", item.get("audioUrl", ""))))
+            for item in result["contentItems"]
+        )
         self._results.move_to_end(call_id)
-        while len(self._results) > _MAX_RESULT_CACHE:
-            self._results.popitem(last=False)
+        while (
+            len(self._results) > _MAX_RESULT_CACHE
+            or self._result_cache_chars > _MAX_RESULT_CACHE_CHARS
+        ):
+            _, (_, _, removed) = self._results.popitem(last=False)
+            self._result_cache_chars -= sum(
+                len(item.get("text", item.get("imageUrl", item.get("audioUrl", ""))))
+                for item in removed["contentItems"]
+            )
         return dict(result)
 
     def _execution_session(self, *, auto_approve: bool) -> Session:
@@ -780,13 +798,14 @@ class HostToolBroker:
         arguments: dict[str, Any],
         call_id: str,
         approval_handled: bool,
-    ) -> tuple[str, bool, str]:
+    ) -> tuple[str, bool, str, list[dict[str, str]]]:
         session = self._execution_session(auto_approve=approval_handled)
         with session_scope(session), parent_tool_use_scope(call_id):
             if self._taint in _TAINT_ORDER:
                 mark_injection_taint(self._taint)
             set_injection_gate_handled(approval_handled)
             try:
+                image_items: list[dict[str, str]] = []
                 output, is_error = execute_native_tool_call(
                     self._stack,
                     {
@@ -794,8 +813,9 @@ class HostToolBroker:
                         "name": entry.skill_name,
                         "arguments": dict(arguments),
                     },
+                    image_items=image_items,
                 )
-                return output, is_error, current_injection_taint()
+                return output, is_error, current_injection_taint(), image_items
             finally:
                 set_injection_gate_handled(False)
 

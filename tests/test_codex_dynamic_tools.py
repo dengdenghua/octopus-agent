@@ -15,7 +15,7 @@ from runtime.execution.suckers.registry import Skill, SkillRegistry
 from runtime.execution.suckers.write_skills import _write_text_file
 from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.journal import InMemoryJournal
-from runtime.safety.approval.approval_gate import AutoDenyProvider
+from runtime.safety.approval.approval_gate import AutoApproveProvider, AutoDenyProvider
 from runtime.safety.auth import TrustEngine
 
 
@@ -35,6 +35,7 @@ def _broker(
     context: dict[str, Any] | None = None,
     goal: str = "perform the requested operation",
     tenant_id: str = "tenant-a",
+    approve: bool = False,
 ) -> CodexDynamicToolBroker:
     stack = SimpleNamespace(executor=SimpleNamespace(registry=registry))
     broker = CodexDynamicToolBroker(
@@ -47,7 +48,7 @@ def _broker(
         workspace=str(tmp_path),
         tenant_id=tenant_id,
         principal_id="actor-a",
-        approval_provider=AutoDenyProvider(),
+        approval_provider=AutoApproveProvider() if approve else AutoDenyProvider(),
         is_interrupted=lambda: False,
     )
     broker.bind_inner_scope(thread_id="inner-thread", turn_id="inner-turn")
@@ -66,6 +67,52 @@ def _request(tool: str, arguments: dict[str, Any], *, call_id: str = "call-1") -
             "arguments": arguments,
         },
     )
+
+
+@pytest.mark.asyncio
+async def test_screenshot_delivers_image_and_retries_do_not_recapture(tmp_path: Path) -> None:
+    import base64
+    import io
+
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (64, 32), "red").save(buffer, format="PNG")
+    calls = []
+
+    def capture():
+        calls.append(True)
+        return {
+            "ok": True,
+            "dataUrl": "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode(),
+        }
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="live_browser_screenshot",
+            description="Capture current page",
+            trusted_source="skill://public/capture",
+            handler=capture,
+            tenant_id="tenant-a",
+        ),
+        verify_tests=False,
+    )
+    broker = _broker(
+        tmp_path,
+        registry,
+        names=("live_browser_screenshot",),
+        context={"browser_operation_mode": True},
+        approve=True,
+    )
+    request = _request("live_browser_screenshot", {})
+    result = await broker(request)
+    assert result["success"] is True, result
+    assert [item["type"] for item in result["contentItems"]] == ["inputText", "inputImage"]
+    decoded = base64.b64decode(result["contentItems"][1]["imageUrl"].split(",")[1])
+    assert Image.open(io.BytesIO(decoded)).size == (64, 32)
+    assert await broker(request) == result
+    assert calls == [True]
 
 
 def test_large_catalog_leaves_room_for_codex_and_keeps_relevant_tools(tmp_path: Path) -> None:

@@ -122,8 +122,14 @@ class HostMCPBridge:
             isError=not result["success"],
             content=[
                 types.TextContent(type="text", text=item["text"])
-                for item in result["contentItems"]
                 if item["type"] == "inputText"
+                else types.ImageContent(
+                    type="image",
+                    mimeType=item["imageUrl"].split(";", 1)[0].removeprefix("data:"),
+                    data=item["imageUrl"].split(",", 1)[1],
+                )
+                for item in result["contentItems"]
+                if item["type"] in {"inputText", "inputImage"}
             ],
         )
 
