@@ -18,6 +18,9 @@ def mount_a2a_server(
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
     data_dir: Path | str,
+    role_id: str = "general",
+    role_name: str | None = None,
+    public_prefix: str = "",
 ) -> Any:
     """Mount official Agent Card, JSON-RPC and REST A2A endpoints.
 
@@ -84,27 +87,25 @@ def mount_a2a_server(
 
     class _OctopusExecutor(AgentExecutor):
         async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
-            from runtime.execution.suckers.delegation_skills import _call_agent
+            from runtime.execution.suckers.delegation_skills import _allowed_agent_ids, _call_agent
 
             text = context.get_user_input().strip()
-            if not text:
+            if public_prefix and role_id not in _allowed_agent_ids():
+                output = "Published role is unavailable on the receiving host."
+                success = False
+            elif not text:
                 output = "A2A request contained no text input."
                 success = False
             else:
+                from runtime.sensing.gateway.inbound_role_execution import execute_role
+
                 result = await asyncio.to_thread(
+                    execute_role,
                     _call_agent,
-                    agent_id="general",
+                    role_id=role_id,
                     prompt=text,
-                    context={
-                        "source": "a2a_inbound",
-                        "direct_conversation_reply": True,
-                        "context_steward_managed": True,
-                        "share_history": False,
-                        "tool_allowlist_read_only": True,
-                        "trust_score": 0.3,
-                        "_inherited_injection_taint": "medium",
-                    },
-                    timeout_s=120,
+                    data_dir=data_dir,
+                    actor_id=context.call_context.user.user_name if context.call_context else None,
                 )
                 output = str(result.get("output") or result.get("error") or "").strip()
                 success = bool(result.get("success")) and bool(output)
@@ -142,13 +143,15 @@ def mount_a2a_server(
             task.status.timestamp.GetCurrentTime()
             await event_queue.enqueue_event(task)
 
-    public_base = os.getenv("OCTOPUS_A2A_PUBLIC_URL", "http://localhost:8888").rstrip("/")
+    public_base = (
+        os.getenv("OCTOPUS_A2A_PUBLIC_URL", "http://localhost:8310").rstrip("/") + public_prefix
+    )
     rpc_path = "/api/a2a/rpc"
     card = AgentCard(
-        name="Echo Multi-Agent Workspace",
+        name=role_name or "Echo Multi-Agent Workspace",
         description=(
-            "Durable multi-agent collaboration with selective context, evidence checks, "
-            "recovery, and isolated specialist execution."
+            "Delegate to this Echo role. The receiving role owns execution and model selection. "
+            "Remote callers submit tasks, not engine settings."
         ),
         version="1.0.0",
         supported_interfaces=[
@@ -217,6 +220,18 @@ def mount_a2a_server(
     app.router.add_event_handler("shutdown", handler.aclose)
     app.state.a2a_server_handler = handler
     app.state.a2a_server_task_store = store
+    if not public_prefix:
+        from runtime.sensing.gateway.published_roles import mount_published_roles
+
+        mount_published_roles(
+            app,
+            data_dir=Path(data_dir),
+            identity_store=identity_store,
+            require_auth=require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
     return handler
 
 

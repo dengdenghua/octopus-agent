@@ -953,3 +953,28 @@ def test_cleanup_refuses_invalid_markers_and_outside_paths(tmp_path: Path) -> No
     with pytest.raises(CodexSecurityError, match="outside sidecar state_root|invalid task path"):
         forged.cleanup()
     assert outside.exists()
+
+
+def test_cleanup_resolves_redirected_root_and_child_consistently(tmp_path, monkeypatch):
+    from runtime.execution.codex_backend import _security_support as support
+
+    root = tmp_path / "logical"
+    child = root / "scratch" / "task"
+    child.mkdir(parents=True)
+    marker = root / "marker.json"
+    marker.write_text(json.dumps({"schema": support._MARKER_KIND,
+        "kind": "scratch", "path": str(child)}), encoding="utf-8")
+    physical = tmp_path / "LocalCache" / "physical"
+    physical_child = physical / "scratch" / "task"
+    physical_child.mkdir(parents=True)
+    original = Path.resolve
+    def redirected(path, strict=False):
+        if path == root:
+            return physical
+        if path == child:
+            return physical_child
+        return original(path, strict=strict)
+    monkeypatch.setattr(Path, "resolve", redirected)
+    support._remove_marked_tree(child, root=root, marker_path=marker, expected_kind="scratch")
+    assert not physical_child.exists()
+    assert not marker.exists()

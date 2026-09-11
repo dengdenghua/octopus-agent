@@ -108,3 +108,65 @@ def test_a2a_tenant_mount_does_not_shadow_later_application_routes(tmp_path, mon
         # reached instead of Starlette's generic 404.
         assert tenant_card.status_code == 400
         assert "extended cards" in tenant_card.text
+
+
+def test_published_role_identity_survives_restart_and_ignores_remote_engine(tmp_path, monkeypatch):
+    from runtime.execution.request import current_execution_request
+
+    monkeypatch.setattr(
+        "runtime.execution.suckers.delegation_skills._allowed_agent_ids",
+        lambda: {"echo_zero", "general"},
+    )
+    seen = []
+
+    def execute(**kwargs):
+        request = current_execution_request()
+        assert request is not None
+        assert request.task.execution_engine is None
+        assert request.task.permissions.writable_roots == ()
+        assert "execution_engine" not in kwargs["context"]
+        seen.append(kwargs["agent_id"])
+        return {"success": True, "output": "Zero replied"}
+
+    monkeypatch.setattr("runtime.execution.suckers.delegation_skills._call_agent", execute)
+    for restart in range(2):
+        app = FastAPI()
+        mount_a2a_server(app, data_dir=tmp_path)
+        with TestClient(app) as client:
+            if not restart:
+                created = client.post("/api/a2a/published-roles", json={"role_id": "echo_zero"})
+                assert created.status_code == 200, created.text
+                assert (
+                    client.post(
+                        "/api/a2a/published-roles", json={"role_id": "echo_zero", "engine": "codex"}
+                    ).status_code
+                    == 400
+                )
+            prefix = "/api/a2a/roles/echo_zero"
+            card = client.get(prefix + "/.well-known/agent-card.json").json()
+            assert card["name"] == "echo_zero"
+            assert prefix in card["supportedInterfaces"][0]["url"]
+            response = client.post(
+                prefix + "/api/a2a/rpc",
+                headers={"A2A-Version": "1.0"},
+                json={
+                    "jsonrpc": "2.0",
+                    "id": "test",
+                    "method": "SendMessage",
+                    "params": {
+                        "message": {
+                            "messageId": "test",
+                            "role": "ROLE_USER",
+                            "parts": [{"text": "Help me"}],
+                            "metadata": {
+                                "agent_id": "general",
+                                "execution_engine": "codex",
+                                "model": "forged",
+                            },
+                        }
+                    },
+                },
+            )
+            assert response.status_code == 200, response.text
+            assert response.json()["result"]["task"]["status"]["state"] == "TASK_STATE_COMPLETED"
+    assert seen == ["echo_zero", "echo_zero"]

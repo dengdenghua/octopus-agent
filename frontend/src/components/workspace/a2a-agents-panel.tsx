@@ -25,6 +25,7 @@ import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
+import { PublishedRolesPanel } from "./published-roles-panel";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -271,6 +272,8 @@ export function A2AAgentsPanel({ className }: { className?: string }) {
         </div>
       </div>
 
+      <PublishedRolesPanel />
+      <p className="border-b px-4 py-2 text-xs text-muted-foreground">委派给对方角色，由对方选择执行引擎。Codex、OpenCode 等直连条目属于专用执行器。</p>
       {/* Error banner */}
       {error && (
         <div className="flex items-center gap-2 border-b bg-destructive/5 px-4 py-2 text-xs text-destructive">

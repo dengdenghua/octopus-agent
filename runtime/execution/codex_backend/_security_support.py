@@ -223,7 +223,16 @@ def _remove_marked_tree(
     if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
         raise CodexSecurityError(f"refusing to clean unsafe sidecar path: {path}")
     resolved = path.resolve(strict=True)
-    if resolved == root or not _is_within(resolved, root):
+    # Windows packaged processes can resolve an AppData path into LocalCache.
+    # Compare both sides in the same namespace, while retaining the lexical
+    # scope checks above and requiring the exact expected relative location.
+    canonical_root = root.resolve(strict=True)
+    expected = canonical_root / path.relative_to(root)
+    if (
+        canonical_root.parent == canonical_root
+        or resolved != expected
+        or not _is_within(resolved, canonical_root)
+    ):
         raise CodexSecurityError(f"refusing to clean outside sidecar state_root: {resolved}")
     try:
         marker = json.loads(marker_path.read_text(encoding="utf-8"))
@@ -232,7 +241,7 @@ def _remove_marked_tree(
     if (
         marker.get("schema") != _MARKER_KIND
         or marker.get("kind") != expected_kind
-        or marker.get("path") != str(resolved)
+        or marker.get("path") not in (str(path), str(resolved))
     ):
         raise CodexSecurityError(f"refusing to clean sidecar tree with invalid marker: {resolved}")
     shutil.rmtree(resolved)
