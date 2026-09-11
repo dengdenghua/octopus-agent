@@ -94,6 +94,8 @@ scratch/
 
 # Local Codex app runtime state.
 .codex-run/
+# Opt-in vision smoke: temporary workspace and isolated authenticated sidecar.
+.codex-vision-*/
 
 # Leaked credential files — never commit. Use OCTOPUS_CREDENTIAL_KEY env var instead.
 appliance-auth.json
