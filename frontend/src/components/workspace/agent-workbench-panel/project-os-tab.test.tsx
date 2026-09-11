@@ -174,6 +174,42 @@ describe("normalizeProjectProgress", () => {
 });
 
 describe("ProjectOsTab", () => {
+  it("routes project execution through conversation approval instead of REST", () => {
+    const command = vi.fn();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const state = { ...projectState, action_specs: projectState.action_specs.map(spec => ({
+      ...spec, realtime_command: spec.action === "run" ? "/project run" : "/project tick",
+    })) };
+    renderWithProviders(<ProjectOsTab state={state} onProjectCommand={command} />);
+    fireEvent.click(screen.getByRole("button", { name: "开始推进" }));
+    fireEvent.click(screen.getByRole("button", { name: "推进一步" }));
+    expect(command.mock.calls).toEqual([["/project run"], ["/project tick"]]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+  it("opens owner acceptance for the selected phase without running the project", () => {
+    const command = vi.fn();
+    const state = { ...projectState, pm: { ...projectState.pm!, next_actions: [{
+      type: "owner_acceptance", milestone_id: "MS2", milestone: "方案设计",
+      task_id: "", task: "等待用户验收", priority: "P1", estimate: 0, due_at: "",
+    }] } };
+    renderWithProviders(<ProjectOsTab state={state} onProjectCommand={command} />);
+    fireEvent.click(screen.getByRole("button", { name: /审阅交付物并验收/ }));
+    expect(command).toHaveBeenCalledWith("/project accept MS2");
+    expect(command).toHaveBeenCalledTimes(1);
+  });
+  it("prevents a competing acceptance command while the conversation is busy", () => {
+    const command = vi.fn();
+    const state = { ...projectState, pm: { ...projectState.pm!, next_actions: [{
+      type: "owner_acceptance", milestone_id: "MS2", milestone: "方案设计",
+      task_id: "", task: "等待用户验收", priority: "P1", estimate: 0, due_at: "",
+    }] } };
+    renderWithProviders(<ProjectOsTab state={state} onProjectCommand={command} commandBusy />);
+    const button = screen.getByRole("button", { name: /审阅交付物并验收/ });
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(command).not.toHaveBeenCalled();
+  });
   it("renders a normalized overview and the five unified project tabs", () => {
     renderWithProviders(<ProjectOsTab state={projectState} />, {
       locale: "zh-CN",
@@ -184,7 +220,7 @@ describe("ProjectOsTab", () => {
       screen.getByText("做一个真实项目管理模式的演示项目"),
     ).toBeInTheDocument();
     expect(screen.getByText("42")).toBeInTheDocument();
-    expect(screen.getByLabelText("项目整体进度 42%")).toBeInTheDocument();
+    expect(screen.getByLabelText("项目交付进度 42%")).toBeInTheDocument();
     expect(screen.getByText("开始推进")).toBeInTheDocument();
     expect(screen.getByText("推进一步")).toBeInTheDocument();
     expect(screen.getByText("管理页")).toBeInTheDocument();
@@ -435,7 +471,7 @@ describe("ProjectOsTab", () => {
       "href",
       "/workspace/projects",
     );
-    expect(screen.queryByText("整体进度")).not.toBeInTheDocument();
+    expect(screen.queryByText("交付进度")).not.toBeInTheDocument();
     expect(screen.queryByText("待推进事项")).not.toBeInTheDocument();
     expect(screen.queryByText("风险与阻塞")).not.toBeInTheDocument();
     expect(screen.queryByText("项目资料")).not.toBeInTheDocument();
@@ -471,7 +507,7 @@ describe("ProjectOsTab", () => {
     );
 
     expect(screen.queryByTestId("project-empty-launch-card")).toBeNull();
-    expect(screen.getByText("整体进度")).toBeInTheDocument();
+    expect(screen.getByText("交付进度")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /项目资料\s*1/ })).toBeVisible();
   });
 

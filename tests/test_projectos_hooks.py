@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import pytest
+
 from runtime.projectos.llm_hooks import (
     _criterion_touched,
     _extract_json_array,
@@ -18,6 +22,28 @@ def test_extract_json_array_handles_fences_and_prose() -> None:
     assert _extract_json_array('here you go: [{"a":1}] done') == [{"a": 1}]
     assert _extract_json_array("no json here") == []
     assert _extract_json_array('{"not":"array"}') == []
+
+
+def test_task_dependencies_resolve_model_ids_and_short_ids():
+    tasks = parse_tasks('[{"id":"draft","goal":"Write"},'
+                        '{"id":"review","goal":"Review","depends_on":["draft"]},'
+                        '{"goal":"Revise","depends_on":["T2"]}]', "MS")
+    assert tasks[1].depends_on == ["MS-T1"]
+    assert tasks[2].depends_on == ["MS-T2"]
+
+
+@pytest.mark.parametrize("reply", [
+    '[{"goal":"Review","depends_on":["missing"]}]',
+    '[{"goal":"Review","depends_on":["T1"]}]',
+    '[]',
+    'invalid JSON',
+])
+def test_invalid_decomposition_never_falls_back_to_executable_task(reply):
+    from runtime.projectos.llm_hooks import llm_decompose_tasks
+
+    router = SimpleNamespace(call=lambda _: SimpleNamespace(text=reply))
+    with pytest.raises((RuntimeError, ValueError)):
+        llm_decompose_tasks(router)(Milestone(id="MS", name="M", goal="review"))
 
 
 def test_parse_milestones_assigns_ids_and_resolves_deps() -> None:
@@ -67,6 +93,24 @@ def test_spec_qa_deterministic_without_router() -> None:
     assert qa(t_empty, ms)["approved"] is False
 
 
+@pytest.mark.parametrize("text", ['{"approved":"false"}', '{}', 'unavailable', '[]'])
+def test_qa_malformed_response_never_approves(text):
+    qa = spec_qa(SimpleNamespace(call=lambda _: SimpleNamespace(text=text)))
+    with pytest.raises(RuntimeError, match="质量检查未完成"):
+        qa(Task(id="T", milestone_id="M", type="analysis", goal="g", output="draft"),
+           Milestone(id="M", name="m", goal="g", success_criteria=["verified evidence"]))
+
+
+def test_qa_provider_failure_never_approves():
+    def fail(_):
+        raise ConnectionError("provider offline")
+
+    qa = spec_qa(SimpleNamespace(call=fail))
+    with pytest.raises(RuntimeError, match="质量检查未完成"):
+        qa(Task(id="T", milestone_id="M", type="analysis", goal="g", output="draft"),
+           Milestone(id="M", name="m", goal="g", success_criteria=["verified evidence"]))
+
+
 def test_subagent_execute_task_propagates_project_scope(monkeypatch) -> None:
     captured: dict = {}
 
@@ -91,6 +135,8 @@ def test_subagent_execute_task_propagates_project_scope(monkeypatch) -> None:
             "tenant_id": "acme",
             "thread_id": "thread-1",
             "milestone_goal": "deliver",
+            "project_goal": "Do not publish externally",
+            "prerequisite_outputs": {"M0": {"T0": "Approved product positioning"}},
             "workspace_path": "/managed/thread-1",
             "runtime_session_metadata": {
                 "workspace_path": "/managed/thread-1",
@@ -100,6 +146,8 @@ def test_subagent_execute_task_propagates_project_scope(monkeypatch) -> None:
     )
 
     assert output == "shipped"
+    assert "Do not publish externally" in captured["prompt"]
+    assert "Approved product positioning" in captured["prompt"]
     assert captured["agent_id"] == "engineer"
     assert captured["context"]["thread_id"] == "thread-1"
     assert captured["context"]["actor"] == "alice"
@@ -119,5 +167,5 @@ def test_subagent_execute_task_propagates_project_scope(monkeypatch) -> None:
     assert host_task.thread_id == "thread-1"
     assert host_task.actor_id == "alice"
     assert host_task.tenant_id == "acme"
-    assert host_task.goal == "Milestone: deliver\nTask: implement"
+    assert host_task.goal == captured["prompt"]
     assert 0 < host_task.resources.remaining_seconds() <= 900

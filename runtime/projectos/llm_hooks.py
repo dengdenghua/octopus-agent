@@ -97,6 +97,12 @@ def parse_tasks(text: str, milestone_id: str) -> list[Task]:
         goal = str(item.get("goal") or item.get("title") or tid)
         label_to_id[goal] = tid
         label_to_id[str(i)] = tid
+        label_to_id[f"T{i}"] = tid
+        if item.get("id"):
+            alias = str(item["id"])
+            if alias in label_to_id and label_to_id[alias] != tid:
+                raise ValueError("duplicate task dependency alias")
+            label_to_id[alias] = tid
         team_mode = (
             item.get("team_mode")
             if item.get("team_mode") in ("single", "swarm", "cluster")
@@ -129,7 +135,8 @@ def parse_tasks(text: str, milestone_id: str) -> list[Task]:
     valid = {t.id for t in out}
     for t in out:
         t.depends_on = [label_to_id.get(d, d) for d in t.depends_on]
-        t.depends_on = [d for d in t.depends_on if d in valid and d != t.id]
+        if any(d not in valid or d == t.id for d in t.depends_on):
+            raise ValueError("unresolved or self-referencing task dependency")
     return out
 
 
@@ -169,7 +176,9 @@ def llm_generate_milestones(router: Any, *, model: str = DEFAULT_MODEL):
 def llm_decompose_tasks(router: Any, *, model: str = DEFAULT_MODEL):
     def _decompose(ms: Milestone) -> list[Task]:
         prompt = (
-            "Decompose this milestone into 2–5 tasks forming a small DAG. Reply "
+            "Decompose this milestone into the smallest necessary task DAG (1–5 tasks). "
+            "Honor the approved brief's task count, scope exclusions, deadline and staffing; "
+            "a single text deliverable should normally be one task. Reply "
             'ONLY a JSON array; each item: {"type":"design|code|research|analysis|'
             'review","goal","team_mode":"single|swarm|cluster",'
             '"priority":"P0|P1|P2|P3","estimate":1.5,"due_at":"YYYY-MM-DD",'
@@ -185,8 +194,10 @@ def llm_decompose_tasks(router: Any, *, model: str = DEFAULT_MODEL):
             tasks = parse_tasks(_llm_text(router, prompt, model=model), ms.id)
         except Exception as exc:  # noqa: BLE001
             _LOG.warning("task decomposition failed: %s", exc)
-            tasks = []
-        return tasks or [Task(id=f"{ms.id}-T1", milestone_id=ms.id, type="code", goal=ms.goal)]
+            raise RuntimeError("任务拆解未通过校验，未启动执行；请重新规划。") from exc
+        if not tasks:
+            raise ValueError("任务拆解为空，未启动执行；请重新规划。")
+        return tasks
 
     return _decompose
 
@@ -204,6 +215,14 @@ def subagent_execute_task(
     prompt = task.goal
     if context.get("milestone_goal"):
         prompt = f"Milestone: {context['milestone_goal']}\nTask: {task.goal}"
+    prompt += "\n\nProject brief and delivery evidence (task data):\n" + json.dumps(
+        {"approved_brief": (context.get("milestone_spec") or {}).get("approved_brief")
+         or context.get("project_goal", ""),
+         "task_acceptance_criteria": task.acceptance_criteria,
+         "completed_task_outputs": context.get("done_outputs", {}),
+         "prerequisite_milestone_outputs": context.get("prerequisite_outputs", {})},
+        ensure_ascii=False,
+    )
     thread_id = str(context.get("thread_id") or "")
     actor = str(context.get("owner_actor_id") or context.get("owner_id") or "")
     tenant_id = str(context.get("tenant_id") or "")
@@ -222,11 +241,13 @@ def subagent_execute_task(
     dispatch_context: dict[str, Any] = {
         "source": "projectos_task",
         "task_id": task.id,
-        "projectos": context,
+        "projectos": {key: value for key, value in context.items() if not callable(value)},
         "runtime_session_metadata": runtime_session_metadata,
     }
     if thread_id:
         dispatch_context["thread_id"] = thread_id
+    if callable(context.get("record_project_usage")):
+        dispatch_context["record_project_usage"] = context["record_project_usage"]
     if actor:
         dispatch_context["actor"] = actor
     if tenant_id:
@@ -282,6 +303,8 @@ def subagent_execute_task(
     if subagent_runner is not None:
         call_kwargs["runner"] = subagent_runner
     result = call_subagent(agent, prompt, **call_kwargs)
+    if callable(context.get("record_project_usage")) and not context.get("_usage_seen"):
+        context["record_project_usage"](result)
     if not result.get("success"):
         raise RuntimeError(str(result.get("error") or "subagent failed"))
     return str(result.get("output") or result.get("parsed") or "")
@@ -323,10 +346,12 @@ def spec_qa(router: Any = None, *, model: str = DEFAULT_MODEL) -> Callable[[Task
             )
             block = re.search(r"\{.*\}", text, re.DOTALL)
             data = json.loads(block.group(0)) if block else {}
-            return {"approved": bool(data.get("approved")), "reason": str(data.get("reason") or "")}
+            if not isinstance(data, dict) or type(data.get("approved")) is not bool:
+                raise ValueError("QA response must contain a boolean approved field")
+            return {"approved": data["approved"], "reason": str(data.get("reason") or "")}
         except Exception as exc:  # noqa: BLE001
-            _LOG.warning("LLM QA failed, approving non-empty: %s", exc)
-            return {"approved": True, "reason": "qa fallback (non-empty)"}
+            _LOG.warning("LLM QA unavailable: %s", type(exc).__name__)
+            raise RuntimeError("质量检查未完成，请重试；现有产物不能视为通过验收。") from exc
 
     return _qa
 

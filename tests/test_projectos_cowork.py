@@ -813,3 +813,19 @@ def test_production_team_cluster_propagates_trusted_project_session(monkeypatch)
 
     assert output.startswith("# 集群交付")
     _assert_team_scope(calls, explicit_runner)
+
+
+@pytest.mark.parametrize("missing_member", [None, "researcher-b"])
+def test_team_forwards_each_provider_receipt_without_overwriting_it(monkeypatch, missing_member):
+    receipts = []
+    def fake_call(agent_id, prompt, **kwargs):
+        if agent_id != missing_member:
+            kwargs["context"]["record_project_usage"]({"governance": {"root_id": agent_id, "cost_usd": 0.25}})
+        return {"success": True, "output": "report", "governance": {"root_id": "parent", "cost_usd": None}}
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", fake_call)
+    context = _managed_project_context()
+    context["record_project_usage"] = receipts.append
+    run_team = team_execute_for_group([("researcher-a", "A"), ("researcher-b", "B")], debate_rounds=0)
+    run_team(Task(id="T-cost", milestone_id="M", type="research", goal="text report", team_mode="swarm"), context)
+    roots = sorted(r["governance"]["root_id"] for r in receipts)
+    assert roots == (["parent", "researcher-a"] if missing_member else ["researcher-a", "researcher-b"])

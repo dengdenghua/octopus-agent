@@ -12,6 +12,7 @@ import { FinalArtifactCompletionNotice } from "@/components/workspace/realtime/f
 import {
   RightPanelMenu,
   type RightPanelPage,
+import { ProjectProposalNotice } from "@/components/workspace/realtime/project-proposal-notice";
 } from "@/components/workspace/realtime/right-panel-menu";
 
 import { ChatHeaderRecButton } from "@/components/workspace/realtime/chat-header-rec-button";
@@ -4848,6 +4849,7 @@ function RealtimePageContent({
                               target={automationTarget}
                             />
                           ) : null}
+                        <ProjectProposalNotice threadId={threadId} busy={thread.isLoading || !thread.readyForMutations} onReview={handleSendFollowUp} />
                           {replyTarget ? (
                             <div className="mb-2 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/[0.04] px-3 py-2 text-xs">
                               <span className="min-w-0 flex-1 truncate text-muted-foreground">
@@ -5250,3 +5252,4 @@ function RealtimePageContent({
     </SubtasksProvider>
   );
 }
+                          onProjectCommand={handleRetryTask}

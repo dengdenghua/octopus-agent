@@ -1,6 +1,9 @@
-import { ShieldAlertIcon } from "lucide-react";
+import { LoaderCircleIcon, ShieldAlertIcon } from "lucide-react";
+import { useRef, useState } from "react";
+import { provisionProjectRoles, type RoleProvision } from "@/core/agents/project-recruitment";
 
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import type { PendingApproval } from "@/core/realtime/items";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -81,10 +84,32 @@ export function RealtimeApprovalPrompt({
   className,
 }: {
   approvals: PendingApproval[];
-  resolveApproval: (requestId: string | number, accept: boolean) => void;
+  resolveApproval: (requestId: string | number, accept: boolean, preparedRoles?: Record<string, string>) => void;
   className?: string;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const zh = locale === "zh-CN";
+  const [busy, setBusy] = useState<string | number | null>(null);
+  const inFlight = useRef(false);
+  const liveApprovals = useRef(approvals);
+  liveApprovals.current = approvals;
+  const [error, setError] = useState<{ id: string | number; message: string } | null>(null);
+  const approve = async (approval: PendingApproval, roles?: RoleProvision[]) => {
+    if (inFlight.current) return;
+    if (!roles?.length) { resolveApproval(approval.requestId, true); return; }
+    inFlight.current = true;
+    setBusy(approval.requestId);
+    setError(null);
+    try {
+      const prepared = await provisionProjectRoles(roles, () => liveApprovals.current.some(item => item.requestId === approval.requestId));
+      resolveApproval(approval.requestId, true, prepared);
+    } catch (e) {
+      setError({ id: approval.requestId, message: e instanceof Error ? e.message : String(e) });
+    } finally {
+      inFlight.current = false;
+      setBusy(null);
+    }
+  };
   if (approvals.length === 0) return null;
 
   return (
@@ -99,11 +124,48 @@ export function RealtimeApprovalPrompt({
           tool?: string;
           argsPreview?: string;
           detail?: string;
+          roleProvisions?: RoleProvision[];
+          staffingReview?: { role: string; name: string; source: string; responsibilities: string; phases: number[] }[];
         };
         const toolLabel = approvalToolLabel(params.tool, approval.method, t);
         const summary = approvalArgsSummary(params, approval.method);
         const label = `${toolLabel} · ${t.toolApproval.requiresApproval}`;
         const labelId = `approval-${String(approval.requestId)}-label`;
+        if (params.tool?.startsWith("project_")) {
+          // Queue project dialogs rather than stacking multiple modal overlays.
+          if (approvals.find(item => String((item.params as { tool?: string }).tool ?? "").startsWith("project_")) !== approval) return null;
+          const roles = params.tool === "project_initiation" ? params.roleProvisions : undefined;
+          return (
+            <Dialog key={String(approval.requestId)} open>
+              <DialogContent showCloseButton={false} className="flex max-h-[85dvh] flex-col sm:max-w-2xl" onEscapeKeyDown={event => event.preventDefault()} onInteractOutside={event => event.preventDefault()}>
+                <DialogTitle>{label}</DialogTitle>
+                <DialogDescription>{params.tool === "project_acceptance"
+                  ? (zh ? "请对照验收标准审阅交付内容。批准仅记录本阶段验收，不自动启动下一阶段。" : "Review the deliverables against the acceptance criteria. Approval records acceptance only; it does not start the next stage.")
+                  : params.tool === "project_budget"
+                    ? (zh ? "请核对费用上限。批准仅调整预算策略，不启动执行或付款。" : "Review the spending limit. Approval changes the budget policy only; it does not start execution or make a payment.")
+                    : (zh ? "请审阅方案后决定。只有你批准后，系统才会添加候选角色或推进对应阶段。" : "Review before deciding. Candidate roles are added or the requested stage advances only after approval.")}</DialogDescription>
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+                  {!!params.staffingReview?.length && <ul className="space-y-2">
+                    {params.staffingReview.map((role, index) => <li key={index} className="rounded-lg border p-3 text-sm">
+                      <div className="flex items-center justify-between gap-2"><strong>{role.name} · {role.role}</strong><span className="rounded bg-muted px-2 py-0.5 text-xs">{({ existing: zh ? "已有角色" : "Existing role", hub: zh ? "从 HUB 添加" : "Add from HUB", new: zh ? "待创建角色" : "Create role", human: zh ? "真人建议" : "Human proposal", supplier: zh ? "供应商建议" : "Supplier proposal" } as Record<string, string>)[role.source] ?? role.source}</span></div>
+                      <p className="mt-1 text-muted-foreground">{role.responsibilities}</p>
+                      <p className="mt-1 text-xs">{zh ? "参与阶段" : "Stages"}：{role.phases.join(", ")}</p>
+                    </li>)}
+                  </ul>}
+                  <section aria-labelledby={labelId}><h3 id={labelId} className="sr-only">{label}</h3><p className="whitespace-pre-wrap text-sm leading-6">{summary}</p></section>
+                </div>
+                {error?.id === approval.requestId && <p role="alert" className="text-sm text-destructive">{error.message}</p>}
+                <div className="flex shrink-0 justify-end gap-2 border-t pt-3">
+                  <Button variant="outline" disabled={busy !== null} onClick={() => resolveApproval(approval.requestId, false)}>{t.toolApproval.reject}</Button>
+                  <Button disabled={busy !== null} aria-busy={busy === approval.requestId} onClick={() => void approve(approval, roles)}>
+                    {busy === approval.requestId && <LoaderCircleIcon className="size-4 animate-spin" />}
+                    {busy === approval.requestId ? (zh ? "正在准备角色…" : "Preparing roles…") : t.toolApproval.approve}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          );
+        }
         return (
           <section
             key={String(approval.requestId)}
@@ -124,12 +186,14 @@ export function RealtimeApprovalPrompt({
                 </p>
                 {summary ? (
                   <code
-                    className="block truncate font-mono text-mini leading-4 text-muted-foreground"
+                    className={cn("block text-mini leading-4 text-muted-foreground",
+                      params.tool?.startsWith("project_") ? "whitespace-pre-wrap font-sans" : "truncate font-mono")}
                     title={summary}
                   >
                     {summary}
                   </code>
                 ) : null}
+                {error?.id === approval.requestId ? <p role="alert" className="text-xs text-destructive">{error.message}</p> : null}
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1">
@@ -138,6 +202,7 @@ export function RealtimeApprovalPrompt({
                 variant="ghost"
                 size="sm"
                 onClick={() => resolveApproval(approval.requestId, false)}
+                disabled={busy !== null}
                 className="text-muted-foreground hover:text-foreground"
               >
                 {t.toolApproval.reject}
@@ -145,8 +210,11 @@ export function RealtimeApprovalPrompt({
               <Button
                 type="button"
                 size="sm"
-                onClick={() => resolveApproval(approval.requestId, true)}
+                onClick={() => void approve(approval, params.tool === "project_initiation" ? params.roleProvisions : undefined)}
+                disabled={busy !== null}
+                aria-busy={busy === approval.requestId}
               >
+                {busy === approval.requestId ? <LoaderCircleIcon className="size-3 animate-spin" /> : null}
                 {t.toolApproval.approve}
               </Button>
             </div>

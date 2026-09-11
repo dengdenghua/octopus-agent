@@ -2555,10 +2555,16 @@ def test_assigner_exception_retries_then_blocks_project(tmp_path) -> None:
 
 
 def test_qa_exception_retries_then_blocks_project(tmp_path) -> None:
+    executions = []
+
+    def execute(task, context):
+        executions.append(task.id)
+        return "original deliverable"
+
     def broken_qa(task: Task, ms: Milestone) -> dict:
         raise RuntimeError(f"qa unavailable for {task.id}")
 
-    eng = _engine(tmp_path, qa_task=broken_qa)
+    eng = _engine(tmp_path, qa_task=broken_qa, execute_task=execute)
     p = eng.plan("x", "g")
 
     result = eng.run(p.id, max_ticks=10)
@@ -2567,10 +2573,46 @@ def test_qa_exception_retries_then_blocks_project(tmp_path) -> None:
     task = eng.store.get_task("MS1-T1")
     assert task.status == "failed"
     assert task.attempts == 2
+    assert executions == ["MS1-T1"]
+    assert task.output == "original deliverable"
+    assert task.qa_verdict["review_error"] is True
+    from runtime.projectos.pm import _task_failure_detail
+
+    assert "原产物已保留" in _task_failure_detail(task)
+    assert "original deliverable" not in _task_failure_detail(task)
     assert "qa error: RuntimeError" in task.qa_verdict["reason"]
     events = [event for tick in result["history"] for event in tick["events"]]
     assert "task_qa_error_retry:MS1-T1" in events
     assert "task_failed_qa_error:MS1-T1" in events
+
+
+def test_review_outage_recovery_rechecks_saved_output_without_execution(tmp_path) -> None:
+    executions = []
+    healthy = False
+
+    def execute(task, context):
+        executions.append(task.id)
+        return "saved evidence"
+
+    def review(task, milestone):
+        assert task.output == "saved evidence"
+        if not healthy:
+            raise RuntimeError("review unavailable")
+        return {"approved": True}
+
+    eng = _engine(
+        tmp_path,
+        generate_milestones=lambda _: [Milestone(id="M", name="Delivery", goal="deliver")],
+        decompose_tasks=lambda ms: [Task(id="T", milestone_id=ms.id, type="research", goal="deliver")],
+        execute_task=execute, qa_task=review,
+    )
+    project = eng.plan("review recovery", "deliver")
+    assert eng.run(project.id)["final_status"] == "blocked"
+    healthy = True
+    eng.recover(project.id)
+    assert eng.store.get_task("T").output == "saved evidence"
+    assert eng.run(project.id)["final_status"] == "done"
+    assert executions == ["T"]
 
 
 def test_gate_exception_blocks_project_instead_of_crashing_tick(tmp_path) -> None:

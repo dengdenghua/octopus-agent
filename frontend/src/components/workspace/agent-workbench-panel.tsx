@@ -106,6 +106,7 @@ function AgentWorkbenchPanelImpl({
   onClose,
   onOpenArtifact,
   onInvitePeople,
+  onProjectCommand,
   runSettled,
   runFailed,
   runInterrupted,
@@ -175,6 +176,7 @@ function AgentWorkbenchPanelImpl({
   onOpenArtifact?: (path: string) => void;
   /** Opens the human-member invitation flow for the linked group room. */
   onInvitePeople?: () => void | Promise<void>;
+  onProjectCommand?: (command: string) => void;
   runSettled?: boolean;
   runFailed?: boolean;
   runInterrupted?: boolean;
@@ -522,9 +524,12 @@ function AgentWorkbenchPanelImpl({
     | "terminal"
     | "browser"
     | "artifacts"
+  const mergeProjectHome = projectTabVisible && workspacePresetForAgent(personaId).workbench === "office";
     | "workspace"
     | "project" =
-    requestedActiveTab === "subagents" ||
+    requestedActiveTab === "workspace" && mergeProjectHome
+      ? "project"
+      : requestedActiveTab === "subagents" ||
     requestedActiveTab === "plan" ||
     requestedActiveTab === "design"
       ? "agent"
@@ -533,8 +538,12 @@ function AgentWorkbenchPanelImpl({
         : requestedActiveTab;
   const workbenchTabs: WorkbenchTab[] = useMemo(
     () => [
-      {
-        id: "workspace",
+      ...(mergeProjectHome ? [{
+        id: "project" as const,
+        label: t.agentWorkbenchPages.projectTab,
+        Icon: FolderKanbanIcon,
+      }] : [{
+        id: "workspace" as const,
         label: workspacePresetForAgent(personaId).workbenchLabel,
         Icon: PanelsTopLeftIcon,
       },
@@ -558,7 +567,7 @@ function AgentWorkbenchPanelImpl({
         label: t.conversation.artifactsTitle,
         Icon: PackageIcon,
       },
-      ...(projectTabVisible
+      ...(projectTabVisible && !mergeProjectHome
         ? [
             {
               id: "project" as const,
@@ -568,7 +577,7 @@ function AgentWorkbenchPanelImpl({
           ]
         : []),
     ],
-    [t.agentWorkbenchPages, t.conversation, projectTabVisible, personaId],
+    [t.agentWorkbenchPages, t.conversation, projectTabVisible, personaId, mergeProjectHome],
   );
 
   // Auto-open a tab if it becomes the effective active tab
@@ -787,6 +796,8 @@ function AgentWorkbenchPanelImpl({
         />
       ) : projectOsQuery.isError ? (
         <ProjectOsTabError
+          onProjectCommand={onProjectCommand}
+          commandBusy={isLoading}
           onRetry={() => {
             void projectOsQuery.refetch();
           }}

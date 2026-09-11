@@ -157,10 +157,19 @@ def team_execute_for_group(
             {
                 "source": "projectos_team_task",
                 "task_id": task_id,
-                "projectos": project_context,
+            "projectos": {key: value for key, value in project_context.items() if not callable(value)},
                 "runtime_session_metadata": runtime_session_metadata,
             }
         )
+        # Each parallel member has its own receipt state. A sibling receipt
+        # must not suppress this member's missing-usage fallback.
+        usage_received = []
+        report_usage = project_context.get("record_project_usage")
+        if callable(report_usage):
+            def record_member_usage(result):
+                report_usage(result)
+                usage_received.append(True)
+            dispatch_context["record_project_usage"] = record_member_usage
         if thread_id:
             dispatch_context["thread_id"] = thread_id
         if actor:
@@ -214,6 +223,8 @@ def team_execute_for_group(
             call_kwargs["runner"] = subagent_runner
         try:
             result = call_subagent(agent_id, prompt, **call_kwargs)
+            if callable(report_usage) and not usage_received:
+                report_usage(result)
             return {
                 "success": bool(result.get("success")),
                 "output": str(result.get("output") or result.get("parsed") or ""),
@@ -363,16 +374,21 @@ def engine_for_group(
     the project."""
     roster = roster_from_group(group_store, thread_id)
     kwargs = dict(hooks or {})
+    kwargs.pop("prepare_initiation", None)
     kwargs.setdefault("generate_milestones", stub_generate_milestones)
     kwargs.setdefault("decompose_tasks", stub_decompose_tasks)
-    kwargs["assign_agent"] = nominate_assigner(roster, competence)
+    def phase_roster(task):
+        ms = project_store.get_milestone(task.milestone_id)
+        allowed = ms.spec.get("phase_agents") if ms else None
+        return [r for r in roster if allowed is None or r[0] in allowed]
+
+    kwargs["assign_agent"] = lambda task: nominate_assigner(phase_roster(task), competence)(task)
     # 项目模式 × 集群/蜂群：有可执行成员时注入任务级团队执行器，让声明了
     # team_mode 的任务节点跑成蜂群/集群，而不是一律单 agent。
     if roster:
-        kwargs["run_task_team"] = team_execute_for_group(
-            roster,
-            subagent_runner=subagent_runner,
-        )
+        kwargs["run_task_team"] = lambda task, context: team_execute_for_group(
+            phase_roster(task), subagent_runner=subagent_runner,
+        )(task, context)
     return ProjectEngine(
         project_store,
         **kwargs,
@@ -496,6 +512,7 @@ def _project_action_specs(project_id: str, status: str) -> list[dict[str, Any]]:
         "run": {
             "action": "run",
             "label": "Run",
+            "realtime_command": "/project run",
             "api": {
                 "method": "POST",
                 "path": f"/api/projects/{project_id}/run",
@@ -505,6 +522,7 @@ def _project_action_specs(project_id: str, status: str) -> list[dict[str, Any]]:
         "tick": {
             "action": "tick",
             "label": "Tick",
+            "realtime_command": "/project tick",
             "api": {"method": "POST", "path": f"/api/projects/{project_id}/tick"},
         },
         "inspect": {

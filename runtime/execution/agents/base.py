@@ -104,6 +104,7 @@ class AgentRegistry:
         # rebuilding agents in the background.
         self._snapshot: tuple[Agent, ...] = ()
         self._event_bus = event_bus
+        self._hub_sources: dict[str, Agent] = {}
 
     def register(self, agent: Agent) -> None:
         with self._lock:
@@ -124,6 +125,18 @@ class AgentRegistry:
                 )
             except Exception:  # noqa: BLE001 — bus is best-effort; never break register
                 pass
+
+    def record_hub_source(self, expert_id: str, agent: Agent) -> None:
+        """Bind a verified catalog installation to the exact loaded role version."""
+        with self._lock:
+            if self._by_id.get(agent.agent_id) is not agent:
+                raise ValueError("installed role changed before source registration")
+            self._hub_sources[expert_id] = agent
+
+    def matches_hub_source(self, expert_id: str, agent_id: str) -> bool:
+        with self._lock:
+            installed = self._hub_sources.get(expert_id)
+            return installed is not None and self._by_id.get(agent_id) is installed
 
     def register_all(self, agents: Iterable[Agent]) -> int:
         count = 0

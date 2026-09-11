@@ -91,6 +91,7 @@ import {
 import { normalizeExecutionPlan } from "../execution-plan-utils";
 
 import { MarkdownContent } from "./markdown-content";
+import { ProjectCommandContent } from "./project-command-content";
 import { useThreadValues } from "./context";
 import {
   STREAMING_TYPE_PRESETS,
@@ -1198,13 +1199,15 @@ function MessageContent_({
     ) : null;
   if (isHuman) {
     const messageResponse = visibleContentToDisplay ? (
+      <ProjectCommandContent content={visibleContentToDisplay} renderBody={(body) => (
       <AIElementMessageResponse
         remarkPlugins={humanMessagePlugins.remarkPlugins}
         rehypePlugins={humanMessagePlugins.rehypePlugins}
         components={components}
       >
-        {visibleContentToDisplay}
+        {body}
       </AIElementMessageResponse>
+      )} />
     ) : null;
     return (
       // items-end right-aligns the inner bubble; flex-col keeps files

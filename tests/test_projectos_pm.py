@@ -203,8 +203,9 @@ def test_pm_report_progress_burndown_risks_actions(tmp_path) -> None:
     s = _store_with_project(tmp_path)
     report = build_pm_report(s, "P1", now=NOW)
     assert report is not None
-    # progress: 1 done / 3 total
-    assert report["overall_progress"] == round(1 / 3, 3)
+    # Phase M1 is half delivered, M2 has no completed tasks: (0.5 + 0) / 2.
+    assert report["overall_progress"] == 0.25
+    assert report["progress_basis"] == "equal_phase_delivery"
     assert report["done_tasks"] == 1
     assert report["total_tasks"] == 3
     # burndown rows per milestone

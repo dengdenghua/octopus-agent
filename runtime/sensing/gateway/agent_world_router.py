@@ -632,11 +632,28 @@ def create_agent_world_router(
 
         store = _cloud_store()
         try:
-            return store.install_expert(
+            result = store.install_expert(
                 expert_id,
                 agents_root=default_agents_root(),
                 skills_root=resources_root() / "skills" / "public",
             )
+            if registry is not None and runtime is not None:
+                from runtime.execution.agents.loader import load_agent
+
+                _register_public_prompt_skills(skill_registry, resources_root() / "skills" / "public")
+                root = default_agents_root().resolve()
+                agent_path = Path(result["agent_path"]).resolve()
+                if not agent_path.is_relative_to(root):
+                    raise ValueError("installed role is outside the agents root")
+                loaded = load_agent(agent_path, runtime, root / "_shared")
+                if registry.has(loaded.agent_id):
+                    registry.replace(loaded)
+                else:
+                    registry.register(loaded)
+                registry.record_hub_source(expert_id, loaded)
+                result["agent_id"] = loaded.agent_id
+                result["loaded"] = True
+            return result
         except KeyError as exc:
             raise HTTPException(404, str(exc)) from exc
         except ValueError as exc:

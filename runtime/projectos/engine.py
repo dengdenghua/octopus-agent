@@ -264,6 +264,16 @@ class ProjectEngine:
                 "current_ms": current.current_ms if current else None,
             }
 
+        from runtime.projectos.governance import budget_reached, phase_authorized
+
+        if not phase_authorized(self.store, project.id, active):
+            return {"events": [f"awaiting_phase_authorization:{active.id}"],
+                    "project_status": project.status, "current_ms": active.id}
+        phase_tasks = self.store.tasks_for_milestone(active.id) if active.spec.get("ai_budget_usd") is not None else []
+        needs_execution = not phase_tasks or any(task.status != "done" for task in phase_tasks)
+        if needs_execution and budget_reached(self.store, project.id, active):
+            return {"events": [f"project_budget_paused:{active.id}"],
+                    "project_status": project.status, "current_ms": active.id}
         self._ensure_tasks(project_id, active, events)
         self._run_frontier(project, active, events)
         self._gate_milestone(project, active, events)
@@ -279,12 +289,19 @@ class ProjectEngine:
         history: list[dict[str, Any]] = []
         bounded_ticks = normalize_run_ticks(max_ticks)
         for _ in range(bounded_ticks):
+            from runtime.safety.approval.cancellation import current_cancellation_token
+
+            current_cancellation_token().throw_if_cancelled()
             r = self.tick(project_id)
             history.append(r)
             if r["project_status"] in ("done", "failed", "blocked"):
                 break
             if any(e == "no_runnable_milestone" for e in r["events"]):
                 break  # blocked — nothing to advance
+            if any(e.startswith("awaiting_owner_acceptance:") for e in r["events"]):
+                break
+            if any(e.startswith(("awaiting_phase_authorization:", "project_budget_paused:")) for e in r["events"]):
+                break
         final = self.store.get_project(project_id)
         result = {
             "ticks": len(history),
@@ -363,7 +380,7 @@ class ProjectEngine:
                 self._reset_task_for_rerun(
                     task,
                     reset_attempts=reset_attempts,
-                    clear_outputs=clear_outputs,
+                    clear_outputs=clear_outputs and not (task.qa_verdict or {}).get("review_error"),
                 )
                 events.append(f"task_recovered:{task.id}")
                 changed = True
@@ -657,6 +674,9 @@ class ProjectEngine:
         project = self.store.get_project(project_id)
         try:
             new_tasks = self._decompose(claimed_ms)
+            limit = claimed_ms.spec.get("max_tasks")
+            if limit is not None and (type(limit) is not int or limit < 1 or len(new_tasks) > limit):
+                raise ValueError(f"任务拆解超过已审批数量上限：{limit}；未启动执行")
         except Exception as exc:  # noqa: BLE001 — decompose hook failure should block, not crash tick
             events.append(f"tasks_decompose_failed:{ms.id}")
             saved_ms, committed = self.store.finalize_milestone_decomposition(
@@ -735,6 +755,14 @@ class ProjectEngine:
     def _run_frontier(self, project: Project, ms: Milestone, events: list[str]) -> None:
         tasks = self.store.tasks_for_milestone(ms.id)
         for ready_task in ready_tasks(tasks):
+            from runtime.safety.approval.cancellation import current_cancellation_token
+
+            current_cancellation_token().throw_if_cancelled()
+            from runtime.projectos.governance import budget_reached
+
+            if budget_reached(self.store, project.id, ms):
+                events.append(f"project_budget_paused:{ms.id}")
+                break
             assigned_role = ROLE_FOR_TASK.get(
                 ready_task.type,
                 ready_task.assigned_role or "engineer",
@@ -756,7 +784,12 @@ class ProjectEngine:
             # or fallback role for this execution. Assignment happens after the
             # atomic claim so an injected assigner is also called only once.
             try:
+                allowed = ms.spec.get("phase_agents")
+                if allowed is not None and task.assigned_agent and task.assigned_agent not in allowed:
+                    raise ValueError("assigned agent is not authorized for this phase")
                 task.assigned_agent = task.assigned_agent or self._assign(task)
+                if allowed is not None and task.assigned_agent not in allowed:
+                    raise ValueError("selected agent is not authorized for this phase")
             except Exception as exc:  # noqa: BLE001 — assignment is an injected hook
                 task.output = f"assignment error: {_error_text(exc)}"
                 if task.attempts >= MAX_TASK_ATTEMPTS:
@@ -767,19 +800,32 @@ class ProjectEngine:
                     event = f"task_assignment_error_retry:{task.id}"
                 self._commit_task_claim(task, claim_id, event, events)
                 continue
+            context = {}
+            execution_started = False
             try:
-                context_tasks = [task if item.id == task.id else item for item in tasks]
-                context = self._context(project, ms, context_tasks)
-                # 项目模式 × 集群/蜂群：任务节点声明了 team_mode（swarm/cluster）
-                # 且注入了 run_task_team 时，把它交给团队执行器（蜂群 fan-out /
-                # 集群角色流水线），否则退回单 agent 执行。这样项目 DAG 里可以
-                # 混排「单点任务」和「团队任务」。
-                if task.team_mode in ("swarm", "cluster") and self._run_task_team is not None:
-                    task.output = self._run_task_team(task, context)
-                else:
-                    task.output = self._execute(task, context)
+                # A review outage does not invalidate an already produced
+                # deliverable. Retry QA without repeating task side effects.
+                if not (task.qa_verdict or {}).get("review_error"):
+                    context_tasks = [task if item.id == task.id else item for item in tasks]
+                    context = self._context(project, ms, context_tasks)
+                    context["task_id"] = task.id
+                    execution_started = True
+                    if task.team_mode in ("swarm", "cluster") and self._run_task_team is not None:
+                        task.output = self._run_task_team(task, context)
+                    else:
+                        task.output = self._execute(task, context)
+                    if ms.spec.get("ai_budget_usd") is not None and not context.get("_usage_seen"):
+                        context["record_project_usage"]({})
             except Exception as exc:  # noqa: BLE001 — one task failing must not kill the loop
+                if execution_started and ms.spec.get("ai_budget_usd") is not None and not context.get("_usage_seen"):
+                    from runtime.projectos.governance import record_usage
+
+                    record_usage(self.store, project.id, {}, task_id=task.id, milestone_id=ms.id)
                 task.output = f"error: {type(exc).__name__}: {exc}"
+                if current_cancellation_token().is_cancelled:
+                    task.status = "pending"
+                    self._commit_task_claim(task, claim_id, f"task_interrupted:{task.id}", events)
+                    current_cancellation_token().throw_if_cancelled()
                 if task.attempts >= MAX_TASK_ATTEMPTS:
                     task.status = "failed"
                     event = f"task_failed:{task.id}"
@@ -788,11 +834,18 @@ class ProjectEngine:
                     event = f"task_error_retry:{task.id}"
                 self._commit_task_claim(task, claim_id, event, events)
                 continue
+            if current_cancellation_token().is_cancelled:
+                task.status = "pending"
+                task.qa_verdict = {"approved": False, "review_error": True,
+                                   "reason": "执行已停止，原产物待质量检查"}
+                self._commit_task_claim(task, claim_id, f"task_interrupted:{task.id}", events)
+                current_cancellation_token().throw_if_cancelled()
             try:
                 verdict = self._qa(task, ms)
             except Exception as exc:  # noqa: BLE001 — QA is an injected hook
                 task.qa_verdict = {
                     "approved": False,
+                    "review_error": True,
                     "reason": f"qa error: {_error_text(exc)}",
                 }
                 if task.attempts >= MAX_TASK_ATTEMPTS:
@@ -803,6 +856,12 @@ class ProjectEngine:
                     event = f"task_qa_error_retry:{task.id}"
                 self._commit_task_claim(task, claim_id, event, events)
                 continue
+            if current_cancellation_token().is_cancelled:
+                task.status = "pending"
+                task.qa_verdict = {"approved": False, "review_error": True,
+                                   "reason": "质量检查期间已停止，待重新检查"}
+                self._commit_task_claim(task, claim_id, f"task_interrupted:{task.id}", events)
+                current_cancellation_token().throw_if_cancelled()
             task.qa_verdict = verdict
             if verdict.get("approved"):
                 task.status = "done"
@@ -866,6 +925,12 @@ class ProjectEngine:
             )
             return
         if gate.get("met"):
+            if ms.spec.get("requires_owner_acceptance"):
+                from runtime.projectos.acceptance import delivery_accepted
+
+                if not delivery_accepted(self.store, project.id, ms, tasks):
+                    events.append(f"awaiting_owner_acceptance:{ms.id}")
+                    return
             ms.status = "done"
             saved_ms = self.store.save_milestone(project.id, ms)
             if saved_ms.status != "done":
@@ -950,7 +1015,20 @@ class ProjectEngine:
             "milestone_spec": ms.spec,
             "success_criteria": ms.success_criteria,
             "done_outputs": {t.id: t.output for t in tasks if t.status == "done"},
+            "prerequisite_outputs": {
+                dependency: {t.id: t.output for t in self.store.tasks_for_milestone(dependency)
+                             if t.status == "done"}
+                for dependency in ms.dependencies
+            },
         }
+        from runtime.projectos.governance import record_usage
+
+        context["_usage_seen"] = []
+        def observe_usage(result):
+            context["_usage_seen"].append(record_usage(
+                self.store, project.id, result, task_id=context.get("task_id", ""), milestone_id=ms.id,
+            ))
+        context["record_project_usage"] = observe_usage
         if self._resolve_thread_context is not None:
             resolved = self._resolve_thread_context(thread_id)
             if not isinstance(resolved, dict):

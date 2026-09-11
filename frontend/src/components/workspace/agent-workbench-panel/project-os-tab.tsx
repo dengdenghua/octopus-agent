@@ -143,6 +143,8 @@ interface PmReport {
   }>;
   blockers: string[];
   next_actions: Array<{
+    type?: string;
+    milestone_id?: string;
     milestone: string;
     task_id: string;
     task: string;
@@ -710,6 +712,8 @@ export function ProjectOsTab({
   onRefetch,
   onOpenArtifact,
   onInvitePeople,
+  onProjectCommand,
+  commandBusy = false,
   rosterSeats = [],
   groupTitle,
   currentThreadTitle,
@@ -718,6 +722,8 @@ export function ProjectOsTab({
   onRefetch?: () => void | Promise<void>;
   onOpenArtifact?: (path: string) => void;
   onInvitePeople?: () => void | Promise<void>;
+  onProjectCommand?: (command: string) => void;
+  commandBusy?: boolean;
   rosterSeats?: WorkbenchRosterSeat[];
   /** Visible room title. Used only to avoid repeating it in the workbench. */
   groupTitle?: string | null;
@@ -950,7 +956,14 @@ export function ProjectOsTab({
 
   const executeAction = useCallback(
     async (spec: ProjectActionSpec, actionKey: string, task = false) => {
-      if (!spec.api || pendingAction) return;
+      if (pendingAction || commandBusy) return;
+      // In a conversation, execution needs its live approval channel. REST
+      // remains the fallback for standalone project views without that channel.
+      if (!task && spec.realtime_command && onProjectCommand) {
+        onProjectCommand(spec.realtime_command);
+        return;
+      }
+      if (!spec.api) return;
       setPendingAction(actionKey);
       try {
         const res = await fetch(spec.api.path, {
@@ -970,7 +983,7 @@ export function ProjectOsTab({
         setPendingAction(null);
       }
     },
-    [onRefetch, pendingAction],
+    [onRefetch, pendingAction, commandBusy, onProjectCommand],
   );
 
   const tabs: Array<{
@@ -1135,6 +1148,8 @@ export function ProjectOsTab({
             pendingAction={pendingAction}
             onAction={(spec, key) => executeAction(spec, key)}
             onNavigate={setActiveTab}
+            onProjectCommand={onProjectCommand}
+            commandBusy={commandBusy}
           />
         ) : activeTab === "milestones" ? (
           <MilestonesTab milestones={milestones} />
@@ -1176,6 +1191,8 @@ function OverviewTab({
   pendingAction,
   onAction,
   onNavigate,
+  onProjectCommand,
+  commandBusy,
 }: {
   state: ProjectFullState;
   milestones: MilestoneView[];
@@ -1189,6 +1206,8 @@ function OverviewTab({
   pendingAction: string | null;
   onAction: (spec: ProjectActionSpec, key: string) => void;
   onNavigate: (tab: ProjectWorkbenchTabId) => void;
+  onProjectCommand?: (command: string) => void;
+  commandBusy: boolean;
 }) {
   const { project, pm, retro, action_specs: actionSpecs = [] } = state;
   const nextActions = pm?.next_actions ?? [];
@@ -1259,7 +1278,7 @@ function OverviewTab({
         <div className="flex items-end justify-between gap-3">
           <div>
             <div className="text-[11px] font-medium text-muted-foreground">
-              整体进度
+              交付进度
             </div>
             <div className="mt-0.5 text-2xl font-semibold tracking-tight">
               {overallProgress}
@@ -1279,9 +1298,13 @@ function OverviewTab({
         </div>
         <Progress
           value={overallProgress}
-          aria-label={`项目整体进度 ${overallProgress}%`}
+          aria-label={`项目交付进度 ${overallProgress}%`}
           className="mt-2.5 h-1.5 rounded-full"
         />
+        <p className="mt-2 text-[10px] text-muted-foreground">
+          按全部里程碑平均计算，未开始阶段也计入。
+          {nextActions.some(action => action.type === "owner_acceptance") ? "交付待你验收，通过后才推进后续阶段。" : "里程碑达成情况单独统计。"}
+        </p>
       </section>
 
       <div className="grid grid-cols-2 gap-2">
@@ -1419,8 +1442,15 @@ function OverviewTab({
             {nextActions.slice(0, 4).map((action) => (
               <button
                 type="button"
-                key={action.task_id}
-                onClick={() => onNavigate("tasks")}
+                key={`${action.type ?? "task"}:${action.milestone_id ?? action.milestone}:${action.task_id}`}
+                disabled={action.type === "owner_acceptance" && (commandBusy || !onProjectCommand)}
+                onClick={() => {
+                  if (action.type === "owner_acceptance" && action.milestone_id &&
+                      /^[a-zA-Z0-9_-]+$/.test(action.milestone_id) &&
+                      milestones.some(ms => ms.id === action.milestone_id)) {
+                    onProjectCommand?.(`/project accept ${action.milestone_id}`);
+                  } else onNavigate("tasks");
+                }}
                 className="group flex w-full items-start gap-2 rounded-lg border border-border-subtle bg-card/50 px-2.5 py-2 text-left transition-colors hover:border-border-default hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Badge
@@ -1434,7 +1464,7 @@ function OverviewTab({
                 </Badge>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[11px] font-medium">
-                    {action.task}
+                    {action.type === "owner_acceptance" ? "审阅交付物并验收" : action.task}
                   </span>
                   <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
                     {action.milestone || "未关联里程碑"}
