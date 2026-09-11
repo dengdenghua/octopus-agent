@@ -3182,6 +3182,7 @@ export const zhCN: Translations = {
     lifecycleFailed: "任务运行状态未能可靠落盘，请重试或重启后端。",
     eventStreamOverloaded:
       "事件处理出现短暂拥塞，已完成的步骤仍被保留。请重试以继续任务。",
+    sidecarCleanupBlocked: "临时运行目录清理被安全检查拦截：目录路径或标记不符合预期。",
     workspaceWriteRequired:
       "该任务要求修改项目文件，但本轮没有产生有效的文件变更。",
     verificationRequired:

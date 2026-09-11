@@ -17,9 +17,7 @@ import {
 } from "lucide-react";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
 import {
-  Suspense,
   createContext,
-  lazy,
   memo,
   useContext,
   useEffect,
@@ -27,12 +25,7 @@ import {
   useState,
 } from "react";
 
-import type { StreamdownProps } from "./streamdown-host";
-
-const LazyStreamdown = lazy(async () => {
-  const mod = await import("./streamdown-host");
-  return { default: mod.LocalizedStreamdown };
-});
+import { LocalizedStreamdown, type StreamdownProps } from "./streamdown-host";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -355,31 +348,7 @@ export type MessageResponseProps = StreamdownProps;
 
 export const MessageResponse = memo(
   ({ className, children, ...props }: MessageResponseProps) => (
-    <Suspense
-      fallback={
-        <div
-          className={cn(
-            "size-full select-text",
-            typeof children === "string" &&
-              "whitespace-pre-wrap break-words text-foreground",
-            className,
-          )}
-          aria-busy="true"
-        >
-          {typeof children === "string" ? (
-            children
-          ) : (
-            <div className="space-y-2">
-              <div className="h-4 w-3/5 rounded-sm bg-muted-foreground/10" />
-              <div className="h-4 w-full rounded-sm bg-muted-foreground/10" />
-              <div className="h-4 w-4/5 rounded-sm bg-muted-foreground/10" />
-              <div className="h-4 w-2/3 rounded-sm bg-muted-foreground/10" />
-            </div>
-          )}
-        </div>
-      }
-    >
-      <LazyStreamdown
+      <LocalizedStreamdown
         className={cn(
           "size-full select-text [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
           className,
@@ -387,8 +356,7 @@ export const MessageResponse = memo(
         {...props}
       >
         {children}
-      </LazyStreamdown>
-    </Suspense>
+      </LocalizedStreamdown>
   ),
 );
 

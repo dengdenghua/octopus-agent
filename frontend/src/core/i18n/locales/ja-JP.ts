@@ -3421,6 +3421,7 @@ export const jaJP: Translations = {
       "タスク結果を確実に保存できませんでした。再試行するかバックエンドを再起動してください。",
     eventStreamOverloaded:
       "イベント処理が一時的に混雑しました。完了済みの手順は保持されています。再試行して続行してください。",
+    sidecarCleanupBlocked: "一時実行ディレクトリの削除が安全性チェックで停止されました。パスまたはマーカーが想定と一致しません。",
     workspaceWriteRequired:
       "このタスクはプロジェクトファイルの変更が必要ですが、有効なファイル変更が記録されませんでした。",
     verificationRequired:

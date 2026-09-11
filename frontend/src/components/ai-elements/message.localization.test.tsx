@@ -1,10 +1,15 @@
 import { expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
 
+vi.mock("./streamdown-host", () => ({
+  LocalizedStreamdown: ({ children }: { children: string }) => <div data-testid="immediate-markdown">{children}</div>,
+}));
+
 import { renderWithProviders } from "@/test/harness";
 
 import {
   MessageAttachment,
+  MessageResponse,
   MessageBranch,
   MessageBranchContent,
   MessageBranchNext,
@@ -61,4 +66,10 @@ it("localizes unnamed image attachments and their remove action", () => {
 
   expect(screen.getByRole("img", { name: "图片附件" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "移除附件" })).toBeInTheDocument();
+});
+
+
+it("renders saved Markdown on the first render without a plain-text fallback", () => {
+  renderWithProviders(<MessageResponse>{"## Saved answer\n\n**Ready**"}</MessageResponse>);
+  expect(screen.getByTestId("immediate-markdown")).toHaveTextContent("Saved answer");
 });

@@ -3440,6 +3440,7 @@ export const enUS: Translations = {
       "The task outcome could not be persisted reliably. Retry or restart the backend.",
     eventStreamOverloaded:
       "Event processing was temporarily overloaded. Completed steps were preserved; retry to continue.",
+    sidecarCleanupBlocked: "Temporary runtime directory cleanup was blocked by a safety check: the path or marker did not match the expected location.",
     workspaceWriteRequired:
       "This task requires a project file change, but no successful file change was recorded.",
     verificationRequired:

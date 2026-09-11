@@ -1021,6 +1021,22 @@ describe("MessageList failure visibility", () => {
     expect(screen.queryByText("任务未完成")).not.toBeInTheDocument();
   });
 
+  it.each([
+    ["zh-CN", "临时运行目录清理被安全检查拦截：目录路径或标记不符合预期。"],
+    ["en-US", "Temporary runtime directory cleanup was blocked by a safety check: the path or marker did not match the expected location."],
+  ] as const)("localizes persisted sidecar cleanup failures in %s", (locale, expected) => {
+    const messages: Message[] = [
+      { id: "user-1", type: "human", content: "Analyze" },
+      { id: "failed-cleanup", type: "ai", content: "", additional_kwargs: {
+        response_state: "failed",
+        error: { message: "refusing to clean outside sidecar state_root: /local/scratch", info: { code: "agent_response_failed" } },
+      } },
+    ];
+    renderMessageList(mockThread({ messages }), locale);
+    expect(screen.getByText(expected)).toBeInTheDocument();
+    expect(screen.queryByText(/refusing to clean outside/)).not.toBeInTheDocument();
+  });
+
   it("renders historical structured failures as compact receipts with full detail in the workbench", () => {
     const rawDetail = [
       "任务未能完成：内部守卫缺少执行证据。",

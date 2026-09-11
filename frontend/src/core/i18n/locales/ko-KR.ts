@@ -3367,6 +3367,7 @@ export const koKR: Translations = {
       "작업 결과를 안정적으로 저장하지 못했습니다. 다시 시도하거나 백엔드를 재시작하세요.",
     eventStreamOverloaded:
       "이벤트 처리가 일시적으로 과부하되었습니다. 완료된 단계는 보존되었습니다. 다시 시도해 계속하세요.",
+    sidecarCleanupBlocked: "안전 검사에서 임시 실행 폴더 정리가 차단되었습니다. 경로나 표식이 예상과 일치하지 않습니다.",
     workspaceWriteRequired:
       "이 작업은 프로젝트 파일 변경이 필요하지만, 성공적인 파일 변경이 기록되지 않았습니다.",
     verificationRequired:

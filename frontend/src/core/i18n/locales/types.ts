@@ -2779,6 +2779,7 @@ export interface Translations {
     guardBlocked: string;
     lifecycleFailed: string;
     eventStreamOverloaded: string;
+    sidecarCleanupBlocked: string;
     workspaceWriteRequired: string;
     verificationRequired: string;
     verificationRunFailed: string;

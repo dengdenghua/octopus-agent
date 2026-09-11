@@ -1586,7 +1586,12 @@ export function MessageList({
                                 : hasStructuredReadableDetail
                                   ? failure.detail
                                   : t.streaming.turnFailed;
-      return { ...failure, kind, message };
+      return {
+        ...failure, kind,
+        message: /refusing to clean (?:outside sidecar state_root|unsafe sidecar path|sidecar tree with invalid marker)/i.test(failure.detail)
+          ? t.streaming.sidecarCleanupBlocked
+          : message,
+      };
     },
     [
       t.streaming.blockedOnUser,
@@ -1602,6 +1607,7 @@ export function MessageList({
       t.streaming.verificationRequired,
       t.streaming.verificationRunFailed,
       t.streaming.workspaceWriteRequired,
+      t.streaming.sidecarCleanupBlocked,
     ],
   );
   const failureReceipt = useMemo<FailurePresentation | null>(() => {

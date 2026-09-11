@@ -251,12 +251,13 @@ export const MarkdownContent = memo(
     // per frame) coalesces into fewer passes instead of re-running the two
     // whole-string regexes on every single token.
     const deferredContent = useDeferredValue(content);
+    const renderContent = isLoading ? deferredContent : content;
     const publicContent = useMemo(
       () =>
         stabilizeMarkdownTableCodePipes(
-          stripLeakedControlMarkup(deferredContent),
+          stripLeakedControlMarkup(renderContent),
         ),
-      [deferredContent],
+      [renderContent],
     );
     const components = useMemo(() => {
       return {
