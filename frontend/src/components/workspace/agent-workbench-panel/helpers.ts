@@ -12,11 +12,38 @@ export type WorkbenchRosterSeat = {
   icon?: string | null;
   role?: "tl" | "member" | string | null;
   kind?: "human" | "agent" | "role";
+  /** `ai` = 托管; `human` = 接管 (its owner holds the wheel). Only meaningful
+   * for AI-side seats (`kind !== "human"`). */
+  driver?: "ai" | "human";
+  /** The human accountable for a `role` (数字员工) seat. */
+  accountableOwner?: string | null;
   /** HUD-derived member profile data for the conversation name card. */
   description?: string | null;
   model?: string | null;
   toolGroups?: string[] | null;
 };
+
+/**
+ * One line answering "纯 AI 还是绑定角色 / 托管还是接管" for a roster seat.
+ * Shape beats color: the icon + wording carry the distinction, the tint only
+ * reinforces it.
+ */
+export function rosterSeatIdentityLabel(
+  seat: Pick<WorkbenchRosterSeat, "kind" | "driver" | "accountableOwner">,
+): string {
+  if (seat.kind === "role") {
+    if (seat.driver === "human") {
+      return seat.accountableOwner
+        ? `真人接管 · ${seat.accountableOwner}`
+        : "真人接管";
+    }
+    return seat.accountableOwner
+      ? `AI 托管 · 由 ${seat.accountableOwner} 负责`
+      : "AI 托管";
+  }
+  if (seat.kind === "agent") return "AI 成员";
+  return "真人";
+}
 
 export function rosterSeatRoleLabel(
   seat: WorkbenchRosterSeat,

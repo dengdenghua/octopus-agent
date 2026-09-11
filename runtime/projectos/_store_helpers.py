@@ -7,7 +7,7 @@ import json
 import re
 from typing import Any
 
-from runtime.projectos.model import Milestone, Project, Task
+from runtime.projectos.model import Milestone, Project, Task, normalize_team_mode
 
 _TASK_TYPES = frozenset({"design", "code", "research", "analysis", "review"})
 _TASK_STATUSES = frozenset({"pending", "ready", "running", "blocked", "done", "failed", "rejected"})
@@ -153,7 +153,7 @@ def _normalize_task(task: Task) -> Task:
         goal=_text(task.goal, label="task goal"),
         assigned_role=_optional_id(task.assigned_role, label="assigned_role") or "engineer",
         assigned_agent=_optional_id(task.assigned_agent, label="assigned_agent") or "",
-        team_mode=task.team_mode if task.team_mode in ("single", "swarm", "cluster") else "single",
+        team_mode=normalize_team_mode(task.team_mode),
         priority=task.priority if task.priority in ("P0", "P1", "P2", "P3") else "P2",
         estimate=max(0.0, float(task.estimate or 0)),
         due_at=_text(task.due_at, label="due_at", max_length=64),
@@ -168,6 +168,12 @@ def _normalize_task(task: Task) -> Task:
             else None
         ),
         attempts=max(0, min(int(task.attempts or 0), 100)),
+        review_mode=(
+            task.review_mode
+            if task.review_mode in ("", "ai_auto", "operator", "human_run")
+            else ""
+        ),
+        reviewed_by=_text(task.reviewed_by, label="task reviewed_by", max_length=128),
     )
 
 

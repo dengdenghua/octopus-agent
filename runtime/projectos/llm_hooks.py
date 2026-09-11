@@ -22,7 +22,7 @@ from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 
-from runtime.projectos.model import ROLE_FOR_TASK, Milestone, Task
+from runtime.projectos.model import ROLE_FOR_TASK, Milestone, Task, normalize_team_mode
 
 _LOG = logging.getLogger("octopus.projectos.hooks")
 DEFAULT_MODEL = "claude-haiku-4-5"
@@ -103,11 +103,7 @@ def parse_tasks(text: str, milestone_id: str) -> list[Task]:
             if alias in label_to_id and label_to_id[alias] != tid:
                 raise ValueError("duplicate task dependency alias")
             label_to_id[alias] = tid
-        team_mode = (
-            item.get("team_mode")
-            if item.get("team_mode") in ("single", "swarm", "cluster")
-            else "single"
-        )
+        team_mode = normalize_team_mode(item.get("team_mode"))
         priority = (
             str(item.get("priority")).upper()
             if str(item.get("priority") or "").upper() in ("P0", "P1", "P2", "P3")

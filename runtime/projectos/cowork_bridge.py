@@ -26,7 +26,7 @@ from runtime.projectos.engine import (
     stub_decompose_tasks,
     stub_generate_milestones,
 )
-from runtime.projectos.model import Task
+from runtime.projectos.model import TEAM_MODES_HUMAN, Task
 from runtime.projectos.store import ProjectStore
 
 
@@ -269,6 +269,11 @@ def team_execute_for_group(
                 metadata=metadata,
             ).session
         execution_context["_host_execution_session"] = parent
+        if task.team_mode in TEAM_MODES_HUMAN:
+            # Defence in depth: the engine already refuses to route human nodes
+            # here, but this bridge is callable on its own. Never let the AI team
+            # engines stand in for a person.
+            raise RuntimeError("human task must not run on the AI team engine")
         if task.team_mode == "swarm":
             return _run_swarm(prompt, execution_context)
         return _run_cluster(task, prompt, execution_context)

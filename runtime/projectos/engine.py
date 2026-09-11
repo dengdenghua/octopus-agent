@@ -24,6 +24,8 @@ from uuid import uuid4
 
 from runtime.projectos.model import (
     ROLE_FOR_TASK,
+    TEAM_MODES_AI,
+    TEAM_MODES_HUMAN,
     Milestone,
     Project,
     Task,
@@ -43,6 +45,11 @@ DEFAULT_RUN_MAX_TICKS = 50
 HARD_MAX_RUN_TICKS = 200
 MIN_RUN_TICKS = 1
 DEFAULT_TASK_CLAIM_TIMEOUT_SECONDS = 60 * 60
+
+# Shown on a human-required node that no human path can run yet. It is a
+# deliberate dead end: the node waits for a real person instead of being handed
+# to an agent, so the block is visible in the task output rather than silent.
+HUMAN_NODE_UNCLAIMED = "等待真人认领：本任务为真人执行节点，不交由 AI 代为完成。"
 
 
 def normalize_run_ticks(value: int | None) -> int:
@@ -142,6 +149,11 @@ AgentAssigner = Callable[[Task], str]  # (task) -> concrete agent/member id
 # 集群) instead of a single agent. Injected by the cowork bridge so a project
 # task can fan out to the group roster and reuse the cluster/swarm engines.
 TaskTeamRunner = Callable[[Task, dict[str, Any]], Any]
+# (task, context) -> output — runs a human-required node through the human claim
+# path (cowork ``Assignment``: claim → lease → artifact) instead of an agent.
+# Injected by whoever owns the human side of the market. When it is NOT injected,
+# the engine fails closed and blocks the node: see the dispatch in ``_run_frontier``.
+TaskHumanRunner = Callable[[Task, dict[str, Any]], Any]
 ThreadContextResolver = Callable[[str], dict[str, Any]]
 
 
@@ -157,6 +169,7 @@ class ProjectEngine:
         gate_milestone: MilestoneGate = _default_gate,
         assign_agent: AgentAssigner = _default_assign,
         run_task_team: TaskTeamRunner | None = None,
+        run_task_human: TaskHumanRunner | None = None,
         owner_id: str = "",
         tenant_id: str = "",
         scope: TenantScope | None = None,
@@ -175,6 +188,7 @@ class ProjectEngine:
         self._gate = gate_milestone
         self._assign = assign_agent
         self._run_task_team = run_task_team
+        self._run_task_human = run_task_human
         self.owner_id = owner_id
         self.tenant_id = tenant_id
         self._resolve_thread_context = resolve_thread_context
@@ -431,12 +445,14 @@ class ProjectEngine:
         reason: str = "",
         reset_attempts: bool = True,
         cascade: bool = True,
+        actor: str = "",
     ) -> dict[str, Any]:
         """Apply an operator intervention to one task.
 
         ``reassign`` and ``reset`` put work back on the DAG frontier. ``complete``
         and ``skip`` mark a task as accepted by the operator so the milestone
-        gate can move on.
+        gate can move on. ``actor`` is the operator identity stamped into the
+        task's review chain on complete/skip (empty falls back to "operator").
         """
         project = self.store.get_project(project_id)
         if project is None:
@@ -509,6 +525,8 @@ class ProjectEngine:
             task.status = "done"
             task.output = output
             task.qa_verdict = {"approved": True, "reason": reason or "operator completed"}
+            task.review_mode = "operator"
+            task.reviewed_by = str(actor or "").strip() or "operator"
             self.store.save_task(task, allow_terminal_rewrite=True)
             events.append(f"task_completed_by_operator:{task.id}")
         elif action == "skip":
@@ -519,6 +537,8 @@ class ProjectEngine:
                 "previous_output": task.output,
             }
             task.qa_verdict = {"approved": True, "reason": reason or "operator skipped"}
+            task.review_mode = "operator"
+            task.reviewed_by = str(actor or "").strip() or "operator"
             self.store.save_task(task, allow_terminal_rewrite=True)
             events.append(f"task_skipped:{task.id}")
         else:
@@ -783,13 +803,20 @@ class ProjectEngine:
             # Operator reassignment wins; otherwise pick a concrete group member
             # or fallback role for this execution. Assignment happens after the
             # atomic claim so an injected assigner is also called only once.
+            #
+            # A human node is not an AI member, so the phase's agent allow-list
+            # does not govern it and the assigner must not touch it: filling in
+            # an agent id would both mislabel the node in the workbench and hand
+            # it to the executor it must never reach. Whoever claims it as a
+            # person (run_task_human) is the one that fills assigned_agent.
             try:
                 allowed = ms.spec.get("phase_agents")
-                if allowed is not None and task.assigned_agent and task.assigned_agent not in allowed:
-                    raise ValueError("assigned agent is not authorized for this phase")
-                task.assigned_agent = task.assigned_agent or self._assign(task)
-                if allowed is not None and task.assigned_agent not in allowed:
-                    raise ValueError("selected agent is not authorized for this phase")
+                if task.team_mode not in TEAM_MODES_HUMAN:
+                    if allowed is not None and task.assigned_agent and task.assigned_agent not in allowed:
+                        raise ValueError("assigned agent is not authorized for this phase")
+                    task.assigned_agent = task.assigned_agent or self._assign(task)
+                    if allowed is not None and task.assigned_agent not in allowed:
+                        raise ValueError("selected agent is not authorized for this phase")
             except Exception as exc:  # noqa: BLE001 — assignment is an injected hook
                 task.output = f"assignment error: {_error_text(exc)}"
                 if task.attempts >= MAX_TASK_ATTEMPTS:
@@ -810,7 +837,25 @@ class ProjectEngine:
                     context = self._context(project, ms, context_tasks)
                     context["task_id"] = task.id
                     execution_started = True
-                    if task.team_mode in ("swarm", "cluster") and self._run_task_team is not None:
+                    if task.team_mode in TEAM_MODES_HUMAN:
+                        runner = self._run_task_human
+                        if runner is None:
+                            # Fail closed. Nobody can claim human work yet, so the
+                            # node blocks and says so. Letting an agent run it
+                            # would pass QA and then be sealed into the delivery
+                            # fingerprint, i.e. an AI impersonating the human
+                            # whose signature the acceptance gate relies on.
+                            task.status = "blocked"
+                            task.output = HUMAN_NODE_UNCLAIMED
+                            self._commit_task_claim(
+                                task, claim_id, f"task_awaiting_human:{task.id}", events
+                            )
+                            continue
+                        task.output = runner(task, context)
+                        # A human run consumes no provider tokens, so this
+                        # context has no usage to report.
+                        context["_usage_seen"] = True
+                    elif task.team_mode in TEAM_MODES_AI and self._run_task_team is not None:
                         task.output = self._run_task_team(task, context)
                     else:
                         task.output = self._execute(task, context)
@@ -865,6 +910,22 @@ class ProjectEngine:
             task.qa_verdict = verdict
             if verdict.get("approved"):
                 task.status = "done"
+                # Review chain: only the human paths sign a delivery. The AI
+                # path is explicitly stamped "ai_auto" with an empty reviewer —
+                # an AI verdict can never be presented as a human approval.
+                if task.team_mode == "human":
+                    task.review_mode = "human_run"
+                    task.reviewed_by = (
+                        str(
+                            (task.output or {}).get("completed_by")
+                            if isinstance(task.output, dict)
+                            else ""
+                        ).strip()
+                        or "human"
+                    )
+                else:
+                    task.review_mode = "ai_auto"
+                    task.reviewed_by = ""
                 event = f"task_done:{task.id}"
             elif task.attempts >= MAX_TASK_ATTEMPTS:
                 task.status = "failed"
@@ -900,13 +961,25 @@ class ProjectEngine:
                 events.append(f"milestone_blocked:{ms.id}")
                 self._block_project(project, ms.id, events, reason="task_failed")
             elif tasks and not any(t.status == "running" for t in tasks) and not ready_tasks(tasks):
+                # A node waiting for a real person is not a broken DAG. Report
+                # which one it is, so the workbench prompts for a human instead of
+                # showing a dependency deadlock.
+                awaiting_human = [
+                    t.id for t in tasks if t.status == "blocked" and t.team_mode in TEAM_MODES_HUMAN
+                ]
                 ms.status = "blocked"
                 saved_ms = self.store.save_milestone(project.id, ms)
                 if saved_ms.status != "blocked":
                     events.append(f"milestone_stale_block_ignored:{ms.id}")
                     return
-                events.append(f"milestone_blocked_dag:{ms.id}")
-                self._block_project(project, ms.id, events, reason="task_dag_blocked")
+                events.append(
+                    f"milestone_blocked_human:{ms.id}" if awaiting_human
+                    else f"milestone_blocked_dag:{ms.id}"
+                )
+                self._block_project(
+                    project, ms.id, events,
+                    reason="awaiting_human" if awaiting_human else "task_dag_blocked",
+                )
             return
         try:
             gate = self._gate(ms, tasks)
@@ -994,6 +1067,10 @@ class ProjectEngine:
         if clear_outputs:
             task.output = None
             task.qa_verdict = None
+            # A rerun invalidates any previous sign-off: the review chain must
+            # restart empty or a stale "reviewed by X" would outlive its proof.
+            task.review_mode = ""
+            task.reviewed_by = ""
         self.store.save_task(task, allow_terminal_rewrite=True)
 
     def _audit(self, project_id: str, kind: str, payload: dict) -> None:

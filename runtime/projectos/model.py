@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from math import isfinite
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 
 def _is_finite_num(value: Any) -> bool:
@@ -30,7 +30,19 @@ TaskStatus = Literal["pending", "ready", "running", "blocked", "done", "failed",
 # parallel brainstorm (swarm, 蜂群), or an orchestrated role team (cluster, 集群).
 # This is the seam that lets 项目模式 (the milestone engine) reuse the cluster /
 # swarm engines as its per-task executors instead of always running single-agent.
-TeamMode = Literal["single", "swarm", "cluster"]
+#
+# ``human`` / ``hybrid`` extend that same seam to real people: a node that must be
+# performed by a human, or one whose AI draft must be signed off by a human. They
+# are deliberately *not* AI execution engines — see TEAM_MODES_HUMAN.
+TeamMode = Literal["single", "swarm", "cluster", "human", "hybrid"]
+
+TEAM_MODES: frozenset[str] = frozenset({"single", "swarm", "cluster", "human", "hybrid"})
+# Modes the AI team engines may run (swarm/cluster fan out over the group roster).
+TEAM_MODES_AI: frozenset[str] = frozenset({"swarm", "cluster"})
+# Human-required modes. An AI executor must never run these: an agent that
+# silently "does the human part" would pass QA and then be baked into the
+# delivery fingerprint — the one guarantee the acceptance gate rests on.
+TEAM_MODES_HUMAN: frozenset[str] = frozenset({"human", "hybrid"})
 MilestoneStatus = Literal["pending", "active", "in_progress", "blocked", "done", "failed"]
 ProjectStatus = Literal["planning", "running", "blocked", "done", "failed"]
 
@@ -42,6 +54,20 @@ ROLE_FOR_TASK: dict[str, str] = {
     "research": "research",
     "review": "qa",
 }
+
+
+def normalize_team_mode(raw: Any) -> TeamMode:
+    """The single source of truth for sanitising ``team_mode``.
+
+    Every read path — the dataclass round-trip, the store normaliser, and the LLM
+    planner output — must go through this. When each site carried its own
+    whitelist, adding a mode meant the new value survived in one place and was
+    silently downgraded to ``single`` in another; for a human node that downgrade
+    is precisely how an AI would have ended up executing human work. Unknown
+    values still fall back to ``single``.
+    """
+    value = str(raw or "").strip().lower()
+    return cast(TeamMode, value) if value in TEAM_MODES else "single"
 
 
 @dataclass
@@ -66,6 +92,12 @@ class Task:
     output: Any = None
     qa_verdict: dict[str, Any] | None = None  # set by the QA gate
     attempts: int = 0
+    # ── 交付审核链（谁对这份成果签的字）─────────────
+    # review_mode: "" = 未完成 / "ai_auto" = AI 产出+AI 质检, 全自动;
+    # "operator" = 运营者手动完成/跳过; "human_run" = 真人节点执行。
+    # 只有真人路径会写 reviewed_by；AI 执行路径永远置空，杜绝自标。
+    review_mode: str = ""
+    reviewed_by: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -81,9 +113,7 @@ class Task:
             goal=str(raw.get("goal") or ""),
             assigned_role=str(raw.get("assigned_role") or "engineer"),
             assigned_agent=str(raw.get("assigned_agent") or ""),
-            team_mode=raw.get("team_mode")
-            if raw.get("team_mode") in ("single", "swarm", "cluster")
-            else "single",
+            team_mode=normalize_team_mode(raw.get("team_mode")),
             priority=raw.get("priority")
             if raw.get("priority") in ("P0", "P1", "P2", "P3")
             else "P2",
@@ -101,6 +131,10 @@ class Task:
             output=raw.get("output"),
             qa_verdict=raw.get("qa_verdict"),
             attempts=int(raw.get("attempts") or 0),
+            review_mode=raw.get("review_mode")
+            if raw.get("review_mode") in ("", "ai_auto", "operator", "human_run")
+            else "",
+            reviewed_by=str(raw.get("reviewed_by") or ""),
         )
 
 

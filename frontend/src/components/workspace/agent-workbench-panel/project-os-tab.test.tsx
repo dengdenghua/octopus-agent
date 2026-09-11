@@ -1,4 +1,5 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/harness";
@@ -10,6 +11,17 @@ import {
   ProjectOsTab,
   type ProjectFullState,
 } from "./project-os-tab";
+
+// Without this the suite never collects: the workbench graph reaches
+// streamdown-host, whose side-effect import of katex.min.css makes Vitest bail
+// with "Unknown file extension .css". The sibling workbench suite mocks the
+// same module for the same reason; this suite only needs deterministic text.
+vi.mock("@/components/ai-elements/streamdown-host", () => ({
+  default: ({ children }: { children?: ReactNode }) => <>{children}</>,
+  LocalizedStreamdown: ({ children }: { children?: ReactNode }) => (
+    <>{children}</>
+  ),
+}));
 
 describe("boundProjectRefetchInterval", () => {
   it("stops polling after the backend confirms that no project is bound", () => {
@@ -720,5 +732,50 @@ describe("AgentWorkbenchPanel project tab", () => {
       expect(screen.getByRole("alert")).toHaveTextContent("项目工作台加载失败");
     });
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+  });
+});
+
+describe("human task nodes", () => {
+  it("shows a human node as waiting for a person, not as an AI member", () => {
+    const state: ProjectFullState = {
+      ...projectState,
+      tasks: {
+        MS2: [
+          {
+            id: "t-human",
+            milestone_id: "MS2",
+            type: "code",
+            goal: "现场拍摄 20 张实物图",
+            assigned_role: "engineer",
+            assigned_agent: "",
+            team_mode: "human",
+            priority: "P0",
+            estimate: 1,
+            due_at: "2026-08-21",
+            acceptance_criteria: ["照片合格"],
+            status: "blocked",
+            attempts: 1,
+            output: "等待真人认领：本任务为真人执行节点，不交由 AI 代为完成。",
+          },
+        ],
+      },
+    };
+
+    renderWithProviders(<ProjectOsTab state={state} />, { locale: "zh-CN" });
+    fireEvent.click(screen.getByRole("tab", { name: /事项/ }));
+
+    expect(screen.getByText("待真人认领")).toBeInTheDocument();
+    expect(screen.getByText("真人执行")).toBeInTheDocument();
+    // An AI role name must not stand in for the person who has to do this.
+    expect(screen.queryByText("engineer")).not.toBeInTheDocument();
+  });
+
+  it("keeps swarm and cluster nodes labelled with their own id", () => {
+    renderWithProviders(<ProjectOsTab state={projectState} />, {
+      locale: "zh-CN",
+    });
+    fireEvent.click(screen.getByRole("tab", { name: /事项/ }));
+
+    expect(screen.getByText("cluster")).toBeInTheDocument();
   });
 });

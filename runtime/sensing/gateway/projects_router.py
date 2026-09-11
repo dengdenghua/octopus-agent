@@ -1069,7 +1069,8 @@ def create_projects_router(
     ) -> dict[str, Any]:
         """Manually reassign, reset, complete, or skip a task."""
         _project_or_404(request, project_id)
-        engine = _engine(_principal(request))
+        principal = _principal(request)
+        engine = _engine(principal)
         try:
             intervention = engine.intervene_task(
                 project_id,
@@ -1081,6 +1082,7 @@ def create_projects_router(
                 reason=body.reason,
                 reset_attempts=body.reset_attempts,
                 cascade=body.cascade,
+                actor=principal.actor_id if principal is not None else "",
             )
         except ProjectClaimActiveError as exc:
             raise _claim_active(exc) from exc

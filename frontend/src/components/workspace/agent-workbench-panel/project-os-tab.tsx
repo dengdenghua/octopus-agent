@@ -56,7 +56,7 @@ import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 import { cn } from "@/lib/utils";
 
-import type { WorkbenchRosterSeat } from "./helpers";
+import { rosterSeatIdentityLabel, type WorkbenchRosterSeat } from "./helpers";
 
 export type ProjectWorkbenchTabId =
   | "overview"
@@ -96,6 +96,8 @@ export interface ProjectTaskReadModel {
   depends_on?: string[];
   output?: unknown;
   qa_verdict?: Record<string, unknown> | null;
+  review_mode?: "" | "ai_auto" | "operator" | "human_run";
+  reviewed_by?: string;
   available_actions?: string[];
   action_specs?: ProjectActionSpec[];
 }
@@ -199,6 +201,10 @@ export interface ProjectMemberReadModel {
   name: string;
   role?: string;
   kind?: "human" | "agent" | "role";
+  /** `ai` = 托管; `human` = 接管 (its owner holds the wheel). */
+  driver?: "ai" | "human";
+  /** The human accountable for a `role` (数字员工) member. */
+  accountable_owner?: string | null;
   avatar_url?: string | null;
   status?: string;
 }
@@ -254,6 +260,8 @@ interface ProjectMemberView {
   name: string;
   role: string;
   kind: "human" | "agent" | "role";
+  driver?: "ai" | "human";
+  accountableOwner?: string | null;
   avatarUrl?: string | null;
   status?: string;
   isOwner?: boolean;
@@ -345,6 +353,18 @@ const TASK_ACTION_LABEL: Record<string, string> = {
 
 const ACTIVE_TASK_STATUSES = new Set(["pending", "ready", "running"]);
 const ATTENTION_TASK_STATUSES = new Set(["blocked", "failed", "rejected"]);
+
+/**
+ * A node a real person has to do — or whose AI draft a person has to sign off.
+ * These never run on an agent, so the workbench must not dress them up as one:
+ * showing a bot avatar (or an AI role name) is how a human step silently reads
+ * as machine work. swarm/cluster keep rendering their raw id, as before.
+ */
+const HUMAN_TEAM_MODES = new Set(["human", "hybrid"]);
+const TEAM_MODE_LABEL: Record<string, string> = {
+  human: "真人执行",
+  hybrid: "人机协同",
+};
 
 /**
  * Project OS serializes progress as a ratio (0–1). Older fixtures and third
@@ -868,10 +888,12 @@ export function ProjectOsTab({
         role:
           seat.role === "tl"
             ? "协作负责人"
-            : kind === "agent" && (!seat.role || seat.role === "member")
+            : kind !== "human" && (!seat.role || seat.role === "member")
               ? "AI 成员"
               : seat.role || "项目成员",
         kind,
+        driver: seat.driver,
+        accountableOwner: seat.accountableOwner,
         avatarUrl: seat.avatarUrl,
       });
     }
@@ -881,6 +903,8 @@ export function ProjectOsTab({
         name: member.name,
         role: member.role || "项目成员",
         kind: member.kind || "human",
+        driver: member.driver,
+        accountableOwner: member.accountable_owner,
         avatarUrl: member.avatar_url,
         status: member.status,
       });
@@ -1850,17 +1874,37 @@ function TasksTab({
                       ) : null}
                     </div>
                     <div className="mt-2 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                      {task.assigned_agent ? (
+                      {task.assigned_agent && !HUMAN_TEAM_MODES.has(task.team_mode) ? (
                         <BotIcon className="size-3" />
                       ) : (
                         <UserRoundIcon className="size-3" />
                       )}
                       <span className="truncate">
-                        {task.assigned_agent || task.assigned_role || "待指派"}
+                        {task.team_mode === "human"
+                          ? task.assigned_agent || "待真人认领"
+                          : task.assigned_agent || task.assigned_role || "待指派"}
                       </span>
                       {task.team_mode && task.team_mode !== "single" ? (
                         <span className="rounded bg-muted px-1 py-px text-[8px] uppercase">
-                          {task.team_mode}
+                          {TEAM_MODE_LABEL[task.team_mode] ?? task.team_mode}
+                        </span>
+                      ) : null}
+                      {task.status === "done" && task.review_mode ? (
+                        <span
+                          className={cn(
+                            "rounded px-1 py-px text-[8px]",
+                            task.review_mode === "operator"
+                              ? "bg-emerald-500/15 text-emerald-700"
+                              : task.review_mode === "human_run"
+                                ? "bg-amber-500/15 text-amber-700"
+                                : "bg-muted text-muted-foreground",
+                          )}
+                        >
+                          {task.review_mode === "operator"
+                            ? `已人工审核${task.reviewed_by ? `·${task.reviewed_by}` : ""}`
+                            : task.review_mode === "human_run"
+                              ? `真人执行${task.reviewed_by && task.reviewed_by !== "human" ? `·${task.reviewed_by}` : ""}`
+                              : "AI 自动交付"}
                         </span>
                       ) : null}
                     </div>
@@ -2097,6 +2141,18 @@ function MembersTab({
                 {member.isOwner ? (
                   <Badge className="h-4 bg-primary/10 px-1 text-[8px] text-primary">
                     负责人
+                  </Badge>
+                ) : null}
+                {member.kind === "role" ? (
+                  <Badge
+                    className={cn(
+                      "h-4 px-1 text-[8px]",
+                      member.driver === "human"
+                        ? "bg-amber-500/15 text-amber-700"
+                        : "bg-violet-500/10 text-violet-600",
+                    )}
+                  >
+                    {rosterSeatIdentityLabel(member)}
                   </Badge>
                 ) : null}
               </div>
