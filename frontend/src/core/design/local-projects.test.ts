@@ -16,6 +16,17 @@ function memoryStorage() {
 }
 
 describe("local creative projects", () => {
+  it("keeps new tasks separate while restoring the same task's canvas", () => {
+    const key = (task: string) =>
+      creativeCanvasStorageKey("canvas", "luna", null, task);
+    const storage = memoryStorage();
+    storage.setItem(key("old"), "saved canvas");
+    expect(storage.getItem(key("new"))).toBeNull();
+    expect(storage.getItem(key("old"))).toBe("saved canvas");
+    expect(key("new")).not.toBe(
+      creativeCanvasStorageKey("canvas", "luna", null),
+    );
+  });
   it("isolates project lists and rooms by persona", () => {
     const storage = memoryStorage();
     createLocalCreativeProject("luna", "品牌片", storage);

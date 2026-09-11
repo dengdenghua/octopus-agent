@@ -41,6 +41,7 @@ def test_journal_is_durable_before_engine_dispatch_and_replays(tmp_path, monkeyp
     async def driver(*_a, **_k):
         assert durable_calls[-1] is True
         assert EventLog(log.path).replay()[-1].execution == turn.execution
+        assert current_execution_request().task.execution_engine == engine
 
     emitter = SimpleNamespace(notify=AsyncMock(), is_turn_interrupted=lambda _id: False)
     runtime = SimpleNamespace(_drive_react=driver, _drive_codex_app_server=driver)
@@ -65,6 +66,61 @@ def test_journal_is_durable_before_engine_dispatch_and_replays(tmp_path, monkeyp
     assert _turn_execution_engine(Turn.model_validate_json(turn.model_dump_json())) == engine
     assert turn.execution.invocation == 2
     assert emitter.notify.await_count == 2
+
+
+@pytest.mark.parametrize(
+    "driver,signal", [("project_os", "project_command"), ("group_fanout", "group_fanout")]
+)
+@pytest.mark.parametrize("engine", ["opencode", "codex"])
+@pytest.mark.parametrize("selection", ["requested_engine", "coordinator_engine"])
+def test_host_dispatch_and_model_continuations_share_execution(
+    tmp_path, monkeypatch, driver, signal, engine, selection
+):
+    from runtime.execution.engines import EngineId
+
+    turn = Turn(threadId="thread", params=TurnParams(threadId="thread", model="auto"))
+    turn.execution_workspace_path = str(tmp_path)
+    log = EventLog(tmp_path / "events.jsonl")
+    log.turn_started(turn.thread_id, turn)
+    tasks = []
+    drivers = []
+
+    async def record(*_args, **_kwargs):
+        tasks.append(current_execution_request().task)
+        restored = EventLog(log.path).replay()[-1]
+        drivers.append(restored.execution.driver)
+        assert restored.execution.engine == engine
+
+    runtime = SimpleNamespace(
+        _drive_project_os=record,
+        _drive_group_fanout=record,
+        _drive_codex_app_server=record,
+        _drive_react=AsyncMock(side_effect=AssertionError("native model invoked")),
+    )
+    monkeypatch.setattr("runtime.sensing.gateway.realtime_opencode_backend.drive_opencode", record)
+    route = select_execution_route(**{selection: EngineId(engine), signal: True})
+    execution = bind_turn_execution(
+        runtime,
+        turn,
+        log,
+        SimpleNamespace(notify=AsyncMock(), is_turn_interrupted=lambda _id: False),
+        object(),
+        object(),
+        route,
+    )
+    intent = ParsedIntent(raw="task", normalized_goal="task", intent_type="task")
+
+    async def scenario():
+        for phase in ExecutionPhase:
+            await execution.execute(TurnExecutionRequest(intent, "task", "auto"), phase=phase)
+
+    asyncio.run(scenario())
+    assert (
+        drivers
+        == [driver] + ["opencode_server" if engine == "opencode" else "codex_app_server"] * 3
+    )
+    assert all(task is tasks[0] for task in tasks)
+    assert tasks[0].execution_engine == engine
 
 
 def test_failed_journal_prevents_engine_start(tmp_path, monkeypatch):
@@ -95,6 +151,52 @@ def test_failed_journal_prevents_engine_start(tmp_path, monkeypatch):
     driver.assert_not_awaited()
     emitter.notify.assert_not_awaited()
     assert turn.execution is None
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        {"engine": "codex"},
+        {"invocation": 1},
+        {"invocation": 3},
+        {"invocation": "2"},
+        {"invocation": True},
+        {"model": " "},
+        {"model": None},
+    ],
+)
+def test_replay_model_selection_is_bound_to_current_execution(tmp_path, invalid):
+    params = TurnParams(
+        threadId="thread", model="native/old", owner_actor_id="alice", tenant_id="tenant"
+    )
+    turn = Turn(threadId="thread", params=params)
+    log = EventLog(tmp_path / "events.jsonl")
+    log.turn_started(turn.thread_id, turn)
+    persisted_params = EventLog(log.path).replay()[-1].params
+    snapshot = ExecutionSnapshot(
+        engine="opencode",
+        driver="opencode_server",
+        reason="explicit",
+        phase="repair",
+        invocation=2,
+    )
+    selection = {"engine": "opencode", "invocation": 2, "model": "selected"}
+    log.turn_updated(
+        turn.thread_id,
+        turn.id,
+        execution=snapshot.model_dump(),
+        execution_model={**selection, "owner_actor_id": "forged", "approval_policy": "never"},
+        durable=True,
+    )
+    log.turn_updated(
+        turn.thread_id,
+        turn.id,
+        execution_model={**selection, "model": "wrong", **invalid},
+        durable=True,
+    )
+    restored = EventLog(log.path).replay()[-1]
+    assert restored.execution == snapshot
+    assert restored.params == persisted_params.model_copy(update={"model": "selected"})
 
 
 def test_replay_rejects_stale_engine_changes_and_malformed_evidence(tmp_path):

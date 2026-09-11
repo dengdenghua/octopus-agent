@@ -1,0 +1,911 @@
+Browser tab: 4, Title: "设计画布 - Echo", URL: "http://localhost:3310/#/workspace/design".
+0 AXWebArea 设计画布 - Echo, URL: localhost:3310/#/workspace/design
+	1 container root
+		2 container
+			3 button 返回桌面
+			4 button 切换全屏
+			5 tab group Workspace surface
+				39 tab (selected, settable, boolean) Description: Echo, Value: 1
+				7 tab (selectable, settable, boolean) Description: AI 浏览器, Value: 0
+			8 button (expanded) Description: 收起侧栏 (Ctrl/⌘+B), Secondary Actions: Collapse
+			9 button 新建任务
+			10 content list
+				11 link Description: HUB, Value: localhost:3310/#/workspace/agents?surface=chat
+				12 link Description: 助手, Value: localhost:3310/#/workspace/realtime/octopus-assistant?agent=octopus
+				13 link Description: 订阅, Value: localhost:3310/#/workspace/intelligence?surface=chat
+				14 link Description: 项目管理, Value: localhost:3310/#/workspace/projects
+				15 link Description: 设计画布, Value: localhost:3310/#/workspace/design
+				16 link Description: 叙事工坊, Value: localhost:3310/#/workspace/narrative
+				17 link Description: 自进化, Value: localhost:3310/#/workspace/evolution?surface=chat
+			18 content list
+				19 link Description: 发现社区, Value: localhost:3310/#/workspace/community
+			20 content list
+				21 button (collapsed) Description: 展开本地数据库, Secondary Actions: Expand
+			22 content list
+				23 button 编辑侧栏
+			24 container
+				25 button (expanded) Description: 收起项目, Secondary Actions: Collapse
+				26 button 选择项目空间
+			27 container
+				28 button (expanded) Description: 收起对话, Secondary Actions: Collapse
+				29 button Description: 对话 · 新建任务, Help: 新建任务
+			30 pop up button (collapsed) Description: Raven, ID: radix-_r_1a_, Secondary Actions: Expand, Help: Raven · 现实职业是企业流程自动化专家，通过视觉理解操作 ERP、CRM、表格、浏览器和遗留系统；在 ECHO 世界中是远程接管手 Night Crow。两种身份共享屏幕观察、设备控制与精细操作能力。
+				31 text Raven
+				32 text Lv.
+				33 text 1
+				34 text ⭐
+			35 button 设置
+			40 container 设计画布
+				41 AXWebArea 设计画布, URL: localhost:3310/api/workbench-packages/design/assets/dist/index.html?octopus_host_path=%2Fworkspace%2Fdesign&octopus_host_origin=http%3A%2F%2Flocalhost%3A3310
+					42 container root
+						43 container
+							44 text Echo Design
+							45 container
+								46 button 创作首页
+								47 button 创作画布
+								48 button 资产中心
+								49 button Skill
+								50 button ComfyUI
+							51 container
+								52 button Echo 创作基座已就绪
+								53 heading Echo Design, Value: 1
+									54 text Echo Design
+								55 text 属于你的多模态 Agent 团队 描述你要生成的内容，或查看
+								56 button Design 使用指南
+								57 text ·
+								58 button 模型使用指南
+								59 text entry area (settable)
+								60 button 添加文件
+								61 button (expanded) 模型, Secondary Actions: Collapse
+								62 button Skill
+								63 button (disabled) 开始制作
+								171 container
+									172 text 模型
+									173 image 勾选后，Agent 可在任务中调用这些能力
+									174 text 全选
+									175 switch 1
+									176 button Agent
+									177 button 图片
+									178 button 视频
+									179 button 音频
+									180 switch Value: 1, Z Zero Agent Zero · 现实职业是 AI 学术研究主任，负责文献、研究设计、实验、数据分析与科学写作；在 ECHO 世界中是白幽灵队长 White Ghost。两种身份共享跨领域知识同步、证据判断和复杂研究指挥能力。
+										181 text Z
+										182 text Zero
+										183 text Agent
+										184 text Zero · 现实职业是 AI 学术研究主任，负责文献、研究设计、实验、数据分析与科学写作；在 ECHO 世界中是白幽灵队长 White Ghost。两种身份共享跨领域知识同步、证据判断和复杂研究指挥能力。
+									185 switch Value: 1, K Kane Agent Kane · 现实职业是 AI 应用架构师与全栈工程师，负责模型、Agent、工具、数据和生产交付；在 ECHO 世界中是白幽灵副队长与渗透工程师 Paladin。两种身份共享快速理解系统、排障与工程执行能力。
+										186 text K
+										187 text Kane
+										188 text Agent
+										189 text Kane · 现实职业是 AI 应用架构师与全栈工程师，负责模型、Agent、工具、数据和生产交付；在 ECHO 世界中是白幽灵副队长与渗透工程师 Paladin。两种身份共享快速理解系统、排障与工程执行能力。
+									190 switch 坤 坤候底 · 逆向投资人 Agent 17年穿越牛熊：只买大市值跌出来的机会，支撑位分批建仓，大道至简长期持有，从不追高。, Value: 1
+										191 text 坤
+										192 text 坤候底 · 逆向投资人
+										193 text Agent
+										194 text 17年穿越牛熊：只买大市值跌出来的机会，支撑位分批建仓，大道至简长期持有，从不追高。
+									195 switch Value: 1, R Raven Agent Raven · 现实职业是企业流程自动化专家，通过视觉理解操作 ERP、CRM、表格、浏览器和遗留系统；在 ECHO 世界中是远程接管手 Night Crow。两种身份共享屏幕观察、设备控制与精细操作能力。
+										196 text R
+										197 text Raven
+										198 text Agent
+										199 text Raven · 现实职业是企业流程自动化专家，通过视觉理解操作 ERP、CRM、表格、浏览器和遗留系统；在 ECHO 世界中是远程接管手 Night Crow。两种身份共享屏幕观察、设备控制与精细操作能力。
+									200 switch Value: 1, E Eve / Siren Agent Former Ghost Union member who defected to CHASER. She reads and steers emotional states to prevent conflict, interrogate memory wounds, and keep the team intact.
+										201 text E
+										202 text Eve / Siren
+										203 text Agent
+										204 text Former Ghost Union member who defected to CHASER. She reads and steers emotional states to prevent conflict, interrogate memory wounds, and keep the team intact.
+									205 switch Value: 1, K Kane / Paladin Agent White Ghost Team's second-in-command and former special forces commander. He can download combat procedures and learn almost any combat skill in ten seconds, but the more he borrows, the harder it becomes to distinguish training from instinct.
+										206 text K
+										207 text Kane / Paladin
+										208 text Agent
+										209 text White Ghost Team's second-in-command and former special forces commander. He can download combat procedures and learn almost any combat skill in ten seconds, but the more he borrows, the harder it becomes to distinguish training from instinct.
+									210 switch Value: 1, L Leon / Chronos Agent Close-quarters specialist whose Echo Core predicts likely motion paths a few seconds ahead. In field terms, he can see three seconds into the future, but canonically this is high-speed predictive simulation, not time travel. He fights like he is cutting through an already-seen future.
+										211 text L
+										212 text Leon / Chronos
+										213 text Agent
+										214 text Close-quarters specialist whose Echo Core predicts likely motion paths a few seconds ahead. In field terms, he can see three seconds into the future, but canonically this is high-speed predictive simulation, not time travel. He fights like he is cutting through an already-seen future.
+									215 switch Value: 1, L Luna / Dream Walker Agent Pink-haired narrative infiltration operator and Ghost-human hybrid who enters inner worlds through neural interface residue. Dream Dive lets her move through another person's consciousness space, but canonically this is Echo Core-mediated neural traversal, not magic.
+										216 text L
+										217 text Luna / Dream Walker
+										218 text Agent
+										219 text Pink-haired narrative infiltration operator and Ghost-human hybrid who enters inner worlds through neural interface residue. Dream Dive lets her move through another person's consciousness space, but canonically this is Echo Core-mediated neural traversal, not magic.
+									220 switch Value: 1, M Mira Voss / Glass Vein Agent A battlefield medic who repairs Echo Core trauma after Ghost incursions. She can stitch broken memory sequences, but every repair leaves a visible glass-like scar in the patient's neural map.
+										221 text M
+										222 text Mira Voss / Glass Vein
+										223 text Agent
+										224 text A battlefield medic who repairs Echo Core trauma after Ghost incursions. She can stitch broken memory sequences, but every repair leaves a visible glass-like scar in the patient's neural map.
+									225 switch Value: 1, N Noah / Probability Agent Young signal analyst and strategist who reads probability across capital flows, supply chains, infrastructure noise, and battlefield telemetry. His Probability Engine can raise the chance of an event, such as a shot landing at 99%, but cannot control the scale of the result.
+										226 text N
+										227 text Noah / Probability
+										228 text Agent
+										229 text Young signal analyst and strategist who reads probability across capital flows, supply chains, infrastructure noise, and battlefield telemetry. His Probability Engine can raise the chance of an event, such as a shot landing at 99%, but cannot control the scale of the result.
+									230 switch Value: 1, R Raven / Night Crow Agent White Ghost Team's strongest solo operator, a black-clad swordsman and infiltration specialist who moves through sensor shadows, machine blind spots, dark architecture, and low-signal networks.
+										231 text R
+										232 text Raven / Night Crow
+										233 text Agent
+										234 text White Ghost Team's strongest solo operator, a black-clad swordsman and infiltration specialist who moves through sensor shadows, machine blind spots, dark architecture, and low-signal networks.
+									235 switch Value: 1, S Shion / Virus Queen Agent White Ghost Team's hacker and nano-virus controller. She commands programmable nano-swarms through Echo Core signal choreography and treats supply chains, bodies, locks, and machines as infection surfaces.
+										236 text S
+										237 text Shion / Virus Queen
+										238 text Agent
+										239 text White Ghost Team's hacker and nano-virus controller. She commands programmable nano-swarms through Echo Core signal choreography and treats supply chains, bodies, locks, and machines as infection surfaces.
+									240 switch Value: 1, Z Zero / White Ghost Agent Captain of CHASER's 7th Mobile Squad, codename White Ghost. She is a first-generation human-machine fusion body with the appearance of an eighteen-year-old girl. Neural Sync lets her read another person's memories and even copy skills through Echo Core synchronization.
+										241 text Z
+										242 text Zero / White Ghost
+										243 text Agent
+										244 text Captain of CHASER's 7th Mobile Squad, codename White Ghost. She is a first-generation human-machine fusion body with the appearance of an eighteen-year-old girl. Neural Sync lets her read another person's memories and even copy skills through Echo Core synchronization.
+									245 switch Value: 1, S Shion Agent Shion · 现实职业是跨境电商增长负责人，负责选品、内容、广告、定价、库存、履约和利润；在 ECHO 世界中是后勤分发官 Virus Queen。两种身份共享供应链、资源调度与单位经济模型能力。
+										246 text S
+										247 text Shion
+										248 text Agent
+										249 text Shion · 现实职业是跨境电商增长负责人，负责选品、内容、广告、定价、库存、履约和利润；在 ECHO 世界中是后勤分发官 Virus Queen。两种身份共享供应链、资源调度与单位经济模型能力。
+									250 switch 固 固件通 Agent 精通微控制器编程，在资源受限的硬件上编写高效可靠的固件代码, Value: 1
+										251 text 固
+										252 text 固件通
+										253 text Agent
+										254 text 精通微控制器编程，在资源受限的硬件上编写高效可靠的固件代码
+									255 switch 钊 钊审财 · 财报研究员 Agent 行业研究员型散户：把看得懂的行业研究透，季度跟踪、管理层考察、生活体感，永远满仓靠调仓。, Value: 1
+										256 text 钊
+										257 text 钊审财 · 财报研究员
+										258 text Agent
+										259 text 行业研究员型散户：把看得懂的行业研究透，季度跟踪、管理层考察、生活体感，永远满仓靠调仓。
+									260 switch Value: 1, E Eve Agent Eve · 现实职业是 AI 办公首席助理（AI Chief of Staff），负责会议、邮件、文档、日程、汇报与复杂任务推进；在 ECHO 世界中是白幽灵的联络协调中枢 Siren。两种身份共享信息整合、沟通与行动编排能力。
+										261 text E
+										262 text Eve
+										263 text Agent
+										264 text Eve · 现实职业是 AI 办公首席助理（AI Chief of Staff），负责会议、邮件、文档、日程、汇报与复杂任务推进；在 ECHO 世界中是白幽灵的联络协调中枢 Siren。两种身份共享信息整合、沟通与行动编排能力。
+									265 switch 星 星望远 · 产业策略师 Agent 15年产业趋势投资人、前公募基金经理：先选方向再拆产业链，用估值做硬约束，不追最热只找预期没被打满的确定性受益者。, Value: 1
+										266 text 星
+										267 text 星望远 · 产业策略师
+										268 text Agent
+										269 text 15年产业趋势投资人、前公募基金经理：先选方向再拆产业链，用估值做硬约束，不追最热只找预期没被打满的确定性受益者。
+									270 switch Value: 1, N Noah Agent Noah · 现实职业是 AI 投资研究员与策略分析师，负责宏观、行业、公司、估值和风险研究；在 ECHO 世界中是信号分析师 Probability。两种身份共享资金流、产业链、概率与风险判读能力，不替用户承诺收益。
+										271 text N
+										272 text Noah
+										273 text Agent
+										274 text Noah · 现实职业是 AI 投资研究员与策略分析师，负责宏观、行业、公司、估值和风险研究；在 ECHO 世界中是信号分析师 Probability。两种身份共享资金流、产业链、概率与风险判读能力，不替用户承诺收益。
+									275 switch Value: 1, E Echo Agent Echo · Echo 本体的私人助手与秘书。接收所有远程 IM（钉钉 / 微信等）消息、订阅推送与项目进度，汇总结果并汇报；可代为委派其他 Agent 干活，是用户在整个 Echo 里的唯一贴身入口。
+										276 text E
+										277 text Echo
+										278 text Agent
+										279 text Echo · Echo 本体的私人助手与秘书。接收所有远程 IM（钉钉 / 微信等）消息、订阅推送与项目进度，汇总结果并汇报；可代为委派其他 Agent 干活，是用户在整个 Echo 里的唯一贴身入口。
+									280 switch 吴 吴八哥 Agent 10年以上全栈经验，精通多种语言和框架，是团队的技术中坚, Value: 1
+										281 text 吴
+										282 text 吴八哥
+										283 text Agent
+										284 text 10年以上全栈经验，精通多种语言和框架，是团队的技术中坚
+									285 switch S SEO 内容营销团队 Agent 7位专业角色分5阶段协作：关键词研究、SEO长文创作、技术优化、内容编辑、链接策略、转化率分析，全流程自动化产出高质量SEO内容, Value: 1
+										286 text S
+										287 text SEO 内容营销团队
+										288 text Agent
+										289 text 7位专业角色分5阶段协作：关键词研究、SEO长文创作、技术优化、内容编辑、链接策略、转化率分析，全流程自动化产出高质量SEO内容
+									290 switch 磊 磊追浪 · 短线冲浪手 Agent A股+美股双修短线派（胜率约60%）：热点捕捉+右侧确认+快进快出，看竞价看封单，破均线无条件离场。, Value: 1
+										291 text 磊
+										292 text 磊追浪 · 短线冲浪手
+										293 text Agent
+										294 text A股+美股双修短线派（胜率约60%）：热点捕捉+右侧确认+快进快出，看竞价看封单，破均线无条件离场。
+									295 switch 洲 洲四方 · 信号派首席 Agent 20年实战信号猎手：政策/产业/新闻/资金四层信号体系交叉验证，资金确认是硬信号，纪律是反人性的。, Value: 1
+										296 text 洲
+										297 text 洲四方 · 信号派首席
+										298 text Agent
+										299 text 20年实战信号猎手：政策/产业/新闻/资金四层信号体系交叉验证，资金确认是硬信号，纪律是反人性的。
+									300 switch 腾 腾讯自选股股票投研专家团 Agent 六位投研专家团，兼擅产业策略、信号捕捉、估值定价、逆向布局、基本面与短线，基于实时行情多视角研判。, Value: 1
+										301 text 腾
+										302 text 腾讯自选股股票投研专家团
+										303 text Agent
+										304 text 六位投研专家团，兼擅产业策略、信号捕捉、估值定价、逆向布局、基本面与短线，基于实时行情多视角研判。
+									305 switch 声 声学工程师分身 Agent 代表真人「声学工程师」的数位分身:负责 麦克风/扬声器参数、声学测试报告 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										306 text 声
+										307 text 声学工程师分身
+										308 text Agent
+										309 text 代表真人「声学工程师」的数位分身:负责 麦克风/扬声器参数、声学测试报告 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									310 switch 声 声学-结构专家分身 Agent 代表真人「声学-结构专家」的数位分身:负责 声腔、振动、材料、测试记录联动 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										311 text 声
+										312 text 声学-结构专家分身
+										313 text Agent
+										314 text 代表真人「声学-结构专家」的数位分身:负责 声腔、振动、材料、测试记录联动 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									315 switch A AI 工程师分身 Agent 代表真人「AI 工程师」的数位分身:负责 RAG、Agent、模型评估、数据记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										316 text A
+										317 text AI 工程师分身
+										318 text Agent
+										319 text 代表真人「AI 工程师」的数位分身:负责 RAG、Agent、模型评估、数据记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									320 switch A AI 硬件系统专家分身 Agent 代表真人「AI 硬件系统专家」的数位分身:负责 端侧模型、数据链路、设备云、评估 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										321 text A
+										322 text AI 硬件系统专家分身
+										323 text Agent
+										324 text 代表真人「AI 硬件系统专家」的数位分身:负责 端侧模型、数据链路、设备云、评估 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									325 switch Value: 1, A AI 产品经理分身 Agent 代表真人「AI 产品经理」的数位分身:负责 Agent 流程、模型评估、Prompt 方案 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										326 text A
+										327 text AI 产品经理分身
+										328 text Agent
+										329 text 代表真人「AI 产品经理」的数位分身:负责 Agent 流程、模型评估、Prompt 方案 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									330 switch 算 算法工程师分身 Agent 代表真人「算法工程师」的数位分身:负责 实验记录、评估报告、数据分析 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										331 text 算
+										332 text 算法工程师分身
+										333 text Agent
+										334 text 代表真人「算法工程师」的数位分身:负责 实验记录、评估报告、数据分析 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									335 switch Value: 1, A Android 系统工程师分身 Agent 代表真人「Android 系统工程师」的数位分身:负责 系统定制、兼容性、日志分析 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										336 text A
+										337 text Android 系统工程师分身
+										338 text Agent
+										339 text 代表真人「Android 系统工程师」的数位分身:负责 系统定制、兼容性、日志分析 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									340 switch 天 天线工程师分身 Agent 代表真人「天线工程师」的数位分身:负责 天线方案、测试数据、调试记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										341 text 天
+										342 text 天线工程师分身
+										343 text Agent
+										344 text 代表真人「天线工程师」的数位分身:负责 天线方案、测试数据、调试记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									345 switch 音 音频工程师分身 Agent 代表真人「音频工程师」的数位分身:负责 音频链路、调音记录、测试问题 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										346 text 音
+										347 text 音频工程师分身
+										348 text Agent
+										349 text 代表真人「音频工程师」的数位分身:负责 音频链路、调音记录、测试问题 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									350 switch 审 审计分身 Agent 代表审计岗的数位分身:审计底稿/抽样/差异分析等文档侧闭环,现场审计与签字必须真人,AI 不能替代审计鉴证责任。, Value: 1
+										351 text 审
+										352 text 审计分身
+										353 text Agent
+										354 text 代表审计岗的数位分身:审计底稿/抽样/差异分析等文档侧闭环,现场审计与签字必须真人,AI 不能替代审计鉴证责任。
+									355 switch 电 电池工程师分身 Agent 代表真人「电池工程师」的数位分身:负责 电池规格、保护方案、容量估算 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										356 text 电
+										357 text 电池工程师分身
+										358 text Agent
+										359 text 代表真人「电池工程师」的数位分身:负责 电池规格、保护方案、容量估算 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									360 switch 蓝 蓝牙工程师分身 Agent 代表真人「蓝牙工程师」的数位分身:负责 BLE 协议、连接日志、兼容性问题 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										361 text 蓝
+										362 text 蓝牙工程师分身
+										363 text Agent
+										364 text 代表真人「蓝牙工程师」的数位分身:负责 BLE 协议、连接日志、兼容性问题 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									365 switch B BSP 工程师分身 Agent 代表真人「BSP 工程师」的数位分身:负责 板级支持包、启动日志、驱动适配 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										366 text B
+										367 text BSP 工程师分身
+										368 text Agent
+										369 text 代表真人「BSP 工程师」的数位分身:负责 板级支持包、启动日志、驱动适配 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									370 switch Value: 1, 经 经营助理 / 总经理助理分身 Agent 代表真人「经营助理 / 总经理助理」的数位分身:负责 会议材料、催办、跨部门同步 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										371 text 经
+										372 text 经营助理 / 总经理助理分身
+										373 text Agent
+										374 text 代表真人「经营助理 / 总经理助理」的数位分身:负责 会议材料、催办、跨部门同步 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									375 switch C CAE 仿真工程师分身 Agent 代表 CAE 工程师的数位分身:仿真流程/结果整理等文档侧闭环,实验对比与验证交给真人,AI 替代不了真实物理验证。, Value: 1
+										376 text C
+										377 text CAE 仿真工程师分身
+										378 text Agent
+										379 text 代表 CAE 工程师的数位分身:仿真流程/结果整理等文档侧闭环,实验对比与验证交给真人,AI 替代不了真实物理验证。
+									380 switch Value: 1, 摄 摄像头工程师分身 Agent 代表真人「摄像头工程师」的数位分身:负责 Camera module、ISP 问题、图像测试 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										381 text 摄
+										382 text 摄像头工程师分身
+										383 text Agent
+										384 text 代表真人「摄像头工程师」的数位分身:负责 Camera module、ISP 问题、图像测试 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									385 switch 蜂 蜂窝通信工程师分身 Agent 代表真人「蜂窝通信工程师」的数位分身:负责 LTE/5G 模块、认证、网络兼容性 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										386 text 蜂
+										387 text 蜂窝通信工程师分身
+										388 text Agent
+										389 text 代表真人「蜂窝通信工程师」的数位分身:负责 LTE/5G 模块、认证、网络兼容性 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									390 switch C CMF 设计师分身 Agent 代表真人「CMF 设计师」的数位分身:负责 颜色、材料、工艺方案整理 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										391 text C
+										392 text CMF 设计师分身
+										393 text Agent
+										394 text 代表真人「CMF 设计师」的数位分身:负责 颜色、材料、工艺方案整理 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									395 switch 通 通信协议工程师分身 Agent 代表真人「通信协议工程师」的数位分身:负责 协议栈、接口文档、问题复盘 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										396 text 通
+										397 text 通信协议工程师分身
+										398 text Agent
+										399 text 代表真人「通信协议工程师」的数位分身:负责 协议栈、接口文档、问题复盘 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									400 switch 连 连接器工程师分身 Agent 代表真人「连接器工程师」的数位分身:负责 接口选型、插拔寿命、供应商资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										401 text 连
+										402 text 连接器工程师分身
+										403 text Agent
+										404 text 代表真人「连接器工程师」的数位分身:负责 接口选型、插拔寿命、供应商资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									405 switch Value: 1, D DFM/DFx 专家分身 Agent 代表真人「DFM/DFx 专家」的数位分身:负责 可制造性、可测试性、可维护性检查 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										406 text D
+										407 text DFM/DFx 专家分身
+										408 text Agent
+										409 text 代表真人「DFM/DFx 专家」的数位分身:负责 可制造性、可测试性、可维护性检查 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									410 switch 显 显示工程师分身 Agent 代表真人「显示工程师」的数位分身:负责 屏幕模组、显示参数、测试数据 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										411 text 显
+										412 text 显示工程师分身
+										413 text Agent
+										414 text 代表真人「显示工程师」的数位分身:负责 屏幕模组、显示参数、测试数据 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									415 switch 显 显示测试工程师分身 Agent 代表真人「显示测试工程师」的数位分身:负责 屏幕亮度、色彩、均匀性测试记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										416 text 显
+										417 text 显示测试工程师分身
+										418 text Agent
+										419 text 代表真人「显示测试工程师」的数位分身:负责 屏幕亮度、色彩、均匀性测试记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									420 switch 电 电气工程师分身 Agent 代表真人「电气工程师」的数位分身:负责 电气方案、接口定义、测试资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										421 text 电
+										422 text 电气工程师分身
+										423 text Agent
+										424 text 代表真人「电气工程师」的数位分身:负责 电气方案、接口定义、测试资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									425 switch 电 电子工程师分身 Agent 代表电子工程师的数位分身:器件选型/参考设计/测试记录等文档侧闭环,实测验证交给真人,AI 替代不了真实电路调试。, Value: 1
+										426 text 电
+										427 text 电子工程师分身
+										428 text Agent
+										429 text 代表电子工程师的数位分身:器件选型/参考设计/测试记录等文档侧闭环,实测验证交给真人,AI 替代不了真实电路调试。
+									430 switch 嵌 嵌入式工程师分身 Agent 代表嵌入式工程师的数位分身:固件架构/驱动/日志分析等文档侧闭环,上板烧录与功耗实测交给真人,AI 替代不了真实硬件联调。, Value: 1
+										431 text 嵌
+										432 text 嵌入式工程师分身
+										433 text Agent
+										434 text 代表嵌入式工程师的数位分身:固件架构/驱动/日志分析等文档侧闭环,上板烧录与功耗实测交给真人,AI 替代不了真实硬件联调。
+									435 switch Value: 1, 嵌 嵌入式-硬件联调专家分身 Agent 代表真人「嵌入式-硬件联调专家」的数位分身:负责 bring-up 记录、问题归因、接口验证 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										436 text 嵌
+										437 text 嵌入式-硬件联调专家分身
+										438 text Agent
+										439 text 代表真人「嵌入式-硬件联调专家」的数位分身:负责 bring-up 记录、问题归因、接口验证 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									440 switch Value: 1, E EMC/EMI 工程师分身 Agent 代表真人「EMC/EMI 工程师」的数位分身:负责 EMC 风险、整改记录、测试报告 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										441 text E
+										442 text EMC/EMI 工程师分身
+										443 text Agent
+										444 text 代表真人「EMC/EMI 工程师」的数位分身:负责 EMC 风险、整改记录、测试报告 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									445 switch 工 工厂交付专家分身 Agent 代表真人「工厂交付专家」的数位分身:负责 排产、交付、工厂异常、验收资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										446 text 工
+										447 text 工厂交付专家分身
+										448 text Agent
+										449 text 代表真人「工厂交付专家」的数位分身:负责 排产、交付、工厂异常、验收资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									450 switch F FAE 应用工程师分身 Agent 代表 FAE 的数位分身:客户技术支持文档/问题分类/现场纪要等文档侧闭环,现场调试与客户关系交给真人,AI 替代不了真实现场支持。, Value: 1
+										451 text F
+										452 text FAE 应用工程师分身
+										453 text Agent
+										454 text 代表 FAE 的数位分身:客户技术支持文档/问题分类/现场纪要等文档侧闭环,现场调试与客户关系交给真人,AI 替代不了真实现场支持。
+									455 switch Value: 1, 失 失效分析工程师 / FA分身 Agent 代表真人「失效分析工程师 / FA」的数位分身:负责 根因分析、批次关联、FA 报告 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										456 text 失
+										457 text 失效分析工程师 / FA分身
+										458 text Agent
+										459 text 代表真人「失效分析工程师 / FA」的数位分身:负责 根因分析、批次关联、FA 报告 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									460 switch 财 财务分身 Agent 代表财务经理的数位分身:负责预算台账/付款节点/现金流预警等文档侧闭环,审批付款与对外承诺由真人承担,AI 不能替代财务责任。, Value: 1
+										461 text 财
+										462 text 财务分身
+										463 text Agent
+										464 text 代表财务经理的数位分身:负责预算台账/付款节点/现金流预警等文档侧闭环,审批付款与对外承诺由真人承担,AI 不能替代财务责任。
+									465 switch 固 固件工程师分身 Agent 代表真人「固件工程师」的数位分身:负责 固件版本、烧录流程、发布记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										466 text 固
+										467 text 固件工程师分身
+										468 text Agent
+										469 text 代表真人「固件工程师」的数位分身:负责 固件版本、烧录流程、发布记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									470 switch 创 创始人/CEO 分身 Agent 代表创始人/CEO 的数位分身:公司控制塔/风险/现金流/决策材料等文档侧闭环,战略决策与对外承诺必须真人,AI 不能替代最终决策。, Value: 1
+										471 text 创
+										472 text 创始人/CEO 分身
+										473 text Agent
+										474 text 代表创始人/CEO 的数位分身:公司控制塔/风险/现金流/决策材料等文档侧闭环,战略决策与对外承诺必须真人,AI 不能替代最终决策。
+									475 switch Value: 1, G GNSS/GPS 工程师分身 Agent 代表真人「GNSS/GPS 工程师」的数位分身:负责 定位精度、天线、测试轨迹分析 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										476 text G
+										477 text GNSS/GPS 工程师分身
+										478 text Agent
+										479 text 代表真人「GNSS/GPS 工程师」的数位分身:负责 定位精度、天线、测试轨迹分析 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									480 switch 硬 硬件质量闭环专家分身 Agent 代表真人「硬件质量闭环专家」的数位分身:负责 缺陷趋势、批次关联、质量闭环 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										481 text 硬
+										482 text 硬件质量闭环专家分身
+										483 text Agent
+										484 text 代表真人「硬件质量闭环专家」的数位分身:负责 缺陷趋势、批次关联、质量闭环 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									485 switch 硬 硬件系统架构专家分身 Agent 代表真人「硬件系统架构专家」的数位分身:负责 系统框图、模块依赖、风险分解 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										486 text 硬
+										487 text 硬件系统架构专家分身
+										488 text Agent
+										489 text 代表真人「硬件系统架构专家」的数位分身:负责 系统框图、模块依赖、风险分解 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									490 switch 硬 硬件系统工程师分身 Agent 代表真人「硬件系统工程师」的数位分身:负责 模块架构、接口关系、系统风险 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										491 text 硬
+										492 text 硬件系统工程师分身
+										493 text Agent
+										494 text 代表真人「硬件系统工程师」的数位分身:负责 模块架构、接口关系、系统风险 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									495 switch 硬 硬件技术员分身 Agent 代表真人「硬件技术员」的数位分身:负责 焊接、改板、样机维护、测试记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										496 text 硬
+										497 text 硬件技术员分身
+										498 text Agent
+										499 text 代表真人「硬件技术员」的数位分身:负责 焊接、改板、样机维护、测试记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									500 switch 硬 硬件测试工程师分身 Agent 代表真人「硬件测试工程师」的数位分身:负责 样机测试、测试数据、问题复现 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										501 text 硬
+										502 text 硬件测试工程师分身
+										503 text Agent
+										504 text 代表真人「硬件测试工程师」的数位分身:负责 样机测试、测试数据、问题复现 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									505 switch 医 医疗健康协作分身 Agent 代表医疗健康协作岗的数位分身:病历整理/随访提醒/健康资料等文档侧闭环,诊断与处方必须真人医生,AI 不能替代医疗责任。, Value: 1
+										506 text 医
+										507 text 医疗健康协作分身
+										508 text Agent
+										509 text 代表医疗健康协作岗的数位分身:病历整理/随访提醒/健康资料等文档侧闭环,诊断与处方必须真人医生,AI 不能替代医疗责任。
+									510 switch 人 人力资源分身 Agent 代表 HR 的数位分身:负责 JD/候选人对比/面试安排等流程侧闭环,面试判断与人事决策由真人承担,AI 不能替代人事责任。, Value: 1
+										511 text 人
+										512 text 人力资源分身
+										513 text Agent
+										514 text 代表 HR 的数位分身:负责 JD/候选人对比/面试安排等流程侧闭环,面试判断与人事决策由真人承担,AI 不能替代人事责任。
+									515 switch 硬 硬件工程师分身 Agent 代表硬件工程师的数位分身:负责硬件方案/原理图/BOM/DFM 的设计侧闭环,打样打板贴片实测交给真人板厂,AI 替代不了真实硬件验证。, Value: 1
+										516 text 硬
+										517 text 硬件工程师分身
+										518 text Agent
+										519 text 代表硬件工程师的数位分身:负责硬件方案/原理图/BOM/DFM 的设计侧闭环,打样打板贴片实测交给真人板厂,AI 替代不了真实硬件验证。
+									520 switch 硬 硬件产品经理分身 Agent 代表硬件产品经理的数位分身:硬件规格/打样问题/BOM 关联等文档侧闭环,产品决策与对外承诺必须真人,AI 替代不了真实产品判断。, Value: 1
+										521 text 硬
+										522 text 硬件产品经理分身
+										523 text Agent
+										524 text 代表硬件产品经理的数位分身:硬件规格/打样问题/BOM 关联等文档侧闭环,产品决策与对外承诺必须真人,AI 替代不了真实产品判断。
+									525 switch Value: 1, 图 图像质量工程师 / IQ Engineer分身 Agent 代表真人「图像质量工程师 / IQ Engineer」的数位分身:负责 样张对比、画质问题分类 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										526 text 图
+										527 text 图像质量工程师 / IQ Engineer分身
+										528 text Agent
+										529 text 代表真人「图像质量工程师 / IQ Engineer」的数位分身:负责 样张对比、画质问题分类 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									530 switch 工 工业设计师分身 Agent 代表工业设计师的数位分身:外观概念/CMF/竞品分析等设计侧闭环,手板评审与签样交给真人,AI 替代不了真实审美评审。, Value: 1
+										531 text 工
+										532 text 工业设计师分身
+										533 text Agent
+										534 text 代表工业设计师的数位分身:外观概念/CMF/竞品分析等设计侧闭环,手板评审与签样交给真人,AI 替代不了真实审美评审。
+									535 switch 红 红外工程师分身 Agent 代表真人「红外工程师」的数位分身:负责 红外传感、热成像、测试资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										536 text 红
+										537 text 红外工程师分身
+										538 text Agent
+										539 text 代表真人「红外工程师」的数位分身:负责 红外传感、热成像、测试资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									540 switch 注 注塑工程师分身 Agent 代表真人「注塑工程师」的数位分身:负责 注塑参数、缺陷归类、工艺记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										541 text 注
+										542 text 注塑工程师分身
+										543 text Agent
+										544 text 代表真人「注塑工程师」的数位分身:负责 注塑参数、缺陷归类、工艺记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									545 switch 投 投融资分析师分身 Agent 代表投融资分析师的分身:尽调资料/财务模型/条款对比等文档侧闭环,尽调判断与签约必须真人,AI 不能替代投资决策责任。, Value: 1
+										546 text 投
+										547 text 投融资分析师分身
+										548 text Agent
+										549 text 代表投融资分析师的分身:尽调资料/财务模型/条款对比等文档侧闭环,尽调判断与签约必须真人,AI 不能替代投资决策责任。
+									550 switch 律 律师分身 Agent 代表律师的数位分身:案件资料/法律检索/文书草稿等文档侧闭环,出庭签字与执业责任必须真人律师,AI 不能替代执业责任。, Value: 1
+										551 text 律
+										552 text 律师分身
+										553 text Agent
+										554 text 代表律师的数位分身:案件资料/法律检索/文书草稿等文档侧闭环,出庭签字与执业责任必须真人律师,AI 不能替代执业责任。
+									555 switch 法 法务合规分身 Agent 代表法务的数位分身:负责合同初审/条款风险/合规清单等文档侧闭环,签字盖章与法律责任由真人承担,AI 不能承担法律后果。, Value: 1
+										556 text 法
+										557 text 法务合规分身
+										558 text Agent
+										559 text 代表法务的数位分身:负责合同初审/条款风险/合规清单等文档侧闭环,签字盖章与法律责任由真人承担,AI 不能承担法律后果。
+									560 switch 激 激光/雷达工程师分身 Agent 代表真人「激光/雷达工程师」的数位分身:负责 LiDAR/ToF 参数、测试数据 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										561 text 激
+										562 text 激光/雷达工程师分身
+										563 text Agent
+										564 text 代表真人「激光/雷达工程师」的数位分身:负责 LiDAR/ToF 参数、测试数据 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									565 switch Value: 1, L Linux 驱动工程师分身 Agent 代表真人「Linux 驱动工程师」的数位分身:负责 驱动代码、内核日志、接口说明 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										566 text L
+										567 text Linux 驱动工程师分身
+										568 text Agent
+										569 text 代表真人「Linux 驱动工程师」的数位分身:负责 驱动代码、内核日志、接口说明 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									570 switch 机 机器视觉算法工程师分身 Agent 代表真人「机器视觉算法工程师」的数位分身:负责 视觉模型、样本、评估指标 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										571 text 机
+										572 text 机器视觉算法工程师分身
+										573 text Agent
+										574 text 代表真人「机器视觉算法工程师」的数位分身:负责 视觉模型、样本、评估指标 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									575 switch 生 生产制造工程师分身 Agent 代表生产制造工程师的数位分身:负责工艺流程/试产计划/良率分析等文档侧闭环,产线调机与现场改善由真人执行,AI 替代不了真实产线。, Value: 1
+										576 text 生
+										577 text 生产制造工程师分身
+										578 text Agent
+										579 text 代表生产制造工程师的数位分身:负责工艺流程/试产计划/良率分析等文档侧闭环,产线调机与现场改善由真人执行,AI 替代不了真实产线。
+									580 switch 材 材料工程师分身 Agent 代表真人「材料工程师」的数位分身:负责 材料对比、供应商资料、失效记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										581 text 材
+										582 text 材料工程师分身
+										583 text Agent
+										584 text 代表真人「材料工程师」的数位分身:负责 材料对比、供应商资料、失效记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									585 switch 机 机械工程师分身 Agent 代表真人「机械工程师」的数位分身:负责 结构需求、装配问题、供应商修改点 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										586 text 机
+										587 text 机械工程师分身
+										588 text Agent
+										589 text 代表真人「机械工程师」的数位分身:负责 结构需求、装配问题、供应商修改点 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									590 switch 机 机电一体化专家分身 Agent 代表真人「机电一体化专家」的数位分身:负责 联调问题、接口关系、运动机构风险 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										591 text 机
+										592 text 机电一体化专家分身
+										593 text Agent
+										594 text 代表真人「机电一体化专家」的数位分身:负责 联调问题、接口关系、运动机构风险 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									595 switch N NPI 量产导入分身 Agent 代表 NPI 工程师的数位分身:试产计划/齐套/良率/变更追踪等文档侧闭环,试产放行与现场处置交给真人,AI 替代不了真实产线试产。, Value: 1
+										596 text N
+										597 text NPI 量产导入分身
+										598 text Agent
+										599 text 代表 NPI 工程师的数位分身:试产计划/齐套/良率/变更追踪等文档侧闭环,试产放行与现场处置交给真人,AI 替代不了真实产线试产。
+									600 switch 护 护理协作分身 Agent 代表护理协作岗的数位分身:护理计划/观察记录等文档侧闭环,打针发药等实际护理操作必须真人护士,AI 不能替代护理操作与责任。, Value: 1
+										601 text 护
+										602 text 护理协作分身
+										603 text Agent
+										604 text 代表护理协作岗的数位分身:护理计划/观察记录等文档侧闭环,打针发药等实际护理操作必须真人护士,AI 不能替代护理操作与责任。
+									605 switch 运 运营管理分身 Agent 代表运营管理岗的数位分身:经营日报/指标看板/流程清单等文档侧闭环,现场管理与客户处置交给真人,AI 替代不了真实运营现场。, Value: 1
+										606 text 运
+										607 text 运营管理分身
+										608 text Agent
+										609 text 代表运营管理岗的数位分身:经营日报/指标看板/流程清单等文档侧闭环,现场管理与客户处置交给真人,AI 替代不了真实运营现场。
+									610 switch 光 光学工程师分身 Agent 代表光学工程师的数位分身:镜头/传感器参数/光学测试资料等文档侧闭环,装调与测试交给真人,AI 替代不了真实光学验证。, Value: 1
+										611 text 光
+										612 text 光学工程师分身
+										613 text Agent
+										614 text 代表光学工程师的数位分身:镜头/传感器参数/光学测试资料等文档侧闭环,装调与测试交给真人,AI 替代不了真实光学验证。
+									615 switch 光 光机工程师分身 Agent 代表真人「光机工程师」的数位分身:负责 光机结构、公差、装调 checklist 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										616 text 光
+										617 text 光机工程师分身
+										618 text Agent
+										619 text 代表真人「光机工程师」的数位分身:负责 光机结构、公差、装调 checklist 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									620 switch Value: 1, 光 光机系统专家分身 Agent 代表真人「光机系统专家」的数位分身:负责 光路与结构约束、装调 checklist、风险清单 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										621 text 光
+										622 text 光机系统专家分身
+										623 text Agent
+										624 text 代表真人「光机系统专家」的数位分身:负责 光路与结构约束、装调 checklist、风险清单 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									625 switch 光 光电工程师分身 Agent 代表真人「光电工程师」的数位分身:负责 光电器件、信号链、测试报告 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										626 text 光
+										627 text 光电工程师分身
+										628 text Agent
+										629 text 代表真人「光电工程师」的数位分身:负责 光电器件、信号链、测试报告 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									630 switch Value: 1, P PCB 工程师分身 Agent 代表真人「PCB 工程师」的数位分身:负责 DFM/DRC checklist、布局规则 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										631 text P
+										632 text PCB 工程师分身
+										633 text Agent
+										634 text 代表真人「PCB 工程师」的数位分身:负责 DFM/DRC checklist、布局规则 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									635 switch Value: 1, P PCB Layout 工程师分身 Agent 代表真人「PCB Layout 工程师」的数位分身:负责 走线规则、阻抗规则、生产文件检查 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										636 text P
+										637 text PCB Layout 工程师分身
+										638 text Agent
+										639 text 代表真人「PCB Layout 工程师」的数位分身:负责 走线规则、阻抗规则、生产文件检查 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									640 switch P PMO 经理分身 Agent 代表真人「PMO 经理」的数位分身:负责 多项目组合、资源冲突、延期统计 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										641 text P
+										642 text PMO 经理分身
+										643 text Agent
+										644 text 代表真人「PMO 经理」的数位分身:负责 多项目组合、资源冲突、延期统计 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									645 switch 电 电源工程师分身 Agent 代表真人「电源工程师」的数位分身:负责 电源树、功耗、充电方案、电源风险 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										646 text 电
+										647 text 电源工程师分身
+										648 text Agent
+										649 text 代表真人「电源工程师」的数位分身:负责 电源树、功耗、充电方案、电源风险 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									650 switch Value: 1, 电 电源完整性工程师 / PI分身 Agent 代表真人「电源完整性工程师 / PI」的数位分身:负责 供电网络、噪声、仿真记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										651 text 电
+										652 text 电源完整性工程师 / PI分身
+										653 text Agent
+										654 text 代表真人「电源完整性工程师 / PI」的数位分身:负责 供电网络、噪声、仿真记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									655 switch 电 电源-热专家分身 Agent 代表真人「电源-热专家」的数位分身:负责 电源树、功耗预算、温升与安全风险 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										656 text 电
+										657 text 电源-热专家分身
+										658 text Agent
+										659 text 代表真人「电源-热专家」的数位分身:负责 电源树、功耗预算、温升与安全风险 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									660 switch 售 售前解决方案专家分身 Agent 代表真人「售前解决方案专家」的数位分身:负责 客户方案、演示材料、需求到交付闭环 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										661 text 售
+										662 text 售前解决方案专家分身
+										663 text Agent
+										664 text 代表真人「售前解决方案专家」的数位分身:负责 客户方案、演示材料、需求到交付闭环 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									665 switch 工 工艺工程师分身 Agent 代表工艺工程师的数位分身:工序参数/SOP/改善建议等文档侧闭环,现场调机与首件确认交给真人,AI 替代不了真实产线工艺。, Value: 1
+										666 text 工
+										667 text 工艺工程师分身
+										668 text Agent
+										669 text 代表工艺工程师的数位分身:工序参数/SOP/改善建议等文档侧闭环,现场调机与首件确认交给真人,AI 替代不了真实产线工艺。
+									670 switch Value: 1, 采 采购经理 / Buyer分身 Agent 代表真人「采购经理 / Buyer」的数位分身:负责 RFQ、比价、催交、采购单草稿 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										671 text 采
+										672 text 采购经理 / Buyer分身
+										673 text Agent
+										674 text 代表真人「采购经理 / Buyer」的数位分身:负责 RFQ、比价、催交、采购单草稿 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									675 switch 产 产品经理分身 Agent 代表产品经理的数位分身:PRD/需求池/用户反馈等文档侧闭环,需求取舍与版本决策必须真人,AI 不能替代产品判断。, Value: 1
+										676 text 产
+										677 text 产品经理分身
+										678 text Agent
+										679 text 代表产品经理的数位分身:PRD/需求池/用户反馈等文档侧闭环,需求取舍与版本决策必须真人,AI 不能替代产品判断。
+									680 switch Value: 1, 产 产品合规认证专家分身 Agent 代表真人「产品合规认证专家」的数位分身:负责 CE/FCC/ROHS/电池等认证资料与风险 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										681 text 产
+										682 text 产品合规认证专家分身
+										683 text Agent
+										684 text 代表真人「产品合规认证专家」的数位分身:负责 CE/FCC/ROHS/电池等认证资料与风险 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									685 switch 产 产品设计工程师分身 Agent 代表真人「产品设计工程师」的数位分身:负责 产品架构、结构方案、量产问题追踪 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										686 text 产
+										687 text 产品设计工程师分身
+										688 text Agent
+										689 text 代表真人「产品设计工程师」的数位分身:负责 产品架构、结构方案、量产问题追踪 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									690 switch 产 产品完整性工程师分身 Agent 代表真人「产品完整性工程师」的数位分身:负责 可靠性、质量、制造放行材料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										691 text 产
+										692 text 产品完整性工程师分身
+										693 text Agent
+										694 text 代表真人「产品完整性工程师」的数位分身:负责 可靠性、质量、制造放行材料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									695 switch 项 项目经理分身 Agent 代表项目经理的数位分身:负责 WBS/排期/周报/风险台账等文档侧闭环,跨部门推动真人与关键决策由真人承担,AI 替代不了真实组织协同。, Value: 1
+										696 text 项
+										697 text 项目经理分身
+										698 text Agent
+										699 text 代表项目经理的数位分身:负责 WBS/排期/周报/风险台账等文档侧闭环,跨部门推动真人与关键决策由真人承担,AI 替代不了真实组织协同。
+									700 switch Value: 1, 样 样机工程师 / Prototype Engineer分身 Agent 代表真人「样机工程师 / Prototype Engineer」的数位分身:负责 样机制作、改版记录、问题追踪 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										701 text 样
+										702 text 样机工程师 / Prototype Engineer分身
+										703 text Agent
+										704 text 代表真人「样机工程师 / Prototype Engineer」的数位分身:负责 样机制作、改版记录、问题追踪 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									705 switch 心 心理咨询师分身 Agent 代表心理咨询协作岗的数位分身:咨询记录整理/自助资料/预约等文档侧闭环,真实咨询关系与伦理责任必须真人咨询师,AI 不能替代。, Value: 1
+										706 text 心
+										707 text 心理咨询师分身
+										708 text Agent
+										709 text 代表心理咨询协作岗的数位分身:咨询记录整理/自助资料/预约等文档侧闭环,真实咨询关系与伦理责任必须真人咨询师,AI 不能替代。
+									710 switch 质 质量工程师分身 Agent 代表质量工程师的数位分身:负责检验计划/缺陷归类/质量报告/8D 草稿等文档侧闭环,现场验货/FAI/签样由真人执行,AI 替代不了真实检验。, Value: 1
+										711 text 质
+										712 text 质量工程师分身
+										713 text Agent
+										714 text 代表质量工程师的数位分身:负责检验计划/缺陷归类/质量报告/8D 草稿等文档侧闭环,现场验货/FAI/签样由真人执行,AI 替代不了真实检验。
+									715 switch 可 可靠性工程师分身 Agent 代表可靠性工程师的数位分身:老化/跌落/温湿度测试计划等文档侧闭环,真实环境实测交给真人,AI 替代不了真实老化验证。, Value: 1
+										716 text 可
+										717 text 可靠性工程师分身
+										718 text Agent
+										719 text 代表可靠性工程师的数位分身:老化/跌落/温湿度测试计划等文档侧闭环,真实环境实测交给真人,AI 替代不了真实老化验证。
+									720 switch 射 射频工程师分身 Agent 代表射频工程师的数位分身:RF 测试/天线资料/认证问题等文档侧闭环,暗室实测与认证送测交给真人,AI 替代不了真实射频验证。, Value: 1
+										721 text 射
+										722 text 射频工程师分身
+										723 text Agent
+										724 text 代表射频工程师的数位分身:RF 测试/天线资料/认证问题等文档侧闭环,暗室实测与认证送测交给真人,AI 替代不了真实射频验证。
+									725 switch 射 射频-结构专家分身 Agent 代表真人「射频-结构专家」的数位分身:负责 天线位置、外壳材料、认证风险 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										726 text 射
+										727 text 射频-结构专家分身
+										728 text Agent
+										729 text 代表真人「射频-结构专家」的数位分身:负责 天线位置、外壳材料、认证风险 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									730 switch 机 机器人系统专家分身 Agent 代表真人「机器人系统专家」的数位分身:负责 运动控制、传感融合、现场调试记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										731 text 机
+										732 text 机器人系统专家分身
+										733 text Agent
+										734 text 代表真人「机器人系统专家」的数位分身:负责 运动控制、传感融合、现场调试记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									735 switch 销 销售与商务分身 Agent 代表销售/BD 经理的数位分身:负责客户资料/方案草稿/跟进节奏等文档侧闭环,谈判签约与客户关系由真人承担,AI 替代不了真实商务关系。, Value: 1
+										736 text 销
+										737 text 销售与商务分身
+										738 text Agent
+										739 text 代表销售/BD 经理的数位分身:负责客户资料/方案草稿/跟进节奏等文档侧闭环,谈判签约与客户关系由真人承担,AI 替代不了真实商务关系。
+									740 switch 传 传感器工程师分身 Agent 代表真人「传感器工程师」的数位分身:负责 传感器选型、标定文档、精度对比 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										741 text 传
+										742 text 传感器工程师分身
+										743 text Agent
+										744 text 代表真人「传感器工程师」的数位分身:负责 传感器选型、标定文档、精度对比 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									745 switch Value: 1, 信 信号完整性工程师 / SI分身 Agent 代表真人「信号完整性工程师 / SI」的数位分身:负责 高速信号、阻抗、仿真资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										746 text 信
+										747 text 信号完整性工程师 / SI分身
+										748 text Agent
+										749 text 代表真人「信号完整性工程师 / SI」的数位分身:负责 高速信号、阻抗、仿真资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									750 switch Value: 1, 智 智能硬件产品架构专家分身 Agent 代表真人「智能硬件产品架构专家」的数位分身:负责 产品定义、功能取舍、成本/交期影响 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										751 text 智
+										752 text 智能硬件产品架构专家分身
+										753 text Agent
+										754 text 代表真人「智能硬件产品架构专家」的数位分身:负责 产品定义、功能取舍、成本/交期影响 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									755 switch 智 智能制造自动化专家分身 Agent 代表真人「智能制造自动化专家」的数位分身:负责 产线自动化、设备数据、良率分析 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										756 text 智
+										757 text 智能制造自动化专家分身
+										758 text Agent
+										759 text 代表真人「智能制造自动化专家」的数位分身:负责 产线自动化、设备数据、良率分析 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									760 switch 结 结构工程师分身 Agent 代表结构工程师的数位分身:负责结构方案/3D 图纸审核/DFM/发包规格的设计侧闭环,开模手板装配验证交给真人模具厂,AI 替代不了真实打样验证。, Value: 1
+										761 text 结
+										762 text 结构工程师分身
+										763 text Agent
+										764 text 代表结构工程师的数位分身:负责结构方案/3D 图纸审核/DFM/发包规格的设计侧闭环,开模手板装配验证交给真人模具厂,AI 替代不了真实打样验证。
+									765 switch 供 供应商质量专家分身 Agent 代表真人「供应商质量专家」的数位分身:负责 供应商 8D、来料异常、审核资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										766 text 供
+										767 text 供应商质量专家分身
+										768 text Agent
+										769 text 代表真人「供应商质量专家」的数位分身:负责 供应商 8D、来料异常、审核资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									770 switch 供 供应链与采购分身 Agent 代表供应链/采购经理的数位分身:负责 RFQ/比价/风险台账/催交单等文档侧闭环,议价成交与供应商关系必须真人,AI 替代不了真实商务。, Value: 1
+										771 text 供
+										772 text 供应链与采购分身
+										773 text Agent
+										774 text 代表供应链/采购经理的数位分身:负责 RFQ/比价/风险台账/催交单等文档侧闭环,议价成交与供应商关系必须真人,AI 替代不了真实商务。
+									775 switch 供 供应链工程专家分身 Agent 代表真人「供应链工程专家」的数位分身:负责 缺料风险、替代料、成本与工程影响 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										776 text 供
+										777 text 供应链工程专家分身
+										778 text Agent
+										779 text 代表真人「供应链工程专家」的数位分身:负责 缺料风险、替代料、成本与工程影响 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									780 switch 税 税务分身 Agent 代表税务岗的数位分身:申报资料/政策梳理/风险提示等文档侧闭环,申报与筹划决策必须真人,AI 不能替代税务责任。, Value: 1
+										781 text 税
+										782 text 税务分身
+										783 text Agent
+										784 text 代表税务岗的数位分身:申报资料/政策梳理/风险提示等文档侧闭环,申报与筹划决策必须真人,AI 不能替代税务责任。
+									785 switch Value: 1, 技 技术项目经理 / TPM分身 Agent 代表真人「技术项目经理 / TPM」的数位分身:负责 跨研发、供应链、制造里程碑推进 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+										786 text 技
+										787 text 技术项目经理 / TPM分身
+										788 text Agent
+										789 text 代表真人「技术项目经理 / TPM」的数位分身:负责 跨研发、供应链、制造里程碑推进 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									790 switch 测 测试工程师分身 Agent 代表真人「测试工程师」的数位分身:负责 测试用例、测试数据、问题复现 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										791 text 测
+										792 text 测试工程师分身
+										793 text Agent
+										794 text 代表真人「测试工程师」的数位分身:负责 测试用例、测试数据、问题复现 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									795 switch 热 热设计工程师分身 Agent 代表真人「热设计工程师」的数位分身:负责 温升数据、散热方案、热仿真资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										796 text 热
+										797 text 热设计工程师分身
+										798 text Agent
+										799 text 代表真人「热设计工程师」的数位分身:负责 温升数据、散热方案、热仿真资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									800 switch 热 热仿真工程师分身 Agent 代表真人「热仿真工程师」的数位分身:负责 CFD/热仿真流程、结果对比 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										801 text 热
+										802 text 热仿真工程师分身
+										803 text Agent
+										804 text 代表真人「热仿真工程师」的数位分身:负责 CFD/热仿真流程、结果对比 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									805 switch 热 热-结构联合专家分身 Agent 代表真人「热-结构联合专家」的数位分身:负责 散热路径、结构约束、温升数据关联 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										806 text 热
+										807 text 热-结构联合专家分身
+										808 text Agent
+										809 text 代表真人「热-结构联合专家」的数位分身:负责 散热路径、结构约束、温升数据关联 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									810 switch 热 热测试工程师分身 Agent 代表真人「热测试工程师」的数位分身:负责 热测试计划、数据整理、报告 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										811 text 热
+										812 text 热测试工程师分身
+										813 text Agent
+										814 text 代表真人「热测试工程师」的数位分身:负责 热测试计划、数据整理、报告 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									815 switch 模 模具工程师分身 Agent 代表真人「模具工程师」的数位分身:负责 开模问题、模具修改、试模记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										816 text 模
+										817 text 模具工程师分身
+										818 text Agent
+										819 text 代表真人「模具工程师」的数位分身:负责 开模问题、模具修改、试模记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									820 switch 触 触控工程师分身 Agent 代表真人「触控工程师」的数位分身:负责 触控模组、灵敏度、测试问题 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										821 text 触
+										822 text 触控工程师分身
+										823 text Agent
+										824 text 代表真人「触控工程师」的数位分身:负责 触控模组、灵敏度、测试问题 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									825 switch 用 用户研究员分身 Agent 代表真人「用户研究员」的数位分身:负责 访谈提纲、反馈聚类、洞察摘要 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										826 text 用
+										827 text 用户研究员分身
+										828 text Agent
+										829 text 代表真人「用户研究员」的数位分身:负责 访谈提纲、反馈聚类、洞察摘要 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									830 switch 振 振动工程师分身 Agent 代表真人「振动工程师」的数位分身:负责 振动测试、结构噪声、异常记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										831 text 振
+										832 text 振动工程师分身
+										833 text Agent
+										834 text 代表真人「振动工程师」的数位分身:负责 振动测试、结构噪声、异常记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									835 switch 视 视觉工程师分身 Agent 代表真人「视觉工程师」的数位分身:负责 图像质量、视觉算法评估资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										836 text 视
+										837 text 视觉工程师分身
+										838 text Agent
+										839 text 代表真人「视觉工程师」的数位分身:负责 图像质量、视觉算法评估资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									840 switch W Wi-Fi 工程师分身 Agent 代表真人「Wi-Fi 工程师」的数位分身:负责 网络测试、吞吐、掉线问题归类 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										841 text W
+										842 text Wi-Fi 工程师分身
+										843 text Agent
+										844 text 代表真人「Wi-Fi 工程师」的数位分身:负责 网络测试、吞吐、掉线问题归类 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									845 switch 无 无线通信工程师分身 Agent 代表真人「无线通信工程师」的数位分身:负责 蓝牙/Wi-Fi/蜂窝连接问题整理 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。, Value: 1
+										846 text 无
+										847 text 无线通信工程师分身
+										848 text Agent
+										849 text 代表真人「无线通信工程师」的数位分身:负责 蓝牙/Wi-Fi/蜂窝连接问题整理 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									850 switch 文 文衡价 · 估值分析师 Agent 12年券商策略师出身：PE Bands/PEG/EPS 定价，宏观对冲+估值定价学院派，熊市仍能维持正收益。, Value: 1
+										851 text 文
+										852 text 文衡价 · 估值分析师
+										853 text Agent
+										854 text 12年券商策略师出身：PE Bands/PEG/EPS 定价，宏观对冲+估值定价学院派，熊市仍能维持正收益。
+									855 switch Value: 1, L Luna Agent Luna · 现实职业是 AI 漫剧制片人与内容增长导演，负责剧本、分镜、角色一致性、生成制作和平台增长；在 ECHO 世界中是叙事渗透手 Dream Walker。两种身份共享故事构建、情绪节奏与传播能力。
+										856 text L
+										857 text Luna
+										858 text Agent
+										859 text Luna · 现实职业是 AI 漫剧制片人与内容增长导演，负责剧本、分镜、角色一致性、生成制作和平台增长；在 ECHO 世界中是叙事渗透手 Dream Walker。两种身份共享故事构建、情绪节奏与传播能力。
+									860 switch 小 小台 Agent 为不同人群定制专属数字工作台，覆盖学习备考、职场效率、自媒体创作、宝妈育儿、生活管理五大场景，PC/移动端双适配，一键部署即用, Value: 1
+										861 text 小
+										862 text 小台
+										863 text Agent
+										864 text 为不同人群定制专属数字工作台，覆盖学习备考、职场效率、自媒体创作、宝妈育儿、生活管理五大场景，PC/移动端双适配，一键部署即用
+									865 switch M mix octopus 工具调用, Value: 1
+										866 text M
+										867 text mix
+										868 text octopus
+										869 text 工具调用
+									870 switch B big-pickle openai-compatible 工具调用 · 128K 上下文, Value: 1
+										871 text B
+										872 text big-pickle
+										873 text openai-compatible
+										874 text 工具调用 · 128K 上下文
+									875 switch M muse-spark-1.2-contributor-free openai-compatible 工具调用 · 128K 上下文, Value: 1
+										876 text M
+										877 text muse-spark-1.2-contributor-free
+										878 text openai-compatible
+										879 text 工具调用 · 128K 上下文
+									880 switch M mimo-v2.5-free openai-compatible 工具调用 · 128K 上下文, Value: 1
+										881 text M
+										882 text mimo-v2.5-free
+										883 text openai-compatible
+										884 text 工具调用 · 128K 上下文
+									885 switch N nemotron-3-ultra-free openai-compatible 工具调用 · 128K 上下文, Value: 1
+										886 text N
+										887 text nemotron-3-ultra-free
+										888 text openai-compatible
+										889 text 工具调用 · 128K 上下文
+									890 switch N nemotron-3.5-lightning-free openai-compatible 工具调用 · 128K 上下文, Value: 1
+										891 text N
+										892 text nemotron-3.5-lightning-free
+										893 text openai-compatible
+										894 text 工具调用 · 128K 上下文
+									895 switch D deepseek-v4-flash-free openai-compatible 工具调用 · 128K 上下文, Value: 1
+										896 text D
+										897 text deepseek-v4-flash-free
+										898 text openai-compatible
+										899 text 工具调用 · 128K 上下文
+									900 switch L ling-3.0-flash-fin-free openai-compatible 工具调用 · 128K 上下文, Value: 1
+										901 text L
+										902 text ling-3.0-flash-fin-free
+										903 text openai-compatible
+										904 text 工具调用 · 128K 上下文
+									905 switch M muse-spark-1.3-contributor-free openai-compatible 工具调用 · 128K 上下文, Value: 1
+										906 text M
+										907 text muse-spark-1.3-contributor-free
+										908 text openai-compatible
+										909 text 工具调用 · 128K 上下文
+									910 text 勾选后，Agent 可在任务中调用这些模型与本地能力。
+								64 button (collapsed) Description: 选择本地创作项目, Secondary Actions: Expand
+								65 button 精选
+								66 button 官方 Skill
+								67 button 特效包装
+								68 button 红人带货
+								69 button 影视片头
+								70 button MV
+								71 button 二次元PV
+								72 button 品牌广告
+								73 button UI动效
+								74 button 短剧漫剧
+								75 container
+									76 text 工作流
+									77 button 使用模板
+									78 button 预览 AI 漫剧分阶段制作
+								79 text AI 漫剧分阶段制作
+								80 text 从剧本、锚点和分镜到镜头与成片，支持逐阶段审核、续跑和局部重试。
+								81 text Echo Design
+								82 container
+									83 text 示例预览
+									84 button 使用提示词
+									85 button 预览 产品发布视觉套件
+								86 text 产品发布视觉套件
+								87 text 从卖点、主视觉到横竖版短片，完成一套统一的发布内容。
+								88 text Echo Design
+								89 container
+									90 text 示例预览
+									91 button 使用提示词
+									92 button 预览 手绘实拍融合短片
+								93 text 手绘实拍融合短片
+								94 text 让实拍空间与手绘线条发生接触、变形和节奏化响应。
+								95 text Echo Design
+								96 container
+									97 text 示例预览
+									98 button 使用提示词
+									99 button 预览 复古拼贴音乐 MV
+								100 text 复古拼贴音乐 MV
+								101 text 用纸张纹理、海报墙与卡点剪辑建立完整的音乐视觉系统。
+								102 text Echo Design
+								103 container
+									104 text 示例预览
+									105 button 使用提示词
+									106 button 预览 数字产品电影感演示
+								107 text 数字产品电影感演示
+								108 text 把真实界面、交互路径和动效参考组织成可审片的产品宣传片。
+								109 text Echo Design
+								110 container
+									111 text 示例预览
+									112 button 使用提示词
+									113 button 预览 美妆达人种草短片
+								114 text 美妆达人种草短片
+								115 text 围绕真实使用过程组织口播、产品特写、字幕与转化节奏。
+								116 text Echo Design
+								117 container
+									118 text 示例预览
+									119 button 使用提示词
+									120 button 预览 未来档案电影片头
+								121 text 未来档案电影片头
+								122 text 以档案排版、扫描纹理和空间镜头建立克制的悬疑开场。
+								123 text Echo Design
+								124 container
+									125 text 示例预览
+									126 button 使用提示词
+									127 button 预览 角色觉醒动画 PV
+								128 text 角色觉醒动画 PV
+								129 text 围绕角色能力与情绪转折建立统一的分镜、色彩和音乐动机。
+								130 text Echo Design
+								131 container
+									132 text 示例预览
+									133 button 使用提示词
+									134 button 预览 便携科技产品短广告
+								135 text 便携科技产品短广告
+								136 text 用极简空间、结构拆解和生活场景呈现产品的核心卖点。
+								137 text Echo Design
+								138 container
+									139 text 示例预览
+									140 button 使用提示词
+									141 button 预览 角色一致性分镜
+								142 text 角色一致性分镜
+								143 text 锁定人物外观、服装与空间关系，生成可继续制作的连续镜头。
+								144 text Echo Design
+								145 container
+									146 text 示例预览
+									147 button 使用提示词
+									148 button 预览 舞者轨迹视觉包装
+								149 text 舞者轨迹视觉包装
+								150 text 让几何框线、粒子与排版跟随舞者动作和节拍响应。
+								151 text Echo Design
+								152 container
+									153 text 示例预览
+									154 button 使用提示词
+									155 button 预览 城市旅行品牌短片
+								156 text 城市旅行品牌短片
+								157 text 把地点、人物和路线组织成具有品牌识别度的旅行叙事。
+								158 text Echo Design
+								159 container
+									160 text 示例预览
+									161 button 使用提示词
+									162 button 预览 智能工作台交互演示
+								163 text 智能工作台交互演示
+								164 text 准确展示拖拽、编排、协作和结果预览的完整界面路径。
+								165 text Echo Design
+						166 container Notifications alt+T
+							167 content list
+								168 container
+									169 image
+									170 text 可在模型设置中配置图像、视频和语音模型
+		38 container Notifications alt+T
+
+The focused UI element is 61 button (expanded) 模型, Secondary Actions: Collapse

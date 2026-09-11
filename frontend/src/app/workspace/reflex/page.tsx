@@ -1,3 +1,4 @@
+import { serviceErrorMessage, requireArray } from "@/core/utils/service-error";
 /**
  * /workspace/reflex · SpinalCord reflex monitor (React port).
  *
@@ -143,17 +144,21 @@ export function ReflexMonitorContent() {
           // than a hard error so the page still works on older builds.
           .catch(() => ({ tiers: [] as TierInfo[] })),
       ]);
+      if (!s || !Number.isFinite(s.try_count) || !Number.isFinite(s.hit_count))
+        throw new Error("规则统计响应不完整，请重试。");
+      const nextRules = requireArray<Rule>(r?.rules, "规则列表");
       setStats(s);
-      setRules(r.rules ?? []);
+      setRules(nextRules);
       setSeries(t);
       setTiers(ti.tiers ?? []);
       setError(null);
       setTickedAt(new Date());
     } catch (e) {
       swallow(e);
-      setError(t.reflexPage.fetchFailed);
+      setStats(null);
+      setError(serviceErrorMessage(e));
     }
-  }, [t.reflexPage.fetchFailed]);
+  }, []);
 
   useEffect(() => {
     void fetchAll();
@@ -212,8 +217,8 @@ export function ReflexMonitorContent() {
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
       {/* Hero / actions */}
       <section className="workspace-panel px-4 py-4 sm:px-6 sm:py-5">
-        <div className="flex flex-col items-start gap-4 md:flex-row md:items-center">
-          <div className="flex size-11 items-center justify-center rounded-lg bg-gradient-to-br from-success to-cyan-500 text-white shadow-[var(--shadow-md)] shadow-success/20">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-success to-cyan-500 text-white shadow-[var(--shadow-md)] shadow-success/20">
             <ZapIcon className="size-5" />
           </div>
           <div className="min-w-0 flex-1">
@@ -227,7 +232,7 @@ export function ReflexMonitorContent() {
                 : ""}
             </p>
           </div>
-          <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
+          <div className="flex w-full flex-wrap items-center gap-2 xl:w-auto xl:justify-end">
             {/* Gene-lock badge · shows current maturity level +
                     panic state · click to drill into governance
                     controls. Auto-hides when the /api/gene-locks/
@@ -314,8 +319,8 @@ export function ReflexMonitorContent() {
         <StatCard
           icon={<HourglassIcon className="size-4" />}
           label={t.reflexPage.statStale}
-          value={stats?.coverage?.stale.length ?? "—"}
-          tone={(stats?.coverage?.stale.length ?? 0) > 0 ? "warn" : undefined}
+          value={stats?.coverage?.stale?.length ?? "—"}
+          tone={(stats?.coverage?.stale?.length ?? 0) > 0 ? "warn" : undefined}
         />
         <StatCard
           icon={<ClockIcon className="size-4" />}

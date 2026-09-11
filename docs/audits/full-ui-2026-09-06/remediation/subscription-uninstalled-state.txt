@@ -1,0 +1,46 @@
+- button "返回桌面":
+- button "切换全屏":
+- tablist "Workspace surface":
+  - tab "Echo" [selected]:
+    - generic: Echo
+  - tab "AI 浏览器":
+- button "收起侧栏 (Ctrl/⌘+B)" [expanded]:
+- button "新建任务":
+  - generic: 新建任务
+- list:
+  - link "HUB":
+    - /url: "#/workspace/agents?surface=chat"
+    - generic: HUB
+  - link "助手":
+    - /url: "#/workspace/realtime/octopus-assistant?agent=octopus"
+    - generic: 助手
+  - link "设计画布":
+    - /url: "#/workspace/design"
+    - generic: 设计画布
+- list
+- list:
+  - button "展开本地数据库":
+    - generic: 本地数据库
+- list:
+  - button "编辑侧栏":
+- button "收起项目" [expanded]:
+  - generic: 项目
+- button "选择项目空间":
+- button "echo agent 1":
+  - generic: echo agent
+  - generic: "1"
+- button "更多：echo agent":
+- button "收起对话" [expanded]:
+  - generic: 对话
+- button "对话 · 新建任务":
+- button "Eve":
+  - generic: Eve
+- button "设置":
+- main:
+  - heading "订阅暂时不可用" [level=1]
+  - paragraph: 应用尚未安装，请从应用中心完成安装。
+  - button "重新检查":
+    - text: 重新检查
+  - button "前往应用中心":
+    - text: 前往应用中心
+- region "Notifications alt+T"

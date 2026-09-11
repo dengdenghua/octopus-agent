@@ -1,0 +1,88 @@
+{
+  "success": true,
+  "total": 177,
+  "passed": 175,
+  "failed": 0,
+  "skipped": 2,
+  "files": [
+    {
+      "path": "D:/echo agent/frontend/src/components/workspace/agent-workbench-panel.test.tsx",
+      "status": "passed",
+      "skipped": [
+        {
+          "fullName": "<AgentWorkbenchPanel /> renders selected public thinking detail in the summary panel",
+          "status": "skipped"
+        },
+        {
+          "fullName": "<AgentWorkbenchPanel /> renders selected execution detail in the summary panel",
+          "status": "skipped"
+        }
+      ]
+    },
+    {
+      "path": "D:/echo agent/frontend/src/components/workspace/browser-preview-panel.toolbar.test.tsx",
+      "status": "passed",
+      "skipped": []
+    },
+    {
+      "path": "D:/echo agent/frontend/src/components/workspace/create-project-dialog.test.tsx",
+      "status": "passed",
+      "skipped": []
+    },
+    {
+      "path": "D:/echo agent/frontend/src/components/workspace/sidebar-footer.test.tsx",
+      "status": "passed",
+      "skipped": []
+    },
+    {
+      "path": "D:/echo agent/frontend/src/components/workspace/workdir-selector.test.tsx",
+      "status": "passed",
+      "skipped": []
+    },
+    {
+      "path": "D:/echo agent/frontend/src/core/utils/ux-resilience.test.ts",
+      "status": "passed",
+      "skipped": []
+    },
+    {
+      "path": "D:/echo agent/frontend/src/core/workspace/pick-local-directory.test.ts",
+      "status": "passed",
+      "skipped": []
+    },
+    {
+      "path": "D:/echo agent/frontend/src/app/share/[token]/page.test.tsx",
+      "status": "passed",
+      "skipped": []
+    },
+    {
+      "path": "D:/echo agent/frontend/src/app/workspace/channels/page.test.tsx",
+      "status": "passed",
+      "skipped": []
+    },
+    {
+      "path": "D:/echo agent/frontend/src/components/workspace/community/community-data.test.ts",
+      "status": "passed",
+      "skipped": []
+    },
+    {
+      "path": "D:/echo agent/frontend/src/components/workspace/evolution-control-panel/evolution-control-panel.integration.test.tsx",
+      "status": "passed",
+      "skipped": []
+    },
+    {
+      "path": "D:/echo agent/frontend/src/components/workspace/evolution-control-panel/evolution-control-panel.test.tsx",
+      "status": "passed",
+      "skipped": []
+    },
+    {
+      "path": "D:/echo agent/frontend/src/components/workspace/settings/model-settings-page.test.tsx",
+      "status": "passed",
+      "skipped": []
+    },
+    {
+      "path": "D:/echo agent/frontend/src/components/workspace/settings/settings-dialog.test.tsx",
+      "status": "passed",
+      "skipped": []
+    }
+  ]
+}

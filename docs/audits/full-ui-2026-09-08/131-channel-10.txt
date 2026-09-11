@@ -1,0 +1,27 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/channels".
+0 AXWebArea Echo, URL: localhost:3310/#/workspace/channels
+	1 container
+		2 container Notifications alt+T
+		3 container 设置 Twitch 机器人, ID: radix-_r_po_
+			4 heading 设置 Twitch 机器人, Value: 2, ID: radix-_r_pp_
+				5 text 设置 Twitch 机器人
+			6 container radix-_r_pq_
+				7 text 凭证会保存到本地 channel_credentials.json (不上云)。
+				8 link Description: 如何接入?, Value: docs.octopus.ai/channels/twitch
+			9 container
+				10 text OAuth Token *
+			11 container
+				12 text field (settable) OAuth Token*
+				13 button 显示
+			14 container
+				15 text Bot Username *
+			16 text field (settable) Bot Username*, ID: channel-twitch-nickname
+			17 container
+				18 text Twitch Channels *
+			19 text field (settable) Twitch Channels*, ID: channel-twitch-channels
+			20 text Comma-separated channel names
+			21 button 取消
+			22 button 保存并连接
+			23 button 关闭
+
+The focused UI element is 12 text field (settable) OAuth Token*

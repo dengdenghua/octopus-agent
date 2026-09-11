@@ -225,6 +225,37 @@ def test_request_relaxes_inner_approval_only_with_server_opt_in(
     assert allowed.sandbox_mode == "danger-full-access"
 
 
+def test_request_routes_approve_for_me_to_codex_auto_review(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "trusted-workspace"
+    workspace.mkdir()
+    monkeypatch.setattr(mod, "blackboard_brief", lambda _turn_id: "")
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "local")
+    turn = SimpleNamespace(id="outer-turn", thread_id="outer-thread")
+    intent = SimpleNamespace(
+        user_context={
+            "cwd": str(workspace),
+            "permission_mode": "acceptEdits",
+            "approval_policy": "on-request",
+            "sandbox_policy": {"type": "workspaceWrite"},
+        }
+    )
+
+    request = mod._request_for_turn(
+        object(),
+        turn,
+        intent,
+        _agent(command="/trusted/bin/codex"),
+        text="run tests",
+    )
+
+    assert request.approval_policy == "on-request"
+    assert request.approval_reviewer == "auto_review"
+    assert request.sandbox_mode == "workspace-write"
+
+
 class _FakeBridgeState:
     def __init__(self) -> None:
         self.flush_calls: list[object] = []

@@ -1,5 +1,5 @@
-import { BotIcon, GlobeIcon } from "lucide-react";
-import { useEffect } from "react";
+import { GlobeIcon } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { useI18n } from "@/core/i18n/hooks";
@@ -11,6 +11,13 @@ import { cn } from "@/lib/utils";
 
 type WorkspaceSurfaceMode = "agent" | "browser";
 
+// Each route owns a header instance; retain the previous position across remounts.
+let lastSurface: WorkspaceSurfaceMode | null = null;
+const sliderPosition = (surface: WorkspaceSurfaceMode) =>
+  surface === "agent"
+    ? { transform: "translateX(0)", width: "44px" }
+    : { transform: "translateX(48px)", width: "44px" };
+
 export const LAST_AGENT_WORKSPACE_ROUTE_KEY =
   "octopus:last-agent-workspace-route";
 
@@ -21,6 +28,23 @@ export function WorkspaceSurfaceSwitch({
 }) {
   const { t } = useI18n();
   const location = useLocation();
+  const slider = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const previous = lastSurface;
+    lastSurface = active;
+    if (
+      !previous ||
+      previous === active ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+      !slider.current?.animate
+    )
+      return;
+    const animation = slider.current.animate(
+      [sliderPosition(previous), sliderPosition(active)],
+      { duration: 180, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+    );
+    return () => animation.cancel();
+  }, [active]);
   let rememberedAgentRoute: string | null = null;
   try {
     if (typeof window !== "undefined") {
@@ -55,27 +79,21 @@ export function WorkspaceSurfaceSwitch({
     {
       to: agentReturnRoute,
       label: t.desktop.header.brand,
-      icon: BotIcon,
+      text: t.desktop.header.brand,
       value: "agent" as const,
-      kind: "brand" as const,
     },
     {
       to: BROWSER_WORKSPACE_ROUTE,
       label: t.sidebar.navBrowserSurface,
-      icon: GlobeIcon,
       value: "browser" as const,
-      kind: "icon" as const,
     },
   ];
-  const activeIndex = items.findIndex((item) => item.value === active);
   const radiusVar = "var(--appearance-radius-control)";
 
   return (
     <div
       className={cn(
-        "relative grid h-8 items-center gap-0 p-0.5",
-        "w-[96px] grid-cols-[minmax(0,1fr)_28px]",
-        "border border-border-default bg-muted/40",
+        "relative isolate grid h-7 w-[92px] shrink-0 grid-cols-2 items-center gap-1 bg-foreground/[0.045]",
         "group-data-[collapsible=icon]:hidden",
       )}
       style={{ borderRadius: radiusVar }}
@@ -83,20 +101,16 @@ export function WorkspaceSurfaceSwitch({
       aria-label="Workspace surface"
     >
       <span
-        className={cn(
-          "absolute top-0.5 bottom-0.5 z-0 translate-y-px",
-          "bg-background shadow-[var(--shadow-xs)] ring-1 ring-border-default",
-          "transition-[left,width]",
-          activeIndex === 0
-            ? "left-[2px] w-[calc(100%-32px)]"
-            : "left-[calc(100%-28px)] w-[24px]",
-        )}
-        style={{ borderRadius: `calc(${radiusVar} - 4px)` }}
+        ref={slider}
         aria-hidden="true"
+        className="pointer-events-none absolute inset-y-0.5 left-0 bg-background shadow-sm dark:bg-foreground/[0.14]"
+        style={{
+          borderRadius: `max(4px, calc(${radiusVar} - 4px))`,
+          ...sliderPosition(active),
+        }}
       />
-      {items.map((item, index) => {
-        const Icon = item.icon;
-        const isActive = index === activeIndex;
+      {items.map((item) => {
+        const isActive = item.value === active;
         return (
           <Link
             key={item.to}
@@ -107,31 +121,23 @@ export function WorkspaceSurfaceSwitch({
             role="tab"
             aria-selected={isActive}
             className={cn(
-              "relative z-10 flex h-7 items-center justify-center",
-              "text-xs font-medium",
-              "transition-colors",
+              "relative z-10 flex h-7 min-w-0 items-center justify-center gap-1.5 px-1 text-xs leading-none after:absolute after:inset-x-0 after:-inset-y-[2px] after:content-['']",
+              "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
               isActive
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-              item.kind === "brand" ? "px-0.5" : "px-0",
-              "group-data-[collapsible=icon]:grid group-data-[collapsible=icon]:size-7 group-data-[collapsible=icon]:place-items-center group-data-[collapsible=icon]:px-0",
-              isActive
-                ? "group-data-[collapsible=icon]:flex"
-                : "group-data-[collapsible=icon]:hidden",
+                ? "font-medium text-foreground"
+                : "font-medium text-muted-foreground hover:bg-foreground/[0.035] hover:text-foreground",
             )}
-            style={{ borderRadius: `calc(${radiusVar} - 4px)` }}
+            style={{ borderRadius: `max(4px, calc(${radiusVar} - 4px))` }}
           >
-            <Icon
-              className={cn(
-                "size-3.5 shrink-0",
-                item.kind === "brand" &&
-                  "hidden group-data-[collapsible=icon]:block",
-              )}
-            />
-            {item.kind === "brand" && (
-              <span className="min-w-0 truncate group-data-[collapsible=icon]:sr-only">
-                {item.label}
-              </span>
+            {item.value === "browser" && (
+              <GlobeIcon
+                className="size-[14px] shrink-0"
+                strokeWidth={1.75}
+                aria-hidden="true"
+              />
+            )}
+            {item.value === "agent" && (
+              <span className="min-w-0 truncate">{item.text}</span>
             )}
           </Link>
         );

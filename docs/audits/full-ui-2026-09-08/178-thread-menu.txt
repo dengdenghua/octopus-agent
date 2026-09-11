@@ -1,0 +1,14 @@
+Browser tab: 4, Title: "未命名 - Echo", URL: "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j".
+0 AXWebArea 未命名 - Echo, URL: localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j
+	1 container
+		2 container root
+			122 container 对话工作区
+				123 container
+					124 text 连接恢复失败。
+					125 button 重试
+			121 container Notifications alt+T
+		126 menu 更多, ID: radix-_r_133_
+			127 重命名
+			128 删除对话
+
+The focused UI element is 126 menu 更多, ID: radix-_r_133_

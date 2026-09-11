@@ -1,3 +1,5 @@
+import { openCustomModelSetup } from "@/core/models/setup";
+import { supportedReasoningEfforts } from "@/core/models/execution-capabilities";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangleIcon,
@@ -56,7 +58,6 @@ import {
   type CoderLoginResult,
   type CoderLoginType,
   type CoderModelProfile,
-  type UpdateCoderModelProfile,
 } from "@/core/coder/api";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -74,12 +75,14 @@ const COPY = {
     followSystem: "跟随系统模型",
     followSystemShort: "系统",
     followSystemDescription:
-      "沿用兼容的系统模型配置；凭据始终由本机后端安全管理。",
+      "复用系统模型连接的服务地址与 API Key，无需重复配置。",
+    systemConnection: "系统连接",
+    accountSetupHint: "登录成功后切换到 Codex 账号，当前仍使用系统模型连接。",
     accountMode: "使用 ChatGPT / Codex",
     accountModeShort: "Codex 账号",
     subscriptionModeShort: "ChatGPT 订阅",
     accountModeDescription:
-      "使用你的 ChatGPT 订阅或单独提交的 OpenAI API Key。",
+      "通过 ChatGPT 订阅登录；独立 OpenAI Key 在高级选项中配置。",
     loading: "正在读取 Coder 配置…",
     loadFailed: "暂时无法读取 Coder 模型配置。",
     retry: "重试",
@@ -105,7 +108,7 @@ const COPY = {
     subtitle:
       "Coder 是普通角色；人设、技能和小队规则由 Echo 管理，代码执行由 Codex 引擎完成。",
     sourceTitle: "模型来源",
-    systemSource: "系统模型",
+    systemSource: "官方模型",
     subscriptionSource: "ChatGPT 订阅",
     apiKeySource: "OpenAI API Key（按量）",
     systemDefault: "跟随系统默认",
@@ -120,7 +123,9 @@ const COPY = {
     pending: "等待授权",
     connectChatGPT: "登录 ChatGPT",
     connectDevice: "使用设备码",
-    connectApiKey: "使用 API Key",
+    connectApiKey: "高级：使用独立 OpenAI Key",
+    reuseApiKeyHint:
+      "已在系统中配置 Key？选择“跟随系统模型”即可复用。这里只用于 Codex 独立连接，不适用于其他服务商的 Key。",
     browserLoginHint:
       "授权页会直接在系统浏览器打开，授权地址不会写入本地存储。",
     deviceCode: "设备码",
@@ -167,12 +172,15 @@ const COPY = {
     followSystem: "Follow system model",
     followSystemShort: "System",
     followSystemDescription:
-      "Use the compatible system model configuration. Credentials stay managed by the local backend.",
+      "Reuse the system model connection's endpoint and API key. No duplicate setup needed.",
+    systemConnection: "System connection",
+    accountSetupHint:
+      "Sign-in will switch to the Codex account. The system model connection remains active until then.",
     accountMode: "Use ChatGPT / Codex",
     accountModeShort: "Codex account",
     subscriptionModeShort: "ChatGPT subscription",
     accountModeDescription:
-      "Use your ChatGPT subscription or a separately submitted OpenAI API key.",
+      "Sign in with ChatGPT; a separate OpenAI key is available under advanced options.",
     loading: "Loading Coder configuration…",
     loadFailed: "The Coder model configuration is unavailable.",
     retry: "Retry",
@@ -199,7 +207,7 @@ const COPY = {
     subtitle:
       "Coder remains a regular role. Echo owns its persona, skills, and team rules; Codex runs the coding work.",
     sourceTitle: "Model source",
-    systemSource: "System models",
+    systemSource: "Official models",
     subscriptionSource: "ChatGPT subscription",
     apiKeySource: "OpenAI API key (metered)",
     systemDefault: "Follow system default",
@@ -215,7 +223,9 @@ const COPY = {
     pending: "Authorization pending",
     connectChatGPT: "Sign in with ChatGPT",
     connectDevice: "Use device code",
-    connectApiKey: "Use API key",
+    connectApiKey: "Advanced: separate OpenAI key",
+    reuseApiKeyHint:
+      "Already configured a key in the system? Choose Follow system model to reuse it. This option is for an independent Codex connection, not keys from other providers.",
     browserLoginHint:
       "Authorization opens directly in your system browser. The URL is never saved in local storage.",
     deviceCode: "Device code",
@@ -269,12 +279,15 @@ const COPY_JA: typeof COPY.en = {
   followSystem: "システムモデルに従う",
   followSystemShort: "システム",
   followSystemDescription:
-    "互換性のあるシステムモデル設定を使用します。認証情報はローカルバックエンドが管理します。",
+    "システムモデル接続のURLとAPIキーを再利用します。再設定は不要です。",
+  systemConnection: "システム接続",
+  accountSetupHint:
+    "ログイン後にCodexアカウントへ切り替えます。それまではシステムモデル接続を使用します。",
   accountMode: "ChatGPT / Codexを使用",
   accountModeShort: "Codexアカウント",
   subscriptionModeShort: "ChatGPTサブスクリプション",
   accountModeDescription:
-    "ChatGPTサブスクリプションまたは別途登録したOpenAI APIキーを使用します。",
+    "ChatGPTでログインします。独立したOpenAIキーは詳細オプションで設定できます。",
   loading: "Coder設定を読み込み中…",
   loadFailed: "Coderモデル設定を読み込めません。",
   retry: "再試行",
@@ -301,7 +314,7 @@ const COPY_JA: typeof COPY.en = {
   subtitle:
     "Coderは通常のロールです。ペルソナ、スキル、チームルールはEchoが管理し、コード実行はCodexエンジンが担当します。",
   sourceTitle: "モデルのソース",
-  systemSource: "システムモデル",
+  systemSource: "公式モデル",
   subscriptionSource: "ChatGPTサブスクリプション",
   apiKeySource: "OpenAI APIキー（従量制）",
   systemDefault: "システムのデフォルトに従う",
@@ -317,7 +330,9 @@ const COPY_JA: typeof COPY.en = {
   pending: "認証待ち",
   connectChatGPT: "ChatGPTにログイン",
   connectDevice: "デバイスコードを使用",
-  connectApiKey: "APIキーを使用",
+  connectApiKey: "詳細：独立したOpenAIキー",
+  reuseApiKeyHint:
+    "設定済みのキーは「システムモデルに従う」で再利用できます。ここではCodex専用のOpenAIキーを設定します。他社のキーは使用できません。",
   browserLoginHint:
     "認証ページはシステムブラウザーで直接開きます。URLはローカルストレージに保存されません。",
   deviceCode: "デバイスコード",
@@ -368,12 +383,15 @@ const COPY_KO: typeof COPY.en = {
   followSystem: "시스템 모델 따르기",
   followSystemShort: "시스템",
   followSystemDescription:
-    "호환되는 시스템 모델 설정을 사용합니다. 인증 정보는 로컬 백엔드가 관리합니다.",
+    "시스템 모델 연결의 주소와 API 키를 재사용합니다. 다시 설정할 필요가 없습니다.",
+  systemConnection: "시스템 연결",
+  accountSetupHint:
+    "로그인 후 Codex 계정으로 전환합니다. 그전까지는 시스템 모델 연결을 사용합니다.",
   accountMode: "ChatGPT / Codex 사용",
   accountModeShort: "Codex 계정",
   subscriptionModeShort: "ChatGPT 구독",
   accountModeDescription:
-    "ChatGPT 구독 또는 별도로 등록한 OpenAI API 키를 사용합니다.",
+    "ChatGPT로 로그인합니다. 별도의 OpenAI 키는 고급 옵션에서 설정할 수 있습니다.",
   loading: "Coder 설정을 불러오는 중…",
   loadFailed: "Coder 모델 설정을 불러올 수 없습니다.",
   retry: "다시 시도",
@@ -400,7 +418,7 @@ const COPY_KO: typeof COPY.en = {
   subtitle:
     "Coder는 일반 역할입니다. 페르소나, 스킬, 팀 규칙은 Echo가 관리하고 코드 실행은 Codex 엔진이 담당합니다.",
   sourceTitle: "모델 출처",
-  systemSource: "시스템 모델",
+  systemSource: "공식 모델",
   subscriptionSource: "ChatGPT 구독",
   apiKeySource: "OpenAI API 키(종량제)",
   systemDefault: "시스템 기본값 따르기",
@@ -416,7 +434,9 @@ const COPY_KO: typeof COPY.en = {
   pending: "인증 대기 중",
   connectChatGPT: "ChatGPT로 로그인",
   connectDevice: "디바이스 코드 사용",
-  connectApiKey: "API 키 사용",
+  connectApiKey: "고급: 별도의 OpenAI 키",
+  reuseApiKeyHint:
+    "이미 시스템에 키를 설정했다면 시스템 모델 따르기를 선택해 재사용하세요. 이 옵션은 Codex 전용 OpenAI 키를 위한 것으로 다른 제공자의 키는 사용할 수 없습니다.",
   browserLoginHint:
     "인증 페이지는 시스템 브라우저에서 직접 열립니다. URL은 로컬 저장소에 저장되지 않습니다.",
   deviceCode: "디바이스 코드",
@@ -509,14 +529,6 @@ function compactProfileLabel(
       : copy.accountModeShort)
   );
 }
-
-const DEFAULT_REASONING_EFFORTS: ReasoningEffort[] = [
-  "off",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-];
 
 function reasoningLabel(effort: ReasoningEffort, locale: string) {
   const language = locale.toLowerCase().slice(0, 2);
@@ -740,64 +752,13 @@ export function CoderEngineControl({
     staleTime: 60_000,
   });
   const saveProfile = useMutation({
+    scope: { id: `coder-model-profile:${principalKey}` },
     mutationFn: updateCoderModelProfile,
-    onMutate: async (input: UpdateCoderModelProfile) => {
+    onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: queryKeys.profile });
-      const previous = queryClient.getQueryData<CoderModelProfile>(
-        queryKeys.profile,
-      );
-      if (!previous) return { previous };
-
-      const reasoningEffort =
-        input.reasoning_effort !== undefined
-          ? input.reasoning_effort
-          : previous.source === input.source
-            ? previous.reasoning_effort
-            : null;
-      if (input.source === "codex_account") {
-        const model =
-          input.model ??
-          (previous.source === "codex_account"
-            ? previous.selected_model
-            : null);
-        queryClient.setQueryData<CoderModelProfile>(queryKeys.profile, {
-          ...previous,
-          source: "codex_account",
-          selected_model: model,
-          effective_model: model,
-          reasoning_effort: reasoningEffort,
-          model_source: model ? "role" : "codex_default",
-          compatible: true,
-          compatibility_reason: null,
-          provider: "openai",
-          proxy_required: false,
-        });
-      } else {
-        const selected = input.model ?? null;
-        const selectedEntry = selected
-          ? systemModels.find((model) => modelMatches(model, selected))
-          : undefined;
-        queryClient.setQueryData<CoderModelProfile>(queryKeys.profile, {
-          ...previous,
-          source: "follow_system",
-          selected_model: selected,
-          effective_model:
-            selectedEntry?.model ||
-            selectedEntry?.name ||
-            previous.system_model,
-          reasoning_effort: reasoningEffort,
-          model_source: selected ? "role" : "system",
-        });
-      }
-      return { previous };
     },
     onSuccess: (profile) => {
       queryClient.setQueryData(queryKeys.profile, profile);
-    },
-    onError: (_error, _input, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(queryKeys.profile, context.previous);
-      }
     },
   });
   const profile = profileQuery.data;
@@ -819,14 +780,21 @@ export function CoderEngineControl({
       : copy.subscriptionSource;
   const visibleSystemModels = useMemo(() => {
     const seen = new Set<string>();
-    return systemModels.filter((model) => {
-      if (!isCoderSystemModel(model)) return false;
-      if (model.context_profile === "1m") return false;
-      const key = pickerModelValue(model);
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    return [...systemModels]
+      .sort(
+        (a, b) =>
+          Number(a.entry_id === "official") - Number(b.entry_id === "official"),
+      )
+      .filter((model) => {
+        if (!isCoderSystemModel(model)) return false;
+        if (["opencode-zen", "opencode-go"].includes(model.entry_id || ""))
+          return false;
+        if (model.context_profile === "1m") return false;
+        const key = pickerModelValue(model);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
   }, [systemModels]);
   const activeSystemModel = useMemo(
     () =>
@@ -855,7 +823,8 @@ export function CoderEngineControl({
     activeSystemModel?.display_name ||
     activeSystemModel?.name ||
     activeSystemModel?.model ||
-    value ||
+    (!nativeKernel ? profile?.effective_model?.replace(/^official\//, "") : undefined) ||
+    value?.replace(/^official\//, "") ||
     "auto";
   const visibleSystemSource = activeSystemModel?.source_display_name;
   const fullProfileLabel = nativeKernel
@@ -864,7 +833,9 @@ export function CoderEngineControl({
       : `${visibleSystemSource || copy.followSystemShort} · ${visibleSystemModelName}`
     : profile?.source === "codex_account" && profile.effective_model
       ? `${visibleAccountSource} · ${profile.effective_model}`
-      : profileLabel(profile, copy);
+      : profile?.source === "follow_system"
+        ? `${visibleSystemSource || copy.followSystemShort} · ${visibleSystemModelName}`
+        : profileLabel(profile, copy);
   const activeCodexModel = useMemo(
     () =>
       nativeKernel
@@ -873,7 +844,9 @@ export function CoderEngineControl({
           )
         : profile?.source === "codex_account"
           ? modelsQuery.data?.models.find(
-              (model) => model.id === profile?.effective_model,
+              (model) =>
+                model.id === profile?.effective_model ||
+                (!profile?.effective_model && model.is_default),
             )
           : undefined,
     [
@@ -884,24 +857,13 @@ export function CoderEngineControl({
       profile?.source,
     ],
   );
-  const offeredEfforts = useMemo(() => {
-    const raw =
-      viewSource === "codex_account"
-        ? activeCodexModel?.reasoning_efforts
-        : activeSystemModel?.reasoning_efforts;
-    if (Array.isArray(raw)) {
-      return raw.filter((effort): effort is ReasoningEffort =>
-        ["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(
-          effort,
-        ),
-      );
-    }
-    return DEFAULT_REASONING_EFFORTS;
-  }, [
-    activeCodexModel?.reasoning_efforts,
-    activeSystemModel?.reasoning_efforts,
-    viewSource,
-  ]);
+  const offeredEfforts = useMemo(
+    () =>
+      supportedReasoningEfforts(
+        viewSource === "codex_account" ? activeCodexModel : activeSystemModel,
+      ),
+    [activeCodexModel, activeSystemModel, viewSource],
+  );
 
   const changeReasoningEffort = (effort: ReasoningEffort) => {
     if (nativeKernel) {
@@ -958,7 +920,7 @@ export function CoderEngineControl({
       {
         source: "follow_system",
         ...(model ? { model } : {}),
-        reasoning_effort: profile?.reasoning_effort,
+        reasoning_effort: null,
       },
       {
         onSuccess: (nextProfile) =>
@@ -998,7 +960,9 @@ export function CoderEngineControl({
     ? nativeAccountSelected
       ? nativeAccountModel
       : visibleSystemModelName
-    : compactProfileLabel(profile, copy);
+    : profile?.source === "follow_system" && activeSystemModel
+      ? visibleSystemModelName
+      : compactProfileLabel(profile, copy)?.replace(/^official\//, "");
   const selectedReasoningEffort = nativeKernel
     ? reasoningEffort
     : profile?.reasoning_effort;
@@ -1081,12 +1045,14 @@ export function CoderEngineControl({
           </div>
         ) : profile ? (
           <>
-            <div className="grid grid-cols-2 gap-0.5 rounded-lg bg-muted/45 p-0.5">
+            <div className="flex flex-wrap gap-0.5 rounded-lg bg-muted/45 p-0.5 [&>button]:flex-1 [&>button]:whitespace-nowrap">
               <button
                 type="button"
                 aria-pressed={viewSource === "follow_system"}
                 disabled={controlPending}
-                onClick={() => setViewSource("follow_system")}
+                onClick={() => {
+                  setViewSource("follow_system");
+                }}
                 className={cn(
                   "h-7 rounded-md px-2 text-xs outline-none transition focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/40",
                   viewSource === "follow_system"
@@ -1108,38 +1074,20 @@ export function CoderEngineControl({
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                {nativeKernel ? copy.subscriptionSource : visibleAccountSource}
+                Codex
               </button>
             </div>
 
             <div className="mt-1 max-h-52 space-y-0.5 overflow-y-auto">
               {viewSource === "follow_system" ? (
                 <>
-                  <button
-                    type="button"
-                    disabled={controlPending}
-                    onClick={() => selectSystemModel()}
-                    className={cn(
-                      "flex h-8 w-full items-center justify-between rounded-md px-2 text-left text-xs hover:bg-muted/60",
-                      (nativeKernel
-                        ? !nativeAccountSelected &&
-                          (!value || value === "auto" || value === "default")
-                        : profile.source === "follow_system" &&
-                          profile.model_source === "system") &&
-                        "bg-muted/70 text-foreground",
-                    )}
-                  >
-                    <span className="truncate font-medium">
-                      {locale.toLowerCase().startsWith("zh") ? "自动" : "Auto"}
-                    </span>
-                    <span className="ml-2 truncate text-muted-foreground">
-                      {nativeKernel
-                        ? copy.smartRoutingHint
-                        : isSystemOrchestratorModel(profile.system_model)
-                          ? copy.systemOrchestratorHint
-                          : profile.system_model || copy.systemDefaultHint}
-                    </span>
-                  </button>
+                  {visibleSystemModels.length === 0 && (
+                    <p className="px-2 py-3 text-xs text-muted-foreground">
+                      {locale === "zh-CN"
+                        ? "暂无可用模型，请在下方添加自定义模型。"
+                        : "No models available. Add a custom model below."}
+                    </p>
+                  )}
                   {visibleSystemModels.map((model, index) => {
                     const selected = nativeKernel
                       ? !nativeAccountSelected && modelMatches(model, value)
@@ -1280,12 +1228,14 @@ export function CoderEngineControl({
                   ))}
                 </div>
               </div>
-            ) : (
-              <div className="mt-1 flex items-center justify-between border-t border-border-default px-1 pt-1.5 text-xs text-muted-foreground">
-                <span>{copy.reasoningShort}</span>
-                <span>{copy.reasoningAdaptive}</span>
-              </div>
-            )}
+            ) : null}
+            {saveProfile.isError ? (
+              <p role="alert" className="px-2 py-2 text-xs text-destructive">
+                {saveProfile.error instanceof Error
+                  ? saveProfile.error.message
+                  : copy.unavailable}
+              </p>
+            ) : null}
 
             {viewSource === "follow_system" && activeSystemModel ? (
               <ModelContextSetting
@@ -1311,11 +1261,14 @@ export function CoderEngineControl({
         )}
         <button
           type="button"
-          onClick={openModelSettings}
+          onClick={() => {
+            setOpen(false);
+            openCustomModelSetup();
+          }}
           className="mt-1 flex h-7 w-full items-center justify-center gap-1.5 rounded-md border-t border-border px-2 pt-1 text-xs text-muted-foreground transition hover:text-foreground"
         >
           <KeyRoundIcon className="size-3.5" />
-          {copy.openSettings}
+          {locale === "zh-CN" ? "添加自定义模型" : "Add custom model"}
         </button>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -1325,9 +1278,13 @@ export function CoderEngineControl({
 export function CoderEngineSettings({
   conversationDefaultModel,
   conversationDefaultLabel,
+  accountSetupRequest = 0,
+  authorizationOnly = false,
 }: {
   conversationDefaultModel?: string;
   conversationDefaultLabel?: string;
+  accountSetupRequest?: number;
+  authorizationOnly?: boolean;
 } = {}) {
   const { locale } = useI18n();
   const copy = copyForLocale(locale);
@@ -1336,6 +1293,10 @@ export function CoderEngineSettings({
   const principalKey = user?.actor_id || user?.user_id || "local";
   const queryKeys = useMemo(() => coderQueryKeys(principalKey), [principalKey]);
   const [activeLogin, setActiveLogin] = useState<CoderLoginResult | null>(null);
+  const [accountSetupOpen, setAccountSetupOpen] = useState(false);
+  useEffect(() => {
+    if (accountSetupRequest > 0) setAccountSetupOpen(true);
+  }, [accountSetupRequest]);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginNotice, setLoginNotice] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -1345,6 +1306,7 @@ export function CoderEngineSettings({
   const loginStartedAtRef = useRef(0);
   const mountedRef = useRef(true);
   const activeLoginRef = useRef<CoderLoginResult | null>(null);
+  const dismissedLoginErrorRef = useRef<string | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -1367,10 +1329,22 @@ export function CoderEngineSettings({
     staleTime: 5_000,
   });
   const refetchAccount = accountQuery.refetch;
+  const profile = profileQuery.data;
+  const loginPending = Boolean(accountQuery.data?.login_pending || activeLogin);
+  const showAccountPanel =
+    authorizationOnly ||
+    profile?.source === "codex_account" ||
+    accountSetupOpen ||
+    loginPending;
 
   useEffect(() => {
     const state = accountQuery.data;
-    if (state?.login_error) setLoginError(state.login_error);
+    if (
+      state?.login_error &&
+      state.login_error !== dismissedLoginErrorRef.current
+    ) {
+      setLoginError(state.login_error);
+    }
     if (state?.login_pending && state.login_id && !activeLoginRef.current) {
       // Login operations outlive a renderer reload. Rehydrate the opaque id
       // from the backend so polling and explicit cancellation remain
@@ -1382,15 +1356,20 @@ export function CoderEngineSettings({
       activeLoginRef.current = recovered;
       loginStartedAtRef.current = 0;
       setActiveLogin(recovered);
+      setAccountSetupOpen(true);
     }
   }, [accountQuery.data]);
   const modelsQuery = useQuery({
     queryKey: queryKeys.models,
     queryFn: ({ signal }) => getCoderModels(signal),
-    enabled: Boolean(accountQuery.data?.account),
+    enabled:
+      !authorizationOnly &&
+      showAccountPanel &&
+      Boolean(accountQuery.data?.account),
     staleTime: 60_000,
   });
-  const hasChatGPTUsage = accountQuery.data?.account?.type === "chatgpt";
+  const hasChatGPTUsage =
+    showAccountPanel && accountQuery.data?.account?.type === "chatgpt";
   const rateLimitsQuery = useQuery({
     queryKey: queryKeys.rateLimits,
     queryFn: ({ signal }) => getCoderRateLimits(signal),
@@ -1419,7 +1398,7 @@ export function CoderEngineSettings({
     },
   });
   const saveProfile = useMutation({
-    scope: { id: "coder-model-profile" },
+    scope: { id: `coder-model-profile:${principalKey}` },
     mutationFn: updateCoderModelProfile,
     onMutate: () => {
       setLoginError(null);
@@ -1427,12 +1406,10 @@ export function CoderEngineSettings({
     },
     onSuccess: (profile) => {
       queryClient.setQueryData(queryKeys.profile, profile);
+      setAccountSetupOpen(false);
       setLoginNotice(
         profileCanExecute(profile) ? copy.saved : copy.savedUnavailable,
       );
-    },
-    onError: (error) => {
-      setLoginError(error instanceof Error ? error.message : String(error));
     },
   });
 
@@ -1446,11 +1423,14 @@ export function CoderEngineSettings({
       queryClient.invalidateQueries({ queryKey: queryKeys.usage }),
       queryClient.invalidateQueries({ queryKey: queryKeys.apps }),
     ]);
-    const profile = await updateCoderModelProfile({
-      source: "codex_account",
-    });
-    queryClient.setQueryData(queryKeys.profile, profile);
+    if (!authorizationOnly) {
+      const profile = await updateCoderModelProfile({
+        source: "codex_account",
+      });
+      queryClient.setQueryData(queryKeys.profile, profile);
+    }
   }, [
+    authorizationOnly,
     copy.loginComplete,
     queryClient,
     queryKeys.apps,
@@ -1500,6 +1480,7 @@ export function CoderEngineSettings({
   }, [activeLogin, completeAccountLogin, copy.loginFailed, refetchAccount]);
 
   const beginLogin = async (type: CoderLoginType, apiKey?: string) => {
+    dismissedLoginErrorRef.current = null;
     setLoginBusy(type);
     setLoginError(null);
     setLoginNotice(null);
@@ -1556,7 +1537,11 @@ export function CoderEngineSettings({
       } else {
         setLoginError(copy.loginFailed);
       }
-      await accountQuery.refetch();
+      const result = await accountQuery.refetch();
+      if (cancelled) {
+        dismissedLoginErrorRef.current = result.data?.login_error || null;
+        setLoginError(null);
+      }
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -1589,7 +1574,6 @@ export function CoderEngineSettings({
     }
   };
 
-  const profile = profileQuery.data;
   const account = accountQuery.data?.account;
   const currentModel =
     modelsQuery.data?.models.find(
@@ -1597,9 +1581,8 @@ export function CoderEngineSettings({
     ) ??
     modelsQuery.data?.models.find((model) => model.is_default) ??
     null;
-  const reasoningOptions = currentModel?.reasoning_efforts ?? [];
+  const reasoningOptions = supportedReasoningEfforts(currentModel);
   const busy = saveProfile.isPending || loginBusy !== null;
-  const loginPending = Boolean(accountQuery.data?.login_pending || activeLogin);
   const chatDefault = conversationDefaultModel?.trim() || "";
   const chatDefaultUsesAccount = /^chatgpt[/:]/i.test(chatDefault);
   const chatDefaultModel = chatDefaultUsesAccount
@@ -1620,6 +1603,19 @@ export function CoderEngineSettings({
     profile?.source === chatDefaultSource &&
     (profile?.selected_model || profile?.effective_model) === chatDefaultModel;
   const executionAvailable = profile ? profileCanExecute(profile) : false;
+  const error = saveProfile.error
+    ? saveProfile.error instanceof Error
+      ? saveProfile.error.message
+      : String(saveProfile.error)
+    : showAccountPanel
+      ? loginError
+      : null;
+  const notice =
+    showAccountPanel ||
+    loginNotice === copy.saved ||
+    loginNotice === copy.savedUnavailable
+      ? loginNotice
+      : null;
 
   return (
     <section
@@ -1629,26 +1625,42 @@ export function CoderEngineSettings({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-base font-semibold">{copy.title}</h2>
+            <h2 className="text-base font-semibold">
+              {authorizationOnly ? copy.account : copy.title}
+            </h2>
             <span
               className={cn(
                 "rounded-md px-2 py-0.5 text-xs font-medium",
-                account
+                (authorizationOnly || profile?.source === "codex_account") &&
+                  account
                   ? "bg-success/10 text-success"
                   : loginPending
                     ? "bg-info/10 text-info"
                     : "bg-muted text-muted-foreground",
               )}
             >
-              {account
-                ? copy.accountConnected
-                : loginPending
-                  ? copy.pending
-                  : copy.notConnected}
+              {!authorizationOnly && profile?.source === "follow_system"
+                ? copy.systemConnection
+                : account
+                  ? copy.accountConnected
+                  : loginPending
+                    ? copy.pending
+                    : copy.notConnected}
             </span>
           </div>
           <p className="mt-0.5 max-w-3xl text-xs leading-5 text-muted-foreground">
-            {copy.subtitle}
+            {authorizationOnly
+              ? {
+                  "zh-CN":
+                    "这里只管理授权。使用账号还是系统 API，请在对话输入框中选择。",
+                  "en-US":
+                    "Manage authorization here. Choose this account or a system API in the conversation composer.",
+                  "ja-JP":
+                    "ここでは認証のみを管理します。アカウントとシステム API は入力欄で選択できます。",
+                  "ko-KR":
+                    "여기서는 인증만 관리합니다. 계정 또는 시스템 API는 대화 입력창에서 선택하세요.",
+                }[locale]
+              : copy.subtitle}
           </p>
         </div>
         <Button
@@ -1682,11 +1694,11 @@ export function CoderEngineSettings({
         </Button>
       </div>
 
-      {profileQuery.isLoading || accountQuery.isLoading ? (
+      {profileQuery.isLoading ? (
         <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2Icon className="size-4 animate-spin" /> {copy.loading}
         </div>
-      ) : profileQuery.isError || accountQuery.isError || !profile ? (
+      ) : profileQuery.isError || !profile ? (
         <div
           role="alert"
           className="mt-4 rounded-lg border border-destructive/20 bg-destructive/[0.04] p-3 text-sm text-destructive"
@@ -1695,511 +1707,567 @@ export function CoderEngineSettings({
         </div>
       ) : (
         <div className="mt-3 space-y-3">
-          <div>
-            <div className="mb-1.5 text-xs font-medium text-muted-foreground">
-              {copy.sourceTitle}
-            </div>
-            <div className="grid gap-2 md:grid-cols-2">
-              <button
-                type="button"
-                aria-pressed={profile.source === "follow_system"}
-                disabled={busy}
-                className={cn(
-                  "flex min-h-11 items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition",
-                  profile.source === "follow_system"
-                    ? "border-primary/40 bg-primary/[0.07] ring-1 ring-primary/15"
-                    : "border-border hover:border-border-strong hover:bg-muted/30",
-                )}
-                onClick={() => saveProfile.mutate({ source: "follow_system" })}
-              >
-                <ShieldCheckIcon className="size-4 shrink-0 text-primary" />
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium">
-                    {copy.backendDefault}
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {copy.backendDefaultHint}
-                  </span>
-                </span>
-              </button>
-              <button
-                type="button"
-                aria-pressed={profile.source === "codex_account"}
-                disabled={busy || !account}
-                className={cn(
-                  "flex min-h-11 items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
-                  profile.source === "codex_account"
-                    ? "border-primary/40 bg-primary/[0.07] ring-1 ring-primary/15"
-                    : "border-border hover:border-border-strong hover:bg-muted/30",
-                )}
-                onClick={() => saveProfile.mutate({ source: "codex_account" })}
-              >
-                <UserRoundIcon className="size-4 shrink-0 text-primary" />
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium">
-                    {copy.accountMode}
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {copy.accountModeDescription}
-                  </span>
-                </span>
-              </button>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-background/45 px-3 py-2 text-xs">
-            <span className="min-w-0 flex-1 truncate font-medium text-foreground">
-              {profile.compatible
-                ? copy.activeSummary(
-                    profile.effective_model ||
-                      (profile.source === "codex_account"
-                        ? currentModel?.id || copy.modelDefault
-                        : copy.systemDefault),
-                  )
-                : copy.pendingModel}
-            </span>
-            <span
-              className={cn(
-                "ml-auto inline-flex items-center gap-1.5 font-medium",
-                executionAvailable ? "text-success" : "text-warning",
-              )}
-            >
-              {executionAvailable ? (
-                <CheckCircle2Icon className="size-3.5" />
-              ) : (
-                <AlertTriangleIcon className="size-3.5" />
-              )}
-              {executionAvailable ? copy.compatible : copy.unavailable}
-            </span>
-            <details className="basis-full text-muted-foreground">
-              <summary className="cursor-pointer select-none text-xs hover:text-foreground">
-                {copy.technicalDetails}
-              </summary>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-border pt-2">
-                <span>
-                  {copy.systemModel}{" "}
-                  <code className="text-foreground/80">
-                    {profile.system_model || "—"}
-                  </code>
-                </span>
-                <span>
-                  {copy.provider}{" "}
-                  <code className="text-foreground/80">
-                    {profile.provider || "—"}
-                  </code>
-                </span>
-              </div>
-            </details>
-          </div>
-          {profileProblem(profile, locale) ? (
-            <p className="text-xs text-warning">
-              {profileProblem(profile, locale)}
-            </p>
-          ) : null}
-          {canUseChatDefault && !matchesChatDefault ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-auto max-w-full whitespace-normal text-left"
-              disabled={busy}
-              onClick={() =>
-                saveProfile.mutate({
-                  source: chatDefaultSource,
-                  model: chatDefaultModel,
-                })
-              }
-            >
-              {copy.useChatDefault(
-                conversationDefaultLabel || chatDefaultModel,
-              )}
-            </Button>
-          ) : null}
-
-          {account ? (
-            <div className="space-y-3">
-              <div className="grid gap-3 rounded-lg bg-muted/25 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <CheckCircle2Icon className="size-4 text-success" />
-                    {copy.account}
-                  </div>
-                  <div className="mt-1 truncate text-xs text-muted-foreground">
-                    {copy.accountSummary(
-                      account.email || "",
-                      account.plan_type || account.type,
-                    )}
-                  </div>
+          {!authorizationOnly && (
+            <>
+              <div>
+                <div className="mb-1.5 text-xs font-medium text-muted-foreground">
+                  {copy.sourceTitle}
                 </div>
-                <label className="space-y-1.5 text-xs text-muted-foreground">
-                  <span>{copy.model}</span>
-                  <Select
-                    value={
+                <div className="grid gap-2 md:grid-cols-2">
+                  <button
+                    type="button"
+                    aria-pressed={profile.source === "follow_system"}
+                    disabled={busy || loginPending}
+                    className={cn(
+                      "flex min-h-11 items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition",
+                      profile.source === "follow_system"
+                        ? "border-primary/40 bg-primary/[0.07] ring-1 ring-primary/15"
+                        : "border-border hover:border-border-strong hover:bg-muted/30",
+                    )}
+                    onClick={() => {
+                      setAccountSetupOpen(false);
+                      setLoginError(null);
+                      setLoginNotice(null);
+                      if (profile.source !== "follow_system") {
+                        saveProfile.mutate({ source: "follow_system" });
+                      }
+                    }}
+                  >
+                    <ShieldCheckIcon className="size-4 shrink-0 text-primary" />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium">
+                        {copy.followSystem}
+                      </span>
+                      <span className="block text-xs leading-5 text-muted-foreground">
+                        {copy.followSystemDescription}
+                      </span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={profile.source === "codex_account"}
+                    aria-expanded={!account ? showAccountPanel : undefined}
+                    disabled={busy || loginPending}
+                    className={cn(
+                      "flex min-h-11 items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
                       profile.source === "codex_account"
-                        ? profile.effective_model || "__default__"
-                        : "__default__"
-                    }
-                    disabled={busy || modelsQuery.isLoading}
-                    onValueChange={(model) =>
-                      saveProfile.mutate({
-                        source: "codex_account",
-                        ...(model === "__default__" ? {} : { model }),
-                      })
-                    }
+                        ? "border-primary/40 bg-primary/[0.07] ring-1 ring-primary/15"
+                        : "border-border hover:border-border-strong hover:bg-muted/30",
+                    )}
+                    onClick={() => {
+                      if (account) {
+                        saveProfile.mutate({ source: "codex_account" });
+                      } else {
+                        dismissedLoginErrorRef.current =
+                          accountQuery.data?.login_error || null;
+                        setLoginError(null);
+                        setLoginNotice(null);
+                        setAccountSetupOpen(true);
+                      }
+                    }}
                   >
-                    <SelectTrigger className="w-full" aria-label={copy.model}>
-                      <SelectValue placeholder={copy.modelDefault} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__default__">
-                        {copy.modelDefault}
-                      </SelectItem>
-                      {(modelsQuery.data?.models ?? []).map((model) => (
-                        <SelectItem key={model.id} value={model.id}>
-                          {model.display_name || model.id}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </label>
-                <label className="space-y-1.5 text-xs text-muted-foreground">
-                  <span>{copy.reasoning}</span>
-                  <Select
-                    value={profile.reasoning_effort || "__default__"}
-                    disabled={busy || reasoningOptions.length === 0}
-                    onValueChange={(reasoning) =>
-                      saveProfile.mutate({
-                        source: "codex_account",
-                        model: profile.effective_model || undefined,
-                        reasoning_effort:
-                          reasoning === "__default__" ? null : reasoning,
-                      })
-                    }
-                  >
-                    <SelectTrigger
-                      className="w-full"
-                      aria-label={copy.reasoning}
-                    >
-                      <SelectValue placeholder={copy.reasoningDefault} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__default__">
-                        {copy.reasoningDefault}
-                      </SelectItem>
-                      {reasoningOptions.map((reasoning) => (
-                        <SelectItem key={reasoning} value={reasoning}>
-                          {reasoning}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </label>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => void logout()}
-                >
-                  <LogOutIcon className="size-3.5" /> {copy.logout}
-                </Button>
+                    <UserRoundIcon className="size-4 shrink-0 text-primary" />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium">
+                        {copy.accountMode}
+                      </span>
+                      <span className="block text-xs leading-5 text-muted-foreground">
+                        {copy.accountModeDescription}
+                      </span>
+                    </span>
+                  </button>
+                </div>
               </div>
 
-              {hasChatGPTUsage ? (
-                <details className="group rounded-lg border border-border bg-background/40 px-3 py-2">
-                  <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium marker:content-none">
-                    <ChevronDownIcon className="size-3.5 text-muted-foreground transition-transform group-open:rotate-180" />
-                    {copy.accountDetails}
+              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-background/45 px-3 py-2 text-xs">
+                <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+                  {profile.compatible
+                    ? copy.activeSummary(
+                        profile.effective_model ||
+                          (profile.source === "codex_account"
+                            ? currentModel?.id || copy.modelDefault
+                            : copy.systemDefault),
+                      )
+                    : copy.pendingModel}
+                </span>
+                <span
+                  className={cn(
+                    "ml-auto inline-flex items-center gap-1.5 font-medium",
+                    executionAvailable ? "text-success" : "text-warning",
+                  )}
+                >
+                  {executionAvailable ? (
+                    <CheckCircle2Icon className="size-3.5" />
+                  ) : (
+                    <AlertTriangleIcon className="size-3.5" />
+                  )}
+                  {executionAvailable ? copy.compatible : copy.unavailable}
+                </span>
+                <details className="basis-full text-muted-foreground">
+                  <summary className="cursor-pointer select-none text-xs hover:text-foreground">
+                    {copy.technicalDetails}
                   </summary>
-                  <div className="mt-3 space-y-4 border-t border-border pt-3">
-                    <div className="space-y-2">
-                      <div>
-                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                          {copy.connectors}
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {copy.connectorsHint}
-                        </p>
-                      </div>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {(appsQuery.data?.apps ?? [])
-                          .filter((app) => app.is_accessible)
-                          .map((app) => (
-                            <button
-                              key={app.id}
-                              type="button"
-                              aria-pressed={app.selected}
-                              disabled={saveApps.isPending}
-                              className={cn(
-                                "rounded-lg border p-3 text-left transition",
-                                app.selected
-                                  ? "border-primary/40 bg-primary/[0.07]"
-                                  : "border-border hover:bg-muted/30",
-                              )}
-                              onClick={() => {
-                                const selected = (appsQuery.data?.apps ?? [])
-                                  .filter((item) =>
-                                    item.id === app.id
-                                      ? !item.selected
-                                      : item.selected,
-                                  )
-                                  .map((item) => item.id);
-                                saveApps.mutate(selected);
-                              }}
-                            >
-                              <span className="flex items-center justify-between gap-2 text-sm font-medium">
-                                <span className="truncate">{app.name}</span>
-                                {app.selected ? (
-                                  <CheckCircle2Icon className="size-4 shrink-0 text-primary" />
-                                ) : null}
-                              </span>
-                              {app.description ? (
-                                <span className="mt-1 line-clamp-2 block text-xs text-muted-foreground">
-                                  {app.description}
-                                </span>
-                              ) : null}
-                            </button>
-                          ))}
-                      </div>
-                      {!appsQuery.isLoading &&
-                      (appsQuery.data?.apps ?? []).filter(
-                        (app) => app.is_accessible,
-                      ).length === 0 ? (
-                        <p className="text-xs text-muted-foreground">
-                          {copy.connectorUnavailable}
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      {copy.allowance}
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {(rateLimitsQuery.data?.buckets ?? []).map((bucket) => {
-                        const window = bucket.primary;
-                        return (
-                          <div
-                            key={bucket.limit_id}
-                            className="rounded-lg border border-border bg-background/60 p-3"
-                          >
-                            <div className="flex items-center justify-between gap-2 text-xs">
-                              <span className="truncate font-medium">
-                                {bucket.limit_name || bucket.limit_id}
-                              </span>
-                              {window ? (
-                                <span className="text-muted-foreground">
-                                  {Math.round(window.remaining_percent)}%{" "}
-                                  {copy.remaining}
-                                </span>
-                              ) : null}
-                            </div>
-                            {window ? (
-                              <>
-                                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-                                  <div
-                                    className="h-full rounded-full bg-primary transition-[width]"
-                                    style={{
-                                      width: `${Math.max(0, Math.min(100, window.used_percent))}%`,
-                                    }}
-                                  />
-                                </div>
-                                <div className="mt-1.5 text-xs text-muted-foreground">
-                                  {copy.resetsAt}:{" "}
-                                  {new Date(
-                                    window.resets_at * 1000,
-                                  ).toLocaleString(locale)}
-                                </div>
-                              </>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <UsageStat
-                        label={copy.lifetimeTokens}
-                        value={usageQuery.data?.summary?.lifetime_tokens}
-                        locale={locale}
-                      />
-                      <UsageStat
-                        label={copy.peakDailyTokens}
-                        value={usageQuery.data?.summary?.peak_daily_tokens}
-                        locale={locale}
-                      />
-                      <UsageStat
-                        label={copy.resetCredits}
-                        value={rateLimitsQuery.data?.reset_credits_available}
-                        locale={locale}
-                      />
-                    </div>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-border pt-2">
+                    <span>
+                      {copy.systemModel}{" "}
+                      <code className="text-foreground/80">
+                        {profile.system_model || "—"}
+                      </code>
+                    </span>
+                    <span>
+                      {copy.provider}{" "}
+                      <code className="text-foreground/80">
+                        {profile.provider || "—"}
+                      </code>
+                    </span>
                   </div>
                 </details>
-              ) : (
-                <p className="border-t border-border pt-3 text-xs text-muted-foreground">
-                  {copy.usageUnavailable}
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-3 rounded-lg border border-border p-3">
-              <div>
-                <div className="text-sm font-medium">{copy.account}</div>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {copy.browserLoginHint}
-                </p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={busy || loginPending}
-                  onClick={() => void beginLogin("chatgpt")}
-                >
-                  <UserRoundIcon className="size-3.5" /> {copy.connectChatGPT}
-                </Button>
+              {profileProblem(profile, locale) ? (
+                <p className="text-xs text-warning">
+                  {profileProblem(profile, locale)}
+                </p>
+              ) : null}
+              {canUseChatDefault && !matchesChatDefault ? (
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
-                  disabled={busy || loginPending}
-                  onClick={() => void beginLogin("chatgptDeviceCode")}
+                  className="h-auto max-w-full whitespace-normal text-left"
+                  disabled={busy}
+                  onClick={() =>
+                    saveProfile.mutate({
+                      source: chatDefaultSource,
+                      model: chatDefaultModel,
+                    })
+                  }
                 >
-                  <ExternalLinkIcon className="size-3.5" /> {copy.connectDevice}
+                  {copy.useChatDefault(
+                    conversationDefaultLabel || chatDefaultModel,
+                  )}
                 </Button>
-              </div>
+              ) : null}
 
-              {activeLogin ? (
-                <div className="rounded-lg border border-info/25 bg-info/[0.05] p-3 text-sm">
-                  <div className="flex items-center gap-2 font-medium text-info">
-                    <Loader2Icon className="size-4 animate-spin" />{" "}
-                    {copy.pending}
+              {showAccountPanel &&
+              !account &&
+              profile.source === "follow_system" ? (
+                <p className="text-xs leading-5 text-muted-foreground">
+                  {copy.accountSetupHint}
+                </p>
+              ) : null}
+            </>
+          )}
+          {showAccountPanel ? (
+            accountQuery.isLoading ? (
+              <p className="text-xs text-muted-foreground">{copy.loading}</p>
+            ) : accountQuery.isError ? (
+              <p role="alert" className="text-xs text-destructive">
+                {copy.loadFailed}
+              </p>
+            ) : account ? (
+              <div className="space-y-3">
+                <div
+                  className={cn(
+                    "grid gap-3 rounded-lg bg-muted/25 p-3 sm:items-end",
+                    authorizationOnly
+                      ? "sm:grid-cols-[1fr_auto]"
+                      : "sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]",
+                  )}
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <CheckCircle2Icon className="size-4 text-success" />
+                      {copy.account}
+                    </div>
+                    <div className="mt-1 truncate text-xs text-muted-foreground">
+                      {copy.accountSummary(
+                        account.email || "",
+                        account.plan_type || account.type,
+                      )}
+                    </div>
                   </div>
-                  {activeLogin.user_code ? (
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <span className="text-xs text-muted-foreground">
-                        {copy.deviceCode}
-                      </span>
-                      <code className="rounded-md border border-border bg-background px-2 py-1 font-mono text-base tracking-wider">
-                        {activeLogin.user_code}
-                      </code>
+                  {!authorizationOnly && (
+                    <label className="space-y-1.5 text-xs text-muted-foreground">
+                      <span>{copy.model}</span>
+                      <Select
+                        value={
+                          profile.source === "codex_account"
+                            ? profile.effective_model || "__default__"
+                            : "__default__"
+                        }
+                        disabled={busy || modelsQuery.isLoading}
+                        onValueChange={(model) =>
+                          saveProfile.mutate({
+                            source: "codex_account",
+                            ...(model === "__default__" ? {} : { model }),
+                          })
+                        }
+                      >
+                        <SelectTrigger
+                          className="w-full"
+                          aria-label={copy.model}
+                        >
+                          <SelectValue placeholder={copy.modelDefault} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__default__">
+                            {copy.modelDefault}
+                          </SelectItem>
+                          {(modelsQuery.data?.models ?? []).map((model) => (
+                            <SelectItem key={model.id} value={model.id}>
+                              {model.display_name || model.id}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </label>
+                  )}
+                  {!authorizationOnly && reasoningOptions.length > 0 ? (
+                    <label className="space-y-1.5 text-xs text-muted-foreground">
+                      <span>{copy.reasoning}</span>
+                      <Select
+                        value={profile.reasoning_effort || "__default__"}
+                        disabled={busy || reasoningOptions.length === 0}
+                        onValueChange={(reasoning) =>
+                          saveProfile.mutate({
+                            source: "codex_account",
+                            model: profile.effective_model || undefined,
+                            reasoning_effort:
+                              reasoning === "__default__" ? null : reasoning,
+                          })
+                        }
+                      >
+                        <SelectTrigger
+                          className="w-full"
+                          aria-label={copy.reasoning}
+                        >
+                          <SelectValue placeholder={copy.reasoningDefault} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__default__">
+                            {copy.reasoningDefault}
+                          </SelectItem>
+                          {reasoningOptions.map((reasoning) => (
+                            <SelectItem key={reasoning} value={reasoning}>
+                              {reasoning}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </label>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => void logout()}
+                  >
+                    <LogOutIcon className="size-3.5" /> {copy.logout}
+                  </Button>
+                </div>
+
+                {hasChatGPTUsage ? (
+                  <details className="group rounded-lg border border-border bg-background/40 px-3 py-2">
+                    <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium marker:content-none">
+                      <ChevronDownIcon className="size-3.5 text-muted-foreground transition-transform group-open:rotate-180" />
+                      {copy.accountDetails}
+                    </summary>
+                    <div className="mt-3 space-y-4 border-t border-border pt-3">
+                      <div className="space-y-2">
+                        <div>
+                          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            {copy.connectors}
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {copy.connectorsHint}
+                          </p>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {(appsQuery.data?.apps ?? [])
+                            .filter((app) => app.is_accessible)
+                            .map((app) => (
+                              <button
+                                key={app.id}
+                                type="button"
+                                aria-pressed={app.selected}
+                                disabled={saveApps.isPending}
+                                className={cn(
+                                  "rounded-lg border p-3 text-left transition",
+                                  app.selected
+                                    ? "border-primary/40 bg-primary/[0.07]"
+                                    : "border-border hover:bg-muted/30",
+                                )}
+                                onClick={() => {
+                                  const selected = (appsQuery.data?.apps ?? [])
+                                    .filter((item) =>
+                                      item.id === app.id
+                                        ? !item.selected
+                                        : item.selected,
+                                    )
+                                    .map((item) => item.id);
+                                  saveApps.mutate(selected);
+                                }}
+                              >
+                                <span className="flex items-center justify-between gap-2 text-sm font-medium">
+                                  <span className="truncate">{app.name}</span>
+                                  {app.selected ? (
+                                    <CheckCircle2Icon className="size-4 shrink-0 text-primary" />
+                                  ) : null}
+                                </span>
+                                {app.description ? (
+                                  <span className="mt-1 line-clamp-2 block text-xs text-muted-foreground">
+                                    {app.description}
+                                  </span>
+                                ) : null}
+                              </button>
+                            ))}
+                        </div>
+                        {!appsQuery.isLoading &&
+                        (appsQuery.data?.apps ?? []).filter(
+                          (app) => app.is_accessible,
+                        ).length === 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            {copy.connectorUnavailable}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        {copy.allowance}
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {(rateLimitsQuery.data?.buckets ?? []).map((bucket) => {
+                          const window = bucket.primary;
+                          return (
+                            <div
+                              key={bucket.limit_id}
+                              className="rounded-lg border border-border bg-background/60 p-3"
+                            >
+                              <div className="flex items-center justify-between gap-2 text-xs">
+                                <span className="truncate font-medium">
+                                  {bucket.limit_name || bucket.limit_id}
+                                </span>
+                                {window ? (
+                                  <span className="text-muted-foreground">
+                                    {Math.round(window.remaining_percent)}%{" "}
+                                    {copy.remaining}
+                                  </span>
+                                ) : null}
+                              </div>
+                              {window ? (
+                                <>
+                                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                                    <div
+                                      className="h-full rounded-full bg-primary transition-[width]"
+                                      style={{
+                                        width: `${Math.max(0, Math.min(100, window.used_percent))}%`,
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="mt-1.5 text-xs text-muted-foreground">
+                                    {copy.resetsAt}:{" "}
+                                    {new Date(
+                                      window.resets_at * 1000,
+                                    ).toLocaleString(locale)}
+                                  </div>
+                                </>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        <UsageStat
+                          label={copy.lifetimeTokens}
+                          value={usageQuery.data?.summary?.lifetime_tokens}
+                          locale={locale}
+                        />
+                        <UsageStat
+                          label={copy.peakDailyTokens}
+                          value={usageQuery.data?.summary?.peak_daily_tokens}
+                          locale={locale}
+                        />
+                        <UsageStat
+                          label={copy.resetCredits}
+                          value={rateLimitsQuery.data?.reset_credits_available}
+                          locale={locale}
+                        />
+                      </div>
+                    </div>
+                  </details>
+                ) : (
+                  <p className="border-t border-border pt-3 text-xs text-muted-foreground">
+                    {copy.usageUnavailable}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3 rounded-lg border border-border p-3">
+                <div>
+                  <div className="text-sm font-medium">{copy.account}</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    {copy.browserLoginHint}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={busy || loginPending}
+                    onClick={() => void beginLogin("chatgpt")}
+                  >
+                    <UserRoundIcon className="size-3.5" /> {copy.connectChatGPT}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={busy || loginPending}
+                    onClick={() => void beginLogin("chatgptDeviceCode")}
+                  >
+                    <ExternalLinkIcon className="size-3.5" />{" "}
+                    {copy.connectDevice}
+                  </Button>
+                </div>
+
+                {activeLogin ? (
+                  <div className="rounded-lg border border-info/25 bg-info/[0.05] p-3 text-sm">
+                    <div className="flex items-center gap-2 font-medium text-info">
+                      <Loader2Icon className="size-4 animate-spin" />{" "}
+                      {copy.pending}
+                    </div>
+                    {activeLogin.user_code ? (
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {copy.deviceCode}
+                        </span>
+                        <code className="rounded-md border border-border bg-background px-2 py-1 font-mono text-base tracking-wider">
+                          {activeLogin.user_code}
+                        </code>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(
+                                activeLogin.user_code || "",
+                              );
+                              setCopied(true);
+                            } catch {
+                              setCopied(false);
+                            }
+                          }}
+                        >
+                          <ClipboardIcon className="size-3.5" />{" "}
+                          {copied ? copy.copied : copy.copyCode}
+                        </Button>
+                      </div>
+                    ) : null}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {activeLogin.auth_url || activeLogin.verification_url ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            void openSensitiveAuthorizationUrl(
+                              activeLogin.auth_url ||
+                                activeLogin.verification_url ||
+                                "",
+                            )
+                          }
+                        >
+                          <ExternalLinkIcon className="size-3.5" />{" "}
+                          {copy.openAuthorization}
+                        </Button>
+                      ) : null}
                       <Button
                         type="button"
                         size="sm"
                         variant="ghost"
-                        onClick={async () => {
-                          try {
-                            await navigator.clipboard.writeText(
-                              activeLogin.user_code || "",
-                            );
-                            setCopied(true);
-                          } catch {
-                            setCopied(false);
-                          }
-                        }}
+                        disabled={loginBusy === "cancel"}
+                        onClick={() => void cancelLogin()}
                       >
-                        <ClipboardIcon className="size-3.5" />{" "}
-                        {copied ? copy.copied : copy.copyCode}
+                        {copy.cancelLogin}
                       </Button>
                     </div>
-                  ) : null}
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {activeLogin.auth_url || activeLogin.verification_url ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          void openSensitiveAuthorizationUrl(
-                            activeLogin.auth_url ||
-                              activeLogin.verification_url ||
-                              "",
-                          )
-                        }
-                      >
-                        <ExternalLinkIcon className="size-3.5" />{" "}
-                        {copy.openAuthorization}
-                      </Button>
-                    ) : null}
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled={loginBusy === "cancel"}
-                      onClick={() => void cancelLogin()}
-                    >
-                      {copy.cancelLogin}
-                    </Button>
                   </div>
-                </div>
-              ) : null}
+                ) : null}
 
-              <details className="rounded-lg border border-border bg-muted/20 px-3 py-2">
-                <summary className="cursor-pointer text-sm font-medium">
-                  {copy.connectApiKey}
-                </summary>
-                <form
-                  className="mt-3 space-y-2"
-                  onSubmit={submitApiKey}
-                  autoComplete="off"
-                >
-                  <label className="block space-y-1.5 text-xs text-muted-foreground">
-                    <span>{copy.apiKeyLabel}</span>
-                    <Input
-                      name="api_key"
-                      type="password"
-                      required
-                      autoComplete="new-password"
-                      data-1p-ignore="true"
-                      data-lpignore="true"
-                      spellCheck={false}
-                      placeholder={copy.apiKeyPlaceholder}
-                    />
-                  </label>
-                  <p className="flex items-start gap-1.5 text-xs leading-5 text-muted-foreground">
-                    <KeyRoundIcon className="mt-0.5 size-3.5 shrink-0" />{" "}
-                    {copy.apiKeyHint}
-                  </p>
-                  <Button
-                    type="submit"
-                    size="sm"
-                    disabled={busy || loginPending}
-                  >
-                    {loginBusy === "apiKey" ? (
-                      <Loader2Icon className="size-3.5 animate-spin" />
-                    ) : (
-                      <KeyRoundIcon className="size-3.5" />
-                    )}
-                    {copy.submitApiKey}
-                  </Button>
-                </form>
-              </details>
-            </div>
-          )}
+                {!authorizationOnly && (
+                  <details className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+                    <summary className="cursor-pointer text-sm font-medium">
+                      {copy.connectApiKey}
+                    </summary>
+                    <form
+                      className="mt-3 space-y-2"
+                      onSubmit={submitApiKey}
+                      autoComplete="off"
+                    >
+                      <p className="text-xs leading-5 text-muted-foreground">
+                        {copy.reuseApiKeyHint}
+                      </p>
+                      <label className="block space-y-1.5 text-xs text-muted-foreground">
+                        <span>{copy.apiKeyLabel}</span>
+                        <Input
+                          name="api_key"
+                          type="password"
+                          required
+                          autoComplete="new-password"
+                          data-1p-ignore="true"
+                          data-lpignore="true"
+                          spellCheck={false}
+                          placeholder={copy.apiKeyPlaceholder}
+                        />
+                      </label>
+                      <p className="flex items-start gap-1.5 text-xs leading-5 text-muted-foreground">
+                        <KeyRoundIcon className="mt-0.5 size-3.5 shrink-0" />{" "}
+                        {copy.apiKeyHint}
+                      </p>
+                      <Button
+                        type="submit"
+                        size="sm"
+                        disabled={busy || loginPending}
+                      >
+                        {loginBusy === "apiKey" ? (
+                          <Loader2Icon className="size-3.5 animate-spin" />
+                        ) : (
+                          <KeyRoundIcon className="size-3.5" />
+                        )}
+                        {copy.submitApiKey}
+                      </Button>
+                    </form>
+                  </details>
+                )}
+              </div>
+            )
+          ) : null}
 
-          {loginError ? (
+          {error ? (
             <div
               role="alert"
               className="flex gap-2 rounded-lg border border-destructive/20 bg-destructive/[0.04] p-3 text-xs text-destructive"
             >
-              <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />{" "}
-              {loginError}
+              <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" /> {error}
             </div>
           ) : null}
-          {loginNotice ? (
+          {notice ? (
             <div
               role="status"
               className={cn(
                 "flex gap-2 rounded-lg border p-3 text-xs",
-                loginNotice === copy.savedUnavailable
+                notice === copy.savedUnavailable
                   ? "border-warning/20 bg-warning/[0.04] text-warning"
                   : "border-success/20 bg-success/[0.04] text-success",
               )}
             >
-              {loginNotice === copy.savedUnavailable ? (
+              {notice === copy.savedUnavailable ? (
                 <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
               ) : (
                 <CheckCircle2Icon className="mt-0.5 size-3.5 shrink-0" />
               )}
-              {loginNotice}
+              {notice}
             </div>
           ) : null}
         </div>

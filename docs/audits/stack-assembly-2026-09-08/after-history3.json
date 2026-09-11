@@ -1,0 +1,13 @@
+{
+  "sample": "after-history3",
+  "import_seconds": 0.9051980000076583,
+  "assembly_seconds": 0.891932899990934,
+  "total_seconds": 1.7971308999985922,
+  "rss_mib": 99.37109375,
+  "scratch_directory": "D:\\echo agent\\.codex-run\\stack-profile-2_p9ulw2",
+  "module_count": 1171,
+  "skill_count": 329,
+  "member_engine": "opencode",
+  "native_planner_created": true,
+  "scope": "complete library stack assembly, not web app lifespan or desktop launch"
+}

@@ -1,0 +1,13 @@
+{
+  "sample": "after-planner3",
+  "import_seconds": 0.7219149000011384,
+  "assembly_seconds": 0.6644914000062272,
+  "total_seconds": 1.3864063000073656,
+  "rss_mib": 92.3046875,
+  "scratch_directory": "D:\\echo agent\\.codex-run\\stack-profile-67cqgu12",
+  "module_count": 1041,
+  "skill_count": 329,
+  "member_engine": "opencode",
+  "native_planner_created": false,
+  "scope": "complete library stack assembly, not web app lifespan or desktop launch"
+}

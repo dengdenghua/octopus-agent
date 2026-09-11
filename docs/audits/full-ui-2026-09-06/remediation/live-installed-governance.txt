@@ -1,0 +1,249 @@
+- button "返回桌面":
+- button "切换全屏":
+- tablist "Workspace surface":
+  - tab "Echo" [selected]:
+    - generic: Echo
+  - tab "AI 浏览器":
+- button "收起侧栏 (Ctrl/⌘+B)" [expanded]:
+- button "新建任务":
+  - generic: 新建任务
+- list:
+  - link "HUB":
+    - /url: "#/workspace/agents?surface=chat"
+    - generic: HUB
+  - link "助手":
+    - /url: "#/workspace/realtime/octopus-assistant?agent=octopus"
+    - generic: 助手
+  - link "订阅":
+    - /url: "#/workspace/intelligence?surface=chat"
+    - generic: 订阅
+  - link "项目管理":
+    - /url: "#/workspace/projects"
+    - generic: 项目管理
+  - link "设计画布":
+    - /url: "#/workspace/design"
+    - generic: 设计画布
+  - link "叙事工坊":
+    - /url: "#/workspace/narrative"
+    - generic: 叙事工坊
+  - link "自进化":
+    - /url: "#/workspace/evolution?surface=chat"
+    - generic: 自进化
+- list:
+  - link "发现社区":
+    - /url: "#/workspace/community"
+    - generic: 发现社区
+- list:
+  - button "展开本地数据库":
+    - generic: 本地数据库
+- list:
+  - button "编辑侧栏":
+- button "收起项目" [expanded]:
+  - generic: 项目
+- button "选择项目空间":
+- button "收起对话" [expanded]:
+  - generic: 对话
+- button "对话 · 新建任务":
+- button "Kane":
+  - text: Kane
+  - generic: Lv.1⭐
+- button "设置":
+- main:
+  - iframe [active]:
+    - banner:
+      - generic: 自进化
+      - generic: 从真实任务中学习，并在验证、安全和可回退的前提下应用改进。
+      - tablist:
+        - tab "进化总览":
+          - text: 进化总览
+        - tab "实验":
+          - text: 实验
+        - tab "候选":
+          - text: 候选
+        - tab "部署":
+          - text: 部署
+        - tab "安全治理" [selected]:
+          - text: 安全治理
+    - tabpanel:
+      - region "安全治理":
+        - article:
+          - heading "影子复核保护" [level=2]
+          - paragraph: 默认单引擎执行；只有手动复核或命中风险门槛时才调用另一引擎， 工作区始终使用隔离副本和只读权限。
+          - button "开启保护"
+          - generic: 当前关闭，不会触发另一引擎，也不会产生额外费用。
+        - article:
+          - text: 治理边界
+          - generic: 影子执行
+          - generic: 手动触发
+          - generic: 工作区权限
+          - generic: 只读副本
+          - generic: 候选发布
+          - generic: 灰度后晋升
+        - tablist:
+          - tab "治理摘要"
+          - tab "策略与预算":
+            - text: 策略与预算
+          - tab "规则与响应" [active] [selected]:
+            - text: 规则与响应
+          - tab "运行与设置":
+            - text: 运行与设置
+        - tabpanel "规则与响应":
+          - heading "SpinalCord 反射" [level=1]
+          - paragraph: 反射规则监控 · 命中率/趋势/A-B 变体/覆盖率 · 实时刷新（2 秒） · 最后刷新 03:14:09
+          - button "基因锁 Lv 2 成长期":
+            - generic: 基因锁
+            - generic: Lv 2
+            - generic: 成长期
+          - link "编辑规则":
+            - /url: /workspace/reflex/edit
+            - text: 编辑规则
+          - button "重新加载":
+            - text: 重新加载
+          - button "重新加载 + 重置"
+          - text: 尝试
+          - generic: "0"
+          - text: 命中
+          - generic: "0"
+          - text: 命中率
+          - generic: 0.0%
+          - text: 规则
+          - generic: "7"
+          - text: 过期（24 小时）
+          - generic: "0"
+          - text: 上小时命中
+          - generic: "0"
+          - generic: 反射命中 · 最近 60 分钟 · 粒度 1 分钟
+          - generic: 最近 60 分钟无反射命中
+          - text: RecipeForge · 提示词进化
+          - generic: 第 7 条反射路径
+          - generic: 当前已应用的附录
+          - generic: 无
+          - generic: 迭代次数
+          - spinbutton "迭代次数"
+          - generic: 评估任务 / 次迭代
+          - spinbutton "评估任务 / 次迭代"
+          - generic: Optimizer
+          - combobox "Optimizer":
+            - option "native_gepa" [selected]
+            - option "dspy_gepa"
+            - option "external_gepa"
+          - button "为失败的配方自动提案":
+            - text: 为失败的配方自动提案
+          - button "运行 Forge":
+            - text: 运行 Forge
+          - text: Canary / 回滚
+          - button "刷新"
+          - generic: 活跃 1 · 已回滚 0 · 总计 1
+          - generic: 阶段 shadow
+          - generic: forged_list_cwd_then_count_words_d349dc27
+          - generic: 命中率 0.000
+          - generic: 样本 0 · 成功 0 · 失败 0
+          - generic: 2026/9/5 18:08:43
+          - generic: 响应层级
+          - generic: fuzzy_cache
+          - generic: 已启用
+          - generic: "大小: 0"
+          - text: "命中: 0"
+          - generic: / 未命中 0
+          - text: "比率:"
+          - generic: 0%
+          - generic: 相似度 0.70
+          - generic: slm
+          - generic: 已禁用
+          - text: "命中: 0"
+          - generic: / 未命中 0
+          - text: "比率:"
+          - generic: 0%
+          - generic: "端点: (not configured)"
+          - generic: 规则
+          - table:
+            - rowgroup:
+              - row "规则 类型 模式 / 类型 优先级 尝试 命中 比率 最后":
+                - columnheader "规则"
+                - columnheader "类型"
+                - columnheader "模式 / 类型"
+                - columnheader "优先级"
+                - columnheader "尝试"
+                - columnheader "命中"
+                - columnheader "比率"
+                - columnheader "最后"
+            - rowgroup:
+              - row "greeting_zh 未调用 regex ^(你好|您好|嗨|哈喽)[!。?\\.\\?\\!,~\\u3002\\uff01\\uff1f]*$ 20 0 0 0% —":
+                - cell "greeting_zh 未调用":
+                  - generic: greeting_zh
+                  - generic: 未调用
+                - cell "regex"
+                - cell "^(你好|您好|嗨|哈喽)[!。?\\.\\?\\!,~\\u3002\\uff01\\uff1f]*$"
+                - cell "20"
+                - cell "0"
+                - cell "0"
+                - cell "0%"
+                - cell "—"
+              - row "greeting_en 未调用 regex ^(hi|hello|hey|yo)[!\\.\\?,]*$ 20 0 0 0% —":
+                - cell "greeting_en 未调用":
+                  - generic: greeting_en
+                  - generic: 未调用
+                - cell "regex"
+                - cell "^(hi|hello|hey|yo)[!\\.\\?,]*$"
+                - cell "20"
+                - cell "0"
+                - cell "0"
+                - cell "0%"
+                - cell "—"
+              - row "thanks_zh 未调用 regex ^(谢谢|多谢|感谢)[!。?\\.\\?\\!,~\\u3002\\uff01\\uff1f]*$ 20 0 0 0% —":
+                - cell "thanks_zh 未调用":
+                  - generic: thanks_zh
+                  - generic: 未调用
+                - cell "regex"
+                - cell "^(谢谢|多谢|感谢)[!。?\\.\\?\\!,~\\u3002\\uff01\\uff1f]*$"
+                - cell "20"
+                - cell "0"
+                - cell "0"
+                - cell "0%"
+                - cell "—"
+              - row "bye 未调用 regex ^(再见|拜拜|bye|byebye|goodbye)[!\\.\\?,]*$ 20 0 0 0% —":
+                - cell "bye 未调用":
+                  - generic: bye
+                  - generic: 未调用
+                - cell "regex"
+                - cell "^(再见|拜拜|bye|byebye|goodbye)[!\\.\\?,]*$"
+                - cell "20"
+                - cell "0"
+                - cell "0"
+                - cell "0%"
+                - cell "—"
+              - row "ping_diagnostic 未调用 regex ^ping$ 20 0 0 0% —":
+                - cell "ping_diagnostic 未调用":
+                  - generic: ping_diagnostic
+                  - generic: 未调用
+                - cell "regex"
+                - cell "^ping$"
+                - cell "20"
+                - cell "0"
+                - cell "0"
+                - cell "0%"
+                - cell "—"
+              - row "chitchat_default 未调用 deterministic chitchat 10 0 0 0% —":
+                - cell "chitchat_default 未调用":
+                  - generic: chitchat_default
+                  - generic: 未调用
+                - cell "deterministic"
+                - cell "chitchat"
+                - cell "10"
+                - cell "0"
+                - cell "0"
+                - cell "0%"
+                - cell "—"
+              - row "semantic_cache 未调用 cache 默认 TTL 5 0 0 0% —":
+                - cell "semantic_cache 未调用":
+                  - generic: semantic_cache
+                  - generic: 未调用
+                - cell "cache"
+                - cell "默认 TTL"
+                - cell "5"
+                - cell "0"
+                - cell "0"
+                - cell "0%"
+                - cell "—"
+    - region "Notifications alt+T"
+- region "Notifications alt+T"

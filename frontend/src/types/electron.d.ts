@@ -31,6 +31,8 @@ export interface NativeDesktopItem {
 export interface OctopusElectronAPI {
   isElectron: true;
   platform: NodeJS.Platform;
+  /** The native title bar overlaps web content only in the main shell window. */
+  windowControlsOverlay?: boolean;
   /** Synchronous backend URL injected by Electron preload for packaged builds. */
   backendBaseURL?: string;
 
@@ -266,6 +268,26 @@ export interface OctopusElectronAPI {
       };
       uptime?: number;
       platform?: string;
+      error?: string;
+    }>;
+    /** Capture a read-only thumbnail of the selected browser/app window for
+     * the automation picture-in-picture surface. */
+    captureAutomationPreview: (request: {
+      kind: "browser_tab" | "desktop_window";
+      id: string;
+      title: string;
+      appId?: string;
+      appName?: string;
+      width?: number;
+      height?: number;
+    }) => Promise<{
+      ok: boolean;
+      dataUrl?: string;
+      width?: number;
+      height?: number;
+      sourceId?: string;
+      sourceName?: string;
+      matched?: boolean;
       error?: string;
     }>;
   };

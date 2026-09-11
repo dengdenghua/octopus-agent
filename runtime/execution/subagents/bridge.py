@@ -1804,6 +1804,7 @@ def _dispatch(
     )
     from runtime.execution.suckers.ephemeral_agents import (
         EphemeralRoleDef,
+        get_ephemeral_role_runner,
         is_ephemeral_role,
         run_ephemeral_definition,
         run_ephemeral_role,
@@ -1819,7 +1820,11 @@ def _dispatch(
         }
         if definition.model:
             merged_context.setdefault("model_name", definition.model)
-        if use_cheap_model and "model_name" not in merged_context:
+        if (
+            use_cheap_model
+            and "model_name" not in merged_context
+            and getattr(get_ephemeral_role_runner(), "execution_backend", "native") == "native"
+        ):
             cheap = _resolve_cheap_subagent_model()
             if cheap:
                 merged_context["model_name"] = cheap
@@ -1850,7 +1855,11 @@ def _dispatch(
 
     if is_ephemeral_role(agent_id):
         merged_eph: dict[str, Any] = dict(context or {})
-        if use_cheap_model and "model_name" not in merged_eph:
+        if (
+            use_cheap_model
+            and "model_name" not in merged_eph
+            and getattr(get_ephemeral_role_runner(), "execution_backend", "native") == "native"
+        ):
             cheap = _resolve_cheap_subagent_model()
             if cheap:
                 merged_eph["model_name"] = cheap
@@ -1877,7 +1886,14 @@ def _dispatch(
 
     merged_ctx: dict[str, Any] = dict(context or {})
     merged_ctx["timeout_s"] = timeout_s
-    if use_cheap_model and "model_name" not in merged_ctx:
+    resolve_backend = getattr(selected_runner, "execution_backend_for", None)
+    try:
+        selected_backend = resolve_backend(agent_id) if callable(resolve_backend) else "native"
+    except ValueError as exc:
+        return {"agent_id": agent_id, "output": "", "success": False, "error": str(exc)}
+    # The host's cheap-model pool belongs to native execution. External
+    # members select models through their own provider/account catalog.
+    if use_cheap_model and "model_name" not in merged_ctx and selected_backend == "native":
         cheap = _resolve_cheap_subagent_model()
         if cheap:
             merged_ctx["model_name"] = cheap

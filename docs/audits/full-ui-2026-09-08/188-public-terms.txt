@@ -1,0 +1,3 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/terms".
+There has been no change in the accessibility tree.
+The focused UI element is 0 AXWebArea Echo, URL: localhost:3310/#/terms

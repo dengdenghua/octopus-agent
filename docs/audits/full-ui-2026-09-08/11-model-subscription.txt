@@ -1,0 +1,24 @@
+Browser tab: 4, Title: "新对话 - Echo", URL: "http://localhost:3310/#/workspace/realtime/new".
+0 AXWebArea 新对话 - Echo, URL: localhost:3310/#/workspace/realtime/new
+	1 container
+		2 container root
+			60 container 对话工作区
+			59 container Notifications alt+T
+		61 container OpenCode Zen 免费模型 · big-pickle, ID: radix-_r_2d_
+			62 checkbox 系统模型, Value: 0
+			63 checkbox ChatGPT 订阅, Value: 1
+			79 button GPT-6-Astra
+			80 button GPT-5.6-Sol
+			81 button GPT-5.6-Terra
+			82 button GPT-5.6-Luna
+			83 button GPT-5.5
+			84 button GPT-5.2
+			85 text 推理等级
+			86 button 关闭
+			87 button 低
+			88 button 中
+			89 button 高
+			90 button 极高
+			78 button 管理登录与模型
+
+The focused UI element is 63 checkbox ChatGPT 订阅, Value: 1

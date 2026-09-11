@@ -1,0 +1,14 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/realtime/octopus-assistant?agent=octopus".
+0 AXWebArea Echo, URL: localhost:3310/#/workspace/realtime/octopus-assistant?agent=octopus
+	1 container
+		2 container root
+			122 container 对话工作区
+			121 container Notifications alt+T
+		123 container 助手设置, ID: radix-_r_128_
+			124 text 助手设置
+			125 text 仅影响当前助手的固定对话窗口。
+			126 text 自动开启新会话
+			127 text 长时间未对话后，下一条消息从新会话开始。
+			128 switch Description: 自动开启新会话, Value: 0
+
+The focused UI element is 123 container 助手设置, ID: radix-_r_128_

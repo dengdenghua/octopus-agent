@@ -1,5 +1,4 @@
 import {
-  cloneElement,
   useId,
   useSyncExternalStore,
   type PointerEvent as ReactPointerEvent,
@@ -106,30 +105,23 @@ export function MemberProfilePopover({
     getActiveMemberProfileCardId,
   );
   const open = activeCardId === instanceId;
-  // Radix dismisses an existing menu on the first outside pointer event. Claim
-  // the next avatar after that event finishes, so one click switches cards
-  // instead of merely closing the previous one.
-  const profileTrigger = cloneElement(trigger, {
-    onPointerDownCapture: (event: ReactPointerEvent) => {
-      trigger.props.onPointerDownCapture?.(event);
-      if (event.defaultPrevented) return;
-      queueMicrotask(() => setActiveMemberProfileCardId(instanceId));
-    },
-  });
 
   return (
     <DropdownMenu
       modal={false}
       open={open}
       onOpenChange={(nextOpen) => {
-        setActiveMemberProfileCardId(nextOpen ? instanceId : null);
+        if (nextOpen) setActiveMemberProfileCardId(instanceId);
+        else if (getActiveMemberProfileCardId() === instanceId)
+          setActiveMemberProfileCardId(null);
       }}
     >
-      <DropdownMenuTrigger asChild>{profileTrigger}</DropdownMenuTrigger>
+      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
         side="top"
         className="w-80 overflow-visible p-0"
+        aria-labelledby={undefined}
         aria-label={`${name} 的成员信息`}
       >
         <div className="p-4">

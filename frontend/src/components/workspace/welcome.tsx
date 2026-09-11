@@ -1,55 +1,12 @@
 import { useSearchParams } from "react-router-dom";
-import { useMemo } from "react";
+import { InfinityIcon } from "lucide-react";
 
-import { type Agent, useAgents } from "@/core/agents";
-import { useActiveAgentId } from "@/core/agents/active";
-import { getAssistantDisplayName } from "@/core/agents/assistant-naming";
+import { type Agent } from "@/core/agents";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
-/** Pseudo agent IDs used in URLs that are not real agent names. */
-const PSEUDO_AGENT_IDS = new Set(["", "new", "general", "octopus-assistant"]);
-
-function agentDisplayName(a: Agent | null | undefined): string | null {
-  if (!a) return null;
-  const d = a.display_name?.trim();
-  if (d) return d;
-  const n = a.name?.trim();
-  if (n && !PSEUDO_AGENT_IDS.has(n)) return n;
-  return null;
-}
-
-function pickGreetingName(
-  agentProp: Agent | null | undefined,
-  agentNameProp: string | null | undefined,
-  allAgents: Agent[],
-  footerAgentId: string | null,
-): string {
-  if (agentNameProp === "octopus") return getAssistantDisplayName();
-
-  const propDisplay = agentDisplayName(agentProp);
-  if (propDisplay) return propDisplay;
-
-  const nameFromProp = agentNameProp?.trim() ?? "";
-  if (nameFromProp && !PSEUDO_AGENT_IDS.has(nameFromProp)) {
-    const found = allAgents.find((a) => a.name === nameFromProp);
-    const foundDisplay = agentDisplayName(found);
-    if (foundDisplay) return foundDisplay;
-  }
-
-  if (footerAgentId && !PSEUDO_AGENT_IDS.has(footerAgentId)) {
-    const footerAgent = allAgents.find((a) => a.name === footerAgentId);
-    const footerDisplay = agentDisplayName(footerAgent);
-    if (footerDisplay) return footerDisplay;
-  }
-
-  return "Echo";
-}
-
 export function Welcome({
   className,
-  agent,
-  agentName,
 }: {
   className?: string;
   agent?: Agent | null;
@@ -57,23 +14,11 @@ export function Welcome({
 }) {
   const { t } = useI18n();
   const [searchParams] = useSearchParams();
-  const { agents: allAgents } = useAgents();
-  const footerAgentId = useActiveAgentId();
   const isSkillSeed = searchParams.get("mode") === "skill";
-
-  const greetingName = useMemo(
-    () =>
-      pickGreetingName(
-        agent ?? null,
-        agentName ?? null,
-        allAgents,
-        footerAgentId,
-      ),
-    [agent, agentName, allAgents, footerAgentId],
-  );
 
   return (
     <div
+      data-composer-welcome="true"
       className={cn(
         "mx-auto flex w-full flex-col items-center justify-center px-5 pt-8 pb-6 text-center sm:px-8",
         className,
@@ -89,9 +34,17 @@ export function Welcome({
           </p>
         </>
       ) : (
-        <h2 className="text-[28px] font-semibold tracking-tight text-foreground">
-          {t.welcome.greeting.replace("{name}", greetingName)}
-        </h2>
+        <div className="inline-flex items-center justify-center gap-2.5 sm:gap-3">
+          <span
+            className="grid size-9 shrink-0 place-items-center rounded-[11px] bg-[#111] text-white shadow-sm sm:size-10 sm:rounded-xl dark:bg-white dark:text-black"
+            aria-hidden="true"
+          >
+            <InfinityIcon className="size-5 sm:size-6" strokeWidth={2} />
+          </span>
+          <h2 className="whitespace-nowrap text-[26px] leading-tight font-semibold tracking-[-0.035em] text-foreground sm:text-[32px]">
+            Echo Everything
+          </h2>
+        </div>
       )}
     </div>
   );

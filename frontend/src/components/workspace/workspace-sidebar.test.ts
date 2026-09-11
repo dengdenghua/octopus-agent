@@ -3,6 +3,23 @@ import { describe, expect, test } from "vitest";
 import { __testing } from "./workspace-sidebar";
 
 describe("workspace sidebar route activation", () => {
+  test("keeps operational workspace routes discoverable", () => {
+    expect(__testing.WORKSPACE_TOOL_ROUTES.map((route) => route.to)).toEqual([
+      "/workspace/computer",
+      "/workspace/desktop-organizer",
+      "/workspace/architecture",
+      "/workspace/channels",
+      "/workspace/observability",
+      "/workspace/diagnostics",
+      "/workspace/reflex",
+    ]);
+    expect(
+      __testing.WORKSPACE_TOOL_ROUTES.every(
+        (route) => typeof route.labelKey === "string" && route.labelKey.length > 0,
+      ),
+    ).toBe(true);
+  });
+
   test("projects thread searches down to sidebar-only state", () => {
     expect(__testing.SIDEBAR_THREAD_QUERY_PARAMS).toEqual({
       limit: 30,

@@ -1,0 +1,3 @@
+Browser tab: 4, Title: "新对话 - Echo", URL: "http://localhost:3310/#/workspace/realtime/new".
+There has been no change in the accessibility tree.
+The focused UI element is 239 button (expanded) Connector 与用量, Secondary Actions: Collapse

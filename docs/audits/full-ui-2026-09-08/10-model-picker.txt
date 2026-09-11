@@ -1,0 +1,26 @@
+Browser tab: 4, Title: "新对话 - Echo", URL: "http://localhost:3310/#/workspace/realtime/new".
+0 AXWebArea 新对话 - Echo, URL: localhost:3310/#/workspace/realtime/new
+	1 container
+		2 container root
+			60 container 对话工作区
+			59 container Notifications alt+T
+		61 container OpenCode Zen 免费模型 · big-pickle, ID: radix-_r_2d_
+			62 checkbox 系统模型, Value: 1
+			63 checkbox ChatGPT 订阅, Value: 0
+			64 container
+				65 button 自动 按任务智能选择
+					66 text 自动
+					67 text 按任务智能选择
+				68 button big-pickle
+				69 button muse-spark-1.2-contributor-free
+				70 button mimo-v2.5-free
+				71 button nemotron-3-ultra-free
+				72 button nemotron-3.5-lightning-free
+				73 button deepseek-v4-flash-free
+				74 button ling-3.0-flash-fin-free
+				75 button muse-spark-1.3-contributor-free
+			76 text 推理等级
+			77 text 当前模型自动控制
+			78 button 管理登录与模型
+
+The focused UI element is 61 container OpenCode Zen 免费模型 · big-pickle, ID: radix-_r_2d_

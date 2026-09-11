@@ -1,5 +1,14 @@
-import { ChevronDownIcon, PlusIcon, SparklesIcon } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { getBackendBaseURL } from "@/core/config";
+import { authHeaders } from "@/core/auth/api";
+import { openCustomModelSetup } from "@/core/models/setup";
+import { supportedReasoningEfforts } from "@/core/models/execution-capabilities";
+import {
+  ChevronDownIcon,
+  PlusIcon,
+  SearchIcon,
+  SparklesIcon,
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   DropdownMenu,
@@ -40,9 +49,80 @@ function selectionValue(model: PickerModel): string {
 }
 
 export function isFreePickerModel(model: PickerModel | undefined): boolean {
-  // ``is_free`` is provider-owned metadata. Keep the legacy Zen fallback so
-  // already-persisted entries become green before their next reconnect.
-  return model?.is_free === true || model?.entry_id === "opencode-zen";
+  // A provider name is not a price guarantee. Unknown or explicitly paid
+  // models must not inherit the free styling from their Zen connection.
+  return model?.is_free === true;
+}
+
+/** Compare series releases and keep the two newest numbered generations per family. */
+export function partitionModelReleases(
+  models: PickerModel[],
+  value?: string | null,
+) {
+  const releases = models.map((model) => {
+    const name = (model.model || model.name).toLowerCase();
+    const match = name.match(
+      /^(claude-(?:opus|sonnet|haiku|fable)-|gpt-|gemini-|grok-|glm-|kimi-k|minimax-m|muse-spark-|qwen|deepseek-v|mimo-v|nemotron-|ling-)([0-9]+(?:[.-][0-9]+)*)(.*)$/,
+    );
+    return {
+      model,
+      generationKey: match
+        ? [
+            model.entry_id || "",
+            match[1]!.startsWith("claude-") ? "claude" : match[1],
+            Boolean(model.is_free),
+          ].join(":")
+        : null,
+      key: match
+        ? [
+            model.entry_id || "",
+            match[1],
+            match[3],
+            Boolean(model.is_free),
+          ].join(":")
+        : null,
+      version: match ? match[2]!.split(/[.-]/).map(Number) : [],
+    };
+  });
+  const compare = (a: number[], b: number[]) => {
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      const delta = (a[i] || 0) - (b[i] || 0);
+      if (delta) return delta;
+    }
+    return 0;
+  };
+  const latest = new Map<string, number[]>();
+  const generations = new Map<string, number[][]>();
+  for (const item of releases) {
+    if (!item.generationKey) continue;
+    const versions = generations.get(item.generationKey) || [];
+    if (!versions.some((version) => compare(version, item.version) === 0)) {
+      versions.push(item.version);
+      versions.sort((a, b) => compare(b, a));
+    }
+    generations.set(item.generationKey, versions);
+  }
+  for (const item of releases)
+    if (
+      item.key &&
+      (!latest.has(item.key) ||
+        compare(item.version, latest.get(item.key)!) > 0)
+    )
+      latest.set(item.key, item.version);
+  const current: PickerModel[] = [],
+    older: PickerModel[] = [];
+  for (const item of releases) {
+    const hidden =
+      ((item.key && compare(item.version, latest.get(item.key)!) < 0) ||
+        (item.generationKey &&
+          generations
+            .get(item.generationKey)!
+            .findIndex((version) => compare(version, item.version) === 0) >=
+            2)) &&
+      !modelMatchesValue(item.model, value);
+    (hidden ? older : current).push(item.model);
+  }
+  return { current, older };
 }
 
 function deduplicatePickerModels(models: PickerModel[]): PickerModel[] {
@@ -155,7 +235,7 @@ export function ModelContextSetting({
       data-testid="model-context-setting"
       className={cn("space-y-1", className)}
     >
-      <div className="flex items-center justify-between gap-2 text-xs">
+      <div className="flex items-center justify-between gap-2 text-ui">
         <span className="font-medium text-muted-foreground/80">
           {t.modelPicker.contextLength}
         </span>
@@ -193,7 +273,7 @@ export function ModelContextSetting({
                 if (!optionSelected) onChange(optionValue);
               }}
               className={cn(
-                "flex h-7 min-w-0 items-center justify-center gap-1 rounded px-1.5 text-xs transition-colors",
+                "flex h-7 min-w-0 items-center justify-center gap-1 rounded px-1.5 text-ui transition-colors",
                 optionSelected
                   ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                   : "text-muted-foreground hover:text-foreground",
@@ -231,14 +311,6 @@ const MIX_META: OfficialMeta = {
   multiplier: "Mix",
   recommended: true,
 };
-
-const REASONING_EFFORT_OPTIONS: ReasoningEffort[] = [
-  "off",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-];
 
 /** Rough strength scale used to map an unsupported effort onto the nearest
  *  tier a provider genuinely accepts (the wire value may differ). */
@@ -306,12 +378,9 @@ function ReasoningEffortSetting({
   onChange: (effort: ReasoningEffort) => void;
 }) {
   const { t } = useI18n();
-  const rawCurrent = value === "max" ? "xhigh" : (value ?? "medium");
-  // An explicitly empty set means this model has no meaningful effort control
-  // (adaptive / unsupported thinking) — hide it rather than show fake tiers.
-  if (efforts && efforts.length === 0) return null;
-  const offered =
-    efforts && efforts.length > 0 ? efforts : REASONING_EFFORT_OPTIONS;
+  const rawCurrent = value ?? "medium";
+  const offered = supportedReasoningEfforts({ reasoning_efforts: efforts });
+  if (offered.length === 0) return null;
   const effective = resolveEffectiveEffort(rawCurrent, offered);
   const mapped = effective !== rawCurrent;
   const title = t.inputBox.reasoningEffort;
@@ -319,10 +388,10 @@ function ReasoningEffortSetting({
   return (
     <div className="mx-1 mt-1 border-t border-border-default pt-1">
       <div className="mb-0.5 flex items-center justify-between px-1">
-        <span className="text-xs font-medium text-muted-foreground/70">
+        <span className="text-ui font-medium text-muted-foreground/70">
           {title}
         </span>
-        <span className="text-xs text-muted-foreground">
+        <span className="text-ui text-muted-foreground">
           {t.inputBox.reasoningEffortCurrent(
             reasoningEffortLabel(effective, t),
           )}
@@ -358,7 +427,7 @@ function ReasoningEffortSetting({
                 onChange(effort);
               }}
               className={cn(
-                "h-5 rounded-md px-1 text-xs transition-colors",
+                "h-5 rounded-md px-1 text-ui transition-colors",
                 selected
                   ? "bg-background text-foreground shadow-[var(--shadow-xs)]"
                   : "text-muted-foreground hover:text-foreground",
@@ -402,7 +471,7 @@ function PickerRow({
         // Match sidebar NavRow language: h-8, opacity-based emphasis,
         // monochrome. No color accent — selection reads via opacity and
         // a 2px leading bar the way active nav items do.
-        "group/row relative flex h-7 w-full items-stretch rounded-md text-xs opacity-75 transition-[opacity,background-color]",
+        "group/row relative flex h-7 w-full items-stretch rounded-md text-ui opacity-75 transition-[opacity,background-color]",
         "hover:bg-muted/40 hover:opacity-100 focus-within:bg-muted/40 focus-within:opacity-100",
         disabled &&
           "cursor-not-allowed opacity-35 hover:opacity-35 hover:bg-transparent",
@@ -428,7 +497,7 @@ function PickerRow({
           {badge}
         </span>
         {right !== undefined && (
-          <span className="shrink-0 text-xs tabular-nums text-muted-foreground/70 transition-colors group-hover/row:text-muted-foreground">
+          <span className="shrink-0 text-ui tabular-nums text-muted-foreground/70 transition-colors group-hover/row:text-muted-foreground">
             {right}
           </span>
         )}
@@ -447,6 +516,8 @@ export interface ModelPickerProps {
   onReasoningEffortChange?: (effort: ReasoningEffort) => void;
   /** Render prop for a custom trigger. */
   renderTrigger?: (selected: PickerModel | undefined) => ReactNode;
+  showSettingsLink?: boolean;
+  engineSource?: "opencode";
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }
@@ -459,13 +530,51 @@ export function ModelPicker({
   reasoningEffortDisabled,
   onReasoningEffortChange,
   renderTrigger,
+  showSettingsLink = true,
+  engineSource,
   open: controlledOpen,
   onOpenChange,
 }: ModelPickerProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const [showOlder, setShowOlder] = useState(false);
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const searchCopy = {
+    "zh-CN": ["搜索模型或提供商", "没有匹配的模型"],
+    "ja-JP": ["モデルやプロバイダーを検索", "一致するモデルがありません"],
+    "ko-KR": ["모델 또는 제공업체 검색", "일치하는 모델이 없습니다"],
+    "en-US": ["Search models or providers", "No matching models"],
+  }[locale];
+  const [openCodeSource, setOpenCodeSource] = useState<
+    "opencode-zen" | "opencode-go" | "official" | "api"
+  >(() =>
+    models.some(
+      (m) => m.entry_id === "opencode-go" && modelMatchesValue(m, value),
+    )
+      ? "opencode-go"
+      : "opencode-zen",
+  );
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const open = controlledOpen ?? uncontrolledOpen;
-  const setOpen = onOpenChange ?? setUncontrolledOpen;
+  const [nativeEfforts, setNativeEfforts] = useState<{model: string; efforts: string[]} | null>(null);
+  useEffect(() => {
+    if (!open || engineSource !== "opencode" || !value) return;
+    const controller = new AbortController();
+    setNativeEfforts(null);
+    void fetch(`${getBackendBaseURL()}/api/opencode/reasoning-variants?model=${encodeURIComponent(value)}`, {
+      headers: authHeaders(), signal: controller.signal,
+    }).then(async (response) => {
+      if (!response.ok) return;
+      const data = await response.json();
+      if (!controller.signal.aborted) setNativeEfforts({model: value, efforts: data.reasoning_efforts ?? []});
+    }).catch(() => {});
+    return () => controller.abort();
+  }, [open, engineSource, value]);
+  const setOpen = (nextOpen: boolean) => {
+    if (!nextOpen) setQuery("");
+    (onOpenChange ?? setUncontrolledOpen)(nextOpen);
+  };
 
   // "auto" is a UI-only sentinel — the backend reads it as "let the
   // ModelRouter middleware pick per-task". We resolve it to a synthetic
@@ -543,8 +652,61 @@ export function ModelPicker({
    * ``::1m`` variants are folded into the selected model's context-length
    * control, so one model still occupies one line without hiding Max mode.
    */
-  const flatEntries = useMemo(() => deduplicatePickerModels(models), [models]);
+  const flatEntries = useMemo(
+    () =>
+      deduplicatePickerModels(models)
+        .filter(
+          (model) =>
+            !engineSource ||
+            (openCodeSource === "official"
+              ? Boolean(
+                  model.entry_id &&
+                  !["opencode-zen", "opencode-go"].includes(model.entry_id),
+                )
+              : model.entry_id === openCodeSource),
+        )
+        .sort((a, b) =>
+          engineSource
+            ? openCodeSource === "official"
+              ? Number(a.entry_id === "official") -
+                Number(b.entry_id === "official")
+              : Number(isFreePickerModel(b)) - Number(isFreePickerModel(a))
+            : 0,
+        ),
+    [models, engineSource, openCodeSource],
+  );
 
+  const releaseGroups = useMemo(
+    () =>
+      engineSource && openCodeSource === "official"
+        ? { current: flatEntries, older: [] }
+        : partitionModelReleases(flatEntries, value),
+    [flatEntries, value, engineSource, openCodeSource],
+  );
+  const searchTerms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const searchResults = searchTerms.length
+    ? flatEntries.filter((model) => {
+        const text = [
+          model.name,
+          model.display_name,
+          model.model,
+          model.provider,
+          model.source_display_name,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return searchTerms.every((term) => text.includes(term));
+      })
+    : null;
+  const olderLabel =
+    locale === "zh-CN"
+      ? "旧版模型"
+      : locale === "ja-JP"
+        ? "旧バージョン"
+        : locale === "ko-KR"
+          ? "이전 모델"
+          : "Older models";
   const handleSelect = (name: string) => {
     onChange(name);
     setOpen(false);
@@ -567,6 +729,39 @@ export function ModelPicker({
       cleanModelName(selected?.display_name) ||
       cleanModelName(selected?.name) ||
       t.modelPicker.selectModel;
+  const selectedIsFree = isFreePickerModel(selected);
+
+  const renderModelRow = (m: PickerModel) => {
+    // selection_id identifies endpoint + upstream variant +
+    // context profile. Legacy catalogs fall back to entry/name.
+    const selectKey = selectionValue(m);
+    const selectedFamily =
+      !isAutoMode && selected && modelFamilyKey(m) === modelFamilyKey(selected);
+    return (
+      <PickerRow
+        key={selectKey}
+        label={
+          <span
+            className={cn(
+              isFreePickerModel(m) && "text-emerald-600 dark:text-emerald-400",
+            )}
+          >
+            {m.display_name || m.name}
+          </span>
+        }
+        selected={Boolean(selectedFamily)}
+        right={
+          engineSource &&
+          ["opencode-zen", "opencode-go"].includes(m.entry_id || "") ? (
+            <span aria-hidden="true" className="text-muted-foreground">
+              {m.entry_id === "opencode-go" ? "Go" : "Zen"}
+            </span>
+          ) : undefined
+        }
+        onSelect={() => handleSelect(selectKey)}
+      />
+    );
+  };
 
   const triggerButton = (
     <button
@@ -574,24 +769,37 @@ export function ModelPicker({
       data-testid="model-picker-trigger"
       className={cn(
         "inline-flex h-8 min-w-0 items-center gap-1 rounded-lg border border-transparent",
-        "bg-transparent px-2 py-1 text-xs text-muted-foreground transition outline-none",
+        "bg-transparent px-1.5 py-1 text-ui text-muted-foreground transition outline-none",
         "hover:border-border-default hover:bg-muted/60 hover:text-foreground",
         "data-[state=open]:bg-muted data-[state=open]:text-foreground",
       )}
       aria-label={t.modelPicker.selectModel}
-      title={selectedDisplayLabel}
+      title={
+        selectedIsFree
+          ? `${selectedDisplayLabel} · ${t.modelPicker.freeBadge}`
+          : `${selectedDisplayLabel}${selected?.entry_id === "opencode-go" ? " · Go" : ""}`
+      }
     >
-      {isAutoMode && <SparklesIcon className="size-3 shrink-0 text-info" />}
-      <span className="truncate max-w-[var(--text-truncate-md)]">
-        <span
-          className={cn(
-            isFreePickerModel(selected) &&
-              "text-emerald-600 dark:text-emerald-400",
-          )}
-        >
-          {selectedDisplayLabel}
-        </span>
+      {isAutoMode && <SparklesIcon className="size-3 shrink-0 text-primary" />}
+      <span
+        className={cn(
+          "max-w-28 truncate",
+          selectedIsFree && "text-emerald-600 dark:text-emerald-400",
+        )}
+      >
+        {selectedDisplayLabel}
       </span>
+      {selected?.entry_id === "opencode-go" && (
+        <span className="text-[10px] text-muted-foreground">Go</span>
+      )}
+      {selectedIsFree ? (
+        <span className="flex shrink-0 items-center gap-1 text-[10px] font-medium leading-none text-emerald-600 dark:text-emerald-400">
+          <span
+            className="size-1.5 rounded-full bg-emerald-500"
+            aria-hidden="true"
+          />
+        </span>
+      ) : null}
       <ChevronDownIcon className="size-3 opacity-60" />
     </button>
   );
@@ -606,7 +814,24 @@ export function ModelPicker({
   );
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (
+          nextOpen &&
+          ["opencode-zen", "opencode-go", "official"].includes(
+            selected?.entry_id || "",
+          )
+        ) {
+          setOpenCodeSource(
+            selected!.entry_id as "opencode-zen" | "opencode-go" | "official",
+          );
+        } else if (nextOpen && selected?.entry_id) {
+          setOpenCodeSource("official");
+        }
+        setOpen(nextOpen);
+      }}
+    >
       {renderTrigger ? (
         <DropdownMenuTrigger asChild>
           {renderTrigger(selected)}
@@ -619,106 +844,198 @@ export function ModelPicker({
         align="end"
         side="top"
         sideOffset={6}
-        className="w-56 p-0"
+        className="w-72 p-1.5"
+        onFocus={(event) => {
+          if (event.target === event.currentTarget) searchRef.current?.focus();
+        }}
       >
-        {/* Auto row lives above the tabs so the user can flip into
-            smart-routing mode without scrolling through the model
-            list. The trigger button is the canonical model label;
-            this row only restates the Auto state with a sparkles
-            icon + 智能 badge so the option stays discoverable. */}
-        <div className="p-1 pb-0">
-          <PickerRow
-            label={
-              <span className="inline-flex items-center gap-1.5">
-                <SparklesIcon className="size-3 shrink-0 text-info" />
-                {t.modelPicker.autoModelLabel}
-              </span>
-            }
-            right={
-              <span className="rounded border border-info/40 px-1 py-0 text-xs text-info">
-                {t.modelPicker.autoModelBadge}
-              </span>
-            }
-            selected={isAutoMode}
-            onSelect={() => handleSelect("auto")}
+        <div className="mb-1 flex items-center gap-2 border-b border-border-subtle px-2 py-2">
+          <SearchIcon
+            className="size-3.5 shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <input
+            ref={searchRef}
+            value={query}
+            aria-label={searchCopy[0]}
+            placeholder={searchCopy[0]}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && !event.nativeEvent.isComposing)
+                return;
+              event.stopPropagation();
+              if (
+                event.nativeEvent.isComposing ||
+                event.nativeEvent.keyCode === 229
+              )
+                return;
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                resultsRef.current
+                  ?.querySelector<HTMLButtonElement>("button:not(:disabled)")
+                  ?.focus();
+              }
+              if (event.key === "Enter") event.preventDefault();
+            }}
+            className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
           />
         </div>
+        {engineSource && (
+          <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted/45 p-0.5">
+            {(["official", "opencode-zen"] as const).map((source) => (
+              <button
+                type="button"
+                key={source}
+                aria-pressed={
+                  (openCodeSource === "official") === (source === "official")
+                }
+                onClick={() => {
+                  setOpenCodeSource(source);
+                  setShowOlder(false);
+                }}
+                className={cn(
+                  "h-7 rounded-md text-xs",
+                  (openCodeSource === "official") === (source === "official")
+                    ? "bg-background font-medium shadow-sm"
+                    : "text-muted-foreground",
+                )}
+              >
+                {source === "official" ? "官方模型" : "OpenCode"}
+              </button>
+            ))}
+          </div>
+        )}
+        {engineSource && openCodeSource !== "official" && (
+          <div className="my-1 flex gap-1 px-1" aria-label="OpenCode 服务">
+            {(["opencode-zen", "opencode-go"] as const).map((source) => (
+              <button
+                key={source}
+                type="button"
+                aria-pressed={openCodeSource === source}
+                onClick={() => {
+                  setOpenCodeSource(source);
+                  setShowOlder(false);
+                }}
+                className={cn(
+                  "h-6 flex-1 rounded-md text-xs",
+                  openCodeSource === source
+                    ? "bg-muted font-medium text-foreground"
+                    : "text-muted-foreground hover:bg-muted/50",
+                )}
+              >
+                {source === "opencode-zen" ? "Zen" : "Go"}
+              </button>
+            ))}
+          </div>
+        )}
+        {/* Echo routing is not a concrete OpenCode provider model. */}
+        {!engineSource && (
+          <div className="p-1 pb-0">
+            <PickerRow
+              label={
+                <span className="inline-flex items-center gap-1.5">
+                  <SparklesIcon className="size-3 shrink-0 text-info" />
+                  {t.modelPicker.autoModelLabel}
+                </span>
+              }
+              right={
+                <span className="rounded border border-info/40 px-1 py-0 text-ui text-info">
+                  {t.modelPicker.autoModelBadge}
+                </span>
+              }
+              selected={isAutoMode}
+              onSelect={() => handleSelect("auto")}
+            />
+          </div>
+        )}
 
         {onReasoningEffortChange && (
           <ReasoningEffortSetting
             value={reasoningEffort}
             disabled={reasoningEffortDisabled}
-            efforts={selected?.reasoning_efforts}
+            efforts={engineSource === "opencode"
+              ? supportedReasoningEfforts({reasoning_efforts: nativeEfforts?.model === value ? nativeEfforts.efforts : []})
+              : supportedReasoningEfforts(selected)}
             onChange={onReasoningEffortChange}
           />
         )}
-        <ModelContextSetting
-          models={models}
-          selected={selected}
-          value={value}
-          disabled={reasoningEffortDisabled}
-          onChange={onChange}
-          className="mx-1 mt-1 border-t border-border-default px-0.5 pt-1"
-        />
+        {!engineSource && (
+          <ModelContextSetting
+            models={models}
+            selected={selected}
+            value={value}
+            disabled={reasoningEffortDisabled}
+            onChange={onChange}
+            className="mx-1 mt-1 border-t border-border-default px-0.5 pt-1"
+          />
+        )}
 
         <div className="p-1 pt-0.5">
-          <div className="flex flex-col gap-0.5">
-            {flatEntries.length === 0 ? (
-              <div className="px-2 py-4 text-center text-xs text-muted-foreground">
+          <div
+            ref={resultsRef}
+            className="flex max-h-44 flex-col gap-0.5 overflow-y-auto"
+          >
+            {searchResults ? (
+              searchResults.length ? (
+                searchResults.map(renderModelRow)
+              ) : (
+                <div
+                  role="status"
+                  className="px-2 py-4 text-center text-ui text-muted-foreground"
+                >
+                  {searchCopy[1]}
+                </div>
+              )
+            ) : flatEntries.length === 0 ? (
+              <div className="px-2 py-4 text-center text-ui text-muted-foreground">
                 {t.modelPicker.noCustomModels}
               </div>
             ) : (
-              flatEntries.map((m) => {
-                // selection_id identifies endpoint + upstream variant +
-                // context profile. Legacy catalogs fall back to entry/name.
-                const selectKey = selectionValue(m);
-                const selectedFamily =
-                  !isAutoMode &&
-                  selected &&
-                  modelFamilyKey(m) === modelFamilyKey(selected);
-                return (
-                  <PickerRow
-                    key={selectKey}
-                    label={
-                      <span
-                        className={cn(
-                          isFreePickerModel(m) &&
-                            "text-emerald-600 dark:text-emerald-400",
-                        )}
-                      >
-                        {m.display_name || m.name}
+              <>
+                {releaseGroups.current.map(renderModelRow)}
+                {releaseGroups.older.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      aria-expanded={showOlder}
+                      onClick={() => setShowOlder((v) => !v)}
+                      className="mt-1 flex w-full items-center justify-between rounded-md border-t border-border-subtle px-2 py-2 text-xs text-muted-foreground hover:bg-muted/60"
+                    >
+                      <span>
+                        {olderLabel} · {releaseGroups.older.length}
                       </span>
-                    }
-                    selected={Boolean(selectedFamily)}
-                    onSelect={() => handleSelect(selectKey)}
-                  />
-                );
-              })
+                      <ChevronDownIcon
+                        className={cn(
+                          "size-3 transition-transform",
+                          showOlder && "rotate-180",
+                        )}
+                      />
+                    </button>
+                    {showOlder && releaseGroups.older.map(renderModelRow)}
+                  </>
+                )}
+              </>
             )}
           </div>
-          <div className="mt-1.5 border-t pt-1.5">
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                // Settings dialog hosts the "models" page where the
-                // user manages api_base / api_key entries.
-                window.dispatchEvent(
-                  new CustomEvent("octopus:open-settings", {
-                    detail: { tab: "models" },
-                  }),
-                );
-              }}
-              className={cn(
-                "flex w-full items-center justify-center gap-1.5 rounded-md",
-                "px-2 py-1.5 text-xs text-muted-foreground transition",
-                "hover:bg-accent hover:text-foreground",
-              )}
-            >
-              <PlusIcon className="size-3.5" />
-              {t.modelPicker.addModel}
-            </button>
-          </div>
+          {showSettingsLink && (
+            <div className="mt-1.5 border-t pt-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  openCustomModelSetup();
+                }}
+                className={cn(
+                  "flex w-full items-center justify-center gap-1.5 rounded-md",
+                  "px-2 py-1.5 text-ui text-muted-foreground transition",
+                  "hover:bg-accent hover:text-foreground",
+                )}
+              >
+                <PlusIcon className="size-3.5" />
+                {locale === "zh-CN" ? "添加自定义模型" : "Add custom model"}
+              </button>
+            </div>
+          )}
         </div>
       </DropdownMenuContent>
     </DropdownMenu>

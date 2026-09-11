@@ -37,11 +37,11 @@ make frontend-types   # regenerate TS types FROM the openapi snapshot
 
 Run the backend directly (matches `.claude/launch.json`):
 ```bash
-.venv/bin/python -m runtime serve --config config.local.yaml --port 8000
+.venv/bin/python -m runtime serve --config config.local.yaml --port 8310
 ```
 CLI entrypoints: `octopus` / `octopus-agent` → `runtime.cli:main`.
 
-Frontend (in `frontend/`): `pnpm dev` (port 3000), `pnpm build`, `pnpm test`
+Frontend (in `frontend/`): `pnpm dev` (port 3310), `pnpm build`, `pnpm test`
 (vitest), `pnpm lint` (eslint), typecheck via `make frontend-typecheck`.
 
 ## Conventions

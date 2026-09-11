@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from pathlib import Path
@@ -66,77 +65,6 @@ def _canonical_public_share_url(token: str) -> str | None:
         _logger.warning("ignored unsafe OCTOPUS_PUBLIC_SHARE_BASE_URL")
         return None
     return f"{base}/#/share/{token}"
-
-
-def _seed_child_realtime_log(
-    logs_root: Path | str | None,
-    parent_thread_id: str,
-    child_thread_id: str,
-    at_message_index: int | None,
-) -> None:
-    """Seed the child's realtime event log from the parent so the chat UI can
-    reconstruct the forked conversation.
-
-    Fork previously wrote only the legacy ``ThreadStateStore`` entry; the
-    realtime UI reconstructs visible messages from the per-thread JSONL event
-    log (``data/threads/<id>.jsonl``), which a fresh fork left empty — so a
-    forked thread rendered "no messages". Copy the parent's turns (rewriting
-    the thread id) up to the same cut the store snapshot used.
-    """
-    if not logs_root:
-        return
-    try:
-        from runtime.memory.threads._event_log_helpers import thread_log_path
-
-        parent_path = thread_log_path(logs_root, parent_thread_id)
-        child_path = thread_log_path(logs_root, child_thread_id)
-        if not parent_path.exists() or parent_path.stat().st_size <= 0:
-            return
-        from runtime.memory.threads.event_log import EventLog
-        from runtime.sensing.gateway.realtime_thread_history import (
-            _flatten_turns_to_messages,
-        )
-
-        keep_turn_ids: set[str] | None = None
-        if at_message_index is not None:
-            keep_turn_ids = set()
-            used = 0
-            for turn in EventLog(parent_path).replay():
-                msgs, _, _ = _flatten_turns_to_messages([turn])
-                keep_turn_ids.add(turn.id)
-                used += len(msgs)
-                if used > at_message_index:
-                    break
-        child_path.parent.mkdir(parents=True, exist_ok=True)
-        with child_path.open("a", encoding="utf-8") as out:
-            for line in parent_path.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    event = json.loads(line)
-                except (ValueError, TypeError):
-                    continue
-                if not isinstance(event, dict):
-                    continue
-                turn_id = event.get("turnId") or event.get("turn_id")
-                if (
-                    keep_turn_ids is not None
-                    and isinstance(turn_id, str)
-                    and turn_id not in keep_turn_ids
-                ):
-                    continue
-                event["threadId"] = child_thread_id
-                event.pop("thread_id", None)
-                event.pop("eventId", None)
-                out.write(json.dumps(event, ensure_ascii=False) + "\n")
-    except Exception:  # noqa: BLE001 — seeding is best-effort
-        _logger.warning(
-            "seed child realtime log for fork failed (%s → %s)",
-            parent_thread_id,
-            child_thread_id,
-            exc_info=True,
-        )
 
 
 def create_thread_state_router(
@@ -1103,7 +1031,7 @@ def create_thread_state_router(
             raise HTTPException(404, f"thread not found: {thread_id}")
         payload = body or {}
         at_index = payload.get("at_message_index") if isinstance(payload, dict) else None
-        if at_index is not None and not isinstance(at_index, int):
+        if at_index is not None and type(at_index) is not int:
             raise HTTPException(400, "at_message_index must be an integer")
         from runtime.memory.threads.store import ForkUnavailableError
 
@@ -1113,15 +1041,30 @@ def create_thread_state_router(
             raise HTTPException(404, f"thread not found: {thread_id}") from exc
         except ForkUnavailableError as exc:
             raise HTTPException(409, "fork-unavailable") from exc
+        from ._thread_history_fork import seed_history
+
+        try:
+            seed_history(logs_root, thread_id, child)
+        except (ForkUnavailableError, OSError, ValueError):
+            store.delete_if_unchanged(child["thread_id"], child)
+            raise HTTPException(409, "fork-unavailable: history could not be verified") from None
         if managed_workspace_required:
             if not actor_id:
                 raise HTTPException(401, "authentication required")
-            child = _assign_managed_workspace(
-                child,
-                actor_id=actor_id,
-                tenant_id=tenant_id or f"legacy:{actor_id}",
-            )
-        _seed_child_realtime_log(logs_root, thread_id, child["thread_id"], at_index)
+            try:
+                child = _assign_managed_workspace(
+                    child,
+                    actor_id=actor_id,
+                    tenant_id=tenant_id or f"legacy:{actor_id}",
+                )
+            except HTTPException:
+                # Allocation performs a compare-and-delete of the unused child.
+                # Only remove our seed if that rollback actually succeeded.
+                if logs_root and store.get(child["thread_id"]) is None:
+                    from runtime.memory.threads._event_log_helpers import thread_log_path
+
+                    thread_log_path(logs_root, child["thread_id"]).unlink(missing_ok=True)
+                raise
         values = child.get("values") if isinstance(child.get("values"), dict) else {}
         seeded = values.get("messages") or []
         return {

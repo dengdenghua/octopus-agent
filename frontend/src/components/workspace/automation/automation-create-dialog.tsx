@@ -1,3 +1,5 @@
+import { firstSubscriptionCheck } from "@/core/automation/schedule-preview";
+import { serviceErrorMessage } from "@/core/utils/service-error";
 import { Loader2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -72,6 +74,8 @@ export function AutomationCreateDialog({
   const [scheduleDay, setScheduleDay] = useState("1");
   const [instructions, setInstructions] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const firstCheck = firstSubscriptionCheck(cadence, scheduleTime, scheduleDay);
 
   const resetForm = () => {
     setDisplayName("");
@@ -91,7 +95,10 @@ export function AutomationCreateDialog({
           setCadence("每天");
         } else if (presetTemplate.cadence.includes("每周")) {
           setCadence("每周");
-        } else if (presetTemplate.cadence.includes("高频") || presetTemplate.cadence.toLowerCase().includes("hour")) {
+        } else if (
+          presetTemplate.cadence.includes("高频") ||
+          presetTemplate.cadence.toLowerCase().includes("hour")
+        ) {
           setCadence("每小时");
         } else {
           setCadence("每天");
@@ -126,7 +133,8 @@ export function AutomationCreateDialog({
         topic: topic.trim(),
         display_name: displayName.trim(),
         keywords,
-        cadence,
+        cadence: cadence === "每小时" ? "hourly" : cadence,
+        timezone,
         enabled: true,
       };
 
@@ -149,8 +157,8 @@ export function AutomationCreateDialog({
       onCreated?.();
       onOpenChange(false);
       resetForm();
-    } catch {
-      toast.error(t.intelligence.createTaskFailed);
+    } catch (error) {
+      toast.error(serviceErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
@@ -170,7 +178,9 @@ export function AutomationCreateDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-4 rounded-lg p-6 sm:max-w-[480px]">
         <DialogHeader className="gap-1 text-left">
-          <DialogTitle className="text-base">{t.intelligence.createTaskTitle}</DialogTitle>
+          <DialogTitle className="text-base">
+            {t.intelligence.createTaskTitle}
+          </DialogTitle>
           <DialogDescription className="text-xs leading-5">
             {t.intelligence.createTaskDescription}
           </DialogDescription>
@@ -182,6 +192,7 @@ export function AutomationCreateDialog({
               {t.intelligence.taskNameLabel}
             </Label>
             <Input
+              aria-label={t.intelligence.taskNameLabel}
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder={t.intelligence.taskNamePlaceholder}
@@ -194,6 +205,7 @@ export function AutomationCreateDialog({
               {t.intelligence.topicLabel}
             </Label>
             <Textarea
+              aria-label={t.intelligence.topicLabel}
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
               placeholder={t.intelligence.topicPlaceholder}
@@ -207,13 +219,22 @@ export function AutomationCreateDialog({
               {t.intelligence.cadenceLabel}
             </Label>
             <Select value={cadence} onValueChange={setCadence}>
-              <SelectTrigger className="w-full text-sm rounded-md">
+              <SelectTrigger
+                aria-label={t.intelligence.cadenceLabel}
+                className="w-full text-sm rounded-md"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="每天">{t.intelligencePanel.cadenceDaily}</SelectItem>
-                <SelectItem value="每周">{t.intelligencePanel.cadenceWeekly}</SelectItem>
-                <SelectItem value="每小时">{t.intelligence.cadenceHourly}</SelectItem>
+                <SelectItem value="每天">
+                  {t.intelligencePanel.cadenceDaily}
+                </SelectItem>
+                <SelectItem value="每周">
+                  {t.intelligencePanel.cadenceWeekly}
+                </SelectItem>
+                <SelectItem value="每小时">
+                  {t.intelligence.cadenceHourly}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -225,6 +246,7 @@ export function AutomationCreateDialog({
               </Label>
               <Input
                 type="time"
+                aria-label={t.intelligence.scheduleTimeLabel}
                 value={scheduleTime}
                 onChange={(e) => setScheduleTime(e.target.value)}
                 className="text-sm rounded-md w-full"
@@ -238,7 +260,10 @@ export function AutomationCreateDialog({
                 {t.intelligence.scheduleDayLabel}
               </Label>
               <Select value={scheduleDay} onValueChange={setScheduleDay}>
-                <SelectTrigger className="w-full text-sm rounded-md">
+                <SelectTrigger
+                  aria-label={t.intelligence.scheduleDayLabel}
+                  className="w-full text-sm rounded-md"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -257,6 +282,7 @@ export function AutomationCreateDialog({
               {t.intelligence.instructionsLabel}
             </Label>
             <Textarea
+              aria-label={t.intelligence.instructionsLabel}
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
               placeholder={t.intelligence.instructionsPlaceholder}
@@ -266,6 +292,21 @@ export function AutomationCreateDialog({
           </div>
         </div>
 
+        <div
+          className="rounded-lg border bg-muted/30 p-3 text-xs leading-5"
+          aria-live="polite"
+        >
+          <p>执行时区：{timezone}</p>
+          <p>
+            首次最早检查：
+            {firstCheck ? firstCheck.toLocaleString() : "请填写有效时间"}
+            （实际运行以服务调度为准）
+          </p>
+          <p>执行位置：当前部署的订阅服务；结果保存在“订阅 → 执行历史”。</p>
+          <p>
+            关闭网页不影响已运行的服务；服务停止期间不会执行，恢复后会重新检查到期任务。
+          </p>
+        </div>
         <DialogFooter className="flex flex-row justify-end gap-2 sm:justify-end">
           <Button
             type="button"
@@ -283,7 +324,9 @@ export function AutomationCreateDialog({
             size="sm"
             className="rounded-md"
             onClick={handleSubmit}
-            disabled={submitting}
+            disabled={
+              submitting || !displayName.trim() || !topic.trim() || !firstCheck
+            }
           >
             {submitting ? (
               <Loader2Icon className="mr-1.5 size-3.5 animate-spin" />

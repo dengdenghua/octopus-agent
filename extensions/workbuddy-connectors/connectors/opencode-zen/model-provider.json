@@ -1,17 +1,17 @@
 {
   "schema": "octopus.model-provider.v1",
   "entry_id": "opencode-zen",
-  "display_name": "OpenCode Zen",
-  "display_name_zh": "OpenCode Zen 免费模型",
+  "display_name": "OpenCode",
+  "display_name_zh": "OpenCode",
   "protocol": "openai-compatible",
   "base_url": "https://opencode.ai/zen/v1",
   "models_endpoint": "https://opencode.ai/zen/v1/models",
   "dashboard_url": "https://opencode.ai/zen",
   "docs_url": "https://opencode.ai/docs/zen/",
-  "api_key_label_zh": "OpenCode Zen API Key",
-  "login_cta_zh": "登录 OpenCode Zen 并获取 API Key",
-  "connection_note_zh": "直连模型 API，不安装或检测 OpenCode CLI",
-  "model_list_label_zh": "当前免费模型",
+  "api_key_label_zh": "OpenCode API Key",
+  "login_cta_zh": "登录 OpenCode 并获取 Key",
+  "connection_note_zh": "一份 Key，连接 Zen 与 Go 两个渠道。Go 需要有效套餐。",
+  "model_list_label_zh": "可用模型",
   "free_models": [
     "big-pickle",
     "muse-spark-1.2-contributor-free",
@@ -31,12 +31,49 @@
   "supports_thinking": false,
   "supports_vision": false,
   "supports_tool_use": true,
-  "models_are_free": true,
+  "models_are_free": false,
   "compat_profile": "opencode_zen",
   "probe_timeout_seconds": 15,
   "privacy_notices_zh": [
     "部分免费模型会记录请求，或将数据用于模型改进；不要发送机密代码和敏感数据。",
-    "Muse Spark Contributor Free 通过 Zen Responses 协议调用，不依赖 ChatGPT 登录。",
-    "Kimi 系列当前属于付费模型，不会被本适配器自动加入免费列表。"
-  ]
+    "Muse Spark Contributor Free 通过 Zen Responses 协议调用，不依赖 ChatGPT 登录。"
+  ],
+  "discover_all_models": true,
+  "channels": {
+    "opencode-go": {
+      "schema": "octopus.model-provider.v1",
+      "entry_id": "opencode-go",
+      "display_name": "OpenCode Go",
+      "display_name_zh": "OpenCode Go",
+      "protocol": "openai-compatible",
+      "base_url": "https://opencode.ai/zen/go/v1",
+      "models_endpoint": "https://opencode.ai/zen/go/v1/models",
+      "dashboard_url": "https://opencode.ai/go",
+      "docs_url": "https://opencode.ai/docs/go/",
+      "api_key_label_zh": "OpenCode API Key（可留空复用）",
+      "login_cta_zh": "登录 OpenCode Go 并获取 API Key",
+      "connection_note_zh": "Go 与 Zen 共用 OpenCode Key。已连接 Zen 可留空直接连接；Go 需有效套餐。",
+      "model_list_label_zh": "套餐模型",
+      "free_models": [],
+      "excluded_models": [],
+      "responses_models": [],
+      "responses_model_prefixes": [
+        "gpt-",
+        "grok-",
+        "muse-spark-"
+      ],
+      "context_window": 128000,
+      "supports_thinking": false,
+      "supports_vision": false,
+      "supports_tool_use": true,
+      "models_are_free": false,
+      "compat_profile": "openai_compat",
+      "probe_timeout_seconds": 15,
+      "privacy_notices_zh": [
+        "Go 套餐存在额度限制；服务商控制台的余额续用选项可能产生额外按量费用。",
+        "Muse Spark Contributor 模型可能将请求用于训练，请留意服务商说明。"
+      ],
+      "discover_all_models": true
+    }
+  }
 }

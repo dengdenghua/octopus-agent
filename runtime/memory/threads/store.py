@@ -211,6 +211,7 @@ class ThreadStateStore:
         index_enabled: bool = True,
         search_enabled: bool = True,
         feedback_enabled: bool = True,
+        repair_on_load: bool = True,
         session_origin: str = "octopus",
     ) -> None:
         self._threads: dict[str, dict[str, Any]] = {}
@@ -270,7 +271,8 @@ class ThreadStateStore:
         if self._per_agent_base is not None:
             self._load_from_per_agent_tree()
         self._prune_permanently_deleted_threads_locked()
-        self._repair_conflicting_agent_copies_locked()
+        if repair_on_load:
+            self._repair_conflicting_agent_copies_locked()
 
         # Backfill the index from in-memory state on first boot. The
         # index is authoritative AFTER first write; before then we

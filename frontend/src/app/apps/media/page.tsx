@@ -19,8 +19,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
-  ELECTRON_TITLE_BAR_HEIGHT,
   inElectron,
+  useElectronTitleBar,
 } from "@/components/electron-title-bar";
 import { useI18n } from "@/core/i18n/hooks";
 import {
@@ -121,6 +121,7 @@ async function loadAssets(
 }
 
 export default function MediaAppPage({ kind }: MediaAppPageProps) {
+  const { titleBarHeight, titleBarInset } = useElectronTitleBar();
   const navigate = useNavigate();
   const { t } = useI18n();
   const isPhotos = kind === "image";
@@ -219,9 +220,7 @@ export default function MediaAppPage({ kind }: MediaAppPageProps) {
   return (
     <main
       className="flex h-screen min-h-0 flex-col overflow-hidden bg-background text-foreground"
-      style={
-        inElectron() ? { paddingTop: ELECTRON_TITLE_BAR_HEIGHT } : undefined
-      }
+      style={titleBarHeight > 0 ? { paddingTop: titleBarInset } : undefined}
     >
       <header className="shrink-0 border-b border-border bg-background/90 px-5 py-3 backdrop-blur">
         <div className="mx-auto flex w-full max-w-[1500px] items-center justify-between gap-4">

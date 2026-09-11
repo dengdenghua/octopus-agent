@@ -1,0 +1,3 @@
+Browser tab: 4, Title: "新对话 - Echo", URL: "http://localhost:3310/#/workspace/realtime/new".
+There has been no change in the accessibility tree.
+The focused UI element is 118 (selected) Help: 根据请求自动选择工作方式；需要修改时小步执行并验证，不盲目改动。, Value: 通用 开发/审查/分析/研究

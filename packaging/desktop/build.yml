@@ -17,6 +17,7 @@
 appId: ai.octopus.desktop
 productName: Echo
 copyright: Echo · EchoOS
+compression: maximum
 
 # 说明：main 入口由 frontend/package.json 的 "main" 字段决定
 # （值：electron/main.cjs）。此处仅注释备忘，避免重复声明产生歧义。
@@ -25,11 +26,20 @@ directories:
   output: release
   buildResources: ../packaging/desktop
 
-# 打包进 app 的文件（相对 frontend/）。dist 为 Vite 产物，electron 为主进程。
-# 注意：electron-builder 默认总会附带 package.json 与生产依赖 node_modules。
+# Keep Chromium locale resources aligned with frontend/src/core/i18n/locale.ts.
+electronLanguages:
+  - en-US
+  - zh-CN
+  - ja
+  - ko
+
+# 打包进 app 的文件（相对 frontend/）。renderer 依赖已经由 Vite 写入 dist；
+# Electron 主进程只使用 Node/Electron 内置模块，并对可选 updater 做缺失兼容，
+# 因此不再重复携带整棵前端 node_modules。
 files:
   - dist/**/*
   - electron/**/*
+  - "!node_modules/**/*"
   - "!**/*.map"
 
 # 额外资源：放入应用 resources/ 目录（打包后 process.resourcesPath 下一级）。
@@ -52,6 +62,13 @@ extraResources:
       - "!**/*.lock"
       - "!**/*.bak"
       - "!**/visuals/backups/**"
+      - "!**/visuals/source_turnaround.*"
+      - "!**/visuals/source-turnaround.*"
+      - "!**/visuals/source_portrait.*"
+      - "!**/visuals/source-portrait.*"
+      - "!**/visuals/originals/**"
+      - "!**/visuals/*-before-padding.*"
+      - "!**/visuals/*-restored-256-upscaled.*"
       - "!**/agent-core/.soul_history/**"
   - from: ../prompts
     to: prompts
@@ -73,6 +90,10 @@ mac:
       to: backend/octopus-backend
     - from: ../extras/desktop/build/codex
       to: codex
+      filter:
+        - "**/*"
+    - from: ../extras/desktop/build/opencode
+      to: opencode
       filter:
         - "**/*"
 
@@ -106,6 +127,10 @@ win:
       to: codex
       filter:
         - "**/*"
+    - from: ../extras/desktop/build/opencode
+      to: opencode
+      filter:
+        - "**/*"
 
 linux:
   target:
@@ -122,6 +147,10 @@ linux:
       to: backend/octopus-backend
     - from: ../extras/desktop/build/codex
       to: codex
+      filter:
+        - "**/*"
+    - from: ../extras/desktop/build/opencode
+      to: opencode
       filter:
         - "**/*"
 

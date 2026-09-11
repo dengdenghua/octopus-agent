@@ -1,4 +1,4 @@
-# Octopus-Agent 快速上手
+# Echo 快速上手
 
 这份文档只回答三个问题：
 
@@ -92,13 +92,13 @@ External
 ## 4. 启动 Web UI
 
 ```bash
-python -m runtime ui --port 8000
+python -m runtime ui --port 8310
 ```
 
 打开：
 
 ```text
-http://127.0.0.1:8000
+http://127.0.0.1:8310
 ```
 
 常用入口：
@@ -181,7 +181,7 @@ docker compose logs -f octopus-agent
 服务地址：
 
 ```text
-http://127.0.0.1:8000
+http://127.0.0.1:8310
 ```
 
 ## 9. 下一步读什么

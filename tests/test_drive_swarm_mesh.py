@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
+import pytest
+
 from runtime.platform.models import BudgetSpec, SkillId, TaskGraph, TaskNode
 from runtime.platform.models.pipeline import WorkflowEdge
 from runtime.sensing.gateway import realtime_team_stream as mod
@@ -63,6 +65,134 @@ def test_graph_favors_mesh_decision() -> None:
         )
         is False
     )
+
+
+def test_result_rendering_preserves_values_and_bounds_untrusted_output():
+    from runtime.sensing.gateway._realtime_team_stream_mesh import _render_mesh_outputs
+
+    graph = _graph(["n0", "n1"], [])
+    arms = [
+        SimpleNamespace(
+            outputs={"n0": {"content": "```\n<script>do_not_execute()</script>"}, "n1": False}
+        )
+    ]
+    rendered = _render_mesh_outputs(graph, arms)
+    assert "n0 · x" in rendered
+    assert '    "content":' in rendered
+    assert "    false" in rendered
+    huge = [SimpleNamespace(outputs={"n0": "X" * 20000, "n1": "omitted"})]
+    clipped = _render_mesh_outputs(graph, huge, limit=200)
+    assert "Output truncated." in clipped
+    assert "omitted" not in clipped
+    assert len(clipped) <= 220
+
+
+def test_result_rendering_failure_does_not_retry_completed_tools():
+    from runtime.sensing.gateway._realtime_team_stream_mesh import _render_mesh_outputs
+
+    recursive = {}
+    recursive["self"] = recursive
+    rendered = _render_mesh_outputs(
+        _graph(["n0"], []), [SimpleNamespace(outputs={"n0": recursive})]
+    )
+    assert "result could not be rendered" in rendered
+
+
+def test_mesh_workers_keep_host_task_permissions_and_budget(monkeypatch):
+    from runtime.execution.host_boundary import create_host_execution_boundary
+    from runtime.execution.request import current_execution_request, execution_request_scope
+    from runtime.platform.config.schema import BudgetConfig
+    from runtime.platform.process.session import current_session, session_scope
+
+    boundary = create_host_execution_boundary(
+        task_id="t1",
+        thread_id="th",
+        goal="inspect files",
+        timeout_s=60,
+        metadata={"mode": "plan", "permission_mode": "plan"},
+        budget=BudgetConfig(max_tokens=500, max_usd=0.02),
+    )
+    seen = []
+
+    def check_boundary():
+        request = current_execution_request()
+        session = current_session()
+        assert request is boundary.request
+        assert session.metadata["_execution_task"] is boundary.request.task
+        assert session.metadata["permission_mode"] == "plan"
+        assert session.metadata["source"] == "realtime_swarm_mesh"
+        seen.append(request)
+
+    def plan(*args, **kwargs):
+        check_boundary()
+        return _graph(["a", "b", "c"], [])
+
+    def run(graph, budget, **kwargs):
+        check_boundary()
+        assert budget.limits.tokens == 500
+        assert budget.limits.usd == 0.02
+        return SimpleNamespace(arm_results=[])
+
+    monkeypatch.setattr("runtime.core.graph_runtime.GraphRuntime", lambda **kwargs: object())
+    monkeypatch.setattr(
+        "runtime.execution.swarm.drive.build_arm_pool_from_registry", lambda *a, **kw: []
+    )
+    monkeypatch.setattr("runtime.execution.swarm.drive.run_swarm", run)
+    monkeypatch.delenv("OCTOPUS_SERVE_MESH", raising=False)
+    stack = SimpleNamespace(
+        planner=SimpleNamespace(plan=plan), executor=object(), registry=object(), journal=object()
+    )
+    turn = SimpleNamespace(thread_id="th", id="t1", items=[])
+    # Ordinary model/client context cannot replace trusted permissions.
+    intent = SimpleNamespace(user_context={"permission_mode": "bypassPermissions"})
+    with session_scope(boundary.session), execution_request_scope(boundary.request):
+        asyncio.run(
+            mod._drive_swarm_mesh(
+                SimpleNamespace(_stack=stack), turn, _Log(), _Emitter(), intent, text="inspect"
+            )
+        )
+    assert len(seen) == 2
+    assert boundary.session.metadata.get("source") != "realtime_swarm_mesh"
+
+
+@pytest.mark.parametrize("mismatch", ["thread", "principal", "request"])
+def test_mesh_rejects_mismatched_boundary_before_planning(monkeypatch, mismatch):
+    from dataclasses import replace
+
+    from runtime.execution.host_boundary import create_host_execution_boundary
+    from runtime.execution.request import execution_request_scope
+    from runtime.platform.process.session import session_scope
+
+    boundary = create_host_execution_boundary(
+        task_id="t1", thread_id="th", goal="inspect", timeout_s=60
+    )
+    request = boundary.request
+    if mismatch == "request":
+        request = replace(request, task=replace(request.task, task_id="other"))
+    turn = SimpleNamespace(
+        thread_id="other" if mismatch == "thread" else "th",
+        id="t1",
+        items=[],
+        params=SimpleNamespace(
+            owner_actor_id="other" if mismatch == "principal" else None,
+            tenant_id=None,
+        ),
+    )
+    with (
+        session_scope(boundary.session),
+        execution_request_scope(request),
+        pytest.raises(ValueError, match="match"),
+    ):
+        asyncio.run(
+            mod._drive_swarm_mesh(
+                SimpleNamespace(),
+                turn,
+                _Log(),
+                _Emitter(),
+                SimpleNamespace(user_context={}),
+                text="inspect",
+            )
+        )
 
 
 # ── mesh path: parallel graph runs the swarm + emits ─────────────
@@ -168,12 +298,24 @@ def test_mesh_fault_falls_back_to_react(monkeypatch) -> None:
 # ── per-turn override: the 集群/蜂群 UI pick wins over the auto-decision ──
 
 
-def test_serve_mesh_0_forces_team_even_for_parallel(monkeypatch) -> None:
+@pytest.mark.parametrize(
+    "context_choice,environment_choice",
+    [("0", "1"), ("false", "1"), ("no", "1"), ("off", "1"), (None, "0")],
+)
+def test_serve_mesh_0_forces_team_even_for_parallel(
+    monkeypatch, context_choice, environment_choice
+) -> None:
     """集群: serve_mesh="0" routes to the sequential team even when the graph
     would otherwise favor the mesh."""
-    monkeypatch.delenv("OCTOPUS_SERVE_MESH", raising=False)
-    parallel = _graph(["a", "b", "c"], [])  # would favor mesh
-    monkeypatch.setattr(asyncio, "to_thread", _to_thread_seq(parallel))
+    monkeypatch.setenv("OCTOPUS_SERVE_MESH", environment_choice)
+    planner_access = []
+
+    class Stack:
+        @property
+        def planner(self):
+            planner_access.append(True)
+            raise AssertionError("sequential routing must not query the native planner")
+
     team = {"called": None}
 
     async def fake_team(runtime, turn, log, emitter, intent, *, text, topology_id):
@@ -181,14 +323,21 @@ def test_serve_mesh_0_forces_team_even_for_parallel(monkeypatch) -> None:
 
     monkeypatch.setattr(mod, "_drive_team_topology", fake_team)
     turn = SimpleNamespace(thread_id="th", id="t1", items=[])
-    intent = SimpleNamespace(user_context={"serve_mesh": "0"})
+    intent = SimpleNamespace(user_context={"serve_mesh": context_choice})
     asyncio.run(
         mod._drive_swarm_mesh(
-            SimpleNamespace(), turn, _Log(), _Emitter(), intent, text="g", topology_id="topo-c"
+            SimpleNamespace(_stack=Stack()),
+            turn,
+            _Log(),
+            _Emitter(),
+            intent,
+            text="g",
+            topology_id="topo-c",
         ),
     )
     assert team["called"] == "topo-c"  # forced to the cluster (sequential) team
     assert turn.items == []
+    assert planner_access == []
 
 
 def test_serve_mesh_1_forces_mesh_even_for_small(monkeypatch) -> None:

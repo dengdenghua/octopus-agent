@@ -1,4 +1,10 @@
 import {
+  ChevronDownIcon,
+  MessageCircleIcon,
+  Maximize2Icon,
+  Minimize2Icon,
+} from "lucide-react";
+import {
   useCallback,
   useEffect,
   useRef,
@@ -10,7 +16,10 @@ import {
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { useElectronTitleBar } from "@/components/electron-title-bar";
 import { useResizablePanel } from "./use-resizable-panel";
+import { createPortal } from "react-dom";
+import { WorkbenchHeaderSlot } from "./workbench-header-slot";
 
 // Resized drawer width is persisted so it survives reloads / remounts.
 const SIDEBAR_WIDTH_KEY = "octopus:chatSidebarWidth";
@@ -40,6 +49,8 @@ function clampPanelWidth(
 }
 
 interface ChatPageLayoutProps {
+  layoutKey?: string;
+  composerNeedsAttention?: boolean;
   header: ReactNode;
   modeSwitcher?: ReactNode;
   messageList: ReactNode;
@@ -58,6 +69,8 @@ interface ChatPageLayoutProps {
 }
 
 export function ChatPageLayout({
+  layoutKey,
+  composerNeedsAttention = false,
   header,
   modeSwitcher,
   messageList,
@@ -74,11 +87,47 @@ export function ChatPageLayout({
   onSecondaryClose,
 }: ChatPageLayoutProps) {
   const { t } = useI18n();
+  const [workbenchHeaderSlot, setWorkbenchHeaderSlot] =
+    useState<HTMLDivElement | null>(null);
+  const { controlsSide } = useElectronTitleBar();
   // Backwards compat: old callers pass Tailwind classes like "lg:w-72" or
   // "lg:w-[44rem]". Extract the pixel/rem value so we can drive inline
   // width (which animates) instead of fighting breakpoint classes.
   const defaultWidth = resolveSidebarWidth(sidebarWidth);
   const [isNarrowViewport, setIsNarrowViewport] = useState(false);
+  const [contentFullWidth, setContentFullWidth] = useState(false);
+  const [composerCompact, setComposerCompact] = useState(false);
+  const [snapPreview, setSnapPreview] = useState(false);
+  const composingRef = useRef(false);
+  const compactButtonRef = useRef<HTMLButtonElement>(null);
+  const composerExpanded = !composerCompact || composerNeedsAttention;
+  const fullWorkbench =
+    contentFullWidth && Boolean(secondaryPanel) && !isNarrowViewport;
+  const layoutPreferenceKey = `echo:workbench-layout:${isNewThread ? "new" : (layoutKey ?? "default")}`;
+  const layoutSnapshot = useRef({ contentFullWidth, composerCompact });
+  layoutSnapshot.current = { contentFullWidth, composerCompact };
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(
+        sessionStorage.getItem(layoutPreferenceKey) || "{}",
+      );
+      setContentFullWidth(saved.contentFullWidth === true);
+      setComposerCompact(saved.composerCompact === true);
+    } catch {
+      setContentFullWidth(false);
+      setComposerCompact(false);
+    }
+    return () => {
+      try {
+        sessionStorage.setItem(
+          layoutPreferenceKey,
+          JSON.stringify(layoutSnapshot.current),
+        );
+      } catch {
+        /* Optional preference. */
+      }
+    };
+  }, [layoutPreferenceKey]);
   // Mobile workbench drawer opens in a collapsed "peek" state and
   // only grows to its full 72vh height after an explicit tap / swipe-up on
   // the grab handle, so the first open doesn't take over the screen.
@@ -112,7 +161,7 @@ export function ChatPageLayout({
     (Number.isFinite(containerWidth) &&
       containerWidth < inlineWorkbenchMinimumWidth);
   const secondaryOverlayPresentation =
-    secondaryPanel && isWorkbenchOverlayViewport
+    secondaryPanel && isWorkbenchOverlayViewport && !fullWorkbench
       ? isNarrowViewport
         ? ("bottom-sheet" as const)
         : ("desktop-drawer" as const)
@@ -155,6 +204,18 @@ export function ChatPageLayout({
         sidebarOpen ? sidebarPx : 0,
       ),
     fallbackPx: MIN_SECONDARY_PX,
+    onDragMove: (width) =>
+      setSnapPreview(
+        Number.isFinite(containerWidth) && width >= containerWidth - 160,
+      ),
+    onDragEnd: (width) => {
+      setSnapPreview(false);
+      if (Number.isFinite(containerWidth) && width >= containerWidth - 160) {
+        setContentFullWidth(true);
+        return true;
+      }
+      return false;
+    },
   });
   const secondaryPx = secondaryPanelCtrl.resolvedPx;
   // Render the clamped pixel width whenever a pixel basis exists — the raw
@@ -262,8 +323,15 @@ export function ChatPageLayout({
   const restoreSecondaryOverlayFocus = useCallback(() => {
     const previous = previousFocusedElementRef.current;
     previousFocusedElementRef.current = null;
-    if (previous?.isConnected) {
+    if (previous?.isConnected && previous !== document.body) {
       previous.focus({ preventScroll: true });
+    } else {
+      // A responsive transition may remove the original desktop trigger.
+      // Return to the surviving composer instead of stranding focus on body.
+      const input = inputOverlayRef.current?.querySelector<HTMLElement>(
+        'textarea, [contenteditable="true"], input',
+      );
+      if (input?.isConnected) input.focus({ preventScroll: true });
     }
   }, []);
 
@@ -287,9 +355,17 @@ export function ChatPageLayout({
 
     if (previousPresentation) {
       previousOverlayPresentationRef.current = null;
-      restoreSecondaryOverlayFocus();
+      if (fullWorkbench) {
+        previousFocusedElementRef.current = null;
+      } else {
+        restoreSecondaryOverlayFocus();
+      }
     }
-  }, [secondaryOverlayPresentation, restoreSecondaryOverlayFocus]);
+  }, [
+    secondaryOverlayPresentation,
+    fullWorkbench,
+    restoreSecondaryOverlayFocus,
+  ]);
 
   // Restore focus even if the whole layout unmounts while its overlay is
   // open (for example during route navigation).
@@ -396,32 +472,90 @@ export function ChatPageLayout({
   return (
     <div
       ref={layoutRootRef}
+      onPointerDownCapture={(event) => {
+        if (!fullWorkbench || composerNeedsAttention || composingRef.current)
+          return;
+        if (
+          !(event.target instanceof Element) ||
+          !event.target.closest("aside")
+        )
+          return;
+        const editor = inputOverlayRef.current?.querySelector<HTMLElement>(
+          'textarea, [contenteditable="true"], input',
+        );
+        const draft =
+          editor instanceof HTMLTextAreaElement ||
+          editor instanceof HTMLInputElement
+            ? editor.value
+            : editor?.textContent;
+        if (!draft?.trim()) setComposerCompact(true);
+      }}
       data-chat-page-layout-root="true"
+      data-workspace-layout={fullWorkbench ? "content-full" : "split"}
       className="relative flex h-full w-full min-h-0 overflow-hidden"
     >
+      {snapPreview && (
+        <div
+          data-workbench-snap-preview="true"
+          className="pointer-events-none absolute inset-1 z-[80] rounded-xl border-2 border-primary/40 bg-primary/5"
+        >
+          <span className="absolute top-4 left-1/2 -translate-x-1/2 rounded-full bg-background px-4 py-2 text-sm shadow-sm">
+            {t.sidebar.expandWorkbench}
+          </span>
+        </div>
+      )}
       <div
         data-chat-page-main-column="true"
         aria-hidden={secondaryModalOpen ? true : undefined}
         inert={secondaryModalOpen ? true : undefined}
-        className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+        className={cn(
+          "flex min-h-0 min-w-0 flex-1 flex-col",
+          fullWorkbench
+            ? "pointer-events-none absolute inset-0 z-[60]"
+            : "relative overflow-hidden",
+        )}
       >
         <header
           data-chat-page-header="true"
+          hidden={fullWorkbench}
+          inert={fullWorkbench || undefined}
           className={cn(
             "flex h-11 shrink-0 items-center justify-between overflow-hidden pl-12 pr-3",
             isNewThread
               ? "border-b border-transparent"
               : "border-b border-border-subtle",
             "bg-background/80 backdrop-blur-lg",
+            fullWorkbench && "!hidden",
             headerClassName,
           )}
+          style={
+            {
+              paddingRight:
+                controlsSide === "right" && !secondaryPanel && !sidebarOpen
+                  ? "calc(var(--window-controls-safe-inset, 138px) + 0.75rem)"
+                  : undefined,
+              WebkitAppRegion: controlsSide === "right" ? "drag" : undefined,
+            } as CSSProperties
+          }
         >
-          {header}
+          <div
+            className="flex min-w-0 flex-1 items-center"
+            style={
+              controlsSide === "right"
+                ? ({ WebkitAppRegion: "no-drag" } as CSSProperties)
+                : undefined
+            }
+          >
+            {header}
+          </div>
         </header>
         <section
           role="region"
           aria-label={t.sidebar.ariaChatWorkspace}
-          className="relative flex min-h-0 flex-1 flex-col overflow-hidden overscroll-none"
+          className={cn(
+            "relative flex min-h-0 flex-1 flex-col overscroll-none",
+            !fullWorkbench && "overflow-hidden",
+          )}
           style={
             {
               "--chat-input-overlay-height": `${inputOverlayHeight || 160}px`,
@@ -429,12 +563,19 @@ export function ChatPageLayout({
           }
         >
           {pageTitle && <h1 className="sr-only">{pageTitle}</h1>}
-          {modeSwitcher && (
+          {modeSwitcher && !fullWorkbench && (
             <div className="pointer-events-auto absolute top-2 left-1/2 z-50 -translate-x-1/2">
               {modeSwitcher}
             </div>
           )}
-          <div className="flex size-full min-w-0 flex-col items-center overflow-hidden">
+          <div
+            aria-hidden={fullWorkbench || undefined}
+            inert={fullWorkbench || undefined}
+            className={cn(
+              "flex size-full min-w-0 flex-col items-center overflow-hidden",
+              fullWorkbench && "invisible",
+            )}
+          >
             <div
               className={cn(
                 "w-full min-w-0 overflow-hidden",
@@ -447,16 +588,84 @@ export function ChatPageLayout({
           <div
             ref={inputOverlayRef}
             data-chat-input-overlay="true"
-            className="absolute right-0 bottom-0 left-0 z-30 flex justify-center bg-gradient-to-t from-background via-background/92 to-transparent px-3 pb-3 pt-8"
+            data-composer-placement={fullWorkbench ? "floating" : "docked"}
+            data-composer-state={
+              fullWorkbench && !composerExpanded ? "compact" : "expanded"
+            }
+            className={cn(
+              "absolute right-0 bottom-0 left-0 z-30 flex justify-center px-3 pb-3",
+              fullWorkbench
+                ? "pointer-events-none mx-auto w-full max-w-[760px] flex-col items-center gap-2 pb-6 pt-3 [&>*]:pointer-events-auto [&_[data-composer-context-strip]]:hidden [&_[data-composer-welcome]]:hidden [&_[data-composer-start]]:!translate-y-0"
+                : "bg-gradient-to-t from-background via-background/92 to-transparent pt-8",
+            )}
           >
-            <ErrorBoundary>{inputArea}</ErrorBoundary>
+            {fullWorkbench && !composerExpanded && (
+              <button
+                ref={compactButtonRef}
+                type="button"
+                className="flex h-12 w-56 items-center justify-center gap-3 rounded-full border border-border-subtle bg-background/95 text-sm text-muted-foreground shadow-lg backdrop-blur-xl transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => {
+                  setComposerCompact(false);
+                  requestAnimationFrame(() => {
+                    inputOverlayRef.current
+                      ?.querySelector<HTMLElement>(
+                        'textarea, [contenteditable="true"], input',
+                      )
+                      ?.focus({ preventScroll: true });
+                  });
+                }}
+              >
+                <MessageCircleIcon className="size-4" />
+                {t.sidebar.showComposer}
+              </button>
+            )}
+            <div
+              className={cn(
+                "w-full min-w-0",
+                fullWorkbench && !composerExpanded && "hidden",
+                fullWorkbench &&
+                  "rounded-3xl drop-shadow-[0_4px_16px_rgba(0,0,0,0.04)]",
+              )}
+              hidden={fullWorkbench && !composerExpanded}
+              inert={(fullWorkbench && !composerExpanded) || undefined}
+              onCompositionStartCapture={() => {
+                composingRef.current = true;
+              }}
+              onCompositionEndCapture={() => {
+                composingRef.current = false;
+              }}
+            >
+              {fullWorkbench && composerExpanded && (
+                <div className="flex justify-end px-2 pb-1">
+                  <button
+                    type="button"
+                    disabled={composerNeedsAttention}
+                    aria-label={t.sidebar.compactComposer}
+                    title={t.sidebar.compactComposer}
+                    className="rounded-full border border-border-subtle bg-background/95 p-1.5 text-muted-foreground shadow-sm hover:bg-muted disabled:opacity-40"
+                    onClick={() => {
+                      if (composingRef.current) return;
+                      setComposerCompact(true);
+                      requestAnimationFrame(() =>
+                        compactButtonRef.current?.focus({
+                          preventScroll: true,
+                        }),
+                      );
+                    }}
+                  >
+                    <ChevronDownIcon className="size-4" />
+                  </button>
+                </div>
+              )}
+              <ErrorBoundary>{inputArea}</ErrorBoundary>
+            </div>
           </div>
         </section>
       </div>
       {sidebar && (
         <aside
-          aria-hidden={secondaryModalOpen || !showSidebar}
-          inert={secondaryModalOpen ? true : undefined}
+          aria-hidden={secondaryModalOpen || fullWorkbench || !showSidebar}
+          inert={secondaryModalOpen || fullWorkbench ? true : undefined}
           aria-label={t.sidebar.ariaUtilityPanel}
           style={
             isNarrowViewport
@@ -465,6 +674,7 @@ export function ChatPageLayout({
           }
           className={cn(
             "relative z-20 flex flex-col overflow-hidden",
+            fullWorkbench && "!hidden",
             isNarrowViewport
               ? cn(
                   "fixed right-0 bottom-0 left-0 z-40 rounded-t-2xl border-t border-border-default bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)] pt-0 shadow-[0_-18px_42px_-24px_rgba(0,0,0,0.28)] backdrop-blur-[10px]",
@@ -500,17 +710,41 @@ export function ChatPageLayout({
           <ErrorBoundary>{sidebar}</ErrorBoundary>
         </aside>
       )}
-      {secondaryPanel && !isWorkbenchOverlayViewport && (
+      {secondaryPanel && !isNarrowViewport && (
         <aside
-          data-secondary-panel-presentation="inline"
+          ref={secondaryOverlayRef}
+          data-secondary-panel-presentation={
+            fullWorkbench
+              ? "full"
+              : isWorkbenchOverlayViewport
+                ? "desktop-drawer"
+                : "inline"
+          }
+          role={secondaryModalOpen ? "dialog" : undefined}
+          aria-modal={secondaryModalOpen || undefined}
+          tabIndex={-1}
           aria-label={t.sidebar.ariaAgentWorkbench}
-          style={{ width: secondaryResolvedWidth }}
-          className="relative z-20 flex flex-shrink-0 flex-col overflow-hidden border-l border-border-default bg-background opacity-100"
+          style={{
+            width: fullWorkbench
+              ? "100%"
+              : isWorkbenchOverlayViewport
+                ? desktopOverlayWidth
+                : secondaryResolvedWidth,
+          }}
+          className={cn(
+            "flex flex-shrink-0 flex-col overflow-hidden border-border-default bg-background opacity-100",
+            fullWorkbench
+              ? "absolute inset-0 z-20"
+              : isWorkbenchOverlayViewport
+                ? "absolute inset-y-0 right-0 z-50 border-l shadow-xl"
+                : "relative z-20 border-l",
+          )}
         >
           <div
             role="separator"
             aria-orientation="vertical"
             tabIndex={0}
+            hidden={fullWorkbench || isWorkbenchOverlayViewport}
             aria-valuenow={Math.round(secondaryPx)}
             aria-valuemin={MIN_SECONDARY_PX}
             aria-valuemax={MAX_SECONDARY_PX}
@@ -519,35 +753,66 @@ export function ChatPageLayout({
             className="absolute top-0 left-0 bottom-0 z-30 w-1 cursor-col-resize transition-colors hover:bg-primary/30 active:bg-primary/50 focus-visible:bg-primary/50 focus-visible:outline-none"
             aria-label={t.sidebar.ariaResizeWorkbench}
           />
-          <ErrorBoundary>{secondaryPanel}</ErrorBoundary>
+          {workbenchHeaderSlot ? (
+            createPortal(
+              <button
+                type="button"
+                aria-label={
+                  fullWorkbench
+                    ? t.sidebar.restoreWorkbenchSplit
+                    : t.sidebar.expandWorkbench
+                }
+                title={
+                  fullWorkbench
+                    ? t.sidebar.restoreWorkbenchSplit
+                    : t.sidebar.expandWorkbench
+                }
+                aria-pressed={fullWorkbench}
+                onClick={() => setContentFullWidth((value) => !value)}
+                className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/45 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {fullWorkbench ? (
+                  <Minimize2Icon aria-hidden="true" className="size-3.5" />
+                ) : (
+                  <Maximize2Icon aria-hidden="true" className="size-3.5" />
+                )}
+              </button>,
+              workbenchHeaderSlot,
+            )
+          ) : (
+            <div className="flex h-8 shrink-0 items-center justify-end border-b border-border/60 px-2">
+              <button
+                type="button"
+                aria-pressed={fullWorkbench}
+                onClick={() => setContentFullWidth((value) => !value)}
+                className="inline-flex h-6 items-center gap-1.5 rounded px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {fullWorkbench ? (
+                  <Minimize2Icon aria-hidden="true" className="size-3" />
+                ) : (
+                  <Maximize2Icon aria-hidden="true" className="size-3" />
+                )}
+                {fullWorkbench
+                  ? t.sidebar.restoreWorkbenchSplit
+                  : t.sidebar.expandWorkbench}
+              </button>
+            </div>
+          )}
+          <WorkbenchHeaderSlot.Provider value={setWorkbenchHeaderSlot}>
+            <ErrorBoundary>{secondaryPanel}</ErrorBoundary>
+          </WorkbenchHeaderSlot.Provider>
         </aside>
       )}
-      {secondaryPanel && isWorkbenchOverlayViewport && !isNarrowViewport && (
-        <>
-          {/* Desktop fit failures stay inside this layout and preserve the
-                full vertical workbench surface instead of becoming a sheet. */}
-          <div
-            data-secondary-panel-backdrop="desktop-drawer"
-            aria-hidden="true"
-            onClick={onSecondaryClose}
-            className={cn(
-              "absolute inset-0 z-40 bg-black/30",
-              onSecondaryClose && "cursor-pointer",
-            )}
-          />
-          <aside
-            ref={secondaryOverlayRef}
-            data-secondary-panel-presentation="desktop-drawer"
-            role="dialog"
-            aria-modal="true"
-            aria-label={t.sidebar.ariaAgentWorkbench}
-            tabIndex={-1}
-            style={{ width: desktopOverlayWidth }}
-            className="absolute inset-y-0 right-0 z-50 flex flex-col overflow-hidden border-l border-border-default bg-[color:color-mix(in_oklch,var(--card)_94%,transparent)] shadow-[-18px_0_42px_-24px_rgba(0,0,0,0.3)] backdrop-blur-[10px]"
-          >
-            <ErrorBoundary>{secondaryPanel}</ErrorBoundary>
-          </aside>
-        </>
+      {secondaryModalOpen && !isNarrowViewport && (
+        <div
+          data-secondary-panel-backdrop="desktop-drawer"
+          aria-hidden="true"
+          onClick={onSecondaryClose}
+          className={cn(
+            "absolute inset-0 z-40 bg-black/30",
+            onSecondaryClose && "cursor-pointer",
+          )}
+        />
       )}
       {secondaryPanel && isNarrowViewport && (
         <>

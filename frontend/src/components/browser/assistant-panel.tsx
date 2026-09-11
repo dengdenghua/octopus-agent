@@ -12,6 +12,8 @@ import {
   ListIcon,
   ChevronDownIcon,
   StopCircleIcon,
+  PlusIcon,
+  ChevronRightIcon,
 } from "lucide-react";
 import {
   useCallback,
@@ -28,9 +30,9 @@ import { isAIMessage, isHumanMessage } from "@/core/api/types";
 import { useI18n } from "@/core/i18n/hooks";
 import { useActiveAgentId } from "@/core/agents/active";
 import { useAgents } from "@/core/agents/hooks";
-import { isPrimaryPersonaAgentId } from "@/core/agents/persona-policy";
+import { primaryPersonaRoster } from "@/core/agents/agent-list";
+import { BrowserAgentPicker as AgentPicker } from "./browser-agent-picker";
 import { copyTextToClipboard } from "@/core/clipboard";
-import { emitAgentChanged } from "@/core/events";
 import { useCapabilitySurface } from "@/core/plugins/use-capability-surface";
 import {
   appendRecordingEvents,
@@ -69,11 +71,13 @@ import {
   type BrowserControlOptions,
 } from "./agentic-actions";
 import { useBrowserStore } from "./browser-store";
+import { useAssistantPresentation } from "./assistant-surface";
 
 import type { WebviewTabHandle } from "./webview-tab";
 
 interface Props {
   webviewHandle: WebviewTabHandle | null;
+  framed?: boolean;
 }
 
 interface PendingConfirmation {
@@ -104,7 +108,9 @@ interface ResearchLogEntry {
   url?: string;
 }
 
-export function AssistantPanel({ webviewHandle }: Props) {
+export function AssistantPanel({ webviewHandle, framed = false }: Props) {
+  const presentation = useAssistantPresentation();
+  const compact = presentation?.compact === true;
   const { t } = useI18n();
   const recorderPluginEnabled = useCapabilitySurface("browser.recorder");
   const { activeTab, state, setCopilotOpen, setCopilotWidth } =
@@ -174,10 +180,7 @@ export function AssistantPanel({ webviewHandle }: Props) {
   const activeAgentId = useActiveAgentId();
   const agentName = activeAgentId ?? "general";
   const { agents } = useAgents();
-  const primaryAgents = useMemo(
-    () => agents.filter((agent) => isPrimaryPersonaAgentId(agent.name)),
-    [agents],
-  );
+  const primaryAgents = useMemo(() => primaryPersonaRoster(agents), [agents]);
   const activeAgent = useMemo(
     () => primaryAgents.find((a) => a.name === agentName) ?? null,
     [agentName, primaryAgents],
@@ -212,6 +215,39 @@ export function AssistantPanel({ webviewHandle }: Props) {
     threadId,
     context: { agent_name: agentName, mode: "chat" },
   });
+  const expandConversation = presentation?.setExpanded;
+  const recentMessage = [...thread.messages]
+    .reverse()
+    .find((message) => isAIMessage(message) || isHumanMessage(message));
+  const recentText = recentMessage
+    ? (typeof recentMessage.content === "string"
+        ? recentMessage.content
+        : recentMessage.content
+            .filter((part) => part.type === "text")
+            .map((part) => (part as { text: string }).text)
+            .join(" ")
+      )
+        .replace(/\s+/g, " ")
+        .trim()
+    : "";
+  useEffect(() => {
+    if (
+      compact &&
+      (thread.isLoading ||
+        errorMsg ||
+        pendingSiteAccess ||
+        pendingConfirmations.length)
+    ) {
+      expandConversation?.(true);
+    }
+  }, [
+    compact,
+    thread.isLoading,
+    errorMsg,
+    pendingSiteAccess,
+    pendingConfirmations.length,
+    expandConversation,
+  ]);
 
   useEffect(() => {
     if (!recorderPluginEnabled) return;
@@ -1016,365 +1052,431 @@ export function AssistantPanel({ webviewHandle }: Props) {
       )}
     >
       {/* Implementation note. */}
-      <div
-        onMouseDown={onResizeStart}
-        className="absolute left-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/30"
-      />
-
-      {/* Implementation note. */}
-      <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-white/24 bg-white/[0.06] px-3">
-        <AgentPicker
-          activeAgent={activeAgent}
-          agents={primaryAgents}
-          activeAgentId={agentName}
+      {!framed && (
+        <div
+          onMouseDown={onResizeStart}
+          className="absolute left-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-primary/30"
         />
-        {activeTab?.title && (
-          <span
-            className="min-w-0 flex-1 truncate text-mini text-muted-foreground"
-            title={activeTab.title}
-          >
-            · {activeTab.title}
-          </span>
+      )}
+
+      <div
+        id={presentation?.contentId}
+        role="region"
+        aria-label="浏览器对话记录"
+        className={cn(
+          "flex min-h-0 flex-1 flex-col overflow-hidden",
+          compact &&
+            "mx-3 rounded-t-2xl border border-b-0 border-border-subtle bg-background shadow-[0_-8px_32px_rgba(0,0,0,0.08)]",
         )}
+        style={{
+          display: compact && !presentation?.expanded ? "none" : undefined,
+        }}
+      >
         {/* Implementation note. */}
-        {agentLoopActive && (
-          <button
-            onClick={stopAgentLoop}
-            className="flex shrink-0 items-center gap-1 rounded bg-destructive/10 px-1.5 py-0.5 text-micro font-medium text-destructive transition-colors hover:bg-destructive/20 dark:text-destructive"
-            title={t.browser.assistant.stopAgentTooltip}
-          >
-            <StopCircleIcon className="size-3" />
-            {t.browser.assistant.stopAgent}
-          </button>
-        )}
-        {/* Implementation note. */}
-        <button
-          onClick={() => setAutoBrowse((v) => !v)}
-          className={cn(
-            "shrink-0 rounded px-1.5 py-0.5 text-micro font-medium transition-colors",
-            autoBrowse
-              ? "bg-primary/10 text-primary"
-              : "border border-white/28 text-muted-foreground hover:bg-white/18",
+        <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-white/24 bg-white/[0.06] px-3">
+          {compact && presentation?.dragHandle}
+          <AgentPicker
+            activeAgent={activeAgent}
+            agents={primaryAgents}
+            activeAgentId={agentName}
+          />
+          {activeTab?.title && (
+            <span
+              className="min-w-0 flex-1 truncate text-mini text-muted-foreground"
+              title={activeTab.title}
+            >
+              · {activeTab.title}
+            </span>
           )}
-          title={
-            autoBrowse
-              ? t.browser.assistant.autoBrowseOnTooltip
-              : t.browser.assistant.autoBrowseOffTooltip
-          }
-        >
-          {autoBrowse ? "AUTO" : "READ"}
-        </button>
-        {recorderPluginEnabled ? (
+          {/* Implementation note. */}
+          {agentLoopActive && (
+            <button
+              onClick={stopAgentLoop}
+              className="flex shrink-0 items-center gap-1 rounded bg-destructive/10 px-1.5 py-0.5 text-micro font-medium text-destructive transition-colors hover:bg-destructive/20 dark:text-destructive"
+              title={t.browser.assistant.stopAgentTooltip}
+            >
+              <StopCircleIcon className="size-3" />
+              {t.browser.assistant.stopAgent}
+            </button>
+          )}
+          {/* Implementation note. */}
           <button
-            onClick={() => void toggleRecorderMode()}
+            onClick={() => setAutoBrowse((v) => !v)}
             className={cn(
               "shrink-0 rounded px-1.5 py-0.5 text-micro font-medium transition-colors",
-              recorderMode
-                ? "bg-success/10 text-success"
+              autoBrowse
+                ? "bg-primary/10 text-primary"
                 : "border border-white/28 text-muted-foreground hover:bg-white/18",
             )}
-            title={t.browser.assistant.recorderTitle}
+            title={
+              autoBrowse
+                ? t.browser.assistant.autoBrowseOnTooltip
+                : t.browser.assistant.autoBrowseOffTooltip
+            }
           >
-            REC
+            {autoBrowse ? "AUTO" : "READ"}
           </button>
-        ) : null}
-        <button
-          onClick={() => setCopilotOpen(false)}
-          className="grid size-7 shrink-0 place-items-center rounded text-muted-foreground hover:bg-white/18 hover:text-foreground"
-          title={t.common.close}
-        >
-          <XIcon className="size-4" />
-        </button>
-      </div>
+          {recorderPluginEnabled ? (
+            <button
+              onClick={() => void toggleRecorderMode()}
+              className={cn(
+                "shrink-0 rounded px-1.5 py-0.5 text-micro font-medium transition-colors",
+                recorderMode
+                  ? "bg-success/10 text-success"
+                  : "border border-white/28 text-muted-foreground hover:bg-white/18",
+              )}
+              title={t.browser.assistant.recorderTitle}
+            >
+              REC
+            </button>
+          ) : null}
+          {compact && presentation?.controls}
+          {!framed && (
+            <button
+              onClick={() => setCopilotOpen(false)}
+              className="grid size-7 shrink-0 place-items-center rounded text-muted-foreground hover:bg-white/18 hover:text-foreground"
+              title={t.common.close}
+            >
+              <XIcon className="size-4" />
+            </button>
+          )}
+        </div>
 
-      {/* quick actions */}
-      <div className="flex shrink-0 flex-wrap gap-1.5 border-b border-white/20 bg-white/[0.05] px-3 py-2">
-        <QuickAction
-          icon={FileTextIcon}
-          label={t.browser.assistant.summarizePage}
-          onClick={() => askWithPage(t.browser.assistant.summarizePagePrompt)}
-          disabled={busy}
-        />
-        <QuickAction
-          icon={ListIcon}
-          label={t.browser.assistant.extractKeyPoints}
-          onClick={() =>
-            askWithPage(t.browser.assistant.extractKeyPointsPrompt)
-          }
-          disabled={busy}
-        />
-        <QuickAction
-          icon={LanguagesIcon}
-          label={t.browser.assistant.translateToChinese}
-          onClick={() =>
-            askWithPage(t.browser.assistant.translateToChinesePrompt)
-          }
-          disabled={busy}
-        />
-      </div>
+        {/* quick actions */}
+        <div className="flex shrink-0 flex-wrap gap-1.5 border-b border-white/20 bg-white/[0.05] px-3 py-2">
+          <QuickAction
+            icon={FileTextIcon}
+            label={t.browser.assistant.summarizePage}
+            onClick={() => askWithPage(t.browser.assistant.summarizePagePrompt)}
+            disabled={busy}
+          />
+          <QuickAction
+            icon={ListIcon}
+            label={t.browser.assistant.extractKeyPoints}
+            onClick={() =>
+              askWithPage(t.browser.assistant.extractKeyPointsPrompt)
+            }
+            disabled={busy}
+          />
+          <QuickAction
+            icon={LanguagesIcon}
+            label={t.browser.assistant.translateToChinese}
+            onClick={() =>
+              askWithPage(t.browser.assistant.translateToChinesePrompt)
+            }
+            disabled={busy}
+          />
+        </div>
 
-      {recorderMode && (
-        <div className="shrink-0 border-b border-white/20 bg-success/50/[0.04] px-3 py-2">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <div className="text-mini font-medium text-success">
-                {t.browser.assistant.recorderTitle}
-              </div>
-              <div className="truncate text-micro text-muted-foreground">
-                {t.browser.assistant.recorderDesc}
-              </div>
-              <div className="mt-0.5 text-micro text-muted-foreground">
-                {recorderProviderState === "embedded"
-                  ? "内置页面已接入"
-                  : recorderProviderState === "relay"
-                    ? "Chrome Relay 已接入"
-                    : "页面采集离线，仅记录 Agent 轨迹"}
+        {recorderMode && (
+          <div className="shrink-0 border-b border-white/20 bg-success/50/[0.04] px-3 py-2">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-mini font-medium text-success">
+                  {t.browser.assistant.recorderTitle}
+                </div>
+                <div className="truncate text-micro text-muted-foreground">
+                  {t.browser.assistant.recorderDesc}
+                </div>
+                <div className="mt-0.5 text-micro text-muted-foreground">
+                  {recorderProviderState === "embedded"
+                    ? "内置页面已接入"
+                    : recorderProviderState === "relay"
+                      ? "Chrome Relay 已接入"
+                      : "页面采集离线，仅记录 Agent 轨迹"}
+                </div>
               </div>
             </div>
-          </div>
-          <div className="mt-2 flex gap-1.5">
-            <input
-              value={researchGoal}
-              onChange={(e) => setResearchGoal(e.target.value)}
-              placeholder={t.browser.assistant.researchGoalPlaceholder}
-              aria-label={t.browser.assistant.researchGoalPlaceholder}
-              className={cn(
-                "min-w-0 flex-1 rounded px-2 py-1 text-mini outline-none focus:ring-1 focus:ring-success/40",
-                "bg-white/10",
-              )}
-            />
-            <button
-              type="button"
-              onClick={startRecorderResearch}
-              disabled={
-                busy ||
-                thread.isLoading ||
-                (!researchGoal.trim() && !input.trim())
-              }
-              className="rounded bg-success px-2 py-1 text-mini font-medium text-white hover:bg-success disabled:opacity-40"
-            >
-              {t.browser.assistant.start}
-            </button>
-          </div>
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <button
-              type="button"
-              onClick={() => void addPageToResearchLog()}
-              disabled={busy}
-              className={cn(
-                "rounded px-2 py-1 text-micro text-muted-foreground disabled:opacity-40",
-                "bg-white/10",
-              )}
-            >
-              {t.browser.assistant.recordCurrentPage}
-            </button>
-            {researchLog.length > 0 && (
+            <div className="mt-2 flex gap-1.5">
+              <input
+                value={researchGoal}
+                onChange={(e) => setResearchGoal(e.target.value)}
+                placeholder={t.browser.assistant.researchGoalPlaceholder}
+                aria-label={t.browser.assistant.researchGoalPlaceholder}
+                className={cn(
+                  "min-w-0 flex-1 rounded px-2 py-1 text-mini outline-none focus:ring-1 focus:ring-success/40",
+                  "bg-white/10",
+                )}
+              />
               <button
                 type="button"
-                onClick={() => setResearchLog([])}
-                className="text-micro text-muted-foreground hover:text-foreground"
+                onClick={startRecorderResearch}
+                disabled={
+                  busy ||
+                  thread.isLoading ||
+                  (!researchGoal.trim() && !input.trim())
+                }
+                className="rounded bg-success px-2 py-1 text-mini font-medium text-white hover:bg-success disabled:opacity-40"
               >
-                {t.browser.assistant.clearLog}
+                {t.browser.assistant.start}
               </button>
+            </div>
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => void addPageToResearchLog()}
+                disabled={busy}
+                className={cn(
+                  "rounded px-2 py-1 text-micro text-muted-foreground disabled:opacity-40",
+                  "bg-white/10",
+                )}
+              >
+                {t.browser.assistant.recordCurrentPage}
+              </button>
+              {researchLog.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setResearchLog([])}
+                  className="text-micro text-muted-foreground hover:text-foreground"
+                >
+                  {t.browser.assistant.clearLog}
+                </button>
+              )}
+            </div>
+            {researchLog.length > 0 && (
+              <div className="mt-2 grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => void copyResearchBrief()}
+                  className={cn(
+                    "inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-micro font-medium text-muted-foreground",
+                    "bg-white/10",
+                  )}
+                >
+                  <ClipboardCheckIcon className="size-3" />
+                  {briefCopied
+                    ? t.browser.assistant.copied
+                    : t.browser.assistant.copyBrief}
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadResearchBrief}
+                  className={cn(
+                    "inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-micro font-medium text-muted-foreground",
+                    "bg-white/10",
+                  )}
+                >
+                  <DownloadIcon className="size-3" />
+                  {t.browser.assistant.exportMd}
+                </button>
+              </div>
+            )}
+            {researchLog.length > 0 && (
+              <div
+                className={cn(
+                  "mt-2 max-h-28 space-y-1 overflow-y-auto rounded p-1.5",
+                  "bg-white/10",
+                )}
+              >
+                {researchLog.slice(0, 5).map((entry) => (
+                  <div key={entry.id} className="rounded bg-white/18 px-2 py-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-micro font-medium">
+                        {entry.platform} · {entry.title}
+                      </span>
+                      <span className="shrink-0 text-[9px] text-muted-foreground">
+                        {new Date(entry.createdAt).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 line-clamp-2 text-micro text-muted-foreground">
+                      {entry.note}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
-          {researchLog.length > 0 && (
-            <div className="mt-2 grid grid-cols-2 gap-1.5">
-              <button
-                type="button"
-                onClick={() => void copyResearchBrief()}
-                className={cn(
-                  "inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-micro font-medium text-muted-foreground",
-                  "bg-white/10",
-                )}
-              >
-                <ClipboardCheckIcon className="size-3" />
-                {briefCopied
-                  ? t.browser.assistant.copied
-                  : t.browser.assistant.copyBrief}
-              </button>
-              <button
-                type="button"
-                onClick={downloadResearchBrief}
-                className={cn(
-                  "inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-micro font-medium text-muted-foreground",
-                  "bg-white/10",
-                )}
-              >
-                <DownloadIcon className="size-3" />
-                {t.browser.assistant.exportMd}
-              </button>
-            </div>
-          )}
-          {researchLog.length > 0 && (
-            <div
-              className={cn(
-                "mt-2 max-h-28 space-y-1 overflow-y-auto rounded p-1.5",
-                "bg-white/10",
-              )}
-            >
-              {researchLog.slice(0, 5).map((entry) => (
-                <div key={entry.id} className="rounded bg-white/18 px-2 py-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-micro font-medium">
-                      {entry.platform} · {entry.title}
-                    </span>
-                    <span className="shrink-0 text-[9px] text-muted-foreground">
-                      {new Date(entry.createdAt).toLocaleTimeString()}
-                    </span>
-                  </div>
-                  <div className="mt-0.5 line-clamp-2 text-micro text-muted-foreground">
-                    {entry.note}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+        )}
 
-      {errorMsg && (
-        <div className="shrink-0 border-b border-white/20 bg-destructive/10 px-3 py-1.5 text-mini text-destructive">
-          {errorMsg}
-        </div>
-      )}
-
-      {pendingSiteAccess && (
-        <div className="shrink-0 border-b border-white/20 bg-primary/8 px-3 py-2">
-          <div className="rounded-md border border-primary/25 bg-white/10 p-2 text-mini">
-            <div className="font-medium text-foreground">
-              允许 Agent 操作此网站？
-            </div>
-            <div className="mt-1 break-all text-muted-foreground">
-              {pendingSiteAccess.origin}
-            </div>
-            <div className="mt-1 text-muted-foreground">
-              允许后，Agent
-              可以读取页面并点击、输入和滚动；提交、支付、删除等敏感操作仍需单独确认。
-            </div>
-            <div className="mt-2 flex gap-2">
-              <button
-                onClick={() => resolveSiteAccess("allow")}
-                className="rounded bg-primary px-2 py-1 font-medium text-primary-foreground hover:bg-primary/90"
-              >
-                允许此网站
-              </button>
-              <button
-                onClick={() => resolveSiteAccess("block")}
-                className="rounded border border-white/28 px-2 py-1 text-muted-foreground hover:bg-white/18"
-              >
-                阻止
-              </button>
-            </div>
+        {errorMsg && (
+          <div className="shrink-0 border-b border-white/20 bg-destructive/10 px-3 py-1.5 text-mini text-destructive">
+            {errorMsg}
           </div>
-        </div>
-      )}
+        )}
 
-      {pendingConfirmations.length > 0 && (
-        <div className="shrink-0 space-y-2 border-b border-white/20 bg-warning/10 px-3 py-2">
-          {pendingConfirmations.map((pending) => (
-            <div
-              key={pending.id}
-              className={cn(
-                "rounded-md border-warning/30 p-2 text-mini",
-                "bg-white/10",
-              )}
-            >
-              <div className="font-medium text-warning">
-                {t.browser.assistant.needsUserConfirmationTitle}
+        {pendingSiteAccess && (
+          <div className="shrink-0 border-b border-white/20 bg-primary/8 px-3 py-2">
+            <div className="rounded-md border border-primary/25 bg-white/10 p-2 text-mini">
+              <div className="font-medium text-foreground">
+                允许 Agent 操作此网站？
+              </div>
+              <div className="mt-1 break-all text-muted-foreground">
+                {pendingSiteAccess.origin}
               </div>
               <div className="mt-1 text-muted-foreground">
-                {describePendingAction(pending)}
+                允许后，Agent
+                可以读取页面并点击、输入和滚动；提交、支付、删除等敏感操作仍需单独确认。
               </div>
-              {pending.error && (
-                <div className="mt-1 break-words text-warning">
-                  {pending.error}
-                </div>
-              )}
               <div className="mt-2 flex gap-2">
                 <button
-                  onClick={() => void confirmPendingAction(pending)}
-                  disabled={busy}
-                  className="rounded bg-warning px-2 py-1 font-medium text-white hover:bg-warning disabled:opacity-50"
+                  onClick={() => resolveSiteAccess("allow")}
+                  className="rounded bg-primary px-2 py-1 font-medium text-primary-foreground hover:bg-primary/90"
                 >
-                  {t.browser.assistant.confirmExecute}
+                  允许此网站
                 </button>
                 <button
-                  onClick={() => dismissPendingAction(pending.id)}
-                  disabled={busy}
-                  className="rounded border border-white/28 px-2 py-1 text-muted-foreground hover:bg-white/18 disabled:opacity-50"
+                  onClick={() => resolveSiteAccess("block")}
+                  className="rounded border border-white/28 px-2 py-1 text-muted-foreground hover:bg-white/18"
                 >
-                  {t.common.cancel}
+                  阻止
                 </button>
               </div>
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Implementation note. */}
-      <div
-        ref={listRef}
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3"
-      >
-        {thread.messages.length === 0 && !thread.isLoading && (
-          <div className="flex h-full flex-col items-center justify-center text-center text-xs text-muted-foreground">
-            <SparklesIcon className="mb-2 size-6 opacity-50" />
-            <div>{t.browser.assistant.emptyHint}</div>
           </div>
         )}
-        {thread.messages.map((m) => {
-          const isUser = isHumanMessage(m);
-          const isAi = isAIMessage(m);
-          if (!isUser && !isAi) return null;
-          const text =
-            typeof m.content === "string"
-              ? m.content
-              : m.content
-                  .filter(
-                    (c): c is { type: "text"; text: string } =>
-                      c.type === "text",
-                  )
-                  .map((c) => c.text)
-                  .join("");
-          return (
+
+        {pendingConfirmations.length > 0 && (
+          <div className="shrink-0 space-y-2 border-b border-white/20 bg-warning/10 px-3 py-2">
+            {pendingConfirmations.map((pending) => (
+              <div
+                key={pending.id}
+                className={cn(
+                  "rounded-md border-warning/30 p-2 text-mini",
+                  "bg-white/10",
+                )}
+              >
+                <div className="font-medium text-warning">
+                  {t.browser.assistant.needsUserConfirmationTitle}
+                </div>
+                <div className="mt-1 text-muted-foreground">
+                  {describePendingAction(pending)}
+                </div>
+                {pending.error && (
+                  <div className="mt-1 break-words text-warning">
+                    {pending.error}
+                  </div>
+                )}
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={() => void confirmPendingAction(pending)}
+                    disabled={busy}
+                    className="rounded bg-warning px-2 py-1 font-medium text-white hover:bg-warning disabled:opacity-50"
+                  >
+                    {t.browser.assistant.confirmExecute}
+                  </button>
+                  <button
+                    onClick={() => dismissPendingAction(pending.id)}
+                    disabled={busy}
+                    className="rounded border border-white/28 px-2 py-1 text-muted-foreground hover:bg-white/18 disabled:opacity-50"
+                  >
+                    {t.common.cancel}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Implementation note. */}
+        <div
+          ref={listRef}
+          className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3"
+        >
+          {thread.messages.length === 0 && !thread.isLoading && (
+            <div className="flex h-full flex-col items-center justify-center text-center text-xs text-muted-foreground">
+              <SparklesIcon className="mb-2 size-6 opacity-50" />
+              <div>{t.browser.assistant.emptyHint}</div>
+            </div>
+          )}
+          {thread.messages.map((m) => {
+            const isUser = isHumanMessage(m);
+            const isAi = isAIMessage(m);
+            if (!isUser && !isAi) return null;
+            const text =
+              typeof m.content === "string"
+                ? m.content
+                : m.content
+                    .filter(
+                      (c): c is { type: "text"; text: string } =>
+                        c.type === "text",
+                    )
+                    .map((c) => c.text)
+                    .join("");
+            return (
+              <div
+                key={m.id}
+                className={cn(
+                  "rounded-lg px-3 py-2 text-[13px] leading-relaxed",
+                  isUser
+                    ? cn("ml-6 text-foreground", "bg-white/10")
+                    : cn("mr-6 text-foreground", "bg-white/10"),
+                )}
+              >
+                {/* Implementation note. */}
+                <div className="whitespace-pre-wrap break-words">{text}</div>
+              </div>
+            );
+          })}
+          {thread.isLoading && (
             <div
-              key={m.id}
               className={cn(
-                "rounded-lg px-3 py-2 text-[13px] leading-relaxed",
-                isUser
-                  ? cn("ml-6 text-foreground", "bg-white/10")
-                  : cn("mr-6 text-foreground", "bg-white/10"),
+                "mr-6 flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] text-muted-foreground",
+                "bg-white/10",
               )}
             >
-              {/* Implementation note. */}
-              <div className="whitespace-pre-wrap break-words">
-                {text.length > 1500 ? `${text.slice(0, 1500)}…` : text}
-              </div>
+              <Loader2Icon className="size-3.5 animate-spin" />
+              {t.browser.assistant.thinking}
             </div>
-          );
-        })}
-        {thread.isLoading && (
-          <div
-            className={cn(
-              "mr-6 flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] text-muted-foreground",
-              "bg-white/10",
-            )}
-          >
-            <Loader2Icon className="size-3.5 animate-spin" />
-            {t.browser.assistant.thinking}
-          </div>
-        )}
-      </div>
+          )}
+        </div>
 
-      {/* input */}
-      <div className="shrink-0 border-t border-white/20 p-2">
-        <div
+        {/* input */}
+      </div>
+      {compact && (
+        <button
+          type="button"
+          aria-label={presentation?.expanded ? "收起对话记录" : "展开对话记录"}
+          aria-expanded={presentation?.expanded}
+          aria-controls={presentation?.contentId}
+          onClick={() => presentation?.setExpanded(!presentation.expanded)}
           className={cn(
-            "flex items-end gap-2 p-2 focus-within:ring-2 focus-within:ring-primary/30",
-            "bg-white/10",
+            "mx-3 flex h-[38px] shrink-0 items-start gap-3 border border-border-subtle bg-background/95 px-3 pt-2 text-xs text-muted-foreground backdrop-blur-xl transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            presentation?.expanded ? "border-t-0" : "rounded-t-2xl",
           )}
         >
+          <span className="shrink-0">
+            {presentation?.expanded ? "收起对话" : "最近一条"}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-left">
+            {recentText}
+          </span>
+          {presentation?.expanded ? (
+            <ChevronDownIcon className="size-3.5 shrink-0" />
+          ) : (
+            <ChevronRightIcon className="size-3.5 shrink-0" />
+          )}
+        </button>
+      )}
+      <div
+        className={cn(
+          "flex shrink-0 items-center",
+          compact
+            ? "relative -mt-[8px] h-[48px] rounded-full border border-border-subtle bg-background px-2 shadow-[0_4px_20px_rgba(0,0,0,0.07)] focus-within:ring-2 focus-within:ring-primary/15"
+            : "h-[62px] border-t border-border-subtle p-2",
+        )}
+      >
+        <div
+          className={cn(
+            "flex w-full items-center gap-2 rounded-full px-1 py-1",
+          )}
+        >
+          {compact && (
+            <button
+              type="button"
+              aria-label="查看网页工具"
+              title="总结、提取与翻译网页"
+              onClick={() => presentation?.setExpanded(true)}
+              className="grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <PlusIcon className="size-4" />
+            </button>
+          )}
+          {compact && thread.isLoading && (
+            <Loader2Icon
+              className="size-4 shrink-0 animate-spin text-muted-foreground"
+              aria-label="正在回复"
+            />
+          )}
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -1382,13 +1484,13 @@ export function AssistantPanel({ webviewHandle }: Props) {
             placeholder={t.browser.assistant.inputPlaceholder}
             aria-label={t.browser.assistant.inputPlaceholder}
             rows={1}
-            className="max-h-32 min-h-[24px] flex-1 resize-none bg-transparent text-sm outline-none"
+            className="max-h-32 min-h-[24px] min-w-0 flex-1 resize-none bg-transparent text-sm outline-none"
           />
           <button
             type="button"
             onClick={() => send(input)}
             disabled={!input.trim() || thread.isLoading}
-            className="grid size-7 place-items-center rounded bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
+            className="grid size-8 shrink-0 place-items-center rounded-full bg-foreground text-background transition-colors hover:bg-foreground/80 disabled:bg-muted disabled:text-muted-foreground"
             title={t.codeMode.send}
             aria-label={t.codeMode.send}
           >
@@ -1582,107 +1684,4 @@ function guessPlatformName(
     swallow(e);
     return c.unknownPlatform;
   }
-}
-
-interface AgentLite {
-  name: string;
-  display_name?: string | null;
-  icon?: string | null;
-}
-
-/* Implementation note. */
-function AgentPicker({
-  activeAgent,
-  agents,
-  activeAgentId,
-}: {
-  activeAgent: AgentLite | null;
-  agents: AgentLite[];
-  activeAgentId: string;
-}) {
-  const { t } = useI18n();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  // Implementation note.
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    window.addEventListener("mousedown", onDoc);
-    return () => window.removeEventListener("mousedown", onDoc);
-  }, [open]);
-
-  const select = (name: string) => {
-    if (!isPrimaryPersonaAgentId(name)) return;
-    emitAgentChanged(name);
-    setOpen(false);
-  };
-
-  const display =
-    activeAgent?.display_name || activeAgent?.name || activeAgentId;
-
-  return (
-    <div ref={ref} className="relative shrink-0">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm font-semibold transition-colors hover:bg-white/18"
-      >
-        {activeAgent?.icon ? (
-          <span className="text-base leading-none">{activeAgent.icon}</span>
-        ) : (
-          <SparklesIcon className="size-4 text-primary" />
-        )}
-        <span className="max-w-[140px] truncate">{display}</span>
-        <ChevronDownIcon
-          className={cn(
-            "size-3 text-muted-foreground transition-transform",
-            open && "rotate-180",
-          )}
-        />
-      </button>
-      {open && (
-        <div
-          className={cn(
-            "absolute left-0 top-full z-50 mt-1 max-h-72 w-56 overflow-y-auto rounded-md bg-popover p-1 text-popover-foreground shadow-lg",
-          )}
-        >
-          {agents.length === 0 ? (
-            <div className="px-2 py-1.5 text-xs text-muted-foreground">
-              {t.browser.assistant.noAgents}
-            </div>
-          ) : (
-            agents.map((a) => {
-              const active = a.name === activeAgentId;
-              return (
-                <button
-                  key={a.name}
-                  onClick={() => select(a.name)}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors hover:bg-white/18",
-                    active && "bg-white/24 font-semibold",
-                  )}
-                >
-                  {a.icon ? (
-                    <span className="text-base leading-none">{a.icon}</span>
-                  ) : (
-                    <span className="grid size-4 place-items-center text-muted-foreground">
-                      <SparklesIcon className="size-3" />
-                    </span>
-                  )}
-                  <span className="min-w-0 flex-1 truncate">
-                    {a.display_name || a.name}
-                  </span>
-                  {active && <span className="text-micro text-primary">●</span>}
-                </button>
-              );
-            })
-          )}
-        </div>
-      )}
-    </div>
-  );
 }

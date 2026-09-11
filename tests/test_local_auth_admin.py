@@ -27,6 +27,7 @@ def test_only_configured_local_owner_passes_real_cloud_install_role_gate(monkeyp
 
     monkeypatch.setattr(catalog_module, "CloudCatalog", Catalog)
     monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "local")
+    monkeypatch.setenv("ECHO_ENV", "development")
     config = LocalAuthConfig(
         enabled=True,
         allow_any_username=True,
@@ -62,7 +63,9 @@ def test_only_configured_local_owner_passes_real_cloud_install_role_gate(monkeyp
     assert identities.get("local:owner").roles == ("user", "local", "admin")
 
 
-def test_admin_allowlist_does_not_bypass_login_allowlist():
+def test_admin_allowlist_does_not_bypass_login_allowlist(monkeypatch):
+    monkeypatch.setenv("ECHO_ENV", "development")
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "local")
     identities = IdentityStore()
     config = LocalAuthConfig(enabled=True, allowed_usernames=["guest"], admin_usernames=["owner"])
     app = FastAPI()

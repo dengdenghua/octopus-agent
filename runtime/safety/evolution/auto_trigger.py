@@ -233,6 +233,7 @@ class EvolutionAutoTrigger:
         self._drift_monitor_lock = threading.Lock()
         self._drift_monitors: dict[str, Any] = {}
         self._active = False
+        self._background_models_enabled = True
         self._event_wire_lock = threading.Lock()
         self._event_bus: Any = None
         self._event_subscription_ids: tuple[int, ...] = ()
@@ -244,6 +245,13 @@ class EvolutionAutoTrigger:
         *,
         agent_registry: Any = None,
     ) -> None:
+        from runtime.execution.model_services import background_model_calls_enabled
+
+        self._background_models_enabled = background_model_calls_enabled(stack)
+        if not self._background_models_enabled:
+            self.stop()
+            _LOG.info("evolution auto-trigger disabled by background model policy")
+            return
         if config is not None:
             self._config = config
         self._stack = stack
@@ -308,6 +316,7 @@ class EvolutionAutoTrigger:
 
     def status(self) -> dict[str, Any]:
         return {
+            "background_model_calls": self._background_models_enabled,
             "running": bool(self._thread and self._thread.is_alive()),
             "tick_count": self._tick_count,
             "config": {

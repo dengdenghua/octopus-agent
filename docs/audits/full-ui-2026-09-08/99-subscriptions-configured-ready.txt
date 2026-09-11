@@ -1,0 +1,23 @@
+Browser tab: 4, Title: "订阅 - Echo", URL: "http://localhost:3310/#/workspace/intelligence?surface=chat".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 44-69
+~					42 container root
+~						43 container
++							44 text 自动化
++							45 text 配置任务、查看执行历史与管理模板
++							46 button 手动新建
++							47 button 在对话中创建
++							48 tab group
++								49 tab (selected, settable, boolean) 已配置, Value: 1, ID: radix-_r_0_-trigger-configured
++								50 tab (selectable, settable, boolean) 执行历史, Value: 0, ID: radix-_r_0_-trigger-history
++								51 tab (selectable, settable, boolean) 任务模板, Value: 0, ID: radix-_r_0_-trigger-templates
++								52 tab (selectable, settable, boolean) 面板, Value: 0, ID: radix-_r_0_-trigger-panels
++							53 container Description: 已配置, ID: radix-_r_0_-content-configured
++								54 text 自动化任务会按设定频率运行并消耗积分。
++								55 text 不再提示
++								56 switch Description: 不再提示, Value: 1
++								57 button 关闭提示
++								58 text 暂无自动化任务
++								59 text 从任务模板中选择一个，或在对话中让 Agent 为你创建。
++						60 container Notifications alt+T
+The focused UI element is 49 tab (selected, settable, boolean) 已配置, Value: 1, ID: radix-_r_0_-trigger-configured

@@ -658,10 +658,13 @@ def _inject_cowork_turn_plan(
         mode_override = (
             requested_override if requested_override in {"chat", "cluster", "swarm"} else None
         )
+        from runtime.sensing.gateway.remote_group_member import resolve_remote_mentions
+
+        planning_text = resolve_remote_mentions(text, [member.id for member in state.roster])
         plan = plan_turn_for_thread(
             store,
             thread_id,
-            text,
+            planning_text,
             persistent_group=persistent_group,
             mode_override=mode_override,
         ).to_dict()
@@ -682,11 +685,20 @@ def _inject_cowork_turn_plan(
     responders = [
         str(agent_id) for agent_id in (plan.get("responders") or []) if str(agent_id or "").strip()
     ]
-    context["cowork_waiting_for_mention"] = bool(plan.get("mode") == "chat" and not responders)
+    context["cowork_waiting_for_mention"] = bool(
+        not responders
+        and (
+            plan.get("mode") == "chat"
+            or any(member.id.startswith("a2a_") for member in state.roster)
+        )
+    )
     active_agents = [
         member.id
         for member in state.roster
-        if member.kind == "agent" and member.role == "participant" and not member.muted
+        if member.kind == "agent"
+        and member.role == "participant"
+        and not member.muted
+        and (not member.id.startswith("a2a_") or member.id in responders)
     ]
     try:
         from runtime.execution.agents.team_patterns import (
@@ -793,6 +805,11 @@ def _inject_cowork_turn_plan(
             "agent_id": agent_id,
             "display_name": display_names.get(agent_id, agent_id),
         }
+        if agent_id.startswith("a2a_"):
+            from runtime.sensing.gateway.remote_group_member import remote_profile
+
+            profile.update(remote_profile(agent_id))
+            return profile
         try:
             if registry is not None and registry.has(agent_id):
                 agent = registry.get(agent_id)
@@ -1028,6 +1045,11 @@ def _resolve_cowork_responder_agent(
     if len(responder_ids) != 1 or responder_ids[0] not in addressed_ids:
         return fallback
     responder_id = responder_ids[0]
+    if responder_id.startswith("a2a_"):
+        # The host agent supplies infrastructure only; the remote fanout lane
+        # resolves the registered endpoint and reports missing roles explicitly.
+        context["cowork_active_responder_id"] = responder_id
+        return fallback
     registry = getattr(runtime, "_agent_registry", None)
     try:
         if registry is not None and registry.has(responder_id):

@@ -1,0 +1,3 @@
+- Name: Marketing Growth Team Lead
+- Role: Financial research agent
+- Source: marketing-growth-team

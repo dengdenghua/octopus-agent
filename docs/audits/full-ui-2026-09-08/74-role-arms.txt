@@ -1,0 +1,48 @@
+Browser tab: 4, Title: "HUB - Echo", URL: "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator".
+0 AXWebArea HUB - Echo, URL: localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator
+	1 container
+		2 container Notifications alt+T
+		3 container Arms · Raven, ID: radix-_r_mh_
+			4 container
+				5 heading Arms · Raven, Value: 2, ID: radix-_r_mi_
+					6 text Arms · Raven
+				7 text 编辑此 agent 可用的 arm(能力组)· 保存后后端热重载,无需重启
+			8 container
+				9 text 勾选这个 agent 能使用的 arm · 每个 arm 附带一组 skill(白名单) · 原子层 skill 对所有 agent 默认放行,不受此处控制。
+				10 tab group
+					11 tab (selected, settable, boolean) ARM 能力臂, Value: 1, ID: radix-_r_mn_-trigger-arms
+					12 tab (selectable, settable, boolean) Skill 白名单, Value: 0, ID: radix-_r_mn_-trigger-skills
+					13 tab (selectable, settable, boolean) 权限, Value: 0, ID: radix-_r_mn_-trigger-permissions
+					14 tab (selectable, settable, boolean) 路由与预算, Value: 0, ID: radix-_r_mn_-trigger-routing
+				15 container Description: ARM 能力臂, ID: radix-_r_mn_-content-arms
+					16 text 可用 ARM
+					17 text 1/7 已启用
+					18 button 全部
+					19 button 已启用
+					20 button 未启用
+					21 container
+						22 switch Description: 为当前角色启用 web_read, Value: 0
+						23 text 🌐 Web Reader web_read Fetches URLs and searches the web. fetch_url web_search web_fetch crawl_site platform_search platform_read platform_collect platform_monitor reach_doctor
+					24 container
+						25 switch Description: 为当前角色启用 browser_read, Value: 0
+						26 text 🔍 Browser Reader browser_read Renders pages (JS-capable), extracts content, takes screenshots. browser_get browser_extract browser_navigate browser_screenshot
+					27 container
+						28 switch Description: 为当前角色启用 browser_interact, Value: 0
+						29 text 🖱️ Browser Operator browser_interact Clicks, types, scrolls, and waits on rendered pages. browser_click browser_type browser_upload browser_scroll browser_wait
+					30 container
+						31 switch Description: 为当前角色启用 fs_writer, Value: 0
+						32 text ✏️ Filesystem Writer fs_writer Writes, appends, and edits text files (sandbox-enforced). write_text_file append_text_file edit_text_file
+					33 container
+						34 switch Description: 为当前角色启用 git, Value: 0
+						35 text 🔀 Git Operator git Runs git status / diff / log / add / commit / branch. git_status git_diff git_log git_add git_commit git_branch
+					36 container
+						37 switch Description: 为当前角色启用 shell, Value: 0
+						38 text 🐚 Shell Executor shell Executes shell commands, including background jobs. exec_shell background_exec read_background_output read_shell_output kill_background_exec kill_shell
+					39 container
+						40 switch Description: 为当前角色启用 desktop_operator, Value: 1
+						41 text 🖥️ Desktop Operator desktop_operator Drives the desktop GUI via screen capture + mouse/keyboard · vision-guided through computer_use_loop. screen_capture screen_info mouse_click mouse_move keyboard_type keyboard_press computer_observe computer_plan_next computer_preview_action computer_execute_token computer_use_loop computer_uia_status computer_uia_tree computer_uia_find
+				42 button (disabled) 重置
+				43 button (disabled) 保存并热重载
+			44 button 关闭
+
+The focused UI element is 44 button 关闭

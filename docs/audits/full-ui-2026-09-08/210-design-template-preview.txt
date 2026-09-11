@@ -1,0 +1,22 @@
+Browser tab: 4, Title: "设计画布 - Echo", URL: "http://localhost:3310/#/workspace/design".
+0 AXWebArea 设计画布 - Echo, URL: localhost:3310/#/workspace/design
+	1 container
+		2 container root
+			6 container
+				7 container 应用导航
+					8 button 返回 HUB
+					9 text 设计画布
+				10 container 设计画布
+					11 AXWebArea 设计画布, URL: localhost:3310/api/workbench-packages/design/assets/dist/index.html?octopus_host_path=%2Fworkspace%2Fdesign&octopus_host_origin=http%3A%2F%2Flocalhost%3A3310
+						12 container
+							13 container Notifications alt+T
+							14 container 产品发布视觉套件, ID: radix-_r_3_
+								15 image 产品发布视觉套件
+								16 heading 产品发布视觉套件, Value: 2, ID: radix-_r_4_
+									17 text 产品发布视觉套件
+								18 text 从卖点、主视觉到横竖版短片，完成一套统一的发布内容。
+								19 button 使用提示词
+								20 button 关闭
+			5 container Notifications alt+T
+
+The focused UI element is 19 button 使用提示词

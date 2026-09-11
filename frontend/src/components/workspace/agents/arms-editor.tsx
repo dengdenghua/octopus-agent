@@ -441,6 +441,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                   <div className="flex items-start gap-3">
                     <Switch
                       checked={isOn}
+                      aria-label={`为当前角色启用 ${arm.arm_id}`}
                       onCheckedChange={() => toggle(arm.arm_id)}
                       className="mt-1 shrink-0"
                     />
@@ -659,6 +660,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                     <div className="flex items-start gap-3">
                       <Switch
                         checked={isOn}
+                        aria-label={`为当前角色授权 ${skillLabel}`}
                         onCheckedChange={() => togglePrivateSkill(skill.name)}
                         className="mt-1 shrink-0"
                       />
@@ -671,9 +673,15 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                             variant={skill.enabled ? "outline" : "secondary"}
                             className="rounded-sm text-xs"
                           >
-                            {skill.enabled
-                              ? t.armsEditor.permissionEnabled
-                              : t.armsEditor.permissionDisabled}
+                            {!skill.enabled
+                              ? "全局未启用"
+                              : !isOn
+                                ? "当前角色未选择"
+                                : permission &&
+                                    (!permission.enabled ||
+                                      !permission.available)
+                                  ? "权限未就绪"
+                                  : "当前角色已选择"}
                           </Badge>
                           {permission ? (
                             <Badge
@@ -792,6 +800,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                     <div className="flex items-start gap-3">
                       <Switch
                         checked={permission.enabled}
+                        aria-label={`全局授权 ${permission.id}`}
                         disabled={updatePermission.isPending}
                         onCheckedChange={(enabled) =>
                           void togglePermission(permission.id, enabled)
@@ -809,9 +818,13 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                             }
                             className="rounded-sm text-xs"
                           >
-                            {permission.available
-                              ? t.armsEditor.permissionAvailable
-                              : t.armsEditor.permissionUnavailable}
+                            {permission.effective
+                              ? "当前角色可用"
+                              : !permission.enabled
+                                ? "全局未授权"
+                                : !permission.available
+                                  ? "运行依赖未就绪"
+                                  : "当前角色未授权"}
                           </Badge>
                           <Badge
                             variant={
@@ -830,9 +843,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                           </Badge>
                           <Badge
                             variant={
-                              permission.agentGranted
-                                ? "outline"
-                                : "secondary"
+                              permission.agentGranted ? "outline" : "secondary"
                             }
                             className={cn(
                               "rounded-sm text-xs",

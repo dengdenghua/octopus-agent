@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from runtime.execution.model_services import native_model_services
 from runtime.platform.process.paths import app_paths
 
 from ._app_context import AppContext
@@ -121,9 +122,7 @@ def mount_routers_a(
     bind_team_project_store = getattr(ctx.team_rooms_router, "bind_project_store", None)
     if callable(bind_team_project_store):
         bind_team_project_store(project_store)
-    project_model_router = (
-        getattr(getattr(stack, "planner", None), "router", None) if stack is not None else None
-    )
+    project_model_router, _ = native_model_services(stack)
 
     # ─── Cowork thread-group · WeChat-style membership + mode + blackboard ──
     # GET /api/cowork/{thread} (public) + POST/DELETE members/mode/blackboard
@@ -516,7 +515,9 @@ def mount_routers_a(
         create_observability_router(
             journal=state.journal,
             registry=state.registry,
-            planner=getattr(stack, "planner", None) if stack is not None else None,
+            planner_provider=(lambda: getattr(stack, "planner", None))
+            if stack is not None
+            else None,
             effect_store=(
                 getattr(stack.executor, "effect_store", None)
                 if stack is not None and getattr(stack, "executor", None) is not None
@@ -559,7 +560,9 @@ def mount_routers_a(
         create_evolution_ops_router(
             journal=state.journal,
             registry=state.registry,
-            planner=getattr(stack, "planner", None) if stack is not None else None,
+            planner_provider=(lambda: getattr(stack, "planner", None))
+            if stack is not None
+            else None,
             thread_store=ctx.thread_store,
             forged_skill_dir=app_paths().data_dir / "forged_skills",
             identity_store=ctx.identity_store,
@@ -578,7 +581,6 @@ def mount_routers_a(
         app.include_router(
             create_dag_debugger_router(
                 journal=state.journal,
-                planner=getattr(stack, "planner", None) if stack is not None else None,
             )
         )
     except Exception as _dag_exc:  # noqa: BLE001

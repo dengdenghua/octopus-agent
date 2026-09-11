@@ -28,13 +28,13 @@ python -m runtime bugfix-demo
 pip install -e ".[dev,serve,web]"
 python -m runtime quickstart --non-interactive
 python -m runtime status
-python -m runtime ui --port 8000
+python -m runtime ui --port 8310
 ```
 
 Open:
 
 ```text
-http://127.0.0.1:8000
+http://127.0.0.1:8310
 ```
 
 Frontend development:
@@ -133,8 +133,8 @@ The biomimetic names are design vocabulary, not hard numeric constraints. See
 | `python -m runtime run "<goal>"` | Run a custom goal |
 | `python -m runtime reflect --from-journal <path>` | Run reflection producers from a journal |
 | `python -m runtime quickstart --non-interactive` | Generate a local static config and run doctor checks |
-| `python -m runtime ui --port 8000` | Start the FastAPI dashboard |
-| `python -m runtime serve --config config.local.yaml --port 8000` | Long-running service entry point |
+| `python -m runtime ui --port 8310` | Start the FastAPI dashboard |
+| `python -m runtime serve --config config.local.yaml --port 8310` | Long-running service entry point |
 
 Editable installs also provide:
 
@@ -233,7 +233,7 @@ docker compose logs -f octopus-agent
 Default service:
 
 ```text
-http://127.0.0.1:8000
+http://127.0.0.1:8310
 ```
 
 ## License

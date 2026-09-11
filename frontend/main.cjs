@@ -36,7 +36,7 @@ const {
   ensureDesktopResources,
 } = require("./desktop-config.cjs");
 
-const DEV_URL = process.env.ELECTRON_START_URL || "http://127.0.0.1:3000";
+const DEV_URL = process.env.ELECTRON_START_URL || "http://127.0.0.1:3310";
 const DESKTOP_DIR = path.join(os.homedir(), "Desktop");
 
 // ``--smoke-test`` launches the packaged-style shell against the built
@@ -130,7 +130,7 @@ function browserProfileSession() {
 // ── backend URL ────────────────────────────────────────────────
 function resolveBackendBaseURL() {
   return desktopProtocol.normalizeLoopbackBackendBaseURL(
-    process.env.OCTOPUS_BACKEND_URL || "http://127.0.0.1:8000",
+    process.env.OCTOPUS_BACKEND_URL || "http://127.0.0.1:8310",
   );
 }
 

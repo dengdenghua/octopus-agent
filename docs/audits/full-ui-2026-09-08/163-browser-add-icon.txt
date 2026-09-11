@@ -1,0 +1,13 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/browser".
+0 AXWebArea Echo, URL: localhost:3310/#/browser
+	1 container
+		2 container Notifications alt+T
+		3 container 网站名称:, ID: radix-_r_10v_
+			4 heading 网站名称:, Value: 2, ID: radix-_r_110_
+				5 text 网站名称:
+			6 container
+				7 text field (settable)
+				8 button 取消
+				9 button (disabled) 确认
+
+The focused UI element is 7 text field (settable)

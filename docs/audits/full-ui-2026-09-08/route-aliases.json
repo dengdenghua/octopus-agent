@@ -1,0 +1,130 @@
+[
+  {
+    "route": "/",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "dialog": false,
+    "heading": [
+      "heading \"新建任务\" [level=1]",
+      "heading \"你好，我是 Raven\" [level=2]"
+    ]
+  },
+  {
+    "route": "/workspace",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "dialog": false,
+    "heading": [
+      "heading \"新建任务\" [level=1]",
+      "heading \"你好，我是 Raven\" [level=2]"
+    ]
+  },
+  {
+    "route": "/workspace/realtime",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "dialog": false,
+    "heading": [
+      "heading \"新建任务\" [level=1]",
+      "heading \"你好，我是 Raven\" [level=2]"
+    ]
+  },
+  {
+    "route": "/plugins",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins",
+    "dialog": false,
+    "heading": [
+      "heading \"HUB\" [level=1]",
+      "heading \"应用中心\" [level=2]",
+      "heading \"本机应用\" [level=3]"
+    ]
+  },
+  {
+    "route": "/workspace/skills",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=skills",
+    "dialog": false,
+    "heading": [
+      "heading \"HUB\" [level=1]",
+      "heading \"Skills\" [level=2]"
+    ]
+  },
+  {
+    "route": "/workspace/plugins",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins",
+    "dialog": false,
+    "heading": [
+      "heading \"HUB\" [level=1]",
+      "heading \"应用中心\" [level=2]",
+      "heading \"本机应用\" [level=3]"
+    ]
+  },
+  {
+    "route": "/workspace/store",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat",
+    "dialog": false,
+    "heading": [
+      "heading \"HUB\" [level=1]",
+      "heading \"角色\" [level=2]",
+      "heading \"远端角色\" [level=3]"
+    ]
+  },
+  {
+    "route": "/workspace/workflows",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=skills",
+    "dialog": false,
+    "heading": [
+      "heading \"HUB\" [level=1]",
+      "heading \"Skills\" [level=2]"
+    ]
+  },
+  {
+    "route": "/workspace/nas",
+    "url": "http://localhost:3310/#/workspace/storage?surface=company",
+    "dialog": false
+  },
+  {
+    "route": "/workspace/database",
+    "url": "http://localhost:3310/#/workspace/storage?surface=company",
+    "dialog": false
+  },
+  {
+    "route": "/workspace/replay",
+    "url": "http://localhost:3310/#/workspace/observability",
+    "dialog": false,
+    "heading": [
+      "heading \"可观测性\" [level=1]",
+      "heading \"运行、协作和日志放到一起看\" [level=2]"
+    ]
+  },
+  {
+    "route": "/workspace/mobile",
+    "url": "http://localhost:3310/#/workspace/computer",
+    "dialog": false,
+    "heading": [
+      "heading \"本机助手\" [level=1]",
+      "heading \"屏幕观察\" [level=2]",
+      "heading \"任务计划\" [level=2]"
+    ]
+  },
+  {
+    "route": "/workspace/mcp",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "dialog": false,
+    "heading": [
+      "heading \"新建任务\" [level=1]",
+      "heading \"你好，我是 Raven\" [level=2]"
+    ]
+  },
+  {
+    "route": "/settings",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "dialog": false,
+    "heading": [
+      "heading \"新建任务\" [level=1]",
+      "heading \"你好，我是 Raven\" [level=2]"
+    ]
+  },
+  {
+    "route": "/workspace/browser",
+    "url": "http://localhost:3310/#/browser",
+    "dialog": false,
+    "note": "正确重定向到独立浏览器"
+  }
+]

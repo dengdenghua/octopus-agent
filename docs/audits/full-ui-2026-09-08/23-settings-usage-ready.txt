@@ -1,0 +1,43 @@
+Browser tab: 4, Title: "新对话 - Echo", URL: "http://localhost:3310/#/workspace/realtime/new".
+0 AXWebArea 新对话 - Echo, URL: localhost:3310/#/workspace/realtime/new
+	1 container
+		2 container root
+			60 container 对话工作区
+			59 container Notifications alt+T
+		61 container 设置, ID: radix-_r_e6_
+			62 heading 设置, Value: 2, ID: radix-_r_e7_
+				63 text 设置
+			64 text 管理你的 Echo 账户和偏好设置
+			65 text 123
+			66 text 当前登录账号
+			67 button 退出登录
+			68 container
+				69 text field (settable) 搜索设置
+				70 text 设置项
+				71 content list
+					72 button 账户
+					73 button 订阅与用量
+					74 button 通用
+					75 button 对话
+					76 button 模型
+					77 button 记忆与个人规则
+					78 button 通知
+					79 button 编码
+					80 button 工具与集成
+					81 button 浏览器自动化
+					82 button 桌面自动化
+					83 button 执行与安全
+					84 button 个人空间与安全
+					85 button 运行诊断
+					86 button 关于
+			147 container
+				148 text 订阅信息暂时无法加载。
+				149 button 重新加载订阅信息
+				150 text 123 当前登录账号
+				151 text 套餐暂时不可用
+				152 text 当前 Echo 账号已登录，但计费服务尚未连接。请重试刷新账号关联与可购买套餐。
+				153 button 重新连接套餐服务
+			145 splitter Description: 拖动调整大小, Value: 50
+			146 button 关闭
+
+The focused UI element is 73 button 订阅与用量

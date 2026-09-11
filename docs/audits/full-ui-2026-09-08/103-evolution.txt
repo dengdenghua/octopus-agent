@@ -1,0 +1,49 @@
+Browser tab: 4, Title: "自进化 - Echo", URL: "http://localhost:3310/#/workspace/evolution".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+~			40 container 自进化
+~				41 AXWebArea 自进化, URL: localhost:3310/api/workbench-packages/self_evolution/assets/dist/index.html?octopus_host_path=%2Fworkspace%2Fevolution&octopus_host_origin=http%3A%2F%2Flocalhost%3A3310
++					42 container root
++						43 container
++							44 text 自进化
++							45 text 从真实任务中学习，并在验证、安全和可回退的前提下应用改进。
++							46 tab group
++								47 tab (selected, settable, boolean) 进化总览, Value: 1, ID: radix-_r_0_-trigger-overview
++								48 tab (selectable, settable, boolean) 实验, Value: 0, ID: radix-_r_0_-trigger-experiments
++								49 tab (selectable, settable, boolean) 候选, Value: 0, ID: radix-_r_0_-trigger-candidates
++								50 tab (selectable, settable, boolean) 部署, Value: 0, ID: radix-_r_0_-trigger-deployments
++								51 tab (selectable, settable, boolean) 安全治理, Value: 0, ID: radix-_r_0_-trigger-governance
++							52 container 双螺旋进化
++								53 heading 双引擎螺旋进化, Value: 2
++									54 text 双引擎螺旋进化
++								55 text Codex 提供能力基线，Echo 沉淀可验证的行为基因。
++								56 text 保护模式已关闭
++								57 button 刷新进化证据
++								58 container
++									59 text 行为基因链
++									60 heading Echo Native, Value: 3
++										61 text Echo Native
++									62 text 已形成差异化 差异化能力 100%
++								63 container
++									64 text 能力基准链
++									65 heading OpenAI Codex, Value: 3
++										66 text OpenAI Codex
++									67 text v0.149.0 能力对齐度 100%
++								68 text 已验证能力
++								69 text 11/12
++								70 text 受控同题配对
++								71 text 0
++								72 text 待验证候选
++								73 text 0
++								74 text 当前状态
++								75 text 观察中
++								76 container
++									77 heading 能力对照产生的下一代候选, Value: 3
++										78 text 能力对照产生的下一代候选
++									79 text 1 为重复出现的验证偏移补充自动修复路线晋升证据。 2 为每类高风险工具补齐威胁模型回归用例。 3 在运行监控中展示已签名的策略评审规则草案。
++								80 container
++									81 heading 最近进化证据, Value: 3
++										82 text 最近进化证据
++									83 text 暂无任务证据。
++								84 text 观察 双引擎对照 生成候选 影子验证 灰度晋升 等待受控同题实验（另有 0 对观察性记录） ·  Codex v0.153.4 待审核
++								85 text 影子模式默认关闭；开启开关本身不会调用模型或产生费用。
++						86 container Notifications alt+T

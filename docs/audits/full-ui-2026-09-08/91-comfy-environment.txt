@@ -1,0 +1,11 @@
+Browser tab: 4, Title: "设计画布 - Echo", URL: "http://localhost:3310/#/workspace/design".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
++							183 button 检测本地服务
++							184 button 安装本地引擎
++							185 text 本地创作环境
++							186 text 尚未找到 ComfyUI 目录，工作流市场仍可浏览
++							187 text 0
++							188 text 本地模型
++							189 text 0
++							190 text 节点扩展
+The focused UI element is 58 button 本地环境

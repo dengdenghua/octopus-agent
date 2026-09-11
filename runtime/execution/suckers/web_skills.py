@@ -408,7 +408,7 @@ def _available_backends() -> list[str]:
     return backs
 
 
-def _web_search(
+def _web_search_impl(
     query: str = "",
     *,
     max_results: int = 5,
@@ -522,6 +522,39 @@ def _web_search(
     finally:
         if close_after:
             client.close()
+
+
+def _web_search(
+    query: str = "", *, max_results: int = 5, timeout_ms: int = 8000,
+    client: Any = None, backend: str | None = None, **kwargs: Any,
+) -> dict[str, Any]:
+    """One result contract for shared search, preserving provider fallback policy."""
+    started = time.monotonic()
+    result = _web_search_impl(query, max_results=max_results, timeout_ms=timeout_ms,
+                              client=client, backend=backend, **kwargs)
+    provider = str(result.get("backend") or result.get("provider") or backend or _resolve_backend())
+    seen: set[str] = set()
+    normalized = []
+    for item in result.get("results") or []:
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url") or item.get("link") or "").strip()
+        try:
+            parsed = urlsplit(url)
+            if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+                continue
+            key = _canonical_search_url(url)
+        except ValueError:
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append({**item, "url": url, "title": str(item.get("title") or ""),
+                           "snippet": str(item.get("snippet") or item.get("content") or ""),
+                           "source": parsed.hostname, "provider": provider})
+    return {**result, "query": result.get("query", query), "results": normalized,
+            "result_count": len(normalized), "provider": provider,
+            "elapsed_ms": round((time.monotonic() - started) * 1000), "schema_version": 1}
 
 
 def _dispatch_search(
@@ -1058,7 +1091,24 @@ def _web_fetch(
             ),
         }
 
-    # Step 5+6: cheap LLM call.
+    # External engines can answer from extracted source text themselves. Do
+    # not add an implicit second provider call for their shared web tool.
+    from runtime.execution.request import current_execution_request
+
+    request = current_execution_request()
+    if request is not None and request.task.execution_engine in {"codex", "opencode"}:
+        return {
+            "ok": True,
+            "url": final_url,
+            "prompt": prompt,
+            "content": extracted_text[:max_chars],
+            "extracted_chars": len(extracted_text[:max_chars]),
+            "fetch_mode": fetch_mode,
+            "model": None,
+            "answer_pending": True,
+        }
+
+    # Step 5+6: cheap LLM call for native callers.
     caller = _llm_caller
     if caller is None:
         try:
@@ -1202,7 +1252,7 @@ def register_web_skills(registry: SkillRegistry) -> int:
         Skill(
             name="web_fetch",
             description=(
-                "用途: 给一个 URL + 一个问题，由廉价 LLM 在页面正文里抽出答案；只把 answer 字符串回给主模型，不再让主模型啃 50KB 原始 HTML。\n"
+                "用途: 给一个 URL + 一个问题，提取页面正文。外部执行引擎收到 content 正文并自行回答；原生调用由辅助模型提取 answer。\n"
                 "何时不用: 只想拿原文 / 自己解析用 fetch_url(extract=true)；不知道目标网址先用 web_search；要本地文件 Q&A 用 read_file 自己问。\n"
                 "关键参数: url (必填); prompt (必填, 你想从页面里得到的答案); max_chars (送进 LLM 的正文上限, 默认 16000); cheap_model (可选, 留空走 web_fetch_default_model)。\n"
                 '示例: web_fetch({"url": "https://docs.example.com/limits", "prompt": "What is the rate limit?"})'

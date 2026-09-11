@@ -42,6 +42,7 @@ export default function NotificationSettingsPage() {
   const handleTestNotification = () => {
     const sent = showNotification(t.settings.notification.testTitle, {
       body: t.settings.notification.testBody,
+      test: true,
     });
     if (sent) toast.success(t.settings.notification.testSent);
   };
@@ -124,6 +125,25 @@ export default function NotificationSettingsPage() {
           />
         </div>
 
+        <div className="flex items-center justify-between gap-4 border-b py-3">
+          <div>
+            <p className="text-sm font-medium">
+              {zh ? "仅在未聚焦时通知" : "Notify only when unfocused"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {zh
+                ? "正在查看 Echo 时不弹出系统通知，测试通知除外。"
+                : "Suppress notifications while viewing Echo, except test notifications."}
+            </p>
+          </div>
+          <Switch
+            aria-label={zh ? "仅在未聚焦时通知" : "Notify only when unfocused"}
+            checked={settings.notification.only_when_unfocused ?? false}
+            onCheckedChange={(value) =>
+              setSettings("notification", { only_when_unfocused: value })
+            }
+          />
+        </div>
         {permission === "default" && (
           <Button
             onClick={handleRequestPermission}

@@ -1,0 +1,480 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/channels".
+0 AXWebArea Echo, URL: localhost:3310/#/workspace/channels
+	1 container root
+		2 container
+			3 button 返回桌面
+			4 button 切换全屏
+			5 tab group Workspace surface
+				39 tab (selected, settable, boolean) Description: Echo, Value: 1
+				7 tab (selectable, settable, boolean) Description: AI 浏览器, Value: 0
+			8 button (expanded) Description: 收起侧栏 (Ctrl/⌘+B), Secondary Actions: Collapse
+			9 button 新建任务
+			10 content list
+				11 link Description: HUB, Value: localhost:3310/#/workspace/agents?surface=chat
+				12 link Description: 助手, Value: localhost:3310/#/workspace/realtime/octopus-assistant?agent=octopus
+				13 link Description: 订阅, Value: localhost:3310/#/workspace/intelligence?surface=chat
+				14 link Description: 项目管理, Value: localhost:3310/#/workspace/projects
+				15 link Description: 设计画布, Value: localhost:3310/#/workspace/design
+				16 link Description: 叙事工坊, Value: localhost:3310/#/workspace/narrative
+				17 link Description: 自进化, Value: localhost:3310/#/workspace/evolution?surface=chat
+			18 content list
+				19 link Description: 发现社区, Value: localhost:3310/#/workspace/community
+			20 content list
+				21 button (collapsed) Description: 展开本地数据库, Secondary Actions: Expand
+			22 content list
+				23 button 编辑侧栏
+			24 container
+				25 button (expanded) Description: 收起项目, Secondary Actions: Collapse
+				26 button 选择项目空间
+			27 container
+				28 button (expanded) Description: 收起对话, Secondary Actions: Collapse
+				29 button Description: 对话 · 新建任务, Help: 新建任务
+			30 pop up button (collapsed) Description: Raven, ID: radix-_r_1a_, Secondary Actions: Expand, Help: Raven · 现实职业是企业流程自动化专家，通过视觉理解操作 ERP、CRM、表格、浏览器和遗留系统；在 ECHO 世界中是远程接管手 Night Crow。两种身份共享屏幕观察、设备控制与精细操作能力。
+				31 text Raven
+				32 text Lv.
+				33 text 1
+				34 text ⭐
+			35 button 设置
+			40 container
+				41 text CHANNEL OPS
+				42 heading 消息渠道, Value: 1
+					43 text 消息渠道
+				44 container
+					45 text 配置 AI 智能体与用户交互的消息平台。 所有连接数据存储在本地——无需云端。
+				46 text 26 个渠道
+				47 text 26
+				48 text 0 个已连接
+				49 text 0
+				50 text field (settable)
+				51 button 全部
+				52 button 已连接
+				53 button 未关联
+				54 heading 即时通讯, Value: 2
+					55 text 即时通讯
+				56 text ✈️
+				57 text Telegram
+				58 container
+					59 text Telegram Bot
+					60 link Description: 如何接入?, Value: docs.octopus.ai/channels/telegram
+				61 text 未关联
+				62 text 0
+				63 text 已配对用户
+				64 text 0
+				65 text 已配对群聊
+				66 text 0
+				67 text 待处理请求
+				68 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					69 text 配置响应对象
+					70 text 选择一个智能体或 AI 团队处理消息
+				71 button 设置机器人
+				72 text #
+				73 text Slack
+				74 container
+					75 text Slack 应用 / bot
+					76 link Description: 如何接入?, Value: docs.octopus.ai/channels/slack
+				77 text 未关联
+				78 text 0
+				79 text 已配对用户
+				80 text 0
+				81 text 已配对群聊
+				82 text 0
+				83 text 待处理请求
+				84 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					85 text 配置响应对象
+					86 text 选择一个智能体或 AI 团队处理消息
+				87 button 设置机器人
+				88 text 🎮
+				89 text Discord
+				90 container
+					91 text Discord Interaction Bot
+					92 link Description: 如何接入?, Value: docs.octopus.ai/channels/discord
+				93 text 未关联
+				94 text 0
+				95 text 已配对用户
+				96 text 0
+				97 text 已配对群聊
+				98 text 0
+				99 text 待处理请求
+				100 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					101 text 配置响应对象
+					102 text 选择一个智能体或 AI 团队处理消息
+				103 button 设置机器人
+				104 text 🔒
+				105 text Signal
+				106 container
+					107 text Signal Private Messenger
+					108 link Description: 如何接入?, Value: docs.octopus.ai/channels/signal
+				109 text 未关联
+				110 text 0
+				111 text 已配对用户
+				112 text 0
+				113 text 已配对群聊
+				114 text 0
+				115 text 待处理请求
+				116 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					117 text 配置响应对象
+					118 text 选择一个智能体或 AI 团队处理消息
+				119 button 设置机器人
+				120 text 📱
+				121 text WhatsApp
+				122 container
+					123 text WhatsApp Business API
+					124 link Description: 如何接入?, Value: docs.octopus.ai/channels/whatsapp
+				125 text 未关联
+				126 text 0
+				127 text 已配对用户
+				128 text 0
+				129 text 已配对群聊
+				130 text 0
+				131 text 待处理请求
+				132 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					133 text 配置响应对象
+					134 text 选择一个智能体或 AI 团队处理消息
+				135 button 设置机器人
+				136 text 📡
+				137 text Mattermost
+				138 container
+					139 text Mattermost 开源协作平台
+					140 link Description: 如何接入?, Value: docs.octopus.ai/channels/mattermost
+				141 text 未关联
+				142 text 0
+				143 text 已配对用户
+				144 text 0
+				145 text 已配对群聊
+				146 text 0
+				147 text 待处理请求
+				148 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					149 text 配置响应对象
+					150 text 选择一个智能体或 AI 团队处理消息
+				151 button 设置机器人
+				152 text 🟢
+				153 text Matrix
+				154 container
+					155 text Matrix / Element 去中心化通信
+					156 link Description: 如何接入?, Value: docs.octopus.ai/channels/matrix
+				157 text 未关联
+				158 text 0
+				159 text 已配对用户
+				160 text 0
+				161 text 已配对群聊
+				162 text 0
+				163 text 待处理请求
+				164 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					165 text 配置响应对象
+					166 text 选择一个智能体或 AI 团队处理消息
+				167 button 设置机器人
+				168 text 💬
+				169 text LINE
+				170 container
+					171 text LINE Messaging API
+					172 link Description: 如何接入?, Value: docs.octopus.ai/channels/line
+				173 text 未关联
+				174 text 0
+				175 text 已配对用户
+				176 text 0
+				177 text 已配对群聊
+				178 text 0
+				179 text 待处理请求
+				180 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					181 text 配置响应对象
+					182 text 选择一个智能体或 AI 团队处理消息
+				183 button 设置机器人
+				184 text 🔐
+				185 text SimpleX
+				186 container
+					187 text SimpleX 隐私聊天
+					188 link Description: 如何接入?, Value: docs.octopus.ai/channels/simplex
+				189 text 未关联
+				190 text 0
+				191 text 已配对用户
+				192 text 0
+				193 text 已配对群聊
+				194 text 0
+				195 text 待处理请求
+				196 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					197 text 配置响应对象
+					198 text 选择一个智能体或 AI 团队处理消息
+				199 button 设置机器人
+				200 text ⌁
+				201 text IRC
+				202 container
+					203 text IRC / IRCv3 实时群聊
+					204 link Description: 如何接入?, Value: docs.octopus.ai/channels/irc
+				205 text 未关联
+				206 text 0
+				207 text 已配对用户
+				208 text 0
+				209 text 已配对群聊
+				210 text 0
+				211 text 待处理请求
+				212 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					213 text 配置响应对象
+					214 text 选择一个智能体或 AI 团队处理消息
+				215 button 设置机器人
+				216 text 🟣
+				217 text Twitch
+				218 container
+					219 text Twitch 直播聊天室
+					220 link Description: 如何接入?, Value: docs.octopus.ai/channels/twitch
+				221 text 未关联
+				222 text 0
+				223 text 已配对用户
+				224 text 0
+				225 text 已配对群聊
+				226 text 0
+				227 text 待处理请求
+				228 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					229 text 配置响应对象
+					230 text 选择一个智能体或 AI 团队处理消息
+				231 button 设置机器人
+				232 heading 国内平台, Value: 2
+					233 text 国内平台
+				234 text 💬
+				235 text 微信
+				236 container
+					237 text 微信 ClawBot · 扫码对接个人号 / 客服号
+					238 link Description: 如何接入?, Value: docs.octopus.ai/channels/wechat
+				239 text 未关联
+				240 text 0
+				241 text 已配对用户
+				242 text 0
+				243 text 已配对群聊
+				244 text 0
+				245 text 待处理请求
+				246 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					247 text 配置响应对象
+					248 text 选择一个智能体或 AI 团队处理消息
+				249 button 设置机器人
+				250 text 📌
+				251 text 钉钉
+				252 container
+					253 text 钉钉机器人
+					254 link Description: 如何接入?, Value: docs.octopus.ai/channels/dingtalk
+				255 text 未关联
+				256 text 0
+				257 text 已配对用户
+				258 text 0
+				259 text 已配对群聊
+				260 text 0
+				261 text 待处理请求
+				262 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					263 text 配置响应对象
+					264 text 选择一个智能体或 AI 团队处理消息
+				265 button 设置机器人
+				266 text 🐦
+				267 text 飞书
+				268 container
+					269 text 飞书机器人
+					270 link Description: 如何接入?, Value: docs.octopus.ai/channels/feishu
+				271 text 未关联
+				272 text 0
+				273 text 已配对用户
+				274 text 0
+				275 text 已配对群聊
+				276 text 0
+				277 text 待处理请求
+				278 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					279 text 配置响应对象
+					280 text 选择一个智能体或 AI 团队处理消息
+				281 button 设置机器人
+				282 text 💼
+				283 text 企业微信
+				284 container
+					285 text WeCom 企业微信应用消息
+					286 link Description: 如何接入?, Value: docs.octopus.ai/channels/wecom
+				287 text 未关联
+				288 text 0
+				289 text 已配对用户
+				290 text 0
+				291 text 已配对群聊
+				292 text 0
+				293 text 待处理请求
+				294 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					295 text 配置响应对象
+					296 text 选择一个智能体或 AI 团队处理消息
+				297 button 设置机器人
+				298 text 🐧
+				299 text QQ 机器人
+				300 container
+					301 text QQ 官方机器人
+					302 link Description: 如何接入?, Value: docs.octopus.ai/channels/qqbot
+				303 text 未关联
+				304 text 0
+				305 text 已配对用户
+				306 text 0
+				307 text 已配对群聊
+				308 text 0
+				309 text 待处理请求
+				310 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					311 text 配置响应对象
+					312 text 选择一个智能体或 AI 团队处理消息
+				313 button 设置机器人
+				314 text 💎
+				315 text 腾讯元宝
+				316 container
+					317 text 腾讯元宝机器人
+					318 link Description: 如何接入?, Value: docs.octopus.ai/channels/yuanbao
+				319 text 未关联
+				320 text 0
+				321 text 已配对用户
+				322 text 0
+				323 text 已配对群聊
+				324 text 0
+				325 text 待处理请求
+				326 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					327 text 配置响应对象
+					328 text 选择一个智能体或 AI 团队处理消息
+				329 button 设置机器人
+				330 heading 邮件/短信, Value: 2
+					331 text 邮件/短信
+				332 text ✉️
+				333 text Email
+				334 container
+					335 text SMTP / IMAP 邮件通道
+					336 link Description: 如何接入?, Value: docs.octopus.ai/channels/email
+				337 text 未关联
+				338 text 0
+				339 text 已配对用户
+				340 text 0
+				341 text 已配对群聊
+				342 text 0
+				343 text 待处理请求
+				344 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					345 text 配置响应对象
+					346 text 选择一个智能体或 AI 团队处理消息
+				347 button 设置机器人
+				348 text 📩
+				349 text SMS (Twilio)
+				350 container
+					351 text Twilio SMS 短信通道
+					352 link Description: 如何接入?, Value: docs.octopus.ai/channels/sms
+				353 text 未关联
+				354 text 0
+				355 text 已配对用户
+				356 text 0
+				357 text 已配对群聊
+				358 text 0
+				359 text 待处理请求
+				360 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					361 text 配置响应对象
+					362 text 选择一个智能体或 AI 团队处理消息
+				363 button 设置机器人
+				364 heading 智能家居, Value: 2
+					365 text 智能家居
+				366 text 🏠
+				367 text Home Assistant
+				368 container
+					369 text 智能家居控制中心
+					370 link Description: 如何接入?, Value: docs.octopus.ai/channels/homeassistant
+				371 text 未关联
+				372 text 0
+				373 text 已配对用户
+				374 text 0
+				375 text 已配对群聊
+				376 text 0
+				377 text 待处理请求
+				378 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					379 text 配置响应对象
+					380 text 选择一个智能体或 AI 团队处理消息
+				381 button 设置机器人
+				382 text 🔔
+				383 text ntfy
+				384 container
+					385 text ntfy.sh 推送通知
+					386 link Description: 如何接入?, Value: docs.octopus.ai/channels/ntfy
+				387 text 未关联
+				388 text 0
+				389 text 已配对用户
+				390 text 0
+				391 text 已配对群聊
+				392 text 0
+				393 text 待处理请求
+				394 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					395 text 配置响应对象
+					396 text 选择一个智能体或 AI 团队处理消息
+				397 button 设置机器人
+				398 heading 开发工具, Value: 2
+					399 text 开发工具
+				400 text 👥
+				401 text Microsoft Teams
+				402 container
+					403 text Teams Bot Framework
+					404 link Description: 如何接入?, Value: docs.octopus.ai/channels/teams
+				405 text 未关联
+				406 text 0
+				407 text 已配对用户
+				408 text 0
+				409 text 已配对群聊
+				410 text 0
+				411 text 待处理请求
+				412 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					413 text 配置响应对象
+					414 text 选择一个智能体或 AI 团队处理消息
+				415 button 设置机器人
+				416 text 🔵
+				417 text BlueBubbles (iMessage)
+				418 container
+					419 text iMessage 桥接通道
+					420 link Description: 如何接入?, Value: docs.octopus.ai/channels/bluebubbles
+				421 text 未关联
+				422 text 0
+				423 text 已配对用户
+				424 text 0
+				425 text 已配对群聊
+				426 text 0
+				427 text 待处理请求
+				428 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					429 text 配置响应对象
+					430 text 选择一个智能体或 AI 团队处理消息
+				431 button 设置机器人
+				432 text 🪝
+				433 text Webhooks
+				434 container
+					435 text 通用 Webhook 集成
+					436 link Description: 如何接入?, Value: docs.octopus.ai/channels/webhooks
+				437 text 未关联
+				438 text 0
+				439 text 已配对用户
+				440 text 0
+				441 text 已配对群聊
+				442 text 0
+				443 text 待处理请求
+				444 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					445 text 配置响应对象
+					446 text 选择一个智能体或 AI 团队处理消息
+				447 button 设置机器人
+				448 text 💬
+				449 text Google Chat
+				450 container
+					451 text Google Workspace 聊天机器人
+					452 link Description: 如何接入?, Value: docs.octopus.ai/channels/google_chat
+				453 text 未关联
+				454 text 0
+				455 text 已配对用户
+				456 text 0
+				457 text 已配对群聊
+				458 text 0
+				459 text 待处理请求
+				460 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					461 text 配置响应对象
+					462 text 选择一个智能体或 AI 团队处理消息
+				463 button 设置机器人
+				464 text 🌐
+				465 text Open WebUI
+				466 container
+					467 text Open WebUI 开源聊天界面
+					468 link Description: 如何接入?, Value: docs.octopus.ai/channels/open_webui
+				469 text 未关联
+				470 text 0
+				471 text 已配对用户
+				472 text 0
+				473 text 已配对群聊
+				474 text 0
+				475 text 待处理请求
+				476 button 配置响应对象 选择一个智能体或 AI 团队处理消息
+					477 text 配置响应对象
+					478 text 选择一个智能体或 AI 团队处理消息
+				479 button 设置机器人
+		38 container Notifications alt+T
+
+The focused UI element is 0 AXWebArea Echo, URL: localhost:3310/#/workspace/channels

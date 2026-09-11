@@ -263,6 +263,20 @@ def _apply_turn_update(turn: Turn, payload: dict[str, Any]) -> None:
             ):
                 turn.execution = execution
                 turn.execution_engine = execution.engine
+    model_selection = payload.get("executionModel")
+    if (
+        isinstance(model_selection, dict)
+        and turn.execution is not None
+        and turn.params is not None
+        and model_selection.get("engine") == turn.execution.engine
+        and type(model_selection.get("invocation")) is int
+        and model_selection["invocation"] == turn.execution.invocation
+        and isinstance(model_selection.get("model"), str)
+        and model_selection["model"].strip()
+    ):
+        # Update only model selection, never credentials, principal identity,
+        # permissions or the immutable engine binding from this record.
+        turn.params = turn.params.model_copy(update={"model": model_selection["model"]})
     if isinstance(payload.get("objectiveId"), str):
         turn.objective_id = payload["objectiveId"]
     if isinstance(payload.get("taskId"), str):

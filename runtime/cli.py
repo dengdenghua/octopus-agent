@@ -47,51 +47,69 @@ configure_logging()
 
 _logger = logging.getLogger(__name__)
 
-# Re-exports from sibling CLI modules (backward compatibility — tests
-# and downstream callers import from ``runtime.cli``).
-from runtime.cli_core import (  # noqa: F401
-    _build_reflex_router,
-    _build_stack,
-    _Colors,
-    _graph_has_template_deps,
-    _make_router,
-    _short_output,
-    DEFAULT_RULES,
-    print_cost_breakdown,
-)
-from runtime.cli_reflect import (
-    run_intel,
-    run_loop,
-    run_optimize,
-    run_reflect,
-)
-from runtime.cli_run import (
-    run_bench,
-    run_goal,
-    run_goal_from_config,
-    run_resume,
-)
-from runtime.cli_serve import (  # noqa: F401
-    register_reflection_tasks as _register_reflection_tasks,
-    run_serve,
-)
+# Resolve legacy re-exports only when accessed; help does not need an execution stack.
+_EXPORTS = {
+    "_build_reflex_router": ("runtime.cli_core", "_build_reflex_router"),
+    "_build_stack": ("runtime.cli_core", "_build_stack"),
+    "_Colors": ("runtime.cli_core", "_Colors"),
+    "_graph_has_template_deps": ("runtime.cli_core", "_graph_has_template_deps"),
+    "_make_router": ("runtime.cli_core", "_make_router"),
+    "_short_output": ("runtime.cli_core", "_short_output"),
+    "DEFAULT_RULES": ("runtime.cli_core", "DEFAULT_RULES"),
+    "print_cost_breakdown": ("runtime.cli_core", "print_cost_breakdown"),
+    "run_intel": ("runtime.cli_reflect", "run_intel"),
+    "run_loop": ("runtime.cli_reflect", "run_loop"),
+    "run_optimize": ("runtime.cli_reflect", "run_optimize"),
+    "run_reflect": ("runtime.cli_reflect", "run_reflect"),
+    "run_bench": ("runtime.cli_run", "run_bench"),
+    "run_goal": ("runtime.cli_run", "run_goal"),
+    "run_goal_from_config": ("runtime.cli_run", "run_goal_from_config"),
+    "run_resume": ("runtime.cli_run", "run_resume"),
+    "_register_reflection_tasks": ("runtime.cli_serve", "register_reflection_tasks"),
+    "run_serve": ("runtime.cli_serve", "run_serve"),
+    "run_backup": ("runtime._cli_commands", "run_backup"),
+    "run_bb": ("runtime._cli_commands", "run_bb"),
+    "run_doctor": ("runtime._cli_commands", "run_doctor"),
+    "run_export": ("runtime._cli_commands", "run_export"),
+    "run_kg": ("runtime._cli_commands", "run_kg"),
+    "run_plugins": ("runtime._cli_commands", "run_plugins"),
+    "run_quickstart": ("runtime._cli_commands", "run_quickstart"),
+    "run_restore": ("runtime._cli_commands", "run_restore"),
+    "run_setup": ("runtime._cli_commands", "run_setup"),
+    "run_skills": ("runtime._cli_commands", "run_skills"),
+    "run_status": ("runtime._cli_commands", "run_status"),
+    "run_ui": ("runtime._cli_commands", "run_ui"),
+    "run_wiki": ("runtime._cli_commands", "run_wiki"),
+}
 
-# Re-exports from the two split submodules (pure structural refactor).
-from runtime._cli_commands import (  # noqa: F401
-    run_backup,
-    run_bb,
-    run_doctor,
-    run_export,
-    run_kg,
-    run_plugins,
-    run_quickstart,
-    run_restore,
-    run_setup,
-    run_skills,
-    run_status,
-    run_ui,
-    run_wiki,
-)
+
+__all__ = [name for name in _EXPORTS if not name.startswith("_")] + [
+    "main",
+    "set_lang",
+    "configure_logging",
+]
+
+
+def __getattr__(name: str):
+    from importlib import import_module
+
+    if name not in _EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module, symbol = _EXPORTS[name]
+    value = getattr(import_module(module), symbol)
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | set(_EXPORTS))
+
+
+def _cli_handler(name: str):
+    # Keep monkeypatched handlers and public re-exports identical to dispatch.
+    return globals()[name] if name in globals() else __getattr__(name)
+
+
 from runtime._cli_parser import _build_parser, _normalize_cli_argv
 
 from runtime.platform.i18n import set_lang
@@ -167,7 +185,7 @@ def _main(argv: list[str] | None = None) -> int:
         return 0 if result["success"] else 1
 
     if args.command == "demo":
-        return run_goal(
+        return _cli_handler("run_goal")(
             "list files in current dir and read README.md and count its words",
             intent_type="task",
             color=color,
@@ -180,7 +198,7 @@ def _main(argv: list[str] | None = None) -> int:
 
     if args.command == "run":
         if args.config is not None:
-            return run_goal_from_config(
+            return _cli_handler("run_goal_from_config")(
                 goal=args.goal,
                 config_path=args.config,
                 intent_type=args.intent,
@@ -189,7 +207,7 @@ def _main(argv: list[str] | None = None) -> int:
                 swarm=args.swarm,
                 max_workers=args.max_workers,
             )
-        return run_goal(
+        return _cli_handler("run_goal")(
             args.goal,
             intent_type=args.intent,
             max_tokens=args.max_tokens,
@@ -206,7 +224,7 @@ def _main(argv: list[str] | None = None) -> int:
         )
 
     if args.command == "bench":
-        return run_bench(
+        return _cli_handler("run_bench")(
             tasks=args.tasks,
             delay_ms=args.delay_ms,
             workers=args.workers,
@@ -214,7 +232,7 @@ def _main(argv: list[str] | None = None) -> int:
         )
 
     if args.command == "intel":
-        return run_intel(
+        return _cli_handler("run_intel")(
             queries=args.queries,
             fetch_top=args.fetch_top,
             max_results=args.max_results,
@@ -228,7 +246,7 @@ def _main(argv: list[str] | None = None) -> int:
         return run_project_command(args, color=color)
 
     if args.command == "kg":
-        return run_kg(
+        return _cli_handler("run_kg")(
             from_journal=args.from_journal,
             subject=args.subject,
             predicate=args.predicate,
@@ -239,7 +257,7 @@ def _main(argv: list[str] | None = None) -> int:
         )
 
     if args.command == "backup":
-        return run_backup(
+        return _cli_handler("run_backup")(
             output=args.output,
             base_dir=args.base_dir,
             components=args.components,
@@ -247,7 +265,7 @@ def _main(argv: list[str] | None = None) -> int:
         )
 
     if args.command == "restore":
-        return run_restore(
+        return _cli_handler("run_restore")(
             input_path=args.input,
             base_dir=args.base_dir,
             components=args.components,
@@ -256,7 +274,7 @@ def _main(argv: list[str] | None = None) -> int:
         )
 
     if args.command == "export":
-        return run_export(
+        return _cli_handler("run_export")(
             output=args.output,
             base_dir=args.base_dir,
             components=args.components,
@@ -264,14 +282,14 @@ def _main(argv: list[str] | None = None) -> int:
         )
 
     if args.command == "wiki":
-        return run_wiki(
+        return _cli_handler("run_wiki")(
             from_journal=args.from_journal,
             output_dir=args.output_dir,
             color=color,
         )
 
     if args.command == "reflect":
-        return run_reflect(
+        return _cli_handler("run_reflect")(
             from_journal=args.from_journal,
             verbose=args.verbose,
             skip=set(args.skip),
@@ -279,10 +297,10 @@ def _main(argv: list[str] | None = None) -> int:
         )
 
     if args.command == "status":
-        return run_status(color=color)
+        return _cli_handler("run_status")(color=color)
 
     if args.command == "quickstart":
-        return run_quickstart(
+        return _cli_handler("run_quickstart")(
             output=args.output,
             non_interactive=args.non_interactive,
             force=args.force,
@@ -294,26 +312,26 @@ def _main(argv: list[str] | None = None) -> int:
         )
 
     if args.command == "setup":
-        return run_setup(
+        return _cli_handler("run_setup")(
             output=args.output,
             non_interactive=args.non_interactive,
             color=color,
         )
 
     if args.command == "doctor":
-        return run_doctor(
+        return _cli_handler("run_doctor")(
             config_path=args.config,
             color=color,
         )
 
     if args.command == "skills":
-        return run_skills(args, color=color)
+        return _cli_handler("run_skills")(args, color=color)
 
     if args.command == "bb":
-        return run_bb(args)
+        return _cli_handler("run_bb")(args)
 
     if args.command == "plugins":
-        return run_plugins(args, color=color)
+        return _cli_handler("run_plugins")(args, color=color)
 
     if args.command == "tour":
         from .tour import run_tour
@@ -325,7 +343,7 @@ def _main(argv: list[str] | None = None) -> int:
         )
 
     if args.command == "ui":
-        return run_ui(
+        return _cli_handler("run_ui")(
             host=args.host,
             port=args.port,
             uds=getattr(args, "uds", None),
@@ -343,7 +361,7 @@ def _main(argv: list[str] | None = None) -> int:
         )
 
     if args.command == "loop":
-        return run_loop(
+        return _cli_handler("run_loop")(
             goal=args.goal,
             config_path=args.config,
             journal_path=args.journal,
@@ -353,7 +371,7 @@ def _main(argv: list[str] | None = None) -> int:
         )
 
     if args.command == "serve":
-        return run_serve(
+        return _cli_handler("run_serve")(
             config_path=args.config,
             host=args.host,
             port=args.port,
@@ -366,7 +384,7 @@ def _main(argv: list[str] | None = None) -> int:
         )
 
     if args.command == "optimize":
-        return run_optimize(
+        return _cli_handler("run_optimize")(
             goal=args.goal,
             config_path=args.config,
             variants_path=args.variants,
@@ -382,7 +400,7 @@ def _main(argv: list[str] | None = None) -> int:
         )
 
     if args.command == "resume":
-        return run_resume(
+        return _cli_handler("run_resume")(
             task_id=args.task_id,
             journal_path=args.journal,
             goal=args.goal,

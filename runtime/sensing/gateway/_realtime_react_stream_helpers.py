@@ -337,8 +337,7 @@ def _personalize_reflex_reply(reply: str, agent: Any) -> str:
     )
 
 
-def _should_use_reflection_fast_path(
-    runtime: CerebrumRuntime,
+def _should_use_direct_text_path(
     text: str,
     params: TurnParams,
     *,
@@ -346,10 +345,7 @@ def _should_use_reflection_fast_path(
     has_resumable_task: bool = False,
     thread_id: str | None = None,
 ) -> bool:
-    """Route simple, non-tool turns through the reflective direct path."""
-    router = getattr(getattr(runtime._stack, "planner", None), "router", None)
-    if router is None:
-        return False
+    """Classify a turn that can safely run without host tools."""
     mode = _turn_mode(params)
     metadata = _input_metadata(params)
     context = metadata.get("context")
@@ -370,33 +366,59 @@ def _should_use_reflection_fast_path(
             )
     if has_resumable_task:
         return False
-    # Capability-bearing turns must reach an agentic driver.  The direct
-    # reflection path cannot inspect a workspace, invoke browser tools, edit
-    # files, or produce verifiable side effects.  Previously ``mode=code``
-    # fell through to the broad final return below and silently became a
-    # text-only answer.
-    if capability_mode or mode in {
-        "browser",
-        "chrome",
-        "code",
-        "deep",
-        "research",
-        "swarm",
-    }:
-        return False
     from runtime.sensing.gateway.realtime_turn_routing import (
         looks_like_contextual_tool_followup,
         looks_like_plain_chat,
     )
 
     history = conversation_messages or _conversation_messages_from_params(params)
-    if mode == "chat":
-        return not looks_like_contextual_tool_followup(text, history)
     if looks_like_contextual_tool_followup(text, history):
         return False
-    if mode in {"", "react"}:
-        return looks_like_plain_chat(text)
-    return True
+    # Capability-bearing turns must reach an agentic driver.  The direct
+    # reflection path cannot inspect a workspace, invoke browser tools, edit
+    # files, or produce verifiable side effects.  Previously ``mode=code``
+    # fell through to the broad final return below and silently became a
+    # text-only answer.
+    if capability_mode in {
+        "browser",
+        "chrome",
+        "deep",
+        "research",
+        "swarm",
+    } or mode in {"browser", "chrome", "deep", "research", "swarm"}:
+        return False
+    # General workspaces may advertise code capability even when this specific
+    # request is an explicit text-only reply.  The request text is the stronger
+    # signal here; actual file/code instructions do not match plain chat.
+    if looks_like_plain_chat(text):
+        return True
+    if capability_mode == "code" or mode == "code":
+        return False
+    if mode == "chat":
+        return True
+    return mode not in {"", "react"}
+
+
+def _should_use_reflection_fast_path(
+    runtime: CerebrumRuntime,
+    text: str,
+    params: TurnParams,
+    *,
+    conversation_messages: list[dict[str, object]] | None = None,
+    has_resumable_task: bool = False,
+    thread_id: str | None = None,
+) -> bool:
+    """Route simple, non-tool turns through the reflective direct path."""
+    router = getattr(getattr(runtime._stack, "planner", None), "router", None)
+    if router is None:
+        return False
+    return _should_use_direct_text_path(
+        text,
+        params,
+        conversation_messages=conversation_messages,
+        has_resumable_task=has_resumable_task,
+        thread_id=thread_id,
+    )
 
 
 def _try_reflex_reply(runtime: CerebrumRuntime, intent: ParsedIntent) -> str | None:

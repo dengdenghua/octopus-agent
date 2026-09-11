@@ -379,6 +379,9 @@ export interface Translations {
     attachmentReadFailed: string;
     maxSubagents: string;
     maxSearches: string;
+    executionModeLabel: string;
+    discussionOnly: string;
+    discussionOnlyDesc: string;
     permissionModeLabel: string;
     permissionModeDefault: string;
     permissionModeDefaultDesc: string;
@@ -1794,6 +1797,8 @@ export interface Translations {
     switchAgentLabel: string;
     switchAgentMenuTitle: string;
     openAgentHud: string;
+    agentProfileAction: string;
+    agentRoleSummary: Record<string, string>;
     openAgentHudFor: (name: string) => string;
     currentAgent: string;
     soloChat: string;
@@ -1857,6 +1862,10 @@ export interface Translations {
     ariaChatWorkspace: string;
     ariaUtilityPanel: string;
     ariaAgentWorkbench: string;
+    expandWorkbench: string;
+    restoreWorkbenchSplit: string;
+    compactComposer: string;
+    showComposer: string;
     ariaToggleWorkbenchDrawer: string;
     // Storage library labels
     libraryApps: string;
@@ -6013,6 +6022,8 @@ export interface Translations {
     autoModelDescription: string;
     /** Compact badge for the picker row (e.g. "智能" / "Smart"). */
     autoModelBadge: string;
+    /** Visible identity cue for models explicitly marked free by the backend. */
+    freeBadge: string;
     longContextHint: string;
     contextLength: string;
     contextStandard: string;

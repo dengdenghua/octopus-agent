@@ -328,6 +328,14 @@ class CredentialStore:
 
     def get_secret(self, connector_id: str, key: str) -> str | None:
         data = self._read_all()
+        if connector_id == "opencode-go" and key == "api_key":
+            shared = data.get("connectors", {}).get(connector_id, {}).get("shared_api_key")
+            if shared:
+                try:
+                    if self._decrypt(self._key, shared) == "opencode-zen":
+                        connector_id = "opencode-zen"
+                except Exception:
+                    return None
         blob = data.get("connectors", {}).get(connector_id, {}).get(key)
         if not blob:
             return None
@@ -349,7 +357,10 @@ class CredentialStore:
 
     def list_secrets(self, connector_id: str) -> list[str]:
         data = self._read_all()
-        return list(data.get("connectors", {}).get(connector_id, {}).keys())
+        keys = list(data.get("connectors", {}).get(connector_id, {}).keys())
+        if connector_id == "opencode-go" and "shared_api_key" in keys and self.get_secret(connector_id, "api_key"):
+            keys.append("api_key")
+        return keys
 
     def clear_connector(self, connector_id: str) -> bool:
         def clear(data: dict[str, Any]) -> JsonMutation[bool]:
@@ -362,6 +373,8 @@ class CredentialStore:
         return bool(self._mutate_all(clear))
 
     def has_credentials(self, connector_id: str) -> bool:
+        if connector_id == "opencode-go":
+            return bool(self.get_secret(connector_id, "api_key"))
         data = self._read_all()
         return bool(data.get("connectors", {}).get(connector_id, {}))
 

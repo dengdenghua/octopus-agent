@@ -1,0 +1,18 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/storage".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+~			40 container
++				41 text 未找到 octopus-storage，请安装本地知识库服务，或设置 OCTOPUS_STORAGE_CMD 后重试。
++				42 button 重新连接
++				43 button 授权
++				44 button (disabled) 扫描
++				45 button (disabled) 效率
++				46 text 离线
++				47 button (disabled) 返回上一级
++				48 text · 未读取 在当前位置中搜索：
++				49 text field (settable)
++				50 button (disabled) 搜索
++				51 text 名称 类型 项目
++				52 text 无法读取当前目录
++				53 container
++					54 button 重试读取
++					55 text 服务暂时无法连接，数据尚未读取。请检查连接后重试。

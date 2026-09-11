@@ -68,6 +68,38 @@ def _request(tool: str, arguments: dict[str, Any], *, call_id: str = "call-1") -
     )
 
 
+def test_large_catalog_leaves_room_for_codex_and_keeps_relevant_tools(tmp_path: Path) -> None:
+    from runtime.execution.codex_backend.responses_proxy import _convert_tools
+    from runtime.execution.codex_backend.tool_limits import MAX_DYNAMIC_TOOLS
+
+    registry = SkillRegistry()
+    names = tuple([f"unrelated_{i}" for i in range(280)] + ["nas_research"])
+    for name in names:
+        registry.register(
+            Skill(
+                name=name,
+                description="NAS storage research" if name == "nas_research" else "Other operation",
+                trusted_source=f"skill://public/{name}",
+                handler=lambda: "ok",
+                tenant_id="tenant-a",
+            ),
+            verify_tests=False,
+        )
+    broker = _broker(tmp_path, registry, names=names, goal="NAS storage research")
+    assert len(broker.catalog.specs) == MAX_DYNAMIC_TOOLS
+    assert "nas_research" in broker.catalog.names
+    raw_tools = [
+        {"type": "function", "name": spec["name"], "parameters": spec["inputSchema"]}
+        for spec in broker.catalog.specs
+    ]
+    raw_tools.extend(
+        {"type": "function", "name": f"codex_builtin_{i}", "parameters": {"type": "object"}}
+        for i in range(16)
+    )
+    _, converted = _convert_tools(raw_tools)
+    assert len(converted) == len(raw_tools)
+
+
 @pytest.mark.asyncio
 async def test_unknown_disabled_and_replaced_tools_fail_closed(tmp_path: Path) -> None:
     calls: list[str] = []

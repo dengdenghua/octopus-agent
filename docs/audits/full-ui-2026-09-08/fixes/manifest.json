@@ -1,0 +1,116 @@
+[
+  {
+    "name": "01-settings-api",
+    "note": "标题与关闭入口保持可见，滚动只发生在设置内容区。",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "excluded": false
+  },
+  {
+    "name": "02-mermaid",
+    "note": "过程截图：恢复文字后仍有格式标签，最终证据为 07。",
+    "url": "http://localhost:3310/#/workspace/architecture",
+    "excluded": true
+  },
+  {
+    "name": "03-mobile-navigation-tabs",
+    "note": "390px：增加全局导航，页签不再重叠，简化首屏说明。",
+    "url": "http://localhost:3310/#/workspace/observability",
+    "excluded": false
+  },
+  {
+    "name": "04-mobile-sidebar",
+    "note": "新增导航可实际展开侧栏",
+    "url": "http://localhost:3310/#/workspace/observability",
+    "excluded": false
+  },
+  {
+    "name": "05-skill-detail",
+    "note": "390px 技能详情完整可读，独立安装入口。",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=skills",
+    "excluded": false
+  },
+  {
+    "name": "06-design-guide",
+    "note": "过程截图：构建包尚未更新到安装副本，指南未打开。最终证据为 08。",
+    "url": "http://localhost:3310/#/workspace/design",
+    "excluded": true
+  },
+  {
+    "name": "07-mermaid-final",
+    "note": "节点文字已恢复，格式标签不再裸露。",
+    "url": "http://localhost:3310/#/workspace/architecture",
+    "excluded": false
+  },
+  {
+    "name": "08-design-guide-updated",
+    "note": "正式更新工作台后，使用指南可打开。",
+    "url": "http://localhost:3310/#/workspace/design",
+    "excluded": false
+  },
+  {
+    "name": "09-mobile-canvas-settings",
+    "note": "390px 画布设置位于可视范围内。",
+    "url": "http://localhost:3310/#/workspace/design",
+    "excluded": false
+  },
+  {
+    "name": "10-mobile-project-form",
+    "note": "展开成员高级配置后，取消和创建按钮仍固定可见。",
+    "url": "http://localhost:3310/#/workspace/projects",
+    "excluded": false
+  },
+  {
+    "name": "11-community-empty",
+    "note": "过程截图：空态正确，但顶部被挤压，最终证据为 14。",
+    "url": "http://localhost:3310/#/workspace/community",
+    "excluded": true
+  },
+  {
+    "name": "12-mobile-browser-settings",
+    "note": "设置浮层适配手机宽度，搜索/编辑/主页/重置名称匹配操作。",
+    "url": "http://localhost:3310/#/browser",
+    "excluded": false
+  },
+  {
+    "name": "13-widget-catalog",
+    "note": "添加小组件打开目录，没有直接新建默认组件。",
+    "url": "http://localhost:3310/#/browser",
+    "excluded": false
+  },
+  {
+    "name": "14-community-mobile-final",
+    "note": "社区、集市、搜索和发布完整可见。",
+    "url": "http://localhost:3310/#/workspace/community",
+    "excluded": false
+  },
+  {
+    "name": "15-community-form",
+    "note": "常驻字段名、分类选中状态和固定发布区；未提交。",
+    "url": "http://localhost:3310/#/workspace/community",
+    "excluded": false
+  },
+  {
+    "name": "16-market-form",
+    "note": "上架表单具有标题、用途、价格和分类标签；未提交。",
+    "url": "http://localhost:3310/#/workspace/community?view=market",
+    "excluded": false
+  },
+  {
+    "name": "17-mobile-asset-form",
+    "note": "资产名称、分类、描述与标签保持可见，创建操作固定在底部。",
+    "url": "http://localhost:3310/#/workspace/design",
+    "excluded": false
+  },
+  {
+    "name": "18-invalid-share",
+    "note": "分享失效提供重试、返回工作区及折叠错误详情。",
+    "url": "http://localhost:3310/#/share/ux-check-invalid",
+    "excluded": false
+  },
+  {
+    "name": "19-market-demo-notice",
+    "note": "集市持续标注本地演示和未接入交付服务。",
+    "url": "http://localhost:3310/#/workspace/community?view=market",
+    "excluded": false
+  }
+]

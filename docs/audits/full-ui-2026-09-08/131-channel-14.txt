@@ -1,0 +1,36 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/channels".
+0 AXWebArea Echo, URL: localhost:3310/#/workspace/channels
+	1 container
+		2 container Notifications alt+T
+		3 container 设置 企业微信 机器人, ID: radix-_r_qg_
+			4 heading 设置 企业微信 机器人, Value: 2, ID: radix-_r_qh_
+				5 text 设置 企业微信 机器人
+			6 container radix-_r_qi_
+				7 text 凭证会保存到本地 channel_credentials.json (不上云)。
+				8 link Description: 如何接入?, Value: docs.octopus.ai/channels/wecom
+			9 container
+				10 text Corp ID *
+			11 text field (settable) Corp ID*, ID: channel-wecom-corp_id
+			12 container
+				13 text Agent ID *
+			14 text field (settable) Agent ID*, ID: channel-wecom-agent_id
+			15 container
+				16 text Secret *
+			17 container
+				18 text field (settable) Secret*
+				19 button 显示
+			20 container
+				21 text Callback Token *
+			22 container
+				23 text field (settable) Callback Token*
+				24 button 显示
+			25 container
+				26 text Encoding AES Key *
+			27 container
+				28 text field (settable) Encoding AES Key*
+				29 button 显示
+			30 button 取消
+			31 button 保存并连接
+			32 button 关闭
+
+The focused UI element is 11 text field (settable) Corp ID*, ID: channel-wecom-corp_id

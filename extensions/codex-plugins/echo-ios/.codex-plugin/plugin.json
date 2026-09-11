@@ -1,0 +1,43 @@
+{
+  "name": "echo-ios",
+  "version": "1.0.0",
+  "description": "按需启用 13 项iOS 自动化接口：截图、点击、输入和设备操作。",
+  "author": {
+    "name": "EchoAI"
+  },
+  "interface": {
+    "displayName": "iOS 自动化",
+    "shortDescription": "按需启用 13 项iOS 自动化接口：截图、点击、输入和设备操作。",
+    "longDescription": "按需启用 13 项iOS 自动化接口：截图、点击、输入和设备操作。需要已配置 WebDriverAgent 的 iPhone/iPad；安装此插件不会自动安装 WebDriverAgent。",
+    "category": "Productivity",
+    "capabilities": [
+      "ios.close_app",
+      "ios.double_tap",
+      "ios.find_element",
+      "ios.get_active_app",
+      "ios.get_screen_info",
+      "ios.home",
+      "ios.input_text",
+      "ios.long_press",
+      "ios.open_app",
+      "ios.swipe",
+      "ios.take_screenshot",
+      "ios.tap",
+      "ios.wait"
+    ],
+    "logo": "./assets/icon.svg",
+    "brandColor": "#64748B",
+    "developerName": "EchoAI",
+    "defaultPrompt": "连接设备并协助完成手机操作。"
+  },
+  "octopus": {
+    "host_api": ">=0.2,<0.3",
+    "permissions": [
+      "content.read",
+      "interaction.user"
+    ],
+    "auth_modes": [],
+    "dependencies": [],
+    "runtime_dependencies": []
+  }
+}

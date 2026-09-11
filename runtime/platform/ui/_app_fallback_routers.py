@@ -21,11 +21,20 @@ def _attach_oct_fallback_router(
     fallback = OctFallbackRouter(登录有 link → OctModelRouter 网关计费;否则 → 自配模型)。
     登录用户的 agent LLM 用量计入统一积分池;guest/未配置仍走自配模型,不回退 P0。
     """
-    dispatcher = getattr(
-        getattr(stack, "planner", None) if stack is not None else None,
-        "router",
-        None,
-    )
+
+    def configure(planner: Any) -> None:
+        _configure_oct_fallback_router(
+            planner=planner, oct_config=oct_config, link_store=link_store
+        )
+
+    if hasattr(type(stack), "configure_native_planner"):
+        stack.configure_native_planner(configure)
+    else:
+        configure(getattr(stack, "planner", None))
+
+
+def _configure_oct_fallback_router(*, planner: Any, oct_config: Any, link_store: Any) -> None:
+    dispatcher = getattr(planner, "router", None)
     if dispatcher is None or not hasattr(dispatcher, "set_fallback"):
         return
     try:
@@ -35,7 +44,7 @@ def _attach_oct_fallback_router(
             build_fallback_router_from_custom_models,
         )
 
-        planner_model = getattr(getattr(stack, "planner", None), "planner_model", None)
+        planner_model = getattr(planner, "planner_model", None)
         self_fallback = (
             build_fallback_router_from_custom_models(planner_model) or UnconfiguredModelRouter()
         )
@@ -50,5 +59,6 @@ def _attach_oct_fallback_router(
                 oct_router=oct_router, self_router=self_fallback, link_store=link_store
             )
         )
+        dispatcher.official_router = oct_router
     except (ImportError, AttributeError, TypeError):
         return

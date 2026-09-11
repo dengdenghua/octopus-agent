@@ -767,7 +767,11 @@ export function DualHelixEvolutionPanel({
             value={localizeVerdict(gap.data?.verdict, zh)}
             score={gap.data?.advantage_score}
             tone="cyan"
-            detail={zh ? "差异化能力" : "Differentiated capability"}
+            detail={
+              zh
+                ? "静态能力估算 · 非任务成功率"
+                : "Static estimate · not task success rate"
+            }
           />
           <HelixBridge />
           <EngineCard
@@ -776,7 +780,11 @@ export function DualHelixEvolutionPanel({
             value={`v${upstream.data?.current_version ?? "—"}`}
             score={gap.data?.parity_score}
             tone="violet"
-            detail={zh ? "能力对齐度" : "Capability parity"}
+            detail={
+              zh
+                ? "静态能力对齐 · 非实测效果"
+                : "Static parity · not measured performance"
+            }
           />
         </div>
       </div>

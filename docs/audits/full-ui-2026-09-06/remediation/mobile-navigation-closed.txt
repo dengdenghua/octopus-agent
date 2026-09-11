@@ -1,0 +1,29 @@
+- main:
+  - generic "Echo":
+    - generic: 🐙
+    - generic: Echo
+  - button "自动化与订阅":
+  - button "助手设置":
+  - button "打开右侧窗口":
+  - region "对话工作区":
+    - heading "Echo" [level=1]
+    - status
+    - log "对话消息":
+      - status:
+        - generic: 还没有消息
+        - generic: 开始一段新的对话吧
+    - textbox "今天帮你做些什么？ @ 引用对话文件，/ 调用技能与指令"
+    - button "插入到输入框":
+    - 'button "权限: 默认"':
+      - generic: 默认
+    - button "只聊想法，暂不执行" [pressed]:
+    - 'button "执行引擎: 自动"':
+      - generic: 运行设置：自动
+    - button "系统 · auto":
+      - generic: auto
+    - button "发送" [disabled]:
+    - button "个人空间":
+      - generic: 个人空间
+    - button "通用":
+      - generic: 通用
+- region "Notifications alt+T"

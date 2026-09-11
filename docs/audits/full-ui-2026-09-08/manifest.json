@@ -1,0 +1,1447 @@
+[
+  {
+    "name": "01-new-task",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "02-insert-menu",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "03-insert-files",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "04-insert-window",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "05-insert-commands",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": "命令使用英文名称，缺少用途说明。"
+  },
+  {
+    "name": "06-insert-plugins",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "07-insert-skills",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "08-permissions",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "09-engine",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "10-model-picker",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "11-model-subscription",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "12-task-mode",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "13-workspace-selector",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "14-collaboration",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "15-right-panel",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "16-automation-workbench",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "17-preview-panel",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "18-artifact-panel",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "19-panel-list",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "17-preview-panel-ready",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "20-settings-general",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "21-settings-general-bottom",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "22-settings-account",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "23-settings-usage",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "24-settings-conversation",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "25-settings-conversation-bottom",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "13-workspace-selector-ready",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": "系统目录选择响应延迟，稍后失败回退弹窗打断了正在查看的设置页。"
+  },
+  {
+    "name": "23-settings-usage-ready",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "26-settings-models",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "27-api-connect-dialog",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "28-api-connect-form-bottom",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "29-settings-memory",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "30-memory-create",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "31-settings-notifications",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "32-settings-coding",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "33-settings-tools",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "34-settings-browser-automation",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "35-settings-browser-automation-bottom",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "36-settings-desktop-automation",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "37-settings-security",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "38-settings-security-bottom",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "39-settings-personal-space",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "40-settings-privacy-advanced",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "41-reset-confirmation",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "42-settings-sandbox",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "43-settings-sandbox-bottom",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "44-settings-diagnostics",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "45-settings-about",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "46-settings-search-empty",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "47-factory-reset-dialog",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "48-settings-about-build",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "49-model-runtime-details",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "50-model-connectors",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "51-model-advanced",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "52-model-gateway",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "53-local-model-recommendations",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "54-multi-model",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "54-multi-model-form",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "55-provider-matrix",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": ""
+  },
+  {
+    "name": "56-hub-roles",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat",
+    "note": ""
+  },
+  {
+    "name": "57-hub-add-menu",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat",
+    "note": ""
+  },
+  {
+    "name": "58-agent-create",
+    "url": "http://localhost:3310/#/workspace/agents/new",
+    "note": ""
+  },
+  {
+    "name": "59-smart-team",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat",
+    "note": ""
+  },
+  {
+    "name": "60-hub-applications",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=featured",
+    "note": "应用入口与推荐插件；检查安装状态与管理入口。"
+  },
+  {
+    "name": "61-workbench-management",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=featured",
+    "note": "仅展开应用管理菜单，不执行禁用、卸载。"
+  },
+  {
+    "name": "62-plugins-all",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=all",
+    "note": "全部插件分组和长列表。"
+  },
+  {
+    "name": "63-plugins-installed",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=installed",
+    "note": "已安装列表不执行开关和卸载。"
+  },
+  {
+    "name": "63-plugins-installed-ready",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=installed",
+    "note": "推荐页显示多个已启用插件，此视图若仍为空，需核对目录来源一致性。"
+  },
+  {
+    "name": "64-remote-agent",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=remote",
+    "note": "空状态英文协议术语，右上两个纯图标按钮缺少可访问名称。"
+  },
+  {
+    "name": "65-remote-agent-register",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=remote",
+    "note": "仅检查注册表单，不连接外部端点。"
+  },
+  {
+    "name": "62-plugins-all-ready",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=all",
+    "note": "插件目录已加载，分类和已安装状态。"
+  },
+  {
+    "name": "66-hub-skills",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=skills",
+    "note": "检查技能分类、安装标记与详情入口。"
+  },
+  {
+    "name": "67-skill-detail",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=skills",
+    "note": "技能卡片写着打开详情；核对是否有实际详情交互。"
+  },
+  {
+    "name": "68-agent-switcher",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=skills",
+    "note": "选中行高亮、侧线代替勾；检查角色档案按钮热区与对齐。"
+  },
+  {
+    "name": "69-role-profile",
+    "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+    "note": "角色档案页面信息密集，专业配置与世界观装饰混排；头像资产重新核对。"
+  },
+  {
+    "name": "70-role-growth",
+    "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+    "note": "成长图空数据状态。"
+  },
+  {
+    "name": "71-role-radar",
+    "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+    "note": "能力雷达空数据状态。"
+  },
+  {
+    "name": "72-role-skills",
+    "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+    "note": "技能树空数据状态。"
+  },
+  {
+    "name": "73-role-basic-config",
+    "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+    "note": "打开基础配置，不保存。"
+  },
+  {
+    "name": "74-role-arms",
+    "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+    "note": "ARM 配置仅查看；无保存。"
+  },
+  {
+    "name": "75-role-skill-allowlist",
+    "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+    "note": "Skill 白名单空状态；无增删。"
+  },
+  {
+    "name": "76-role-permissions",
+    "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+    "note": "角色权限表单仅查看。"
+  },
+  {
+    "name": "77-projects",
+    "url": "http://localhost:3310/#/workspace/projects",
+    "note": "项目工作台加载结果。"
+  },
+  {
+    "name": "78-project-create",
+    "url": "http://localhost:3310/#/workspace/projects",
+    "note": "项目创建表单，仅打开，不提交。"
+  },
+  {
+    "name": "79-project-members",
+    "url": "http://localhost:3310/#/workspace/projects",
+    "note": "高级邀请设置仅展开，无邀请或提交。"
+  },
+  {
+    "name": "80-design",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "设计画布初始状态。"
+  },
+  {
+    "name": "81-design-guide",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "创作指南说明。"
+  },
+  {
+    "name": "82-design-model-guide",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "模型指南入口当前仅短 toast。"
+  },
+  {
+    "name": "83-design-model-picker",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "生成模型菜单；不选择模型。"
+  },
+  {
+    "name": "84-design-canvas",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "默认示例节点已出现；未运行、未编辑。"
+  },
+  {
+    "name": "85-design-node-menu",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "添加节点菜单仅展开。"
+  },
+  {
+    "name": "86-design-assets",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "资产中心空状态；两个视图按钮没有可访问名称。"
+  },
+  {
+    "name": "87-design-add-asset",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "新增资产表单仅打开。"
+  },
+  {
+    "name": "88-design-skills",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "设计技能列表有中文标题和详情，和 HUB 的 Skills 列表标准不一致。"
+  },
+  {
+    "name": "89-design-skill-detail",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "设计技能详情，只读。"
+  },
+  {
+    "name": "89-design-skill-detail-ready",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "技能正文已加载，纯查看。"
+  },
+  {
+    "name": "90-comfy-workflows",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "ComfyUI 列表可见已内置与需依赖；未运行。"
+  },
+  {
+    "name": "91-comfy-environment",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "环境说明只读，不安装或启动。"
+  },
+  {
+    "name": "92-comfy-import-menu",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "仅展开创建和导入菜单。"
+  },
+  {
+    "name": "93-narrative",
+    "url": "http://localhost:3310/#/workspace/narrative",
+    "note": "叙事工坊主页面。"
+  },
+  {
+    "name": "94-narrative-mcp",
+    "url": "http://localhost:3310/#/workspace/narrative",
+    "note": "叙事能力信息面板。"
+  },
+  {
+    "name": "95-narrative-create",
+    "url": "http://localhost:3310/#/workspace/narrative",
+    "note": "叙事项目创建表单；不提交。能力弹窗 Escape 未关闭，需点关闭。"
+  },
+  {
+    "name": "96-paper-trading",
+    "url": "http://localhost:3310/#/workspace/paper-trading",
+    "note": "模拟炒股工作台加载结果；不下单、不创建账户。"
+  },
+  {
+    "name": "97-paper-watch-blocked",
+    "url": "http://localhost:3310/#/workspace/paper-trading?tab=watch",
+    "note": "当前认证部署按后端限制不可用，未尝试解除限制。"
+  },
+  {
+    "name": "98-intelligence",
+    "url": "http://localhost:3310/#/workspace/intelligence?surface=chat",
+    "note": "订阅主页面。"
+  },
+  {
+    "name": "99-subscriptions-configured",
+    "url": "http://localhost:3310/#/workspace/intelligence?surface=chat",
+    "note": "已配置任务为空。"
+  },
+  {
+    "name": "100-subscriptions-history",
+    "url": "http://localhost:3310/#/workspace/intelligence?surface=chat",
+    "note": "任务历史为空。"
+  },
+  {
+    "name": "101-subscriptions-dashboard",
+    "url": "http://localhost:3310/#/workspace/intelligence?surface=chat",
+    "note": "面板视图。"
+  },
+  {
+    "name": "102-subscription-create",
+    "url": "http://localhost:3310/#/workspace/intelligence?surface=chat",
+    "note": "手动创建定时任务表单，仅查看。"
+  },
+  {
+    "name": "99-subscriptions-configured-ready",
+    "url": "http://localhost:3310/#/workspace/intelligence?surface=chat",
+    "note": "空状态已加载。"
+  },
+  {
+    "name": "100-subscriptions-history-ready",
+    "url": "http://localhost:3310/#/workspace/intelligence?surface=chat",
+    "note": "空状态已加载。"
+  },
+  {
+    "name": "103-evolution",
+    "url": "http://localhost:3310/#/workspace/evolution",
+    "note": "自进化主工作台。"
+  },
+  {
+    "name": "104-evolution-experiments",
+    "url": "http://localhost:3310/#/workspace/evolution?section=experiments",
+    "note": "空实验数据明确说明，不运行实验。"
+  },
+  {
+    "name": "105-evolution-candidates",
+    "url": "http://localhost:3310/#/workspace/evolution?section=candidates",
+    "note": "候选为空。"
+  },
+  {
+    "name": "106-evolution-deployments",
+    "url": "http://localhost:3310/#/workspace/evolution?section=deployments",
+    "note": "无部署候选，不执行灰度或回滚。"
+  },
+  {
+    "name": "107-evolution-governance",
+    "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+    "note": "保护开关与摘要仅查看。"
+  },
+  {
+    "name": "108-governance-policy",
+    "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+    "note": "治理策略数据加载结果。"
+  },
+  {
+    "name": "109-governance-skills",
+    "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+    "note": "技能提案列表，无提案。"
+  },
+  {
+    "name": "110-governance-models",
+    "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+    "note": "模型提案页面；未运行基准。"
+  },
+  {
+    "name": "111-governance-mcp",
+    "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+    "note": "无待审核项仍提供审核全部待定按钮。"
+  },
+  {
+    "name": "112-governance-curriculum",
+    "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+    "note": "课程目标为空，不运行周期。"
+  },
+  {
+    "name": "113-governance-framework",
+    "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+    "note": "框架基准数据状态。"
+  },
+  {
+    "name": "114-governance-drift",
+    "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+    "note": "漂移页仅查看，无扫描或生成修复。"
+  },
+  {
+    "name": "115-governance-ab",
+    "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+    "note": "A/B 分发只读。"
+  },
+  {
+    "name": "116-governance-reflex",
+    "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+    "note": "规则与响应状态。"
+  },
+  {
+    "name": "117-governance-runtime",
+    "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+    "note": "进化运行设置只读，未变更开关。"
+  },
+  {
+    "name": "118-governance-runtime-bottom",
+    "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+    "note": "高级术语和环境变量直接出现在产品页，底部可见。"
+  },
+  {
+    "name": "119-community",
+    "url": "http://localhost:3310/#/workspace/community",
+    "note": "发现社区页面加载结果。"
+  },
+  {
+    "name": "120-community-feed",
+    "url": "http://localhost:3310/#/workspace/community",
+    "note": "大封面占据首屏，滚动后才看到标题；多张封面加载失败。"
+  },
+  {
+    "name": "121-community-comments",
+    "url": "http://localhost:3310/#/workspace/community",
+    "note": "只查看评论，不发布。"
+  },
+  {
+    "name": "122-community-publish",
+    "url": "http://localhost:3310/#/workspace/community",
+    "note": "发布表单仅打开，不写入。"
+  },
+  {
+    "name": "123-community-market",
+    "url": "http://localhost:3310/#/workspace/community?view=market",
+    "note": "集市入口与积分，未购买。"
+  },
+  {
+    "name": "124-market-detail",
+    "url": "http://localhost:3310/#/workspace/community?view=market",
+    "note": "商品详情只读。"
+  },
+  {
+    "name": "124-market-detail-ready",
+    "url": "http://localhost:3310/#/workspace/community?view=market",
+    "note": "商品详情封面最终仍空白，内容被推到底部。"
+  },
+  {
+    "name": "125-market-create",
+    "url": "http://localhost:3310/#/workspace/community?view=market",
+    "note": "商品上架表单只查看，不发布。"
+  },
+  {
+    "name": "126-storage",
+    "url": "http://localhost:3310/#/workspace/storage",
+    "note": "本地数据库主页面。"
+  },
+  {
+    "name": "127-knowledge",
+    "url": "http://localhost:3310/#/workspace/knowledge",
+    "note": "知识库页面加载结果。"
+  },
+  {
+    "name": "128-knowledge-memory",
+    "url": "http://localhost:3310/#/workspace/knowledge",
+    "note": "记忆资产空状态可见，筛选可用。"
+  },
+  {
+    "name": "129-knowledge-wiki",
+    "url": "http://localhost:3310/#/workspace/knowledge",
+    "note": "Wiki 状态。"
+  },
+  {
+    "name": "130-channels",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "渠道配置总览，不连接外部账户。"
+  },
+  {
+    "name": "131-channel-bot-config",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "Telegram 机器人配置，仅查看。"
+  },
+  {
+    "name": "131-channel-1",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "渠道配置表单，仅查看，不保存连接。"
+  },
+  {
+    "name": "131-channel-2",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "渠道配置表单，仅查看，不保存连接。"
+  },
+  {
+    "name": "131-channel-3",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "渠道配置表单，仅查看，不保存连接。"
+  },
+  {
+    "name": "131-channel-4",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "渠道配置表单，仅查看，不保存连接。"
+  },
+  {
+    "name": "131-channel-5",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "同一渠道配置组件的独立字段变体，只查看。"
+  },
+  {
+    "name": "131-channel-6",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "同一渠道配置组件的独立字段变体，只查看。"
+  },
+  {
+    "name": "131-channel-7",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "同一渠道配置组件的独立字段变体，只查看。"
+  },
+  {
+    "name": "131-channel-8",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "同一渠道配置组件的独立字段变体，只查看。"
+  },
+  {
+    "name": "131-channel-9",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "同一渠道配置组件的独立字段变体，只查看。"
+  },
+  {
+    "name": "131-channel-10",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "同一渠道配置组件的独立字段变体，只查看。"
+  },
+  {
+    "name": "131-channel-11",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "国内平台配置窗口，仅查看，未授权或连接。"
+  },
+  {
+    "name": "131-channel-12",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "国内平台配置窗口，仅查看，未授权或连接。"
+  },
+  {
+    "name": "131-channel-13",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "国内平台配置窗口，仅查看，未授权或连接。"
+  },
+  {
+    "name": "131-channel-14",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "国内平台配置窗口，仅查看，未授权或连接。"
+  },
+  {
+    "name": "131-channel-15",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "国内平台配置窗口，仅查看，未授权或连接。"
+  },
+  {
+    "name": "131-channel-16",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "国内平台配置窗口，仅查看，未授权或连接。"
+  },
+  {
+    "name": "131-channel-17",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "邮件、短信、智能家居及 Teams 配置，只查看，不保存。"
+  },
+  {
+    "name": "131-channel-18",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "邮件、短信、智能家居及 Teams 配置，只查看，不保存。"
+  },
+  {
+    "name": "131-channel-19",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "邮件、短信、智能家居及 Teams 配置，只查看，不保存。"
+  },
+  {
+    "name": "131-channel-20",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "邮件、短信、智能家居及 Teams 配置，只查看，不保存。"
+  },
+  {
+    "name": "131-channel-21",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "邮件、短信、智能家居及 Teams 配置，只查看，不保存。"
+  },
+  {
+    "name": "131-channel-22",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "开发工具渠道的配置字段，仅查看。"
+  },
+  {
+    "name": "131-channel-23",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "开发工具渠道的配置字段，仅查看。"
+  },
+  {
+    "name": "131-channel-24",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "开发工具渠道的配置字段，仅查看。"
+  },
+  {
+    "name": "131-channel-25",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "开发工具渠道的配置字段，仅查看。"
+  },
+  {
+    "name": "132-channel-routing",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "响应对象选择器，仅展开，不修改绑定。"
+  },
+  {
+    "name": "133-computer",
+    "url": "http://localhost:3310/#/workspace/computer",
+    "note": "设备工作台，无设备连接不触发连接。"
+  },
+  {
+    "name": "134-computer-controls",
+    "url": "http://localhost:3310/#/workspace/computer",
+    "note": "设备控制工作区：先读长诊断才到主操作；JSON 和坐标框对普通用户负担大。未观察屏幕或执行动作。"
+  },
+  {
+    "name": "135-computer-action-menu",
+    "url": "http://localhost:3310/#/workspace/computer",
+    "note": "动作类型菜单仅查看。"
+  },
+  {
+    "name": "136-desktop-organizer",
+    "url": "http://localhost:3310/#/workspace/desktop-organizer",
+    "note": "桌面整理页面，仅检查预览前表单。"
+  },
+  {
+    "name": "137-architecture",
+    "url": "http://localhost:3310/#/workspace/architecture",
+    "note": "架构视图。"
+  },
+  {
+    "name": "138-architecture-mermaid",
+    "url": "http://localhost:3310/#/workspace/architecture",
+    "note": "Mermaid 图是否稳定渲染。"
+  },
+  {
+    "name": "139-architecture-readme",
+    "url": "http://localhost:3310/#/workspace/architecture",
+    "note": "架构文档入口。"
+  },
+  {
+    "name": "139-architecture-ascii",
+    "url": "http://localhost:3310/#/workspace/architecture",
+    "note": "架构文档子页，只读渲染检查。"
+  },
+  {
+    "name": "139-architecture-chat",
+    "url": "http://localhost:3310/#/workspace/architecture",
+    "note": "架构文档子页，只读渲染检查。"
+  },
+  {
+    "name": "139-architecture-react",
+    "url": "http://localhost:3310/#/workspace/architecture",
+    "note": "架构文档子页，只读渲染检查。"
+  },
+  {
+    "name": "139-architecture-layers",
+    "url": "http://localhost:3310/#/workspace/architecture",
+    "note": "架构文档子页，只读渲染检查。"
+  },
+  {
+    "name": "139-architecture-modules",
+    "url": "http://localhost:3310/#/workspace/architecture",
+    "note": "架构文档子页，只读渲染检查。"
+  },
+  {
+    "name": "139-architecture-cerebrum",
+    "url": "http://localhost:3310/#/workspace/architecture",
+    "note": "核心器官文档只读检查。"
+  },
+  {
+    "name": "139-architecture-ganglia",
+    "url": "http://localhost:3310/#/workspace/architecture",
+    "note": "核心器官文档只读检查。"
+  },
+  {
+    "name": "139-architecture-beak",
+    "url": "http://localhost:3310/#/workspace/architecture",
+    "note": "核心器官文档只读检查。"
+  },
+  {
+    "name": "139-architecture-hearts",
+    "url": "http://localhost:3310/#/workspace/architecture",
+    "note": "核心器官文档只读检查。"
+  },
+  {
+    "name": "139-architecture-chromatophores",
+    "url": "http://localhost:3310/#/workspace/architecture",
+    "note": "核心器官文档只读检查。"
+  },
+  {
+    "name": "140-observability-events",
+    "url": "http://localhost:3310/#/workspace/observability",
+    "note": "事件流空态清楚，但夹杂管理员权限错误及内部实现说明。"
+  },
+  {
+    "name": "141-observability-overview",
+    "url": "http://localhost:3310/#/workspace/observability",
+    "note": "总览空数据时仍有完整检查结果入口；需要滚动才能看到状态。"
+  },
+  {
+    "name": "142-observability-resources",
+    "url": "http://localhost:3310/#/workspace/observability",
+    "note": "预算空态引用内部 ContextComposer API，不能指导普通用户。"
+  },
+  {
+    "name": "143-observability-system",
+    "url": "http://localhost:3310/#/workspace/observability",
+    "note": "系统页集合多块诊断，功能开关与审计信息面向开发者。"
+  },
+  {
+    "name": "144-diagnostics-runtime",
+    "url": "http://localhost:3310/#/workspace/observability",
+    "note": "运行态自检详细但长表过密，主要给开发者定位。"
+  },
+  {
+    "name": "145-diagnostics-streaming",
+    "url": "http://localhost:3310/#/workspace/observability",
+    "note": "已有7条历史指标；失败行的结束状态仍为正常，列含义需要解释。"
+  },
+  {
+    "name": "146-diagnostics-flags",
+    "url": "http://localhost:3310/#/workspace/observability",
+    "note": "功能开关显示权限错误；未修改。"
+  },
+  {
+    "name": "147-diagnostics-suggestions",
+    "url": "http://localhost:3310/#/workspace/observability",
+    "note": "无活跃项目时说明需先打开项目。"
+  },
+  {
+    "name": "148-diagnostics-remote",
+    "url": "http://localhost:3310/#/workspace/observability",
+    "note": "远程功能禁用状态，重试与配置入口需解释权限原因。"
+  },
+  {
+    "name": "149-diagnostics-invariants",
+    "url": "http://localhost:3310/#/workspace/observability",
+    "note": "规则只读目录；未重建目录。"
+  },
+  {
+    "name": "150-reflex-monitor",
+    "url": "http://localhost:3310/#/workspace/reflex",
+    "note": "反射规则监控只读走查；无触发历史。"
+  },
+  {
+    "name": "151-reflex-editor",
+    "url": "http://localhost:3310/#/workspace/reflex/edit",
+    "note": "规则编辑器只读查看，未保存或试跑。"
+  },
+  {
+    "name": "152-reflex-source-blocked",
+    "url": "http://localhost:3310/#/workspace/reflex/edit",
+    "note": "监控7规则，编辑器却找不到规则文件；源码模式也被阻塞。"
+  },
+  {
+    "name": "153-desktop",
+    "url": "http://localhost:3310/#/desktop",
+    "note": "浏览器内桌面入口，原生窗口边框不在本轮可控范围。"
+  },
+  {
+    "name": "154-desktop-local-apps",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins",
+    "note": "本地应用入口在浏览器中的反馈。"
+  },
+  {
+    "name": "155-browser",
+    "url": "http://localhost:3310/#/browser",
+    "note": "独立 AI 浏览器页面。"
+  },
+  {
+    "name": "156-browser-downloads",
+    "url": "http://localhost:3310/#/browser",
+    "note": "下载记录浮层，当前无记录。"
+  },
+  {
+    "name": "157-browser-bookmarks",
+    "url": "http://localhost:3310/#/browser",
+    "note": "书签空态明确。"
+  },
+  {
+    "name": "158-browser-history",
+    "url": "http://localhost:3310/#/browser",
+    "note": "历史记录及清空入口可见，未清空。"
+  },
+  {
+    "name": "159-browser-more",
+    "url": "http://localhost:3310/#/browser",
+    "note": "浏览器更多菜单入口。"
+  },
+  {
+    "name": "160-browser-extensions",
+    "url": "http://localhost:3310/#/browser",
+    "note": "拓展面板与安装前入口；未安装。"
+  },
+  {
+    "name": "161-browser-ai",
+    "url": "http://localhost:3310/#/browser",
+    "note": "AI侧栏进入任务入口；未发送。"
+  },
+  {
+    "name": "161-browser-ai-ready",
+    "url": "http://localhost:3310/#/browser",
+    "note": "AI侧栏最终态；浏览器控制会话仍在连接。"
+  },
+  {
+    "name": "162-browser-desktop-edit",
+    "url": "http://localhost:3310/#/browser",
+    "note": "桌面编辑态有自动保存说明，未移动任何图标。"
+  },
+  {
+    "name": "163-browser-add-icon",
+    "url": "http://localhost:3310/#/browser",
+    "note": "新图标表单，未保存。"
+  },
+  {
+    "name": "164-browser-new-folder",
+    "url": "http://localhost:3310/#/browser",
+    "note": "文件夹名称表单，取消后无新增。"
+  },
+  {
+    "name": "165-browser-widgets",
+    "url": "http://localhost:3310/#/browser",
+    "note": "组件目录只读查看。"
+  },
+  {
+    "name": "166-browser-widget-menu",
+    "url": "http://localhost:3310/#/browser",
+    "note": "添加小组件会直接新建而不是打开目录；已在审计中撤回该临时项。"
+  },
+  {
+    "name": "167-browser-themes",
+    "url": "http://localhost:3310/#/browser",
+    "note": "浏览器桌面主题目录，未更换主题。"
+  },
+  {
+    "name": "168-browser-home-settings",
+    "url": "http://localhost:3310/#/browser",
+    "note": "主页设置入口实际反馈。"
+  },
+  {
+    "name": "169-photos",
+    "url": "http://localhost:3310/#/apps/photos",
+    "note": "独立图片库页面。"
+  },
+  {
+    "name": "170-media-ready",
+    "url": "http://localhost:3310/#/apps/media",
+    "note": "视频索引最终状态。"
+  },
+  {
+    "name": "169-photos-ready",
+    "url": "http://localhost:3310/#/apps/photos",
+    "note": "图片索引服务不可用，同存储依赖。"
+  },
+  {
+    "name": "171-team-join",
+    "url": "http://localhost:3310/#/workspace/team/join",
+    "note": "无邀请参数时团队加入入口；没有创建团队或加入。"
+  },
+  {
+    "name": "172-web-app",
+    "url": "http://localhost:3310/#/workspace/web-app",
+    "note": "网页应用未给URL时的空态。"
+  },
+  {
+    "name": "173-assistant",
+    "url": "http://localhost:3310/#/workspace/realtime/octopus-assistant?agent=octopus",
+    "note": "助手固定会话入口；未发送请求。"
+  },
+  {
+    "name": "174-assistant-settings",
+    "url": "http://localhost:3310/#/workspace/realtime/octopus-assistant?agent=octopus",
+    "note": "助手设置菜单。"
+  },
+  {
+    "name": "175-existing-thread",
+    "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+    "note": "历史 Eight Sleep 任务能读取；当前角色 Raven 与历史 Kane 混合，未重跑。"
+  },
+  {
+    "name": "176-thread-replay",
+    "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+    "note": "展开历史过程回放，未重试执行。"
+  },
+  {
+    "name": "177-thread-tools",
+    "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+    "note": "历史工具明细展开，原始工具标识偏长。"
+  },
+  {
+    "name": "178-thread-menu",
+    "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+    "note": "任务菜单只读检查，未归档、删除或重命名。"
+  },
+  {
+    "name": "179-preview-final",
+    "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+    "note": "预览最终显示 no_actions_recorded 的关注提示；未进行浏览器操作。"
+  },
+  {
+    "name": "180-thread-tool-details",
+    "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+    "note": "展开工具详情与耗时信息。"
+  },
+  {
+    "name": "181-tool-output",
+    "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+    "note": "工具输出读取窗；未再次调用。"
+  },
+  {
+    "name": "182-panel-list",
+    "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+    "note": "工作台面板管理菜单。"
+  },
+  {
+    "name": "183-diff",
+    "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+    "note": "Diff面板空态与受限宽度。"
+  },
+  {
+    "name": "184-terminal",
+    "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+    "note": "终端面板未收到历史命令输出的空态，未执行命令。"
+  },
+  {
+    "name": "185-sidebar-edit",
+    "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+    "note": "侧栏入口配置窗口；未改动选项。"
+  },
+  {
+    "name": "186-project-space",
+    "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+    "note": "项目空间选择器只读查看。"
+  },
+  {
+    "name": "187-public-about",
+    "url": "http://localhost:3310/#/about",
+    "note": "公开介绍页与工作区视觉采用不同风格。"
+  },
+  {
+    "name": "188-public-terms",
+    "url": "http://localhost:3310/#/terms",
+    "note": "条款文字页的层级与返回入口。"
+  },
+  {
+    "name": "189-public-privacy",
+    "url": "http://localhost:3310/#/privacy",
+    "note": "隐私页只评估可读性，不作法律合规结论。"
+  },
+  {
+    "name": "190-login-authenticated",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": "登录路由的当前已登录态。"
+  },
+  {
+    "name": "191-register",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": "注册入口在当前登录态下的实际视图。"
+  },
+  {
+    "name": "192-newtask-800",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": "800×700 桌面窄窗口，新任务仍可操作。"
+  },
+  {
+    "name": "193-newtask-390",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": "390×844 触屏窄视口。"
+  },
+  {
+    "name": "194-mobile-sidebar",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": "窄屏侧栏抽屉及背景遮罩。"
+  },
+  {
+    "name": "195-mobile-settings",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": "手机宽度设置选择导航。"
+  },
+  {
+    "name": "196-mobile-dark-settings",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": "深色设置弹窗，测试后恢复跟随系统。"
+  },
+  {
+    "name": "197-mobile-models",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": "窄屏模型设置，卡片逐列排布。"
+  },
+  {
+    "name": "198-model-connectors-390",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": "Connector 展开实际内容。"
+  },
+  {
+    "name": "199-model-connectors-dark",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": "桌面深色 Connector 展开状态。"
+  },
+  {
+    "name": "200-multimodel-actual",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": "多模型协同实际配置表单，未修改。"
+  },
+  {
+    "name": "201-hub-dark",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=featured",
+    "note": "深色 HUB，统一主题已生效。"
+  },
+  {
+    "name": "202-hub-mobile",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=featured",
+    "note": "手机 HUB 应用列表。"
+  },
+  {
+    "name": "203-skills-mobile",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=skills",
+    "note": "技能名与说明一行截断，手机上难判断用途；详情入口缺失已由源码确认。"
+  },
+  {
+    "name": "204-roles-mobile",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=agents",
+    "note": "手机角色列表，场景卡占据多屏。"
+  },
+  {
+    "name": "205-remote-role-detail",
+    "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=agents",
+    "note": "远端角色详情弹窗；未安装。"
+  },
+  {
+    "name": "206-projects-mobile-dark",
+    "url": "http://localhost:3310/#/workspace/projects",
+    "note": "项目应用窄屏深色。"
+  },
+  {
+    "name": "207-project-create-mobile",
+    "url": "http://localhost:3310/#/workspace/projects",
+    "note": "新建项目窄屏表单。"
+  },
+  {
+    "name": "208-project-members-bottom",
+    "url": "http://localhost:3310/#/workspace/projects",
+    "note": "成员设置展开后手机弹窗仍可滚动到创建和取消，底部操作可达。"
+  },
+  {
+    "name": "209-design-mobile-dark",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "设计画布首页在390px，检查宿主应用导航与暗色同步。"
+  },
+  {
+    "name": "210-design-template-preview",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "模板预览窗口，未应用模板或发起生成。"
+  },
+  {
+    "name": "211-design-canvas-mobile",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "画布在手机宽度的控制栏与画布区域。"
+  },
+  {
+    "name": "212-canvas-settings-mobile",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "画布设置浮层，检查边界和对齐。"
+  },
+  {
+    "name": "213-canvas-help",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "帮助菜单未超出窄屏。"
+  },
+  {
+    "name": "214-canvas-shortcuts",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "快捷键帮助的实际反馈。"
+  },
+  {
+    "name": "215-free-canvas-mobile",
+    "url": "http://localhost:3310/#/workspace/design",
+    "note": "自由画布窄屏，未添加节点。"
+  },
+  {
+    "name": "216-narrative-mobile",
+    "url": "http://localhost:3310/#/workspace/narrative",
+    "note": "叙事工坊窄屏布局。"
+  },
+  {
+    "name": "217-narrative-create-mobile",
+    "url": "http://localhost:3310/#/workspace/narrative",
+    "note": "窄屏新建叙事项目，未保存。"
+  },
+  {
+    "name": "218-intelligence-mobile",
+    "url": "http://localhost:3310/#/workspace/intelligence",
+    "note": "自动化窄屏列表及说明。"
+  },
+  {
+    "name": "219-evolution-mobile",
+    "url": "http://localhost:3310/#/workspace/evolution",
+    "note": "自进化窄屏指标和导航。"
+  },
+  {
+    "name": "220-community-mobile",
+    "url": "http://localhost:3310/#/workspace/community",
+    "note": "社区窄屏封面版式，内容可读性。"
+  },
+  {
+    "name": "221-channels-mobile",
+    "url": "http://localhost:3310/#/workspace/channels",
+    "note": "手机渠道页面与返回路径。"
+  },
+  {
+    "name": "222-computer-mobile",
+    "url": "http://localhost:3310/#/workspace/computer",
+    "note": "本机助手手机页面缺少工作区导航入口；不执行屏幕或输入操作。"
+  },
+  {
+    "name": "223-architecture-mobile",
+    "url": "http://localhost:3310/#/workspace/architecture",
+    "note": "架构目录固定宽度挤压正文，窄屏正文不可读。"
+  },
+  {
+    "name": "224-observability-mobile",
+    "url": "http://localhost:3310/#/workspace/observability",
+    "note": "诊断页首屏说明过多，核心状态被推到下方；窄屏没有通用导航。"
+  },
+  {
+    "name": "225-browser-mobile",
+    "url": "http://localhost:3310/#/browser",
+    "note": "窄屏浏览器顶部与主页；导航仍可用。"
+  },
+  {
+    "name": "226-browser-theme-ready",
+    "url": "http://localhost:3310/#/browser",
+    "note": "主题控制面板可打开；此前无变化的截图不作为死按钮证据。"
+  },
+  {
+    "name": "227-browser-widget-catalog",
+    "url": "http://localhost:3310/#/browser",
+    "note": "小组件目录只读查看，未添加。"
+  },
+  {
+    "name": "228-browser-wallpaper",
+    "url": "http://localhost:3310/#/browser",
+    "note": "壁纸选择面板，未更换。"
+  },
+  {
+    "name": "229-browser-games",
+    "url": "http://localhost:3310/#/browser",
+    "note": "娱乐目录只读查看，不打开游戏。"
+  },
+  {
+    "name": "230-browser-app-catalog",
+    "url": "http://localhost:3310/#/browser",
+    "note": "桌面应用目录，未新增快捷方式。"
+  },
+  {
+    "name": "231-browser-settings",
+    "url": "http://localhost:3310/#/browser",
+    "note": "浏览器桌面设置在窄屏裁切右侧内容。"
+  },
+  {
+    "name": "232-browser-settings-desktop",
+    "url": "http://localhost:3310/#/browser",
+    "note": "桌面宽度浏览器设置面板。"
+  },
+  {
+    "name": "233-browser-settings-ready",
+    "url": "http://localhost:3310/#/browser",
+    "note": "浏览器主页设置在侧栏展开后的反馈。"
+  },
+  {
+    "name": "234-browser-settings-pointer",
+    "url": "http://localhost:3310/#/browser",
+    "note": "通过实际可见坐标打开浏览器设置，检验悬停展开后的点击。"
+  },
+  {
+    "name": "235-theme-restored",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": "已恢复原来的跟随系统、蔷薇粉、舒适15px设置。"
+  },
+  {
+    "name": "236-agent-routing",
+    "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+    "note": "角色路由与预算表单，未修改。"
+  },
+  {
+    "name": "237-agent-routing-mobile",
+    "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+    "note": "角色高级配置窄屏。"
+  },
+  {
+    "name": "238-role-hud-mobile",
+    "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+    "note": "角色档案窄屏，头像区与参数区的顺序。"
+  },
+  {
+    "name": "239-diagnostics-route",
+    "url": "http://localhost:3310/#/workspace/diagnostics",
+    "note": "诊断直达路由正确选中系统页。"
+  },
+  {
+    "name": "240-settings-deeplink-settled",
+    "url": "http://localhost:3310/#/workspace/realtime/new",
+    "note": "/settings 已跳转到新任务页，但等待稳定后没有打开设置弹窗；仅作为入口失败证据。"
+  },
+  {
+    "name": "241-agent-create-route",
+    "url": "http://localhost:3310/#/workspace/agents/new",
+    "note": "独立角色蓝图页面可达，目标和 Agent ID 均有标签；未生成配置或创建角色。"
+  },
+  {
+    "name": "242-share-invalid",
+    "url": "http://localhost:3310/#/share/audit-invalid-token",
+    "note": "无效分享 token 显示明确错误及重新加载按钮，但原因未中文化，缺少返回工作区入口；未创建或发布分享。"
+  }
+]

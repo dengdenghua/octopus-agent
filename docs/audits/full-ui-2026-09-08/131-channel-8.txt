@@ -1,0 +1,18 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/channels".
+0 AXWebArea Echo, URL: localhost:3310/#/workspace/channels
+	1 container
+		2 container Notifications alt+T
+		3 container 设置 SimpleX 机器人, ID: radix-_r_pc_
+			4 heading 设置 SimpleX 机器人, Value: 2, ID: radix-_r_pd_
+				5 text 设置 SimpleX 机器人
+			6 container radix-_r_pe_
+				7 text 凭证会保存到本地 channel_credentials.json (不上云)。
+				8 link Description: 如何接入?, Value: docs.octopus.ai/channels/simplex
+			9 container
+				10 text SimpleX Chat API URL *
+			11 text field (settable) SimpleX Chat API URL*, ID: channel-simplex-api_base_url
+			12 button 取消
+			13 button 保存并连接
+			14 button 关闭
+
+The focused UI element is 11 text field (settable) SimpleX Chat API URL*, ID: channel-simplex-api_base_url

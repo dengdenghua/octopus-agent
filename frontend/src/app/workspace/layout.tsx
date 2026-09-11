@@ -1,14 +1,11 @@
 import { Fragment, lazy, Suspense, useEffect, useState } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { Banner } from "@/components/ui/banner";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { WorkspaceSidebar } from "@/components/workspace/workspace-sidebar";
 import { WorkspaceRouteOutlet } from "@/components/workspace/workspace-route-outlet";
-import {
-  ELECTRON_TITLE_BAR_HEIGHT,
-  inElectron,
-} from "@/components/electron-title-bar";
+import { useElectronTitleBar } from "@/components/electron-title-bar";
 import {
   STUB_RESPONSE_EVENT,
   type StubResponseDetail,
@@ -24,7 +21,6 @@ import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
 import { useActiveAgentId } from "@/core/agents/active";
 import { workspacePresetForAgent } from "@/core/workspace/workspace-presets";
 import { useWorkbenchAvailabilitySync } from "@/core/workbench/availability";
-import { freshDesignWorkspaceRoute } from "@/core/design/mode-bridge";
 
 const CommandPalette = lazy(() =>
   import("@/components/workspace/command-palette").then((m) => ({
@@ -78,9 +74,9 @@ function StubResponseBannerHost() {
 }
 
 export default function WorkspaceLayout() {
-  const electron = inElectron();
+  const { titleBarHeight, contentTopInset, controlsSafeInset } =
+    useElectronTitleBar();
   const navigate = useNavigate();
-  const location = useLocation();
   const activeAgentId = useActiveAgentId() ?? "general";
   const personaThemeId = workspacePresetForAgent(activeAgentId).themeId;
   const [searchParams] = useSearchParams();
@@ -96,16 +92,6 @@ export default function WorkspaceLayout() {
     "task:new",
     (taskIdentity) => {
       const taskNonce = uuid();
-      if (location.pathname === "/workspace/design") {
-        navigate(
-          freshDesignWorkspaceRoute({
-            currentSearch: location.search,
-            taskNonce,
-          }),
-          { state: { taskNonce } },
-        );
-        return;
-      }
       navigate(
         taskWorkspaceRoute({
           agentId: taskIdentity?.agentId,
@@ -119,7 +105,7 @@ export default function WorkspaceLayout() {
         },
       );
     },
-    [location.pathname, location.search, navigate],
+    [navigate],
   );
   return (
     <Fragment>
@@ -129,9 +115,11 @@ export default function WorkspaceLayout() {
           className="persona-shell workspace-shell h-screen overflow-hidden bg-background"
           defaultOpen={false}
           style={
-            electron && embeddedApp
+            titleBarHeight > 0 && embeddedApp
               ? ({
-                  paddingTop: ELECTRON_TITLE_BAR_HEIGHT,
+                  paddingTop: contentTopInset,
+                  "--window-content-top-inset": contentTopInset,
+                  "--window-controls-safe-inset": controlsSafeInset,
                 } as React.CSSProperties)
               : undefined
           }
@@ -147,9 +135,11 @@ export default function WorkspaceLayout() {
             className="persona-shell workspace-shell h-screen overflow-hidden"
             defaultOpen
             style={
-              electron
+              titleBarHeight > 0
                 ? ({
-                    paddingTop: ELECTRON_TITLE_BAR_HEIGHT,
+                    paddingTop: contentTopInset,
+                    "--window-content-top-inset": contentTopInset,
+                    "--window-controls-safe-inset": controlsSafeInset,
                   } as React.CSSProperties)
                 : undefined
             }

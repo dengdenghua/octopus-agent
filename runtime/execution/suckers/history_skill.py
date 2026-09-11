@@ -62,7 +62,15 @@ def _resolve_store() -> Any:
         from runtime.platform.process.paths import app_paths
 
         # Mirrors _app_stack.py: per_agent_base = <data_dir>/threads.jsonl -> .parent.parent
-        _FALLBACK_STORE = ThreadStateStore(per_agent_base=app_paths().threads_path.parent.parent)
+        # History tools use snapshot search/get_history, not FTS or feedback.
+        # A read must not create those databases or rewrite conflicting copies.
+        _FALLBACK_STORE = ThreadStateStore(
+            per_agent_base=app_paths().threads_path.parent.parent,
+            index_enabled=False,
+            search_enabled=False,
+            feedback_enabled=False,
+            repair_on_load=False,
+        )
     except Exception:  # noqa: BLE001 — no store on disk yet is a normal cold start
         return None
     return _FALLBACK_STORE
@@ -335,12 +343,11 @@ def register_history_skill(registry: SkillRegistry) -> int:
             trusted_source="skill://private/history_search",
             handler=_history_search,
             tests=[
-                SkillTestCase(
-                    name="empty_query_returns_structure",
-                    tier="golden",
-                    args={"limit": 1},
-                    expect=SkillExpect(schema_keys=["count", "threads"]),
-                ),
+                # Registration runs these probes during app bootstrap. A
+                # valid query would scan the user's history and instantiate
+                # the fallback index before the live store is injected.
+                # Valid searches are covered with an isolated in-memory store
+                # in test_history_skill; boot probes must be data-independent.
                 SkillTestCase(
                     name="bad_date_returns_error",
                     tier="golden",

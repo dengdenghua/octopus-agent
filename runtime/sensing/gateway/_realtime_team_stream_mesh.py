@@ -14,6 +14,7 @@ Public API (re-exported by ``realtime_team_stream``):
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 from typing import Any
 
@@ -28,6 +29,44 @@ from runtime.protocol import (
 from runtime.sensing.gateway.realtime_gateway import EventEmitter
 
 _logger = logging.getLogger(__name__)
+
+
+def _render_mesh_outputs(graph: Any, arms: list[Any], *, limit: int = 16_000) -> str:
+    """Expose actual node results with bounded, inert Markdown rendering."""
+    labels = {
+        str(node.node_id): str(getattr(node, "skill_ref", "") or "")
+        for node in getattr(graph, "nodes", [])
+    }
+    remaining = limit
+    chunks: list[str] = []
+    truncated = False
+    for arm in arms:
+        outputs = getattr(arm, "outputs", None)
+        if not isinstance(outputs, dict):
+            continue
+        for node_id, output in outputs.items():
+            if remaining <= 0:
+                truncated = True
+                break
+            label = str(node_id)
+            if label in labels:
+                label += f" · {labels[label]}"
+            try:
+                body = json.dumps(
+                    output, ensure_ascii=False, indent=2, default=lambda _: "<unavailable>"
+                )
+            except (TypeError, ValueError, RecursionError):
+                body = "<result could not be rendered>"
+            # Indentation keeps returned Markdown/HTML as data, including
+            # backticks that would break out of a fixed fenced code block.
+            block = "\n".join("    " + line for line in (label + "\n\n" + body).splitlines())
+            clipped = block[:remaining]
+            chunks.append(clipped)
+            remaining -= len(clipped) + 2
+            truncated |= len(clipped) < len(block)
+    if truncated:
+        chunks.append("Output truncated.")
+    return "\n\n".join(chunks)
 
 
 def _budget_for_graph(graph: Any) -> tuple[int, float]:
@@ -86,11 +125,40 @@ async def _drive_swarm_mesh(
     """
     import asyncio
 
+    from runtime.execution.host_boundary import inherit_host_execution_session
+    from runtime.execution.request import ExecutionRequest, current_execution_request
+    from runtime.platform.process.session import current_session
+
     # Resolve the parent module lazily so ``_drive_team_topology`` and
     # ``GatewayApprovalProvider`` stay monkeypatchable on
     # ``realtime_team_stream`` (tests swap them out) without a module-level
     # circular import.
     from runtime.sensing.gateway import realtime_team_stream as _parent
+
+    parent_session = current_session()
+    host_request = current_execution_request()
+    trusted_session = None
+    if parent_session is not None and "_execution_task" in parent_session.metadata:
+        params = getattr(turn, "params", None)
+        trusted_session = inherit_host_execution_session(
+            parent_session,
+            thread_id=turn.thread_id,
+            actor_id=getattr(params, "owner_actor_id", None),
+            tenant_id=getattr(params, "tenant_id", None),
+            metadata={"source": "realtime_swarm_mesh"},
+        )
+        task = trusted_session.metadata["_execution_task"]
+        if host_request is not None and host_request.task is not task:
+            raise ValueError("mesh execution request does not match host session")
+        host_request = host_request or ExecutionRequest(task, text)
+        task.resources.remaining_seconds()
+    elif host_request is not None:
+        raise ValueError("mesh execution request has no host session")
+    bound_engine = getattr(getattr(turn, "execution", None), "engine", None)
+    if bound_engine in {"opencode", "codex"} and (
+        host_request is None or host_request.task.execution_engine != bound_engine
+    ):
+        raise ValueError("external mesh execution requires its bound host task")
 
     async def _emit(body: str) -> None:
         item = AgentMessageItem(text=body, status=ItemStatus.COMPLETED)
@@ -124,11 +192,33 @@ async def _drive_swarm_mesh(
             agent = runtime._resolve_agent(
                 TurnParams(threadId=turn.thread_id, input=[]),  # type: ignore[call-arg]
             )
-        await runtime._drive_react(turn, log, emitter, intent, provider, agent)
+        engine = getattr(getattr(turn, "execution", None), "engine", "octopus")
+        if engine == "opencode":
+            from runtime.sensing.gateway.realtime_opencode_backend import drive_opencode
 
+            await drive_opencode(runtime, turn, log, emitter, intent, agent, provider, text=text)
+        elif engine == "codex":
+            await runtime._drive_codex_app_server(
+                turn, log, emitter, intent, agent, provider, text=text
+            )
+        else:
+            await runtime._drive_react(turn, log, emitter, intent, provider, agent)
+
+    @contextlib.contextmanager
     def _session():
+        from runtime.execution.request import execution_request_scope
         from runtime.memory.journal.journal_context import journal_context
         from runtime.platform.process.session import Session, session_scope
+
+        if trusted_session is not None and host_request is not None:
+            host_request.task.resources.remaining_seconds()
+            with (
+                session_scope(trusted_session),
+                execution_request_scope(host_request),
+                journal_context(conversation_id=turn.thread_id),
+            ):
+                yield
+            return
 
         session_metadata = dict(intent.user_context or {})
         params = getattr(turn, "params", None)
@@ -144,13 +234,20 @@ async def _drive_swarm_mesh(
             turn_id=turn.id,
             metadata=session_metadata,
         )
-        return session_scope(turn_session), journal_context(
-            conversation_id=turn.thread_id,
-        )
+        with session_scope(turn_session), journal_context(conversation_id=turn.thread_id):
+            yield
 
     def _plan() -> Any:
-        scope, jctx = _session()
-        with scope, jctx:
+        with _session():
+            if host_request is not None and host_request.task.execution_engine in {
+                "opencode",
+                "codex",
+            }:
+                from runtime.execution.graph_planning import plan_external_graph
+
+                return plan_external_graph(
+                    runtime._stack, intent, engine=host_request.task.execution_engine
+                )
             # Extract user-selected model from intent.user_context
             user_model = None
             if isinstance(intent.user_context, dict):
@@ -167,12 +264,15 @@ async def _drive_swarm_mesh(
         from runtime.safety.chromatophores import SignalBus
 
         stack = runtime._stack
-        scope, jctx = _session()
-        with scope, jctx:
+        with _session():
             grt = GraphRuntime(executor=stack.executor, journal=stack.journal)
             sb = SignalBus()
             pool = build_arm_pool_from_registry(stack.registry, grt, signal_bus=sb)
             _budget_tokens, _budget_usd = _budget_for_graph(graph)
+            if host_request is not None:
+                resources = host_request.task.resources
+                _budget_tokens = min(_budget_tokens, resources.token_target)
+                _budget_usd = min(_budget_usd, resources.usd_target)
             budget = Budget(
                 task_id=graph.task_id,
                 limits=BudgetLimits(tokens=int(_budget_tokens), usd=_budget_usd),
@@ -205,8 +305,16 @@ async def _drive_swarm_mesh(
     forced_on = force in {"1", "true", "yes", "on"}
 
     graph: Any = None
-    with contextlib.suppress(Exception):
-        graph = await asyncio.to_thread(_plan)
+    # Explicit sequential execution already determines the route. Do not
+    # create a model-generated graph that the team driver will never consume.
+    if not forced_off:
+        if host_request is not None and host_request.task.execution_engine in {"opencode", "codex"}:
+            # A failed external model call must not acquire a native planner
+            # or quietly launch a different plan through the team driver.
+            graph = await asyncio.to_thread(_plan)
+        else:
+            with contextlib.suppress(Exception):
+                graph = await asyncio.to_thread(_plan)
 
     use_mesh = graph is not None and not forced_off and (forced_on or _graph_favors_mesh(graph))
     if not use_mesh:
@@ -237,6 +345,9 @@ async def _drive_swarm_mesh(
         # shared progress with each other, not just ran in isolation.
         shared = f" · shared {signal_count} live updates between them" if signal_count else ""
         await _emit(f"Ran {len(arms)} agents in parallel — {done} done{tail}{shared}")
+        outputs = _render_mesh_outputs(graph, arms)
+        if outputs:
+            await _emit(outputs)
     except Exception as exc:  # noqa: BLE001 — never break the turn on a mesh fault
         _logger.warning(
             "mesh swarm failed (%s: %s) — falling back to react",

@@ -279,7 +279,16 @@ class CerebrumRuntime:
         self._project_store = project_store
         self._project_os_hooks = dict(project_os_hooks or {})
         self._subagent_runner = subagent_runner
-        composer = getattr(getattr(stack, "planner", None), "composer", None)
+        # The cowork engine is a host context service. Its default loader
+        # does not require constructing an unused native model planner.
+        planner = None
+        if cowork_context_engine is None:
+            planner = (
+                stack.peek_native_planner()
+                if hasattr(type(stack), "peek_native_planner")
+                else getattr(stack, "planner", None)
+            )
+        composer = getattr(planner, "composer", None)
         self._cowork_context_engine = cowork_context_engine or getattr(
             composer,
             "cowork_engine",
@@ -850,6 +859,7 @@ class CerebrumRuntime:
         *,
         thread_id: str,
         text: str,
+        leader: Any = None,
     ) -> None:
         """Handle an explicit ``/project`` command for a cowork thread."""
         await _drive_project_os(
@@ -860,6 +870,7 @@ class CerebrumRuntime:
             intent,
             thread_id=thread_id,
             text=text,
+            leader=leader,
         )
 
     def _is_codex_app_server_partner(self, agent: Any) -> bool:

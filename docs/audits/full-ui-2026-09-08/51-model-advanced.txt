@@ -1,0 +1,3 @@
+Browser tab: 4, Title: "新对话 - Echo", URL: "http://localhost:3310/#/workspace/realtime/new".
+There has been no change in the accessibility tree.
+The focused UI element is 209 button (expanded) Description: 高级能力与兼容诊断, Help: 高级能力与兼容诊断 网关排障、连接兼容详情、Cookbook、Echo Mix 和 OpenAI-compatible 矩阵统一收在这里。 高级, Secondary Actions: Collapse

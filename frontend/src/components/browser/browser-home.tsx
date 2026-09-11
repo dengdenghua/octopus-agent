@@ -1,3 +1,4 @@
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   useEffect,
   useState,
@@ -10,6 +11,7 @@ import {
 } from "react";
 import {
   SearchIcon,
+  MailIcon,
   BotIcon,
   HomeIcon,
   PaletteIcon,
@@ -50,6 +52,7 @@ import {
 } from "lucide-react";
 
 import { swallow } from "@/core/utils/log";
+import { BrowserStartPage } from "./browser-start-page";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -189,6 +192,38 @@ const WORKSPACE_DESKTOP_APPS: BrowserDesktopApp[] = WORKBENCH_BUILTIN_APPS.map(
 
 const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
   ...WORKSPACE_DESKTOP_APPS,
+  {
+    name: "QQ 邮箱",
+    url: "https://mail.qq.com/",
+    icon: MailIcon,
+    color: "from-blue-500 to-sky-400",
+    description: "QQ 邮箱网页版，收发邮件",
+    category: "tool",
+  },
+  {
+    name: "163 邮箱",
+    url: "https://mail.163.com/",
+    icon: MailIcon,
+    color: "from-red-500 to-orange-400",
+    description: "网易 163 邮箱网页版，收发邮件",
+    category: "tool",
+  },
+  {
+    name: "Gmail",
+    url: "https://mail.google.com/",
+    icon: MailIcon,
+    color: "from-red-500 to-rose-400",
+    description: "Google 邮箱网页版，收发邮件",
+    category: "tool",
+  },
+  {
+    name: "Outlook",
+    url: "https://outlook.live.com/mail/",
+    icon: MailIcon,
+    color: "from-blue-600 to-cyan-400",
+    description: "Microsoft 邮箱网页版，收发邮件",
+    category: "tool",
+  },
   {
     name: "Gemini",
     url: "https://gemini.google.com/app",
@@ -957,6 +992,7 @@ export function BrowserHome({
   const bp = t.browserPreviewPanel;
   const { history } = useBrowserStore();
   const workspaceWebShortcuts = useWorkspaceWebShortcuts();
+  const [desktopVisible, setDesktopVisible] = useState(false);
   const [localServices, setLocalServices] = useState<DetectedLocalService[]>(
     [],
   );
@@ -974,9 +1010,9 @@ export function BrowserHome({
   }, []);
 
   useEffect(() => {
-    if (!active) return;
+    if (!active || !desktopVisible) return;
     scanLocalServices();
-  }, [active, scanLocalServices]);
+  }, [active, desktopVisible, scanLocalServices]);
 
   const appNameMap = useMemo<Record<string, string>>(
     () => ({
@@ -1026,14 +1062,37 @@ export function BrowserHome({
   );
 
   const [query, setQuery] = useState("");
-  const [selectedEngine, setSelectedEngine] = useState(0);
+  const [selectedEngine, setSelectedEngine] = useState(() => {
+    try {
+      const saved = localStorage.getItem("echo.browser.search-engine.v1");
+      return Math.max(
+        0,
+        SEARCH_ENGINES.findIndex((engine) => engine.name === saved),
+      );
+    } catch {
+      return 0;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "echo.browser.search-engine.v1",
+        SEARCH_ENGINES[selectedEngine]!.name,
+      );
+    } catch {
+      // Keep the selected engine for this session when storage is unavailable.
+    }
+  }, [selectedEngine]);
   const [enginePickerOpen, setEnginePickerOpen] = useState(false);
   const [openAppGroupId, setOpenAppGroupId] =
     useState<DesktopAppCategory | null>(null);
   const [activePanel, setActivePanel] = useState<DesktopPanelId>("home");
   const [editMode, setEditMode] = useState(false);
   useEffect(() => {
-    const enterEditMode = () => setEditMode(true);
+    const enterEditMode = () => {
+      setDesktopVisible(true);
+      setEditMode(true);
+    };
     window.addEventListener(BROWSER_EDIT_HOME_EVENT, enterEditMode);
     return () =>
       window.removeEventListener(BROWSER_EDIT_HOME_EVENT, enterEditMode);
@@ -1297,6 +1356,18 @@ export function BrowserHome({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.defaultPrevented ||
+        document.querySelector(
+          '[data-slot="dialog-content"][data-state="open"]',
+        )
+      )
+        return;
+      const typing =
+        e.target instanceof HTMLElement &&
+        (e.target.isContentEditable ||
+          /INPUT|TEXTAREA|SELECT/.test(e.target.tagName));
+      if (typing && e.key !== "Escape") return;
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         searchInputRef.current?.focus();
@@ -1306,14 +1377,18 @@ export function BrowserHome({
         searchInputRef.current?.focus();
       }
       if (e.key === "Escape") {
-        setContextMenu((prev) => ({ ...prev, visible: false }));
-        setEnginePickerOpen(false);
-        setEditMode(false);
+        e.preventDefault();
+        if (contextMenu.visible)
+          setContextMenu((prev) => ({ ...prev, visible: false }));
+        else if (enginePickerOpen) setEnginePickerOpen(false);
+        else if (activePanel !== "home") setActivePanel("home");
+        else if (openAppGroupId) setOpenAppGroupId(null);
+        else setEditMode(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [contextMenu.visible, enginePickerOpen, activePanel, openAppGroupId]);
 
   useEffect(() => {
     if (!enginePickerOpen) return;
@@ -1505,7 +1580,7 @@ export function BrowserHome({
       if (
         !(await confirm({
           title: wt.deleteConfirmTitle,
-          description: wt.deleteConfirmDescription,
+          description: `${widgets.find((item) => item.id === id)?.title ?? quickLinks.find((item) => item.id === id)?.name ?? folders.find((item) => item.id === id)?.name ?? ""} — ${wt.deleteConfirmDescription}`,
           confirmLabel: wt.ctxDelete,
           destructive: true,
         }))
@@ -1520,7 +1595,15 @@ export function BrowserHome({
         })),
       );
     },
-    [confirm, wt.ctxDelete, wt.deleteConfirmDescription, wt.deleteConfirmTitle],
+    [
+      confirm,
+      widgets,
+      quickLinks,
+      folders,
+      wt.ctxDelete,
+      wt.deleteConfirmDescription,
+      wt.deleteConfirmTitle,
+    ],
   );
 
   const handleResize = useCallback((id: string, size: string) => {
@@ -1728,6 +1811,28 @@ export function BrowserHome({
   const activeBackdrop = DESKTOP_BACKDROPS[desktopBackdrop];
   const activeBackdropStyle = getBackdropImageStyle(activeBackdrop);
 
+  if (!desktopVisible) {
+    return (
+      <BrowserStartPage
+        active={active}
+        query={query}
+        onQueryChange={setQuery}
+        onSearch={submitSearch}
+        searchInputRef={searchInputRef}
+        engines={engines}
+        selectedEngine={selectedEngine}
+        onEngineChange={setSelectedEngine}
+        apps={visibleDesktopApps.map((app) => ({
+          ...app,
+          name: getAppName(app.name),
+          description: getAppDesc(app.description),
+        }))}
+        onOpen={openDesktopApp}
+        onManageDesktop={() => setDesktopVisible(true)}
+      />
+    );
+  }
+
   return (
     <div
       style={
@@ -1753,6 +1858,17 @@ export function BrowserHome({
       )}
       onContextMenu={handleBackgroundContext}
     >
+      <button
+        type="button"
+        className="absolute left-16 top-2 z-40 rounded-lg border bg-background px-3 py-1.5 text-sm text-foreground shadow-sm hover:bg-muted"
+        onClick={() => {
+          setDesktopVisible(false);
+          setEditMode(false);
+          setActivePanel("home");
+        }}
+      >
+        返回主页
+      </button>
       <div
         data-testid="desktop-side-rail"
         className={cn(
@@ -1834,10 +1950,10 @@ export function BrowserHome({
 
       <div
         className={cn(
-          "flex h-full min-h-0 flex-col pl-16 pr-10 pt-7",
-          compactDesktop && "pl-14 pr-5 pt-5 pb-28",
+          "flex h-full min-h-0 flex-col pl-16 pr-10 pt-16",
+          compactDesktop && "pl-14 pr-5 pt-16 pb-28",
           tabletDesktop && "pl-16 pr-8",
-          mobileDesktop && "pl-12 pr-4 pt-4 pb-24",
+          mobileDesktop && "pl-12 pr-4 pt-16 pb-24",
         )}
       >
         <div
@@ -1962,7 +2078,7 @@ export function BrowserHome({
               </button>
               <button
                 type="button"
-                onClick={() => handleAddWidget()}
+                onClick={() => setActivePanel("widgets")}
                 className="rounded-lg px-2 py-1 text-mini font-medium text-muted-foreground transition hover:bg-white/10 hover:text-foreground liquid-glass-subtle"
               >
                 <PanelLeftIcon className="w-3 h-3 inline mr-0.5" />
@@ -1974,7 +2090,7 @@ export function BrowserHome({
             <button
               type="button"
               onClick={() => setEditMode(false)}
-              className="rounded-lg bg-primary/90 px-2 py-1 text-mini font-medium text-primary-foreground transition hover:bg-primary liquid-glass-subtle"
+              className="rounded-lg bg-primary/90 px-2 py-1 text-mini font-medium text-primary-foreground transition hover:bg-primary"
             >
               {wt.finishEditing}
             </button>
@@ -2645,7 +2761,7 @@ export function BrowserHome({
         onDelete={handleDelete}
         onResize={handleResize}
         onEditHome={() => setEditMode(true)}
-        onAddWidget={() => handleAddWidget()}
+        onAddWidget={() => setActivePanel("widgets")}
         onAddIcon={handleAddIcon}
         onOpenSettings={() => setActivePanel("settings")}
         currentSize={
@@ -2658,97 +2774,108 @@ export function BrowserHome({
       {confirmDialog}
       {promptDialog}
 
-      {editWidgetState.visible && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-          <div className="rounded-2xl p-6 w-full max-w-sm liquid-glass">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-medium text-foreground">
-                {wt.editWidgetDialogTitle}
-              </h3>
-              <button
-                onClick={() =>
-                  setEditWidgetState({
-                    visible: false,
-                    widgetId: null,
-                    title: "",
-                    type: "notes",
-                    size: "medium",
-                  })
-                }
-              >
-                <X className="w-5 h-5 text-muted-foreground/70 hover:text-muted-foreground" />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-muted-foreground mb-2">
-                  {wt.editWidgetTitleLabel}
-                </label>
-                <input
-                  type="text"
-                  value={editWidgetState.title}
-                  onChange={(e) =>
-                    setEditWidgetState((prev) => ({
-                      ...prev,
-                      title: e.target.value,
-                    }))
-                  }
-                  className="w-full bg-input border border-border-subtle rounded-md px-4 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  placeholder={wt.editWidgetTitlePlaceholder}
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-muted-foreground mb-2">
-                  {wt.editWidgetTypeLabel}
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    {
-                      type: "weather" as const,
-                      label: wt.editWidgetTypeWeather,
-                    },
-                    {
-                      type: "calendar" as const,
-                      label: wt.editWidgetTypeCalendar,
-                    },
-                    { type: "notes" as const, label: wt.editWidgetTypeNotes },
-                    { type: "system" as const, label: wt.editWidgetTypeSystem },
-                    {
-                      type: "ai-tools" as const,
-                      label: wt.editWidgetTypeAiTools,
-                    },
-                    {
-                      type: "bookmarks" as const,
-                      label: wt.editWidgetTypeBookmarks,
-                    },
-                  ].map(({ type, label }) => (
-                    <button
-                      key={type}
-                      onClick={() =>
-                        setEditWidgetState((prev) => ({ ...prev, type }))
-                      }
-                      className={cn(
-                        "flex flex-col items-center gap-1 p-2 rounded-md border transition-all",
-                        editWidgetState.type === type
-                          ? "bg-accent border-primary text-foreground"
-                          : "bg-card/60 border-border-subtle text-muted-foreground hover:bg-card",
-                      )}
-                    >
-                      <span className="text-xs">{label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <button
-                onClick={handleSaveWidget}
-                className="w-full py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium"
-              >
-                {wt.editWidgetSave}
-              </button>
-            </div>
+      <Dialog
+        open={editWidgetState.visible}
+        onOpenChange={(open) =>
+          setEditWidgetState((previous) => ({ ...previous, visible: open }))
+        }
+      >
+        <DialogContent
+          showCloseButton={false}
+          aria-describedby={undefined}
+          className="max-w-sm"
+        >
+          <div className="flex items-center justify-between mb-6">
+            <DialogTitle className="text-lg font-medium text-foreground">
+              {wt.editWidgetDialogTitle}
+            </DialogTitle>
+            <button
+              aria-label={t.common.close}
+              onClick={() =>
+                setEditWidgetState({
+                  visible: false,
+                  widgetId: null,
+                  title: "",
+                  type: "notes",
+                  size: "medium",
+                })
+              }
+            >
+              <X className="w-5 h-5 text-muted-foreground/70 hover:text-muted-foreground" />
+            </button>
           </div>
-        </div>
-      )}
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm text-muted-foreground mb-2">
+                {wt.editWidgetTitleLabel}
+              </label>
+              <input
+                aria-label={wt.editWidgetTitleLabel}
+                type="text"
+                value={editWidgetState.title}
+                onChange={(e) =>
+                  setEditWidgetState((prev) => ({
+                    ...prev,
+                    title: e.target.value,
+                  }))
+                }
+                className="w-full bg-input border border-border-subtle rounded-md px-4 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder={wt.editWidgetTitlePlaceholder}
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-muted-foreground mb-2">
+                {wt.editWidgetTypeLabel}
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  {
+                    type: "weather" as const,
+                    label: wt.editWidgetTypeWeather,
+                  },
+                  {
+                    type: "calendar" as const,
+                    label: wt.editWidgetTypeCalendar,
+                  },
+                  { type: "notes" as const, label: wt.editWidgetTypeNotes },
+                  { type: "system" as const, label: wt.editWidgetTypeSystem },
+                  {
+                    type: "ai-tools" as const,
+                    label: wt.editWidgetTypeAiTools,
+                  },
+                  {
+                    type: "bookmarks" as const,
+                    label: wt.editWidgetTypeBookmarks,
+                  },
+                ].map(({ type, label }) => (
+                  <button
+                    aria-pressed={editWidgetState.type === type}
+                    key={type}
+                    onClick={() =>
+                      setEditWidgetState((prev) => ({ ...prev, type }))
+                    }
+                    className={cn(
+                      "flex flex-col items-center gap-1 p-2 rounded-md border transition-all",
+                      editWidgetState.type === type
+                        ? "bg-accent border-primary text-foreground"
+                        : "bg-card/60 border-border-subtle text-muted-foreground hover:bg-card",
+                    )}
+                  >
+                    <span className="text-xs">{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button
+              disabled={!editWidgetState.title.trim()}
+              onClick={handleSaveWidget}
+              className="w-full py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium"
+            >
+              {wt.editWidgetSave}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {activePanel !== "home" && (
         <DesktopControlPanel
@@ -2869,7 +2996,7 @@ function DesktopControlPanel({
   return (
     <div
       className={cn(
-        "absolute bottom-7 left-16 top-8 z-20 w-[360px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-2xl text-foreground liquid-glass",
+        "absolute bottom-3 left-3 right-3 top-3 z-20 w-auto overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-xl sm:bottom-7 sm:left-16 sm:right-auto sm:top-8 sm:w-[360px] sm:max-w-[calc(100%-5rem)]",
       )}
     >
       <div className="flex items-center justify-between border-b border-white/15 px-5 py-4">

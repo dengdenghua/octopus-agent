@@ -752,7 +752,7 @@ def _deploy_website(
         )
     except (OSError, json.JSONDecodeError):
         manifest = {"deployments": []}
-    base_url = (os.environ.get("OCTOPUS_PUBLIC_BASE_URL") or "http://127.0.0.1:8000").rstrip("/")
+    base_url = (os.environ.get("OCTOPUS_PUBLIC_BASE_URL") or "http://127.0.0.1:8310").rstrip("/")
     url = f"{base_url}/api/deployments/{deploy_id}/index.html"
     record = {
         "id": deploy_id,

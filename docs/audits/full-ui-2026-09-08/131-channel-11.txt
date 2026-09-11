@@ -1,0 +1,16 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/channels".
+0 AXWebArea Echo, URL: localhost:3310/#/workspace/channels
+	1 container
+		2 container Notifications alt+T
+		3 container 设置 微信 机器人, ID: radix-_r_pu_
+			4 heading 设置 微信 机器人, Value: 2, ID: radix-_r_pv_
+				5 text 设置 微信 机器人
+			6 container radix-_r_q0_
+				7 text 凭证会保存到本地 channel_credentials.json (不上云)。
+				8 link Description: 如何接入?, Value: docs.octopus.ai/channels/wechat
+			9 text 点击下方按钮获取二维码,用微信扫码确认后即可接入。
+			10 button 获取二维码
+			11 button 取消
+			12 button 关闭
+
+The focused UI element is 10 button 获取二维码

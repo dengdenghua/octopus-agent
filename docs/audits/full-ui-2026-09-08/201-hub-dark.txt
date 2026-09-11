@@ -1,0 +1,3 @@
+Browser tab: 4, Title: "HUB - Echo", URL: "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=featured".
+There has been no change in the accessibility tree.
+The focused UI element is 0 AXWebArea HUB - Echo, URL: localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=featured

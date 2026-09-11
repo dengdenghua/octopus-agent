@@ -1,3 +1,6 @@
+import { useHistoryDraft } from "@/core/threads/use-history-draft";
+import { useRemoteGroupAgents } from "@/core/agents/remote-agents";
+import { InviteDialog } from "@/components/workspace/collab/invite-dialog";
 import { Settings2Icon, XIcon } from "lucide-react";
 import {
   useCallback,
@@ -9,10 +12,10 @@ import {
 } from "react";
 
 import { FinalArtifactCompletionNotice } from "@/components/workspace/realtime/final-artifact-completion-notice";
+import { ProjectProposalNotice } from "@/components/workspace/realtime/project-proposal-notice";
 import {
   RightPanelMenu,
   type RightPanelPage,
-import { ProjectProposalNotice } from "@/components/workspace/realtime/project-proposal-notice";
 } from "@/components/workspace/realtime/right-panel-menu";
 
 import { ChatHeaderRecButton } from "@/components/workspace/realtime/chat-header-rec-button";
@@ -82,7 +85,6 @@ import {
   ChatInputBox,
   type DeepResearchComposerOptions,
 } from "@/components/workspace/chat-input-box";
-import { ConversationRosterStrip } from "@/components/workspace/conversation-roster-strip";
 import type { GroupTaskStrategy } from "@/components/workspace/group-task-strategy";
 import { ComposerStepProgress } from "@/components/workspace/composer-step-progress";
 import {
@@ -703,7 +705,6 @@ function RealtimePageContent({
   >(null);
   const settledWorkbenchAutoDismissedRef = useRef<string | null>(null);
   const emptyWorkbenchAutoDismissedRef = useRef<string | null>(null);
-  const [discussionOnly, setDiscussionOnly] = useState(false);
   const [chatsDrawerOpen, setChatsDrawerOpen] = useState(false);
   // 助理专属：右侧内嵌「自动化 / 订阅」管理面板开关。
   const [showAutomationPanel, setShowAutomationPanel] = useState(false);
@@ -893,12 +894,13 @@ function RealtimePageContent({
   const { mobileAgents } = useMobileDevices({
     enabled: collaboratorPickerOpen || hasPersistedCollaboration,
   });
+  const remoteAgents = useRemoteGroupAgents(collaboratorPickerOpen || hasPersistedCollaboration);
   const allTaskCollaboratorAgents = useMemo(
     () =>
       dedupePersonaAgentsByDisplayName(
-        dedupeAgentsByName([...mobileAgents, ...builtinAgents]),
+        dedupeAgentsByName([...remoteAgents, ...mobileAgents, ...builtinAgents]),
       ),
-    [builtinAgents, mobileAgents],
+    [builtinAgents, mobileAgents, remoteAgents],
   );
   const collaborationMentionMembers = useMemo(
     () =>
@@ -976,6 +978,15 @@ function RealtimePageContent({
 
   const navigate = useNavigate();
   const location = useLocation();
+  useEffect(() => {
+    try {
+      if (!sessionStorage.getItem(`echo:browser-return:${location.pathname}`)) return;
+      setAgentWorkbenchTab("browser");
+      setAgentWorkbenchTabTouched(true);
+      setAgentWorkbenchDismissed(false);
+      setAgentWorkbenchManuallyOpened(true);
+    } catch { /* Returning to the conversation still works without storage. */ }
+  }, [location.pathname]);
   const routeState = (location.state as ThreadRouteState | null) ?? null;
   const projectWorkbenchRouteOpenedRef = useRef<string | null>(null);
   const humanInviteRouteOpenedRef = useRef<string | null>(null);
@@ -1971,8 +1982,7 @@ function RealtimePageContent({
     isOctopusAssistant ||
     isExplicitAgentSelected ||
     routeMode === "chat" ||
-    routeMode === "flash" ||
-    discussionOnly;
+    routeMode === "flash";
   const isCodingWorkspaceMode =
     isProjectCodeMode ||
     ((isAgentRoute || isRealtimeRoute) && !isExplicitConversationMode);
@@ -2017,23 +2027,27 @@ function RealtimePageContent({
         ? routeMode
         : isAgentRoute
           ? "react"
-          : discussionOnly
-            ? "chat"
-            : "react";
+          : "react";
   const streamMode: ReasoningMode | "team" = collaborationEnabled
     ? "team"
     : effectiveMode;
   const executionSelection = useExecutionEngine({
     threadId,
+    parentThreadId:
+      firstString(threadIdentityQuery.data?.metadata?.parent_thread_id) ||
+      undefined,
     principal: user?.actor_id || user?.user_id || "local",
     roleBackend: perspectiveDisplayAgent?.capabilities?.execution_backend,
     // General/Design and directory scope do not determine task intent.
     // Automatic selection is resolved by the host from the submitted request.
     codingTask: false,
     orchestrated: collaborationEnabled,
+    nativeTopology: collaborationEnabled && teamModeIntent === "cluster",
     enabled: !embeddedDesignChat && !authLoading,
   });
   const selectedExecutionEngine = executionSelection.engine;
+  const executionEnginePreference = executionSelection.preference;
+  const rememberExecutionEngineForThread = executionSelection.rememberForThread;
   const threadRouteFor = useCallback(
     (id: string) => {
       const path = `/workspace/realtime/${encodeURIComponent(id)}`;
@@ -2147,6 +2161,7 @@ function RealtimePageContent({
   // Skip the navigate+invalidate on the FIRST observed value (page
   // mount) — only react to actual changes.
   const [composerSeed, setComposerSeed] = useState(initialPrompt);
+  useHistoryDraft(threadId, setComposerSeed);
   const boundProjectState: ProjectFullState | null | undefined =
     boundProjectQuery.data;
   const projectMilestoneOptions = useMemo(
@@ -2674,7 +2689,7 @@ function RealtimePageContent({
             ? projectModePreset.promptContract
             : undefined,
           project_signals: projectSignals,
-          execution_engine_preference: executionSelection.preference,
+          execution_engine_preference: executionEnginePreference,
           // A stable, user-visible browser tab / desktop window reference. The
           // runtime receives structured identity instead of guessing from prose.
           automation_target:
@@ -2701,7 +2716,7 @@ function RealtimePageContent({
         selectedExecutionEngine,
       ),
       onStart: (startedThreadId) => {
-        executionSelection.rememberForThread(startedThreadId);
+        rememberExecutionEngineForThread(startedThreadId);
         if (startedThreadId !== threadId) {
           clearSidebarThreadStatus(threadId);
         }
@@ -2757,8 +2772,8 @@ function RealtimePageContent({
       projectWorkspacePath,
       qc,
       selectedExecutionEngine,
-      executionSelection.preference,
-      executionSelection.rememberForThread,
+      executionEnginePreference,
+      rememberExecutionEngineForThread,
       setIsNewThread,
       settings.context,
       settings.personal_space.custom_instructions,
@@ -3198,6 +3213,7 @@ function RealtimePageContent({
     hasAgentAnswer &&
     (!requiresReportDeliverable || hasReportArtifact || hasFinalArtifact);
   const agentRunSettled =
+    (lastTurnMessages.length > 0 || agentDisplayEvents.length > 0) &&
     !thread.isLoading &&
     (!hasRunningAgentEvents ||
       canSettleStaleLiveEvents ||
@@ -3206,6 +3222,7 @@ function RealtimePageContent({
     !hasActiveBackgroundTask &&
     (!hasPausedOrPendingBackgroundTask || agentRunPaused);
   const hasCompletedAgentOutput =
+    hasAgentAnswer &&
     lastTurnTerminalState === null &&
     !agentRunBlocked &&
     (!thread.error || hasFinalArtifact) &&
@@ -3352,7 +3369,8 @@ function RealtimePageContent({
     const href = threadRouteFor(sidebarThreadId);
     eventBus.emit("thread:run-status", {
       href,
-      state: sidebarRunState,
+      state:
+        hasCompletedAgentOutput && !agentRunFailed ? "done" : sidebarRunState,
       threadId: sidebarThreadId,
     });
     return () => {
@@ -3362,7 +3380,13 @@ function RealtimePageContent({
         threadId: sidebarThreadId,
       });
     };
-  }, [sidebarRunState, sidebarThreadId, threadRouteFor]);
+  }, [
+    sidebarRunState,
+    sidebarThreadId,
+    threadRouteFor,
+    hasCompletedAgentOutput,
+    agentRunFailed,
+  ]);
   const shouldHideSettledProcessChrome =
     agentRunSettled && hasCompletedAgentOutput;
   const hasRenderableAgentWorkbench = useMemo(
@@ -3650,21 +3674,37 @@ function RealtimePageContent({
       );
   }, [closeSpecialUtilityPanels, setArtifactsOpen, setShowResearch]);
 
+  // A restored Design preference uses the same home as an explicit mode switch.
+  // Embedded chats must stay here so the Design host can render its conversation.
+  useEffect(() => {
+    if (!isNewThread || embeddedDesignChat || projectAgentMode !== "uxui") return;
+    navigate(
+      designWorkspaceRoute({
+        newTask: true,
+        projectId: boundProjectState?.project.id,
+        projectName: boundProjectState?.project.name,
+      }),
+      { replace: true },
+    );
+  }, [isNewThread, embeddedDesignChat, projectAgentMode, navigate,
+    boundProjectState?.project.id, boundProjectState?.project.name]);
+
   const handleAcceptModeIntent = useCallback(
     async (mode: AgentModeName) => {
       const previousMode = projectAgentMode;
       const previousManualOverride = modeManualOverride;
       const label = modeLabelFor(mode, t);
-      setProjectAgentMode(mode);
       setModeManualOverride(true);
       setModeIntentSuggestion(null);
       try {
         await persistModeSelection(mode, threadId, effectiveWorkDir);
+        setProjectAgentMode(mode);
         toast.success(t.modeIntent.autoSwitched(label));
         if (mode === "uxui" && !embeddedDesignChat) {
           navigate(
             designWorkspaceRoute({
               threadId: sidebarThreadId,
+              newTask: isNewThread,
               projectId: boundProjectState?.project.id,
               projectName: boundProjectState?.project.name,
             }),
@@ -3683,6 +3723,7 @@ function RealtimePageContent({
       boundProjectState?.project.name,
       effectiveWorkDir,
       embeddedDesignChat,
+      isNewThread,
       modeManualOverride,
       navigate,
       projectAgentMode,
@@ -3721,6 +3762,7 @@ function RealtimePageContent({
         navigate(
           designWorkspaceRoute({
             threadId: sidebarThreadId,
+            newTask: isNewThread,
             projectId: boundProjectState?.project.id,
             projectName: boundProjectState?.project.name,
           }),
@@ -3731,6 +3773,7 @@ function RealtimePageContent({
       boundProjectState?.project.id,
       boundProjectState?.project.name,
       embeddedDesignChat,
+      isNewThread,
       embeddedDesignParentOrigin,
       navigate,
       sidebarThreadId,
@@ -3990,10 +4033,7 @@ function RealtimePageContent({
     (mode: ReasoningMode, draft?: string) => {
       if (mode === effectiveMode) return;
       if (mode === "code" && !isCodingWorkspaceMode) return;
-      if (!isAgentRoute) {
-        setDiscussionOnly(mode === "chat");
-        return;
-      }
+      if (!isAgentRoute) return;
       setSettings("context", {
         ...settings.context,
         mode,
@@ -4486,6 +4526,7 @@ function RealtimePageContent({
   const headerHumanInvite =
     !isOctopusAssistant && canManageHumanInvites ? (
       <GroupHumanInviteButton
+        renderDialog={false}
         roomId={resolvedHumanInviteRoomId}
         threadId={threadId}
         onEnsureRoom={ensureHumanInviteRoom}
@@ -4550,7 +4591,8 @@ function RealtimePageContent({
             replayBlocks.length > 0 ? handleExportReplay : undefined,
         }
       : undefined;
-  const headerWorkbench = (
+  // Open surfaces own their close control; the chat header only offers reopening.
+  const headerWorkbench = activeRightPanel ? null : (
     <RightPanelMenu
       activePage={activeRightPanel}
       artifactCount={artifactCount}
@@ -4605,6 +4647,14 @@ function RealtimePageContent({
 
   return (
     <SubtasksProvider>
+      {resolvedHumanInviteRoomId && (
+        <InviteDialog
+          open={humanInviteDialogOpen}
+          onOpenChange={setHumanInviteDialogOpen}
+          roomId={resolvedHumanInviteRoomId}
+          threadId={threadId}
+        />
+      )}
       <ThreadProviders thread={thread} isMock={false}>
         <ToolEffectsProvider
           enabled={
@@ -4625,6 +4675,10 @@ function RealtimePageContent({
           >
             <ChatBox artifactPanelMode="external" threadId={threadId}>
               <ChatPageLayout
+                composerNeedsAttention={
+                  realtimeApprovals.pendingApprovals.length > 0
+                }
+                layoutKey={threadId}
                 isNewThread={isNewThread}
                 pageTitle={
                   headerThreadTitle ||
@@ -4795,6 +4849,7 @@ function RealtimePageContent({
                     timelineEntries={conversationTimelineEntries}
                     footer={
                       <>
+                        <ProjectProposalNotice threadId={threadId} busy={thread.isLoading || !thread.readyForMutations} onReview={handleSendFollowUp} />
                         {hasCompletedAgentOutput &&
                         hasFinalArtifact &&
                         !hasReportArtifact ? (
@@ -4809,8 +4864,10 @@ function RealtimePageContent({
                 }
                 inputArea={
                   <div
+                    data-composer-start={isNewThread || undefined}
+                    data-composer-root="true"
                     className={cn(
-                      "relative w-full transition-[max-width,transform] duration-slow",
+                      "relative mx-auto w-full transition-[max-width,transform] duration-slow",
                       isNewThread &&
                         "-translate-y-[clamp(3rem,12dvh,7rem)] md:-translate-y-[calc(50vh-168px)]",
                       isNewThread
@@ -4821,10 +4878,12 @@ function RealtimePageContent({
                     {mounted ? (
                       <div className="flex flex-col gap-2">
                         {isNewThread ? (
-                          <Welcome
-                            agent={perspectiveDisplayAgent}
-                            agentName={mainPerspectiveAgentId}
-                          />
+                          <div data-composer-welcome="true">
+                            <Welcome
+                              agent={perspectiveDisplayAgent}
+                              agentName={mainPerspectiveAgentId}
+                            />
+                          </div>
                         ) : null}
                         {!isNewThread ? (
                           <ComposerStepProgress
@@ -4849,7 +4908,6 @@ function RealtimePageContent({
                               target={automationTarget}
                             />
                           ) : null}
-                        <ProjectProposalNotice threadId={threadId} busy={thread.isLoading || !thread.readyForMutations} onReview={handleSendFollowUp} />
                           {replyTarget ? (
                             <div className="mb-2 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/[0.04] px-3 py-2 text-xs">
                               <span className="min-w-0 flex-1 truncate text-muted-foreground">
@@ -4888,9 +4946,18 @@ function RealtimePageContent({
                               !embeddedDesignChat ? (
                                 <ExecutionEnginePicker
                                   value={executionSelection.preference}
+                                  resolvedEngine={selectedExecutionEngine}
+                                  codexCapabilityChecks={executionSelection.codexCapabilityChecks}
+                                  opencodeCapabilityChecks={executionSelection.opencodeCapabilityChecks}
                                   onChange={executionSelection.setPreference}
                                   codexAvailable={
                                     executionSelection.codexAvailable
+                                  }
+                                  opencodeAvailable={
+                                    executionSelection.opencodeAvailable
+                                  }
+                                  opencodeUnavailableReason={
+                                    executionSelection.opencodeUnavailableReason
                                   }
                                   unavailableReason={
                                     executionSelection.codexUnavailableReason
@@ -4902,6 +4969,7 @@ function RealtimePageContent({
                             mode={effectiveMode}
                             reasoningEffort={effectiveReasoningEffort}
                             threadId={threadId}
+                            draftStorageKey={isNewThread ? "__new__" : threadId}
                             mentionMembers={collaborationMentionMembers}
                             isGroupConversation={isGroupConversation}
                             groupTaskStrategy={groupTaskStrategy}
@@ -4960,11 +5028,6 @@ function RealtimePageContent({
                                       : "已连接画布"
                                     : "正在连接画布…"}
                                 </span>
-                              ) : isGroupConversation ? (
-                                <ConversationRosterStrip
-                                  seats={collaborationRosterSeats}
-                                  onOpenMemberProcess={openAgentPanel}
-                                />
                               ) : undefined
                             }
                             automationTarget={
@@ -5021,7 +5084,6 @@ function RealtimePageContent({
                             onPermissionModeChange={handlePermissionModeChange}
                             onSubmit={handleSubmit}
                             onDeepResearch={handleDeepResearch}
-                            showInspirationToggle={!embeddedDesignChat}
                             allowAgentModes={!embeddedDesignChat}
                             onStop={handleStop}
                             isStopping={isStopping}
@@ -5197,6 +5259,7 @@ function RealtimePageContent({
                             isGroupConversation ? collaborationTeamName : null
                           }
                           currentThreadTitle={headerThreadTitle || null}
+                          onProjectCommand={handleRetryTask}
                           onInvitePeople={
                             canManageHumanInvites
                               ? handleOpenHumanInvite
@@ -5252,4 +5315,3 @@ function RealtimePageContent({
     </SubtasksProvider>
   );
 }
-                          onProjectCommand={handleRetryTask}

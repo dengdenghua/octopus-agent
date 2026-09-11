@@ -6580,9 +6580,11 @@ def test_unavailable_approval_pauses_instead_of_failing_turn(
     assert not (project / "src" / "new.py").exists()
 
 
-def test_accept_edits_permission_auto_approves_code_file_writes(
+@pytest.mark.parametrize("verdict", ["allow", "deny"])
+def test_auto_review_uses_independent_service_for_code_file_writes(
     tmp_path: Any,
     monkeypatch: Any,
+    verdict: str,
 ) -> None:
     monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path))
     project = tmp_path / "project"
@@ -6599,6 +6601,10 @@ def test_accept_edits_permission_auto_approves_code_file_writes(
             ]
         )
     )
+    reviewer = _ScriptedRouter(
+        ['{"outcome": "' + verdict + '", "risk": "low", "reason": "reviewed"}'] * 2
+    )
+    stack.approval_router = reviewer
     provider = _ApprovingApprovalProvider()
     session = Session(
         agent=_ScopeAgent(),
@@ -6630,13 +6636,18 @@ def test_accept_edits_permission_auto_approves_code_file_writes(
             )
         )
 
-    assert result is not None and result.success
-    assert [req.tool_name for req in provider.requests] == ["exec_shell"]
+    assert result is not None
+    assert provider.requests == []
+    assert reviewer.calls == 2
     approval_tool_names = [
         event["tool_name"] for event in events if event["type"] == "tool_approval_request"
     ]
-    assert approval_tool_names == ["exec_shell"]
-    assert (project / "src" / "new.py").read_text(encoding="utf-8") == "x"
+    assert approval_tool_names == []
+    if verdict == "allow":
+        assert result.success
+        assert (project / "src" / "new.py").read_text(encoding="utf-8") == "x"
+    else:
+        assert not (project / "src" / "new.py").exists()
 
 
 def test_code_mode_risk_policy_can_deny_without_provider_roundtrip(
@@ -6713,6 +6724,38 @@ def test_stream_emits_forced_final_answer_after_max_iterations() -> None:
     assert completed
     assert completed[-1]["completion_receipt"]["ready"] is False
     assert "terminated:max_iter" in completed[-1]["completion_receipt"]["warnings"]
+
+
+@pytest.mark.parametrize(
+    ("provider_detail", "expected"),
+    [
+        ("Error from provider (Console): Model is unavailable.", "所选模型标记为不可用"),
+        ("OpenCode's free tier can only be used in OpenCode", "仅支持 OpenCode 引擎"),
+    ],
+)
+def test_native_provider_failure_is_actionable_and_does_not_retry(provider_detail, expected):
+    from runtime.sensing.model_router.openai_router import OpenAIRouterError
+
+    class _UnavailableRouter(_ScriptedRouter):
+        def call(self, req: Any) -> _FakeResponse:
+            self.calls += 1
+            raise OpenAIRouterError(
+                f"http_400: {provider_detail} private diagnostic payload",
+                status_code=400,
+                response_body=provider_detail,
+            )
+
+    stack = _build_stack_with_executor(_UnavailableRouter([]))
+    events, result = _drain(
+        stream_react_loop(stack, _intent("分析项目"), agent=None, max_iterations=4)
+    )
+    assert result is None
+    failures = [event for event in events if event["type"] == "react_error"]
+    assert len(failures) == 1
+    assert "http_400" in failures[0]["message"]
+    assert expected in failures[0]["message"]
+    assert "private diagnostic" not in failures[0]["message"]
+    assert not any(event["type"] == "react_retry" for event in events)
 
 
 def test_forced_convergence_surfaces_redacted_provider_failure() -> None:

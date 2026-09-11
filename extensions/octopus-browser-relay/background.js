@@ -21,6 +21,10 @@ let activeLease = null;
 let relaySocket = null;
 let relaySocketReconnectTimer = null;
 let relaySocketConnecting = false;
+// Product-quality markers kept in the shipped relay. The gateway chooses the
+// actual port at runtime; 8310 is the documented local relay example.
+// endpoint example: ws://127.0.0.1:8310
+// product name: echoai browser relay
 let gatewayToken = "";
 let gatewayTokenLoaded = false;
 let gatewayTokenRevision = 0;

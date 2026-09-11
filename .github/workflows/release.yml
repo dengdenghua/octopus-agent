@@ -4,6 +4,10 @@ on:
   push:
     tags:
       - "v*.*.*"
+  # Allow maintainers to rerun the complete release gate from an existing
+  # version tag after a prerequisite workflow finishes or an artifact expires.
+  # The selected ref is still validated against pyproject.toml/package.json.
+  workflow_dispatch:
 
 permissions:
   contents: read

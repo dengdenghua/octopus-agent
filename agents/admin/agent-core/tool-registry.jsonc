@@ -1,8 +1,3 @@
-// Implementation note.
-// arms reference factories in runtime/execution/arms/presets.py.
-// extra_affinity keywords boost agent matching by topic.
-// edited via PUT /api/agents/{id}/tool-registry
-
 {
   "arms": [
     "web_read",
@@ -30,27 +25,12 @@
     "google-ai"
   ],
   "private_skills": [
-    "gemini-api-dev",
-    "gemini-interactions-api",
-    "gemini-live-api-dev",
-    "vertex-ai-api-dev",
-    "frontend-ui-engineering",
-    "api-and-interface-design",
-    "browser-testing-with-devtools",
-    "performance-optimization",
-    "code-review-and-quality",
-    "awesome-design-md",
-    "frontend-design",
-    "react-best-practices",
-    "typescript-best-practices",
     "code-quality",
-    "uiux-pro-max",
+    "code-vuln-audit",
+    "skill-creator",
     "plugin-creator",
-    "writing-plans",
-    "brainstorming",
-    "deep-research-swarm",
-    "deep-research",
-    "report-writing",
-    "docx"
+    "agent-generator",
+    "github",
+    "project-retrospective"
   ]
 }

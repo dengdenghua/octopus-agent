@@ -129,12 +129,12 @@ describe("useRealtimeThread approval lifecycle", () => {
     });
 
     act(() => {
-      rendered.result.current.resolveApproval(8, true);
+      rendered.result.current.resolveApproval(8, true, { "hub:test": "loaded_role" });
     });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(reply).toMatchObject({ action: "accept" });
+    expect(reply).toMatchObject({ action: "accept", preparedRoles: { "hub:test": "loaded_role" } });
     expect(rendered.result.current.state.pendingApprovals).toHaveLength(0);
 
     // The timer must not fire a second resolution later.

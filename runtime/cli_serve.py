@@ -179,6 +179,10 @@ def maybe_setup_prompt_evolution(
     color: bool,
 ) -> tuple[Any, int]:
     """Enable optional live prompt evolution for serve mode."""
+    from runtime.execution.model_services import background_model_calls_enabled
+
+    if not background_model_calls_enabled(stack):
+        return None, 0
     from runtime.core.cerebrum import LLMPlanner
 
     if prompt_variants_path is None:
@@ -311,7 +315,9 @@ def register_memory_distill_task(runner: Any, stack: Any) -> int:
     if interval_s <= 0:
         return 0
 
-    router = getattr(getattr(stack, "planner", None), "router", None)
+    from runtime.execution.model_services import background_model_router
+
+    router = background_model_router(stack)
 
     def _tick() -> None:
         from runtime.memory.users.distill import distill_user_memory

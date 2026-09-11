@@ -1,0 +1,13 @@
+{
+  "sample": "sample1",
+  "import_seconds": 0.8166271999944001,
+  "assembly_seconds": 0.8488375000015367,
+  "total_seconds": 1.6654646999959368,
+  "rss_mib": 99.96484375,
+  "scratch_directory": "D:\\echo agent\\.codex-run\\stack-profile-y200lqm_",
+  "module_count": 1179,
+  "skill_count": 329,
+  "member_engine": "opencode",
+  "native_planner_created": true,
+  "scope": "complete library stack assembly, not web app lifespan or desktop launch"
+}

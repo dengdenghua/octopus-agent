@@ -1,8 +1,19 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+
+def development_login_enabled(config: Any) -> bool:
+    """Local credentials are an explicit development-only facility."""
+    return bool(
+        config is not None
+        and getattr(config, "enabled", False)
+        and os.getenv("ECHO_ENV", "").strip().lower() == "development"
+        and os.getenv("OCTOPUS_DEPLOYMENT_MODE", "local").strip().lower() == "local"
+    )
 
 
 def hash_password(plaintext: str) -> str:
@@ -33,6 +44,10 @@ def verify_password(plaintext: str, hashed: str) -> bool:
 
 
 class LocalAuthConfig(BaseModel):
+    password_only_username: str | None = Field(
+        default=None,
+        description="本地开发彩蛋使用的固定账号；必须在 users 中配置密码哈希。",
+    )
     enabled: bool = Field(
         default=False,
         description="总开关 · 生产环境慎开",
@@ -140,3 +155,5 @@ class LocalAuthConfig(BaseModel):
 
     def model_post_init(self, __context: Any) -> None:
         self._validate_jwt_secret(self.jwt_secret)
+        if self.password_only_username and self.password_only_username not in self.users:
+            raise ValueError("password_only_username must have a configured password hash")

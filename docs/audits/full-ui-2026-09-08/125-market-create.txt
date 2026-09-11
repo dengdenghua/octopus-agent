@@ -1,0 +1,33 @@
+Browser tab: 4, Title: "发现社区 - Echo", URL: "http://localhost:3310/#/workspace/community?view=market".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 286, 290
++								282 text 上架好物
+~								284 text field (settable)
+~								285 text entry area (settable)
++								286 text 售价（积分）
+~								287 stepper (settable, integer) 10
+~								288 text 分类
+~								289 pop up button (collapsed, settable) Value: 效率工具, Secondary Actions: Expand
++									290 menu
++										291 (selected) 效率工具
++										292 职场模板
++										293 学习资源
++										294 生活好物
++										295 游戏好物
++										296 购物神器
++								297 text 选择封面
++								298 button
++								299 button
++								300 button
++								301 button
++								302 button
++								303 button
++								304 button
++								305 button
++								306 button
++								307 button
++								308 button
++								309 button
++								310 text 售出后积分将计入你的账户
++								311 button (disabled) 上架
+The focused UI element is 184 button 上架

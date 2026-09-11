@@ -39,7 +39,7 @@ from runtime.execution.suckers.browser_backend import BrowserResult, Track
 # the other two adapters wrap their tracks into the same shape.
 Transport = Callable[[str, dict[str, Any]], dict[str, Any]]
 
-_DEFAULT_GATEWAY_BASE_URL = "http://127.0.0.1:8000"
+_DEFAULT_GATEWAY_BASE_URL = "http://127.0.0.1:8310"
 _BROWSER_RELAY_API_PATH = "/api/browser/relay"
 _BROWSER_RELAY_BASE_URL_ENV_KEYS = (
     "OCTOPUS_BROWSER_RELAY_BASE_URL",

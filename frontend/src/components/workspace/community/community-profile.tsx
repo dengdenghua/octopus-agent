@@ -1,3 +1,4 @@
+import { ImageWithFallback } from "@/components/ui/image-with-fallback";
 import { useCallback, useMemo, useState } from "react";
 import {
   BellRingIcon,
@@ -132,9 +133,7 @@ export function CommunityProfile({
         {/* 数据指标 */}
         <div className="mt-2 flex items-center gap-5 text-xs text-muted-foreground">
           <span className="text-center">
-            <b className="block text-sm text-foreground">
-              {profile.postCount}
-            </b>
+            <b className="block text-sm text-foreground">{profile.postCount}</b>
             笔记
           </span>
           <span className="text-center">
@@ -207,7 +206,7 @@ export function CommunityProfile({
                     background: `linear-gradient(135deg, ${p.coverGradient.join(", ")})`,
                   }}
                 >
-                  <img
+                  <ImageWithFallback
                     src={p.coverUrl}
                     alt={p.title}
                     loading="lazy"

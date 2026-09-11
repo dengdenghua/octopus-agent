@@ -59,8 +59,8 @@ export default function AppearanceSettingsPage() {
     setCustomColor,
   } = useAppearance();
 
-  // Two groups by character: bright/warm ("柔和") vs low-chroma/deep ("沉稳").
-  // Swatch hexes are the computed light-mode --primary of each [data-theme].
+  // Classic neutrals and restrained accents; stored palette ids stay stable.
+  // Pastel swatches represent the atmosphere; stronger action colors retain text contrast.
   const paletteGroups = useMemo(
     () =>
       [
@@ -72,25 +72,25 @@ export default function AppearanceSettingsPage() {
               id: "rouge" as NamedPalette,
               label: t.settings.appearance.paletteRose,
               description: t.settings.appearance.paletteRoseDescription,
-              swatch: "#d85164",
+              swatch: "#edb7cb",
             },
             {
               id: "apricot" as NamedPalette,
               label: t.settings.appearance.paletteApricot,
               description: t.settings.appearance.paletteApricotDescription,
-              swatch: "#bd5223",
+              swatch: "#f3c4af",
             },
             {
               id: "violet" as NamedPalette,
               label: t.settings.appearance.paletteViolet,
               description: t.settings.appearance.paletteVioletDescription,
-              swatch: "#9e4eab",
+              swatch: "#d3bfeb",
             },
             {
-              id: "mint" as NamedPalette,
-              label: t.settings.appearance.paletteMint,
-              description: t.settings.appearance.paletteMintDescription,
-              swatch: "#008557",
+              id: "emerald" as NamedPalette,
+              label: t.settings.appearance.paletteEmerald,
+              description: t.settings.appearance.paletteEmeraldDescription,
+              swatch: "#efdda6",
             },
           ],
         },
@@ -102,25 +102,25 @@ export default function AppearanceSettingsPage() {
               id: "steel" as NamedPalette,
               label: t.settings.appearance.paletteSteel,
               description: t.settings.appearance.paletteSteelDescription,
-              swatch: "#4461be",
+              swatch: "#0066cc",
             },
             {
               id: "teal" as NamedPalette,
               label: t.settings.appearance.paletteTeal,
               description: t.settings.appearance.paletteTealDescription,
-              swatch: "#377684",
+              swatch: "#34363b",
             },
             {
-              id: "emerald" as NamedPalette,
-              label: t.settings.appearance.paletteEmerald,
-              description: t.settings.appearance.paletteEmeraldDescription,
-              swatch: "#167a69",
+              id: "mint" as NamedPalette,
+              label: t.settings.appearance.paletteMint,
+              description: t.settings.appearance.paletteMintDescription,
+              swatch: "#686b73",
             },
             {
               id: "amber" as NamedPalette,
               label: t.settings.appearance.paletteAmber,
               description: t.settings.appearance.paletteAmberDescription,
-              swatch: "#af5331",
+              swatch: "#807366",
             },
           ],
         },
@@ -216,25 +216,27 @@ export default function AppearanceSettingsPage() {
         description={t.settings.appearance.paletteDescription}
       >
         <div className="space-y-3">
-          {paletteGroups.map((group) => (
-            <div key={group.id} className="flex flex-wrap items-center gap-2">
-              <span className="w-10 shrink-0 text-xs text-muted-foreground">
+          {[...paletteGroups].reverse().map((group) => (
+            <div key={group.id} className="space-y-2">
+              <span className="block text-xs font-medium tracking-wide text-muted-foreground">
                 {group.label}
               </span>
-              {group.options.map((option) => (
-                <PaletteSwatchButton
-                  key={option.id}
-                  label={option.label}
-                  description={option.description}
-                  active={palette === option.id}
-                  swatch={option.swatch}
-                  onSelect={() => setPalette(option.id)}
-                />
-              ))}
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {group.options.map((option) => (
+                  <PaletteSwatchButton
+                    key={option.id}
+                    label={option.label}
+                    description={option.description}
+                    active={palette === option.id}
+                    swatch={option.swatch}
+                    onSelect={() => setPalette(option.id)}
+                  />
+                ))}
+              </div>
             </div>
           ))}
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
           <PaletteSwatchButton
             label={t.settings.appearance.paletteCustom}
             active={palette === "custom"}
@@ -256,12 +258,15 @@ export default function AppearanceSettingsPage() {
               value={customColor}
               onChange={(event) => setCustomColor(event.target.value)}
             />
-            <span aria-hidden="true" className="font-mono text-xs leading-none">
+            <span
+              aria-hidden="true"
+              className="font-mono text-ui-caption leading-none"
+            >
               +
             </span>
           </label>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">
+        <p className="mt-2 text-ui-caption text-muted-foreground">
           {t.settings.appearance.paletteCustomHint}
           <span className="ml-1.5 font-mono uppercase">{customColor}</span>
         </p>
@@ -271,7 +276,7 @@ export default function AppearanceSettingsPage() {
 
       {/* Language remains a general application preference. Conversation
           density now has its own destination in Settings. */}
-      <div className="divide-y rounded-lg border">
+      <div className="divide-y">
         <SettingRow
           title={t.settings.appearance.languageTitle}
           description={t.settings.appearance.languageDescription}
@@ -398,10 +403,10 @@ function SettingRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+    <div className="flex flex-col gap-2 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
       <div className="min-w-0 space-y-0.5">
         <div className="text-sm font-medium">{title}</div>
-        <p className="text-xs leading-snug text-muted-foreground">
+        <p className="text-ui-caption leading-snug text-muted-foreground">
           {description}
         </p>
       </div>
@@ -432,22 +437,27 @@ function PaletteSwatchButton({
       aria-label={label}
       title={description ? `${label} · ${description}` : label}
       className={cn(
-        "relative inline-flex size-8 shrink-0 items-center justify-center rounded-full",
-        "border transition-all hover:scale-105",
+        "group relative flex min-h-14 items-center gap-3 rounded-xl border px-3 py-2.5 text-left",
+        "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         active
-          ? "border-primary ring-2 ring-primary/35 ring-offset-1 ring-offset-background"
-          : "border-black/10 hover:border-primary/40 dark:border-white/15",
+          ? "border-foreground/30 bg-foreground/[0.04] shadow-sm"
+          : "border-border/70 bg-card hover:border-foreground/20 hover:bg-muted/60",
       )}
-      style={{ backgroundColor: swatch }}
     >
-      {active ? (
-        <CheckIcon
-          aria-hidden="true"
-          className="size-4 text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.45)]"
-          strokeWidth={3}
-        />
-      ) : null}
-      <span className="sr-only">{label}</span>
+      <span
+        aria-hidden="true"
+        className="size-7 shrink-0 rounded-full border border-black/10 shadow-[inset_0_1px_2px_rgba(255,255,255,0.2)] dark:border-white/15"
+        style={{ backgroundColor: swatch }}
+      />
+      <span className="min-w-0 flex-1 text-xs font-medium">{label}</span>
+      <CheckIcon
+        aria-hidden="true"
+        className={cn(
+          "size-3.5 shrink-0 text-foreground",
+          !active && "invisible",
+        )}
+        strokeWidth={2}
+      />
     </button>
   );
 }
@@ -520,12 +530,12 @@ function AppearanceStepSlider<TValue extends AppearanceStepValue>({
           <div>
             <div className="text-sm font-medium">{label}</div>
             {activeDetail ? (
-              <div className="mt-1 text-xs text-muted-foreground">
+              <div className="mt-1 text-ui-caption text-muted-foreground">
                 {activeDetail}
               </div>
             ) : null}
           </div>
-          <div className="rounded-full border bg-background/75 px-2.5 py-1 text-xs font-medium shadow-[var(--shadow-xs)]">
+          <div className="rounded-full border bg-background/75 px-2.5 py-1 text-ui-caption font-medium shadow-[var(--shadow-xs)]">
             <span>{active.label}</span>
             {active.preview ? (
               <span className="ml-1 text-muted-foreground">
@@ -595,7 +605,7 @@ function AppearanceStepSlider<TValue extends AppearanceStepValue>({
         </div>
       </div>
       <div
-        className="mt-2 grid gap-1 text-xs"
+        className="mt-2 grid gap-1 text-ui-caption"
         style={{
           gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))`,
         }}
@@ -615,7 +625,7 @@ function AppearanceStepSlider<TValue extends AppearanceStepValue>({
           >
             <span className="block truncate">{option.label}</span>
             {option.preview ? (
-              <span className="mt-0.5 block truncate text-xs font-normal text-muted-foreground">
+              <span className="mt-0.5 block truncate text-ui-caption font-normal text-muted-foreground">
                 {option.preview}
               </span>
             ) : null}
@@ -649,46 +659,46 @@ function ThemePreviewCard({
   const previewFrameClass =
     previewMode === "dark"
       ? "border-neutral-800 bg-neutral-950 text-neutral-200"
-      : "border-border bg-white text-foreground";
+      : "border-neutral-200 bg-white text-neutral-800";
   const previewTopbarClass =
     previewMode === "dark"
       ? "border-white/10 bg-neutral-900"
-      : "border-border bg-muted";
+      : "border-neutral-200 bg-neutral-100";
   const previewSidebarClass =
     previewMode === "dark"
       ? "border-white/10 bg-[linear-gradient(180deg,#171717_0%,#101010_100%)]"
-      : "border-border bg-muted/85";
+      : "border-neutral-200 bg-neutral-100";
   const previewCanvasClass =
     previewMode === "dark" ? "bg-neutral-900" : "bg-white";
-  const activeDotClass = previewMode === "dark" ? "bg-success" : "bg-success";
+  const activeDotClass = "bg-primary";
   return (
     <button
       type="button"
       onClick={() => onSelect(mode)}
       aria-pressed={active}
       className={cn(
-        "group flex h-full min-w-0 flex-col gap-2 rounded-lg border p-2 text-left transition-all sm:p-3",
+        "group flex h-full min-w-0 flex-col gap-3 rounded-xl border border-transparent p-2 text-left transition-colors sm:p-3",
         active
-          ? "border-primary ring-primary/30 shadow-[var(--shadow-xs)] ring-2"
-          : "hover:border-border hover:shadow-[var(--shadow-xs)]",
+          ? "border-primary/35 bg-primary/5"
+          : "hover:border-border/70 hover:bg-muted/40",
       )}
     >
       <div className="flex min-w-0 items-center gap-1.5 sm:items-start sm:gap-3">
-        <div className="hidden rounded-lg bg-muted p-1.5 sm:block">
+        <div className="hidden py-0.5 text-muted-foreground sm:block">
           <Icon className="size-4" />
         </div>
         <div className="min-w-0 space-y-1">
-          <div className="truncate text-xs font-semibold leading-none sm:text-sm">
+          <div className="truncate text-ui-caption font-semibold leading-none sm:text-sm">
             {label}
           </div>
-          <p className="hidden text-xs leading-snug text-muted-foreground sm:block">
+          <p className="hidden text-ui-caption leading-snug text-muted-foreground sm:block">
             {description}
           </p>
         </div>
       </div>
       <div
         className={cn(
-          "relative aspect-[4/3] overflow-hidden rounded-md border text-xs transition-colors sm:aspect-auto sm:rounded-lg",
+          "relative aspect-[4/3] overflow-hidden rounded-md border text-ui-caption transition-colors sm:aspect-auto sm:rounded-lg",
           previewFrameClass,
         )}
       >
@@ -730,7 +740,7 @@ function ThemePreviewCard({
                   "h-6 rounded-md border bg-current/5 sm:h-9 sm:rounded-lg",
                   previewIsDark
                     ? "border-white/10 bg-white/[0.03]"
-                    : "border-border bg-white",
+                    : "border-neutral-200 bg-white",
                 )}
               />
             </div>
@@ -745,7 +755,7 @@ function ThemePreviewCard({
               <div
                 className={cn(
                   "flex flex-col gap-1 rounded-lg border border-dashed p-2",
-                  previewIsDark ? "border-white/10" : "border-border",
+                  previewIsDark ? "border-white/10" : "border-neutral-200",
                 )}
               >
                 <div className="h-2 w-3/5 rounded-md bg-current/15" />

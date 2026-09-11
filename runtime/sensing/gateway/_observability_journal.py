@@ -29,7 +29,6 @@ def register_journal_endpoints(router: Any, ctx: ObservabilityContext) -> None:
 
     journal = ctx.journal
     registry = ctx.registry
-    planner = ctx.planner
     effect_store = ctx.effect_store
 
     @router.get("/api/tool-effects")
@@ -336,6 +335,7 @@ def register_journal_endpoints(router: Any, ctx: ObservabilityContext) -> None:
         cross_tenant: bool = Query(default=False),
     ) -> dict[str, Any]:
         _require_global_control(request, ctx, cross_tenant=cross_tenant)
+        planner = ctx.get_planner()
         if planner is None:
             return {
                 "global_control_plane": True,
@@ -407,6 +407,7 @@ def register_journal_endpoints(router: Any, ctx: ObservabilityContext) -> None:
         cross_tenant: bool = Query(default=False),
     ) -> dict[str, Any]:
         _require_global_control(request, ctx, cross_tenant=cross_tenant)
+        planner = ctx.get_planner()
         if planner is None:
             raise HTTPException(status_code=503, detail="planner not wired")
         current = _parse_section_lines(
@@ -432,6 +433,7 @@ def register_journal_endpoints(router: Any, ctx: ObservabilityContext) -> None:
         cross_tenant: bool = Query(default=False),
     ) -> dict[str, Any]:
         _require_global_control(request, ctx, cross_tenant=cross_tenant)
+        planner = ctx.get_planner()
         if planner is None:
             raise HTTPException(status_code=503, detail="planner not wired")
         current = _parse_section_lines(

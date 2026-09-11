@@ -1,3 +1,6 @@
+import { serializeComposerDraft } from "@/core/threads/composer-capability-refs";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
+import { serviceErrorMessage } from "@/core/utils/service-error";
 import {
   useCallback,
   useDeferredValue,
@@ -10,11 +13,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   Boxes,
   ChevronDown,
-  CloudDownload,
   KeyRound,
   Loader2,
+  MoreHorizontal,
+  Plus,
   Plug,
-  PlugZap,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -25,6 +28,13 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import {
   Card,
   CardDescription,
@@ -383,7 +393,7 @@ async function pollCapabilityDeviceFlow(
   return "cancelled";
 }
 
-function ConnectDialog({
+export function ConnectDialog({
   capability,
   open,
   onOpenChange,
@@ -783,7 +793,7 @@ function ConnectDialog({
           mountedRef.current &&
           openRef.current
         ) {
-          setMessage(err instanceof Error ? err.message : String(err));
+          setMessage(serviceErrorMessage(err));
         }
       } finally {
         if (
@@ -905,9 +915,19 @@ function ConnectDialog({
                 autoComplete="off"
                 value={apiKey}
                 onChange={(event) => setApiKey(event.target.value)}
-                placeholder="粘贴 API Key"
+                placeholder={
+                  ["opencode-go", "opencode-zen"].includes(capability.id)
+                    ? "留空复用已保存的 OpenCode Key"
+                    : "粘贴 API Key"
+                }
                 className="h-9 text-sm"
               />
+              {capability.id === "opencode-go" && (
+                <p className="text-xs text-muted-foreground">
+                  已连接 Zen 可直接连接 Go，无需重复填写。填写新 Key 会更新 Go /
+                  Zen 共用的凭据；Go 仍需有效套餐。
+                </p>
+              )}
             </div>
             {modelProvider.configurable_base_url ? (
               <div className="space-y-1.5">
@@ -1031,7 +1051,12 @@ function ConnectDialog({
           <Button
             type="button"
             size="sm"
-            disabled={busy || (isModelProvider && !apiKey.trim())}
+            disabled={
+              busy ||
+              (isModelProvider &&
+                !["opencode-go", "opencode-zen"].includes(capability.id) &&
+                !apiKey.trim())
+            }
             onClick={() => void onSubmit()}
           >
             {busy ? (
@@ -1111,7 +1136,7 @@ function OAuthAppDialog({
       setMessage("凭据已保存,正在打开授权页…");
       onSaved();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : String(err));
+      setMessage(serviceErrorMessage(err));
       setBusy(false);
     }
   };
@@ -1125,7 +1150,7 @@ function OAuthAppDialog({
       setExistingMask("");
       setMessage("已移除本地保存的 OAuth App 凭据。");
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : String(err));
+      setMessage(serviceErrorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -1427,6 +1452,8 @@ export function CapabilityMarketPanel({
   compact = false,
 }: CapabilityMarketPanelProps = {}) {
   const queryClient = useQueryClient();
+  const { confirm, confirmDialog } = useConfirmDialog();
+  const [loadedOffset, setLoadedOffset] = useState(0);
   const [items, setItems] = useState<CapabilityInfo[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -1440,6 +1467,9 @@ export function CapabilityMarketPanel({
   >("all");
   const [busyMap, setBusyMap] = useState<Record<string, boolean>>({});
   const [statusMap, setStatusMap] = useState<Record<string, boolean>>({});
+  const [statusErrors, setStatusErrors] = useState<
+    Record<string, string | null>
+  >({});
   /** 显示只能手动填 token 的插件(默认隐藏,对齐「都能跳网页授权」)。 */
   const [showManual, setShowManual] = useState(false);
   const [collapsedCategories, setCollapsedCategories] = useState<
@@ -1457,6 +1487,7 @@ export function CapabilityMarketPanel({
   const [connectTarget, setConnectTarget] = useState<CapabilityInfo | null>(
     null,
   );
+  const pendingTryRef = useRef<CapabilityInfo | null>(null);
   const [permissionReview, setPermissionReview] = useState<{
     capability: CapabilityInfo;
     mode: "install" | "enable";
@@ -1493,11 +1524,19 @@ export function CapabilityMarketPanel({
           includeManual: showManual,
         });
         setItems((current) =>
-          append ? [...current, ...res.capabilities] : res.capabilities,
+          Array.from(
+            new Map(
+              (append
+                ? [...current, ...res.capabilities]
+                : res.capabilities
+              ).map((cap) => [cap.id, cap]),
+            ).values(),
+          ),
         );
         setTotal(res.total);
+        setLoadedOffset(offset + res.capabilities.length);
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        setError(serviceErrorMessage(err));
       } finally {
         if (append) setLoadingMore(false);
         else setLoading(false);
@@ -1513,17 +1552,20 @@ export function CapabilityMarketPanel({
   // 拉取已安装能力的连接状态
   const refreshStatus = useCallback(async (installed: CapabilityInfo[]) => {
     const next: Record<string, boolean> = {};
+    const errors: Record<string, string | null> = {};
     await Promise.all(
       installed.map(async (c) => {
         try {
           const st = await getCapabilityStatus(c.id);
           next[c.id] = !!st.connected;
-        } catch {
-          next[c.id] = false;
+          errors[c.id] = null;
+        } catch (error) {
+          errors[c.id] = serviceErrorMessage(error);
         }
       }),
     );
     setStatusMap((prev) => ({ ...prev, ...next }));
+    setStatusErrors((prev) => ({ ...prev, ...errors }));
   }, []);
 
   useEffect(() => {
@@ -1556,9 +1598,9 @@ export function CapabilityMarketPanel({
     }
     const seen = new Set<string>();
     return featuredIds.flatMap((id) => {
-      if (seen.has(id)) return [];
-      seen.add(id);
       const capability = firstById.get(id);
+      if (!capability || seen.has(capability.id)) return [];
+      seen.add(capability.id);
       return capability ? [capability] : [];
     });
   }, [featuredIds, items, view]);
@@ -1723,7 +1765,7 @@ export function CapabilityMarketPanel({
       });
       if (reviewedPlan) setPermissionReview(null);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = serviceErrorMessage(err);
       if (reviewedPlan) {
         setPermissionReview((current) =>
           current ? { ...current, busy: false, error: message } : current,
@@ -1761,7 +1803,7 @@ export function CapabilityMarketPanel({
           : current,
       );
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = serviceErrorMessage(err);
       setPermissionReview((current) =>
         current?.capability.id === cap.id
           ? { ...current, loading: false, error: message }
@@ -1779,6 +1821,15 @@ export function CapabilityMarketPanel({
   };
 
   const onUninstall = async (cap: CapabilityInfo) => {
+    if (
+      !(await confirm({
+        title: `卸载“${cap.name_zh || cap.name}”？`,
+        description:
+          "该插件将停止为本机任务提供能力，并结束尚未完成的授权连接。之后可在此重新安装。",
+        confirmLabel: "卸载插件",
+      }))
+    )
+      return;
     setBusy(cap.id, true);
     setError(null);
     setNotice(null);
@@ -1810,37 +1861,35 @@ export function CapabilityMarketPanel({
         queryKey: CAPABILITY_SURFACE_QUERY_KEY,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(serviceErrorMessage(err));
     } finally {
       setBusy(cap.id, false);
     }
   };
 
-  const onToggleEnabled = async (cap: CapabilityInfo) => {
-    if (!cap.enabled && cap.permission_review_required) {
-      await openPermissionReview(cap, "enable");
+  const openTrialConversation = (cap: CapabilityInfo) => {
+    const prompt = serializeComposerDraft({ refs: [{ type: "plugin", id: cap.codex_plugin_id || cap.id }], body: "" });
+    window.location.hash = `/workspace/realtime/new?prompt=${encodeURIComponent(prompt)}`;
+  };
+
+  const onTry = async (cap: CapabilityInfo) => {
+    if (cap.is_codex_marketplace || cap.enabled || cap.model_provider) {
+      openTrialConversation(cap);
       return;
     }
-    if (!cap.enabled && cap.model_provider && !statusMap[cap.id]) {
-      setConnectTarget(cap);
+    if (cap.permission_review_required) {
+      pendingTryRef.current = cap;
+      await openPermissionReview(cap, "enable");
       return;
     }
     setBusy(cap.id, true);
     setError(null);
     try {
-      await setCapabilityEnabled(cap.id, !cap.enabled);
-      setItems((prev) =>
-        prev.map((c) =>
-          c.id === cap.id
-            ? { ...c, enabled: !c.enabled, permission_active: !c.enabled }
-            : c,
-        ),
-      );
-      void queryClient.invalidateQueries({
-        queryKey: CAPABILITY_SURFACE_QUERY_KEY,
-      });
+      await setCapabilityEnabled(cap.id, true);
+      void queryClient.invalidateQueries({ queryKey: CAPABILITY_SURFACE_QUERY_KEY });
+      openTrialConversation(cap);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(serviceErrorMessage(err));
     } finally {
       setBusy(cap.id, false);
     }
@@ -1886,6 +1935,10 @@ export function CapabilityMarketPanel({
         ),
       );
       setPermissionReview(null);
+      if (pendingTryRef.current?.id === review.capability.id) {
+        pendingTryRef.current = null;
+        openTrialConversation(review.capability);
+      }
       void queryClient.invalidateQueries({
         queryKey: CAPABILITY_SURFACE_QUERY_KEY,
       });
@@ -1895,7 +1948,7 @@ export function CapabilityMarketPanel({
           ? {
               ...current,
               busy: false,
-              error: err instanceof Error ? err.message : String(err),
+              error: serviceErrorMessage(err),
             }
           : current,
       );
@@ -1911,7 +1964,7 @@ export function CapabilityMarketPanel({
       await disconnectCapability(cap.id);
       setStatusMap((m) => ({ ...m, [cap.id]: false }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(serviceErrorMessage(err));
     } finally {
       setBusy(cap.id, false);
     }
@@ -1972,6 +2025,12 @@ export function CapabilityMarketPanel({
   };
 
   const openConnect = async (cap: CapabilityInfo) => {
+    if (["opencode-zen", "opencode-go"].includes(cap.id)) {
+      window.dispatchEvent(
+        new CustomEvent("octopus:open-settings", { detail: { tab: "models" } }),
+      );
+      return;
+    }
     // 插件(Codex)无需认证,直接确认就绪
     if (cap.source === "codex_plugin") {
       setBusy(cap.id, true);
@@ -1979,9 +2038,7 @@ export function CapabilityMarketPanel({
         .then(() => {
           setStatusMap((m) => ({ ...m, [cap.id]: true }));
         })
-        .catch((err) =>
-          setError(err instanceof Error ? err.message : String(err)),
-        )
+        .catch((err) => setError(serviceErrorMessage(err)))
         .finally(() => setBusy(cap.id, false));
       return;
     }
@@ -2152,6 +2209,7 @@ export function CapabilityMarketPanel({
             const typeMeta = TYPE_META[cap.type] ?? DEFAULT_TYPE_META;
             const busy = busyMap[cap.id];
             const connected = statusMap[cap.id];
+            const statusError = statusErrors[cap.id];
             const needsConnection =
               cap.auth_mode !== "none" ||
               Boolean(
@@ -2167,27 +2225,27 @@ export function CapabilityMarketPanel({
                 data-capability-id={cap.id}
                 className={cn(
                   "gap-2.5 py-3 transition-colors hover:border-primary/40",
-                  isFeaturedView && "min-h-44 rounded-xl py-4",
+                  isFeaturedView && !compact && "min-h-44 rounded-xl py-4",
                   compact &&
-                    "min-h-16 rounded-none border-0 border-b border-border-subtle bg-transparent py-1.5 shadow-none hover:bg-muted/25 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:grid-rows-1 sm:items-center sm:gap-x-3",
+                    "grid min-h-20 grid-cols-[minmax(0,1fr)_auto] grid-rows-1 items-center gap-x-3 gap-y-0 rounded-lg border-0 bg-transparent py-3 shadow-none hover:bg-muted/25 hover:shadow-none",
                 )}
               >
                 <CardHeader
                   className={cn(
-                    "flex-row items-center gap-2.5 px-3 pt-0",
-                    compact && "sm:col-start-1 sm:row-start-1",
+                    "flex min-w-0 flex-row items-center gap-3 px-3 pt-0",
+                    compact && "col-start-1 row-start-1 pr-0",
                   )}
                 >
                   <div
                     className={cn(
                       "flex size-10 shrink-0 items-center justify-center rounded-lg border border-border-default bg-muted text-base",
-                      compact && "size-9 rounded-none border-0 bg-transparent",
+                      compact && "size-9 rounded-lg border-0 bg-transparent",
                     )}
                   >
                     <CapabilityIcon capability={cap} />
                   </div>
-                  <div className="min-w-0">
-                    <CardTitle className="truncate text-sm">
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <CardTitle className="truncate text-sm leading-5">
                       {cap.name_zh}
                     </CardTitle>
                     <CardDescription className="truncate text-xs">
@@ -2197,6 +2255,11 @@ export function CapabilityMarketPanel({
                           ? `来自 ${cap.author || "EchoOS"}`
                           : `${cap.id} · ${AUTH_LABEL[cap.auth_mode] ?? cap.auth_mode}`}
                     </CardDescription>
+                    {compact && cap.author ? (
+                      <p className="truncate text-[11px] text-muted-foreground">
+                        来自 {cap.author}
+                      </p>
+                    ) : null}
                   </div>
                 </CardHeader>
                 <div
@@ -2260,17 +2323,19 @@ export function CapabilityMarketPanel({
                           : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
                       )}
                     >
-                      {cap.permission_review_required
-                        ? "待确认权限"
-                        : needsModelConfiguration
-                          ? "待配置"
-                          : !cap.enabled
-                            ? "已停用"
-                            : !needsConnection
-                              ? "已启用"
-                              : connected
-                                ? "已连接"
-                                : "待连接"}
+                      {statusError
+                        ? "状态未读取"
+                        : cap.permission_review_required
+                          ? "待确认权限"
+                          : needsModelConfiguration
+                            ? "待配置"
+                            : !cap.enabled
+                              ? "已停用"
+                              : !needsConnection
+                                ? "已启用"
+                                : connected
+                                  ? "已连接"
+                                  : "待连接"}
                     </Badge>
                   )}
                   {cap.permission_review_required ? (
@@ -2296,134 +2361,98 @@ export function CapabilityMarketPanel({
                   ) : null}
                 </div>
 
+                {statusError ||
+                (!cap.installed && cap.installable === false) ? (
+                  <div
+                    className="px-3 text-xs text-muted-foreground sm:col-span-full"
+                    role="status"
+                  >
+                    {statusError ? (
+                      <>
+                        <span>连接状态未读取：{statusError}</span>
+                        <Button
+                          size="sm"
+                          variant="link"
+                          className="h-auto px-1 text-xs"
+                          onClick={() => void refreshStatus([cap])}
+                        >
+                          重读状态
+                        </Button>
+                      </>
+                    ) : (
+                      "当前账号或工作区不允许安装，请联系此部署的管理员检查插件权限。"
+                    )}
+                  </div>
+                ) : null}
+
                 <CardFooter
                   className={cn(
                     "flex flex-wrap gap-1.5 px-3 pb-0",
                     compact &&
-                      "sm:col-start-2 sm:row-start-1 sm:self-center sm:justify-end sm:pr-3",
+                      "col-start-2 row-start-1 flex-nowrap self-center justify-end pl-0 pr-3",
                   )}
                 >
                   {!cap.installed ? (
                     <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 rounded-sm px-3 text-xs"
+                      size="icon"
+                      variant="ghost"
+                      className="size-8 rounded-md text-muted-foreground"
                       disabled={busy || cap.installable === false}
                       onClick={() => void onInstall(cap)}
-                      title={
-                        cap.installable === false
-                          ? "当前账号或工作区不允许安装"
-                          : "按需安装"
-                      }
+                      aria-label={`安装 ${cap.name_zh || cap.name}`}
+                      title={cap.installable === false ? "当前账号或工作区不允许安装" : "安装"}
                     >
-                      {busy ? (
-                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                      ) : (
-                        <CloudDownload className="mr-1 h-3 w-3" />
-                      )}
-                      {cap.installable === false ? "不可安装" : "安装"}
+                      {busy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
                     </Button>
-                  ) : isCodexMarketplace ? (
-                    <>
-                      <span className="px-1 text-xs text-emerald-600 dark:text-emerald-400">
-                        已安装
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 rounded-sm px-2 text-xs text-muted-foreground"
-                        disabled={busy || cap.lifecycle_manageable === false}
-                        onClick={() => void onUninstall(cap)}
-                        title={
-                          cap.lifecycle_manageable === false
-                            ? "当前账号或工作区不允许卸载"
-                            : "卸载 Codex 插件"
-                        }
-                      >
-                        {busy ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-3 w-3" />
-                        )}
-                      </Button>
-                    </>
                   ) : (
                     <>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 rounded-sm px-3 text-xs"
-                        disabled={busy}
-                        onClick={() => void onToggleEnabled(cap)}
-                        title={
-                          cap.enabled
-                            ? "禁用"
-                            : cap.permission_review_required
-                              ? "查看并确认签名权限"
-                              : needsModelConfiguration
-                                ? "配置模型并启用"
-                                : "启用"
-                        }
-                      >
-                        {busy ? (
-                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                        ) : cap.enabled ? (
-                          <PlugZap className="mr-1 h-3 w-3 text-emerald-500" />
-                        ) : (
-                          <Plug className="mr-1 h-3 w-3" />
-                        )}
-                        {cap.enabled
-                          ? "已启用"
-                          : cap.permission_review_required
-                            ? "确认权限"
-                            : needsModelConfiguration
-                              ? "配置模型"
-                              : "启用"}
-                      </Button>
-                      {needsConnection &&
-                        !(needsModelConfiguration && !cap.enabled) && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
                           <Button
-                            size="sm"
-                            variant={connected ? "outline" : "secondary"}
-                            className="h-7 rounded-sm px-3 text-xs"
-                            disabled={busy || cap.permission_review_required}
-                            onClick={() =>
-                              connected
-                                ? void onDisconnect(cap)
-                                : void openConnect(cap)
-                            }
-                            title={
-                              cap.permission_review_required
-                                ? "请先确认权限并启用"
-                                : connected
-                                  ? "断开并清除凭据"
-                                  : "连接/认证"
-                            }
+                            size="icon"
+                            variant="ghost"
+                            className="size-8 rounded-md text-muted-foreground"
+                            disabled={busy}
+                            aria-label={`管理 ${cap.name_zh || cap.name}`}
                           >
-                            {busy ? (
-                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                            ) : connected ? (
-                              <Unplug className="mr-1 h-3 w-3" />
-                            ) : (
-                              <KeyRound className="mr-1 h-3 w-3" />
-                            )}
-                            {connected ? "断开" : "连接"}
+                            {busy ? <Loader2 className="size-4 animate-spin" /> : <MoreHorizontal className="size-4" />}
                           </Button>
-                        )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 rounded-sm px-2 text-xs text-muted-foreground"
-                        disabled={busy || cap.lifecycle_manageable === false}
-                        onClick={() => void onUninstall(cap)}
-                        title={
-                          cap.lifecycle_manageable === false
-                            ? "当前账号或工作区不允许卸载"
-                            : "卸载能力包"
-                        }
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="min-w-40">
+                          <DropdownMenuItem onSelect={() => void onTry(cap)}>
+                            <Plug className="size-4" />
+                            试用
+                          </DropdownMenuItem>
+                          {!isCodexMarketplace && needsConnection && !connected && (cap.enabled || !needsModelConfiguration) && (
+                            <DropdownMenuItem disabled={cap.permission_review_required} onSelect={() => void openConnect(cap)}>
+                              <KeyRound className="size-4" />
+                              连接
+                            </DropdownMenuItem>
+                          )}
+                          {!isCodexMarketplace &&
+                            needsConnection &&
+                            connected && (
+                              <DropdownMenuItem
+                                disabled={cap.permission_review_required}
+                                onSelect={() => void onDisconnect(cap)}
+                              >
+                                <Unplug className="size-4" />
+                                断开连接
+                              </DropdownMenuItem>
+                            )}
+                          {!isCodexMarketplace && cap.enabled && (
+                            <DropdownMenuSeparator />
+                          )}
+                          <DropdownMenuItem
+                            disabled={cap.lifecycle_manageable === false}
+                            onSelect={() => void onUninstall(cap)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="size-4" />
+                            卸载插件
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </>
                   )}
                 </CardFooter>
@@ -2432,29 +2461,32 @@ export function CapabilityMarketPanel({
           })}
           {visibleItems.length === 0 && !loading && (
             <div className="col-span-full py-8 text-center text-sm text-muted-foreground">
-              {view === "featured"
-                ? "暂无精选应用"
-                : view === "installed"
-                  ? "还没有已安装应用"
-                  : "没有匹配的应用"}
+              {serverQuery
+                ? `没有与“${serverQuery}”匹配的插件`
+                : view === "featured"
+                  ? "暂无精选应用"
+                  : view === "installed"
+                    ? "还没有已安装应用"
+                    : "没有匹配的应用"}
             </div>
           )}
         </div>
       )}
 
-      {!loading && view === "all" && items.length < total ? (
+      {!loading && view === "all" && loadedOffset < total ? (
         <Button
           type="button"
           variant="ghost"
           size="sm"
           className="mx-auto flex"
           disabled={loadingMore}
-          onClick={() => void load(items.length)}
+          onClick={() => void load(loadedOffset)}
         >
-          {loadingMore ? "加载中…" : `加载更多(${total - items.length})`}
+          {loadingMore ? "加载中…" : `加载更多(${total - loadedOffset})`}
         </Button>
       ) : null}
 
+      {confirmDialog}
       {permissionReview ? (
         <PermissionReviewDialog
           capability={permissionReview.capability}

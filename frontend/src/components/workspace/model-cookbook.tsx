@@ -65,7 +65,12 @@ function hardwareLine(
   const parts: string[] = [];
   if (hw.gpu_name) parts.push(hw.gpu_name);
   parts.push(hw.backend.toUpperCase());
-  parts.push(`${hw.unified_memory ? "≈" : ""}${hw.vram_gb} GB`);
+  if (hw.vram_gb > 0)
+    parts.push(`${hw.unified_memory ? "≈" : ""}${hw.vram_gb} GB`);
+  else
+    parts.push(
+      hw.backend.toLowerCase() === "cpu" ? "未检测到独立显存" : "显存未读取",
+    );
   if (hw.bandwidth_gbps) parts.push(`${hw.bandwidth_gbps} GB/s`);
   return parts.join(" · ");
 }
@@ -155,9 +160,7 @@ export function ModelCookbook() {
       <div className="flex min-w-0 flex-col items-start justify-between gap-2 sm:flex-row sm:gap-4">
         <div className="min-w-0">
           <h4 className="text-sm font-medium">{t.title}</h4>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {t.subtitle}
-          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{t.subtitle}</p>
         </div>
         {snapshot?.hardware && (
           <span className="max-w-full truncate text-left text-xs text-muted-foreground sm:max-w-[45%] sm:shrink-0 sm:text-right">

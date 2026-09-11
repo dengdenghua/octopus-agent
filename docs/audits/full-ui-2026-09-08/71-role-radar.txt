@@ -1,0 +1,19 @@
+Browser tab: 4, Title: "HUB - Echo", URL: "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 88
+~				87 container
++					88 text 六维能力图
++					89 image
++						90 text 执行效率
++						91 text 0
++						92 text 准确度
++						93 text 5
++						94 text 创造力
++						95 text 0
++						96 text 学习能力
++						97 text 0
++						98 text 沟通表达
++						99 text 0
++						100 text 问题解决
++						101 text 0
+The focused UI element is 21 button 🎯 能力雷达

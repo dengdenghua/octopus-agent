@@ -8,6 +8,8 @@ actually reach an LLM instead of returning a "not configured" stub.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 
@@ -1325,7 +1327,7 @@ class TestEphemeralInjectionTaintGate:
 
         assert is_error is False
         assert "octopus.regression.v1" in output
-        assert str(artifact_root / "agent-regression.json") in output
+        assert json.loads(output)["path"] == str(artifact_root / "agent-regression.json")
 
 
 class TestVerificationGate:

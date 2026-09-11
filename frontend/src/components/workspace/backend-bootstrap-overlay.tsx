@@ -11,7 +11,7 @@ import { Progress } from "@/components/ui/progress";
  * unreachable, so we show a full-screen overlay instead of a broken shell.
  *
  * Detection: only in the *packaged* shell (`isElectron` + `octopus-app:` protocol).
- * Dev mode loads the renderer from the Vite server (http://localhost:3000) and
+ * Dev mode loads the renderer from the Vite server (http://localhost:3310) and
  * runs the backend externally, so it never triggers this gate.
  *
  * We track readiness rather than the legacy always-200 health endpoint. The

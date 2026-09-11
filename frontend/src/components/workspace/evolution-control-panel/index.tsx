@@ -758,7 +758,12 @@ function McpProposalsSection() {
         <button
           type="button"
           onClick={vetAll}
-          className="rounded-lg border border-border-default px-2 py-1 text-xs hover:bg-muted"
+          disabled={
+            loading ||
+            Boolean(busy) ||
+            !rows.some((row) => ["pending", "pending_vet"].includes(row.status))
+          }
+          className="rounded-lg border border-border-default px-2 py-1 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
         >
           {t.evolutionControl.mcp.vetAll}
         </button>

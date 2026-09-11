@@ -1,4 +1,20 @@
 import type { Agent } from "./types";
+import {
+  isPrimaryPersonaAgentId,
+  WHITE_GHOST_AGENT_ORDER,
+} from "./persona-policy";
+
+/** Shared roster for personal conversation pickers in every surface. */
+export function primaryPersonaRoster(agents: Agent[]): Agent[] {
+  const rank = new Map<string, number>(
+    WHITE_GHOST_AGENT_ORDER.map((id, index) => [id, index]),
+  );
+  return dedupePersonaAgentsByDisplayName(
+    agents
+      .filter((agent) => isPrimaryPersonaAgentId(agent.name))
+      .sort((left, right) => rank.get(left.name)! - rank.get(right.name)!),
+  );
+}
 
 /** Dedupe an agent list by stable id, keeping the first occurrence. */
 export function dedupeAgentsByName(agents: Agent[]): Agent[] {
@@ -15,7 +31,7 @@ export function dedupePersonaAgentsByDisplayName(agents: Agent[]): Agent[] {
   const result: Agent[] = [];
   const personaIndexByLabel = new Map<string, number>();
   for (const agent of agents) {
-    const isExternalRuntime = /^(?:registry_local_|mobile_)/.test(agent.name);
+    const isExternalRuntime = /^(?:registry_local_|mobile_|a2a_)/.test(agent.name);
     if (isExternalRuntime) {
       result.push(agent);
       continue;

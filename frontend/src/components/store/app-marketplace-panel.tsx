@@ -30,6 +30,8 @@ export interface AppMarketplacePanelProps {
 export const DEFAULT_FEATURED_APP_IDS = [
   "opencode-zen",
   "browser",
+  "echo-android",
+  "echo-ios",
   "documents",
   "spreadsheets",
   "presentations",

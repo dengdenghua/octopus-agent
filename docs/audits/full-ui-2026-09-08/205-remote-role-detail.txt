@@ -1,0 +1,15 @@
+Browser tab: 4, Title: "HUB - Echo", URL: "http://localhost:3310/#/workspace/agents?surface=chat&tab=agents".
+0 AXWebArea HUB - Echo, URL: localhost:3310/#/workspace/agents?surface=chat&tab=agents
+	1 container
+		2 container Notifications alt+T
+		3 container 专家详情 · 卡仔, ID: radix-_r_1c5_
+			4 heading 专家详情 · 卡仔, Value: 2, ID: radix-_r_1c6_
+				5 text 专家详情 · 卡仔
+			6 text NGO 共創卡設計助手
+			7 container
+				8 text 领域 NGO 共創卡設計助手 简介 通過點擊式訪談梳理 NGO 真實工作痛點，生成清晰可執行的共創卡，並在發佈前完成適配、邊界與質量檢查。 标签 共創卡設計 NGO 需求 引導訪談 快速开场 我想把 NGO 的一個真實工作痛點整理成共創卡 幫我從幾個 NGO 痛點中選出最適合發佈的一張 幫我檢查這張 NGO 共創卡是否已經適合發佈
+			9 text 专家
+			10 button 安装此专家
+			11 button 关闭
+
+The focused UI element is 10 button 安装此专家

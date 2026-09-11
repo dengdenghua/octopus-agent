@@ -112,6 +112,7 @@ export interface CoderModelProfile {
   provider: string | null;
   proxy_required: boolean;
   execution_available?: boolean;
+  capability_checks?: import("@/core/agents/engine-capability-checks").EngineCapabilityChecks;
   execution_unavailable_reason?: string | null;
 }
 
@@ -431,6 +432,7 @@ function normalizeModelProfile(payload: unknown): CoderModelProfile {
     provider: typeof row.provider === "string" ? row.provider : null,
     proxy_required: row.proxy_required === true,
     execution_available: row.execution_available === true,
+    capability_checks: row.capability_checks as CoderModelProfile["capability_checks"],
     execution_unavailable_reason:
       typeof row.execution_unavailable_reason === "string"
         ? row.execution_unavailable_reason
@@ -449,8 +451,9 @@ export function applyCoderModelProfileBoundary<
 >(
   agentId: string | null | undefined,
   context: T,
-  executionEngine?: "octopus" | "codex",
+  executionEngine?: "octopus" | "codex" | "opencode",
 ): T {
+  if (executionEngine === "opencode") return context;
   if (executionEngine !== "codex" && agentId !== "coder") return context;
   const next = { ...context };
   delete next.model_name;

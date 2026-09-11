@@ -1,0 +1,18 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/apps/photos".
+0 AXWebArea Echo, URL: localhost:3310/#/apps/photos
+	1 container
+		2 container root
+			122 container
+				123 button 返回桌面
+				124 heading 图片, Value: 1
+					125 text 图片
+				126 text 0 项 · OCR、地点、人物与截图统一检索
+				127 text 本机索引 ·  0  项 ·  0 B
+				128 button (disabled) 刷新
+				129 button 更新索引
+				130 text field (settable)
+				131 button 管理授权目录
+				132 text 正在读取本机索引…
+			121 container Notifications alt+T
+
+The focused UI element is 0 AXWebArea Echo, URL: localhost:3310/#/apps/photos

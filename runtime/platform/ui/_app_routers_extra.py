@@ -15,6 +15,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from runtime.execution.model_services import native_model_services
 from runtime.platform.process.paths import app_paths
 
 from ._app_context import AppContext
@@ -409,14 +410,13 @@ def mount_routers_b(
             # catches few-turns-huge-content threads (a couple of 20k-
             # token tool dumps would otherwise blow a 128k window well
             # before turn 24).
-            _chat_model = getattr(getattr(stack, "planner", None), "model", None)
+            _summary_router, _chat_model = native_model_services(stack)
             _compaction_policy = CompactionPolicy(
                 trigger_at=24,
                 keep_recent=12,
                 trigger_tokens=compaction_trigger_tokens(_chat_model),
                 max_summary_chars=4_000,
             )
-            _summary_router = getattr(getattr(stack, "planner", None), "router", None)
             _project_os_hooks: dict[str, Any] = {}
             if ctx.project_model_router is not None:
                 try:
@@ -425,6 +425,13 @@ def mount_routers_b(
                     _project_os_hooks = create_llm_hooks(
                         ctx.project_model_router,
                         subagent_runner=ctx.subagent_runner,
+                    )
+                    from functools import partial
+
+                    from runtime.projectos.initiation import prepare_proposal
+
+                    _project_os_hooks["prepare_initiation"] = partial(
+                        prepare_proposal, ctx.project_model_router, model=_chat_model,
                     )
                 except Exception as exc:  # noqa: BLE001
                     logging.getLogger(__name__).warning(

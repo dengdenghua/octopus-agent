@@ -1,0 +1,275 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/architecture".
+0 AXWebArea Echo, URL: localhost:3310/#/workspace/architecture
+	1 container root
+		2 container
+			3 button 返回桌面
+			4 button 切换全屏
+			5 tab group Workspace surface
+				38 tab (selected, settable, boolean) Description: Echo, Value: 1
+				7 tab (selectable, settable, boolean) Description: AI 浏览器, Value: 0
+			8 button (expanded) Description: 收起侧栏 (Ctrl/⌘+B), Secondary Actions: Collapse
+			9 button 新建任务
+			10 content list
+				11 link Description: HUB, Value: localhost:3310/#/workspace/agents?surface=chat
+				12 link Description: 助手, Value: localhost:3310/#/workspace/realtime/octopus-assistant?agent=octopus
+				13 link Description: 订阅, Value: localhost:3310/#/workspace/intelligence?surface=chat
+				14 link Description: 项目管理, Value: localhost:3310/#/workspace/projects
+				15 link Description: 设计画布, Value: localhost:3310/#/workspace/design
+				16 link Description: 叙事工坊, Value: localhost:3310/#/workspace/narrative
+				17 link Description: 自进化, Value: localhost:3310/#/workspace/evolution?surface=chat
+			18 content list
+				19 link Description: 发现社区, Value: localhost:3310/#/workspace/community
+			20 content list
+				21 button (collapsed) Description: 展开本地数据库, Secondary Actions: Expand
+			22 content list
+				23 button 编辑侧栏
+			24 container
+				25 button (expanded) Description: 收起项目, Secondary Actions: Collapse
+				26 button 选择项目空间
+			27 container
+				28 button (expanded) Description: 收起对话, Secondary Actions: Collapse
+				29 button Description: 对话 · 新建任务, Help: 新建任务
+			30 pop up button (collapsed) Description: Raven, ID: radix-_r_1a_, Secondary Actions: Expand, Help: Raven · 现实职业是企业流程自动化专家，通过视觉理解操作 ERP、CRM、表格、浏览器和遗留系统；在 ECHO 世界中是远程接管手 Night Crow。两种身份共享屏幕观察、设备控制与精细操作能力。
+				31 text Raven
+				32 text Lv.
+				33 text 1
+				34 text ⭐
+			35 button 设置
+			39 container
+				40 heading 架构探索, Value: 1
+					41 text 架构探索
+				42 text docs/architecture/ 下的手写设计文档 · Mermaid 代码块自动渲染
+				43 container
+					44 text 入口
+					45 content list
+						46 button README · 入口, Help: docs/architecture/README.md
+						47 button 核心路径 5+3+5+6, Help: docs/architecture/core-path.md
+					48 text 高清图
+					49 content list
+						50 button 高清架构图 (ASCII), Help: docs/architecture/high-res-map.md
+						51 button 高清架构图 (Mermaid), Help: docs/architecture/high-res-map.mermaid.md
+					52 text 专题
+					53 content list
+						54 button Chat 模式对照, Help: docs/architecture/chat-modes.md
+						55 button ReAct 自进化闭环, Help: docs/architecture/react-self-evolution.md
+						56 button 器官分层(维护), Help: docs/architecture/organ-tiering.md
+						57 button 模块地图, Help: docs/architecture/module-map.md
+					58 text 核心器官
+					59 content list
+						60 button 🧠 Cerebrum · 中枢脑, Help: docs/architecture/organs/cerebrum.md
+						61 button 🧬 Ganglia · 神经节, Help: docs/architecture/organs/ganglia.md
+						62 button 🐦 Beak · 工具执行, Help: docs/architecture/organs/beak.md
+						63 button ❤️ Hearts · 调度 facade, Help: docs/architecture/organs/hearts.md
+						64 button 🎨 Chromatophores · arm 广播, Help: docs/architecture/organs/chromatophores.md
+				65 heading Octopus 核心路径地图, Value: 1
+					66 text Octopus 核心路径地图
+				67 text 新人阅读顺序：这 5 个走主路径，再看 3 个治理，其余按需。
+				68 heading 第一层 · 主路径（5 个，必看）, Value: 2
+					69 text 第一层 · 主路径（5 个，必看）
+				70 text 一条请求从 HTTP 到回复的最短链路：
+				71 container
+					72 text TEXT
+					73 button 横向滚动
+					74 button
+					75 container
+						76 text 1 HTTP request 2     │ 3     ▼ 4 ┌─────────┐     一次 LLM 调用 5 │Cerebrum │ ─── 规划成 TaskGraph (DAG) ─── runtime/core/cerebrum/ 6 └────┬────┘ 7      ▼ 8 ┌─────────┐     消费 DAG，逐节点调度 9 │Ganglia  │ ─── GraphRuntime / SwarmRuntime ─ runtime/core/graph_runtime/ 10 └────┬────┘ 11      ▼ 12 ┌─────────┐     执行载体，8 类 worker 13 │Arms     │ ─── 每 arm 可配不同 model ─── runtime/execution/arms/ 14 └────┬────┘ 15      ▼ 16 ┌─────────┐     技能原子（"能做什么"的最小单元） 17 │Suckers  │ ─── SkillRegistry + builtins ─ runtime/execution/suckers/ 18 └────┬────┘ 19      ▼ 20 ┌─────────┐     真正调工具 + 全程审计 21 │Beak     │ ─── ToolExecutor ─────────── runtime/execution/tool_engine/ 22 └─────────┘ 23
+				77 container
+					78 text 读这 5 个 ，就理解了 Octopus 怎么把"用户一句话"变成"tool 调用 + 返回"。
+				79 container
+					80 text 默认路径 vs 条件路径（避免误读）
+一次 普通对话轮次 实际走的是 中心化 ReAct loop （
+					81 text _drive_react
+					82 text ，见
+					83 text runtime/sensing/gateway/realtime_turn_lifecycle.py
+					84 text ）——Cerebrum 直接驱动 Arms/Beak，并不一定经过 Ganglia 的多节点图调度。
+上面图里的  GraphRuntime / SwarmRuntime（Ganglia 多臂并行 + 腕间 SignalBus）  是 按条件启用的次路径 ：仅当任务是多代理 / 图编排 / 团队协作（
+					85 text _drive_swarm_mesh
+					86 text  /
+					87 text _drive_team_topology
+					88 text ）时才激活。
+同理  Hearts 双循环隔离 ：fencing 租约 + etcd/redis 选举 + 每通道熔断 已实装 ，但单机默认回退到
+					89 text _AlwaysLeaderGuard
+					90 text ，多节点互备需显式部署协调器。
+一句话: 这些分布式器官"代码已具备、机制可用",但默认运行拓扑是中心化 ReAct;mesh/HA 是条件启用,不是"未实装"。
+				91 heading 第二层 · 治理三件套（3 个，必看）, Value: 2
+					92 text 第二层 · 治理三件套（3 个，必看）
+				93 container
+					94 text Beak 每次  execute_step  都会经过这 3 个关卡：
+				95 button 复制表格为 Markdown
+				96 button 下载表格
+				97 table
+					98 row
+						99 cell
+							100 text 器官
+						101 cell
+							102 text 位置
+						103 cell
+							104 text 管什么
+					105 row
+						106 cell
+							107 text Immunity
+						108 cell
+							109 text runtime/safety/immunity/
+						110 cell
+							111 text 谁能调 / 谁被拒 · AntigenSignature + TrustEngine
+					112 row
+						113 cell
+							114 text Ink
+						115 cell
+							116 text runtime/safety/budget_breaker/
+						117 cell
+							118 text 预算/熔断 · CircuitBreaker + Budget
+					119 row
+						120 cell
+							121 text Genome
+						122 cell
+							123 text runtime/memory/genome/
+						124 cell
+							125 text Journal 持久化 · 所有事件 append-only
+				126 heading 第三层 · 能力增强（5 个，按需）, Value: 2
+					127 text 第三层 · 能力增强（5 个，按需）
+				128 text 你不一定立刻需要，但某些场景必读：
+				129 button 复制表格为 Markdown
+				130 button 下载表格
+				131 table
+					132 row
+						133 cell
+							134 text 器官
+						135 cell
+							136 text 何时读
+					137 row
+						138 cell
+							139 text SpinalCord
+						140 cell
+							141 text 想优化首字节延迟 · 80% 请求不走 LLM 的短路
+					142 row
+						143 cell
+							144 text Regeneration
+						145 cell
+							146 text 想理解自演化闭环 · 含 6 个反思生产者
+					147 row
+						148 cell
+							149 text Camouflage
+						150 cell
+							151 text 想跑 A/B 策略对照 · 实现上挂在 Regeneration 下
+					152 row
+						153 cell
+							154 text Eyes
+						155 cell
+							156 text 新增 LLM 供应商 · Anthropic / OpenAI / Gemini / Oct
+					157 row
+						158 cell
+							159 text Mantle
+						160 cell
+							161 text 加沙箱策略 · Local / Subprocess / Docker / SSH / K8s
+				162 heading 第四层 · 基础设施（6 个，几乎不用改）, Value: 2
+					163 text 第四层 · 基础设施（6 个，几乎不用改）
+				164 text 写插件基本碰不到这层：
+				165 button 复制表格为 Markdown
+				166 button 下载表格
+				167 table
+					168 row
+						169 cell
+							170 text 器官
+						171 cell
+							172 text 实现本质
+					173 row
+						174 cell
+							175 text Hearts
+						176 cell
+							177 text Scheduler + CircuitBreakerGroup + Coordinator
+							178 text  的 facade（不是字面"3 心脏"）
+					179 row
+						180 cell
+							181 text Nerves
+						182 cell
+							183 text TypedEventBus + HookManager · 内部事件总线
+					184 row
+						185 cell
+							186 text Chromatophores
+						187 cell
+							188 text Arm-to-arm 广播 + Boids 群仲裁 · 和 Nerves bus 分工
+					189 row
+						190 cell
+							191 text Skin
+						192 cell
+							193 text 环境 sensor 层 · 挂在 Nerves 上（新路径
+							194 text nerves.sensors
+							195 text ）
+					196 row
+						197 cell
+							198 text Siphon
+						199 cell
+							200 text HTTP/SSE/WS  外部 边界 · 不要和 Nerves 内部总线混淆
+					201 row
+						202 cell
+							203 text Hemolymph
+						204 cell
+							205 text 上下文配额管理 · system 15 / 技能 10 / 记忆 30 / 历史 45
+					206 row
+						207 cell
+							208 text Constitution
+						209 cell
+							210 text Soul 注入 + 伦理门
+				211 heading 命名诚实声明, Value: 2
+					212 text 命名诚实声明
+				213 text 部分器官名带仿生浪漫色彩，但代码里是工程实现。以下是本质翻译：
+				214 button 复制表格为 Markdown
+				215 button 下载表格
+				216 table
+					217 row
+						218 cell
+							219 text 诗化名
+						220 cell
+							221 text 工程本质
+					222 row
+						223 cell
+							224 text Hearts
+						225 cell
+							226 text HA coordinator + bulkhead 熔断聚合
+					227 row
+						228 cell
+							229 text Chromatophores
+						230 cell
+							231 text arm-to-arm pub/sub 带 Boids 协调规则
+					232 row
+						233 cell
+							234 text Regeneration
+						235 cell
+							236 text 6 个反思生产者（RuleExtractor / SkillForge /...）的 umbrella
+					237 row
+						238 cell
+							239 text Camouflage
+						240 cell
+							241 text A/B 策略分流 + 自动淘汰
+				242 text 读代码时遇到仿生名卡住，直接查本表，别琢磨生物学。
+				243 heading 概念重分组（shim 层）, Value: 2
+					244 text 概念重分组（shim 层）
+				245 container
+					246 text 为降低认知负担，以下两个器官有 工程心智 下的新 import 路径（老路径继续可用）：
+				247 button 复制表格为 Markdown
+				248 button 下载表格
+				249 table
+					250 row
+						251 cell
+							252 text 老路径（物理位置）
+						253 cell
+							254 text 新路径（概念归属）
+					255 row
+						256 cell
+							257 text runtime.sensing.normalize.*
+						258 cell
+							259 text runtime.core.nerves.sensors.*
+					260 row
+						261 cell
+							262 text runtime.safety.experiments.*
+						263 cell
+							264 text runtime.safety.recovery.camouflage.*
+				265 text 新代码优先用新路径 · 老代码保持可用（shim 100% 向后兼容）。
+				266 heading 一句话总结, Value: 2
+					267 text 一句话总结
+				268 container
+					269 text 仿生是设计灵感，不是架构枷锁。  主路径 Cerebrum → Ganglia → Arms → Suckers → Beak，治理 Immunity + Ink + Genome，其余按需读。22 个器官，8 个是核心。
+		37 container Notifications alt+T
+
+The focused UI element is 0 AXWebArea Echo, URL: localhost:3310/#/workspace/architecture

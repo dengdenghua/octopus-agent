@@ -25,7 +25,7 @@ except ImportError:  # pragma: no cover
 
 from runtime.sensing._fastapi_guard import require_fastapi
 
-from .config import LocalAuthConfig, verify_password
+from .config import LocalAuthConfig, development_login_enabled, verify_password
 
 logger = logging.getLogger(__name__)
 
@@ -175,12 +175,11 @@ def create_local_auth_router(
     )
 
     def _require_enabled() -> None:
-        if not config.enabled:
+        if not development_login_enabled(config):
             raise HTTPException(
                 status_code=503,
                 detail=(
-                    "Local auth disabled · set config.local_auth.enabled=true "
-                    "（注意：无密码 · 不对外开放）"
+                    "本地登录仅用于开发环境，当前未启用。"
                 ),
             )
 
@@ -278,6 +277,18 @@ def create_local_auth_router(
         response: Response,
     ) -> LoginResponse:
         _require_enabled()
+        if config.password_only_username:
+            import ipaddress
+            from urllib.parse import urlsplit
+
+            try:
+                local_client = ipaddress.ip_address(_direct_client_ip(request)).is_loopback
+            except ValueError:
+                local_client = False
+            origin = request.headers.get("origin")
+            local_origin = not origin or urlsplit(origin).hostname in {"localhost", "127.0.0.1", "::1"}
+            if not local_client or not local_origin:
+                raise HTTPException(status_code=403, detail="开发登录仅限本机")
         _check_credentials(body.username, body.password, request)
 
         actor_id = f"{config.actor_prefix}{body.username}"

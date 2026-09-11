@@ -42,6 +42,17 @@ export function PersonaWorkbenchHome({
           ))}
         </div>
 
+        {preset.workbench === "development" && (
+          <button
+            type="button"
+            className="mt-5 rounded-md border bg-background px-3 py-2 text-sm hover:bg-muted"
+            onClick={() =>
+              window.dispatchEvent(new Event("octopus:open-workspace-picker"))
+            }
+          >
+            选择工作区文件夹
+          </button>
+        )}
         {preset.primaryAction ? (
           <Link
             to={preset.primaryAction.to}

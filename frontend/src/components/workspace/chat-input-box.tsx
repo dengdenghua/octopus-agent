@@ -38,6 +38,8 @@ import type { AutomationTarget } from "@/core/computer/api";
  */
 
 export interface ChatInputBoxProps {
+  /** Stable text-draft identity before a new conversation is sent. */
+  draftStorageKey?: string;
   status?: ChatStatus;
   disabled?: boolean;
   /** Thread mutations are safe only after the socket has reopened and the
@@ -111,7 +113,7 @@ export interface ChatInputBoxProps {
   /** Expected execution kernel for this task. Model source remains independently
    * selectable: Octopus uses per-thread model_name, Codex uses its scoped
    * server profile. */
-  executionEngine?: "octopus" | "codex";
+  executionEngine?: "octopus" | "codex" | "opencode";
   executionEngineControl?: ReactNode;
   onPermissionModeChange?: (mode: PermissionMode) => void;
   onProjectAgentModeChange?: (mode: AgentModeName) => void;
@@ -272,7 +274,8 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
       {showStatusStrip && (
         <div
           data-testid="chat-status-strip"
-          className="flex min-h-8 items-center gap-2 overflow-x-auto px-2 pt-1 text-xs text-muted-foreground [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          data-composer-context-strip={statusTrailing ? undefined : "true"}
+          className="flex min-h-8 items-center gap-2 overflow-x-auto px-2 pt-1.5 text-ui text-muted-foreground [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           <div className="inline-flex max-w-full items-center gap-1.5 rounded-lg px-0.5 py-0.5">
             {showAgentSegment ? (
@@ -307,6 +310,7 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
             {showWorkDirSegment ? (
               <>
                 <WorkDirSelector
+                  designSpace={visibleProjectMode === "uxui"}
                   workDir={workDir ?? ""}
                   onWorkDirChange={onWorkDirChange}
                   lockToCurrentThread={lockWorkDirToThread}

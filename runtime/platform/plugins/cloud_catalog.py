@@ -68,6 +68,22 @@ _MAX_MEMBER_BYTES = 64 * 1024 * 1024
 
 _REMOTE_SURFACE_PLUGINS: tuple[dict[str, Any], ...] = (
     {
+        "id": "codex_echo-android", "plugin": "echo-android", "source": "octopus",
+        "kind": "plugin", "name": "Android Automation", "name_zh": "安卓自动化",
+        "description": "按需启用 30 项手机接口：截图、点击、输入及浏览器操作。需要连接 Echo Android 客户端。",
+        "category": "Productivity", "author": "EchoAI", "version": "1.0.0",
+        "icon": "./assets/icon.svg", "capabilities": ["android"],
+        "install": {"kind": "codex-plugin", "plugin_id": "echo-android"},
+    },
+    {
+        "id": "codex_echo-ios", "plugin": "echo-ios", "source": "octopus",
+        "kind": "plugin", "name": "iOS Automation", "name_zh": "iOS 自动化",
+        "description": "按需启用 13 项 iPhone/iPad 接口。需要已配置 WebDriverAgent 的设备。",
+        "category": "Productivity", "author": "EchoAI", "version": "1.0.0",
+        "icon": "./assets/icon.svg", "capabilities": ["ios"],
+        "install": {"kind": "codex-plugin", "plugin_id": "echo-ios"},
+    },
+    {
         "id": "codex_echo-recorder",
         "plugin": "echo-recorder",
         "source": "octopus",
@@ -324,9 +340,14 @@ class CloudCatalog:
         # cache/remote release, so Hub refreshes can actually deliver updates.
         if source_checkout and not prefer_remote:
             store = self._load_mirror(require_trusted=False)
+        if store is None and prefer_remote:
+            remote = self._load_verified_remote()
+            if remote is not None:
+                store, envelope = remote
+                self._cache_verified_remote(store, envelope)
         if store is None:
             store = self._load_cache()
-        if store is None:
+        if store is None and not prefer_remote:
             remote = self._load_verified_remote()
             if remote is not None:
                 store, envelope = remote
@@ -343,12 +364,8 @@ class CloudCatalog:
         self._store = None
         self._catalog_trust = None
         self._force_remote_once = True
-        if self._use_cache and self._cache_file.exists():
-            with contextlib.suppress(OSError):
-                self._cache_file.unlink()
-        if self._use_cache and self._cache_signature_file.exists():
-            with contextlib.suppress(OSError):
-                self._cache_signature_file.unlink()
+        # Keep the last verified pair available if the network or a release's
+        # catalog/signature transition prevents accepting the remote update.
         return self._load()
 
     def meta(self) -> dict[str, Any]:
@@ -547,13 +564,49 @@ class CloudCatalog:
         if (target / "SKILL.md").exists():
             return {"installed": True, "already_exists": True, "name": safe, "path": str(target)}
         with tempfile.TemporaryDirectory(prefix="octopus-skill-") as tmp:
-            extracted = self._extract_member(self._archive_path(), "skills", Path(tmp), safe)
+            extracted = self._extract_member(
+                self._skill_archive_path(safe), "skills", Path(tmp), safe
+            )
             if extracted is None or not (extracted / "SKILL.md").exists():
                 raise KeyError(f"skill not found in content pack: {name}")
             if any(child.is_symlink() for child in extracted.rglob("*")):
                 raise ValueError(f"skill contains symlinks: {name}")
             shutil.copytree(extracted, target)
         return {"installed": True, "name": safe, "path": str(target), "source": "cloud"}
+
+    def _skill_archive_path(self, name: str) -> Path:
+        """Use a catalog-pinned individual download; support older cloud releases."""
+        row = next(
+            (item for item in self._load().get("skills", []) if item.get("name") == name), {}
+        )
+        url = row.get("package_url")
+        if not url:
+            return self._archive_path()
+        digest = str(row.get("package_sha256") or "").lower()
+        if not re.fullmatch(r"[a-f0-9]{64}", digest):
+            raise ValueError("skill package checksum is missing or invalid")
+        import hashlib
+
+        cache = CACHE_DIR / "skills"
+        cache.mkdir(parents=True, exist_ok=True)
+        target = cache / f"{digest}.tar.gz"
+        if (
+            target.is_file()
+            and target.stat().st_size <= _MAX_ARCHIVE_BYTES
+            and hashlib.sha256(target.read_bytes()).hexdigest() == digest
+        ):
+            return target
+        body = fetch_public_https_bytes(str(url), timeout=180, max_bytes=_MAX_ARCHIVE_BYTES)
+        if hashlib.sha256(body).hexdigest() != digest:
+            raise ValueError("skill package checksum mismatch")
+        with tempfile.NamedTemporaryFile(dir=cache, suffix=".part", delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(body)
+        try:
+            temporary.replace(target)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return target
 
     # All mutable deployment state follows OCTOPUS_DATA_DIR. In the container
     # that is the /data PVC/bind mount, never the read-only image layer.

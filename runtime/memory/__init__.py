@@ -22,41 +22,92 @@
 
 from __future__ import annotations
 
-from .diagnostics import (  # noqa: F401
-    error_classifier,
-    trace_store,
-    wiki_compiler,
-)
+from importlib import import_module
+from typing import TYPE_CHECKING, Any
 
-# Backward-compat shims: legacy code does ``from runtime.memory import X``
-# where X is the submodule name. After the Phase B reorg the modules live
-# inside subpackages, so re-export them at the parent level.
-from .learning import (  # noqa: F401
-    deep_evolution,
-    experience_ledger,
-    promotion_applier,
-    review_queue,
-    soul_holdout,
-    turn_scoring,
-)
-from .runtime_state import (  # noqa: F401
-    blackboard,
-    file_transactions,
-    hot_cache,
-    hub,
-    process_timeline,
-    scope_paths,
-)
-from .skills_lib import (  # noqa: F401
-    ambient_suggestions,
-    ambient_suggestions_scheduler,
-    meta_skill,
-    skill_curator,
-    skill_library,
-)
-from .users import (  # noqa: F401
-    mention_history,
-    profile,
-    user_preferences,
-    user_store,
-)
+if TYPE_CHECKING:
+    from .diagnostics import (  # noqa: F401
+        error_classifier,
+        trace_store,
+        wiki_compiler,
+    )
+
+    # Backward-compat shims: legacy code does ``from runtime.memory import X``
+    # where X is the submodule name. After the Phase B reorg the modules live
+    # inside subpackages, so re-export them at the parent level.
+    from .learning import (  # noqa: F401
+        deep_evolution,
+        experience_ledger,
+        promotion_applier,
+        review_queue,
+        soul_holdout,
+        turn_scoring,
+    )
+    from .runtime_state import (  # noqa: F401
+        blackboard,
+        file_transactions,
+        hot_cache,
+        hub,
+        process_timeline,
+        scope_paths,
+    )
+    from .skills_lib import (  # noqa: F401
+        ambient_suggestions,
+        ambient_suggestions_scheduler,
+        meta_skill,
+        skill_curator,
+        skill_library,
+    )
+    from .users import (  # noqa: F401
+        mention_history,
+        profile,
+        user_preferences,
+        user_store,
+    )
+
+_MODULES = {
+    "error_classifier": "diagnostics.error_classifier",
+    "trace_store": "diagnostics.trace_store",
+    "wiki_compiler": "diagnostics.wiki_compiler",
+    "deep_evolution": "learning.deep_evolution",
+    "experience_ledger": "learning.experience_ledger",
+    "promotion_applier": "learning.promotion_applier",
+    "review_queue": "learning.review_queue",
+    "soul_holdout": "learning.soul_holdout",
+    "turn_scoring": "learning.turn_scoring",
+    "blackboard": "runtime_state.blackboard",
+    "file_transactions": "runtime_state.file_transactions",
+    "hot_cache": "runtime_state.hot_cache",
+    "hub": "runtime_state.hub",
+    "process_timeline": "runtime_state.process_timeline",
+    "scope_paths": "runtime_state.scope_paths",
+    "ambient_suggestions": "skills_lib.ambient_suggestions",
+    "ambient_suggestions_scheduler": "skills_lib.ambient_suggestions_scheduler",
+    "meta_skill": "skills_lib.meta_skill",
+    "skill_curator": "skills_lib.skill_curator",
+    "skill_library": "skills_lib.skill_library",
+    "mention_history": "users.mention_history",
+    "profile": "users.profile",
+    "user_preferences": "users.user_preferences",
+    "user_store": "users.user_store",
+    "diagnostics": "diagnostics",
+    "learning": "learning",
+    "runtime_state": "runtime_state",
+    "skills_lib": "skills_lib",
+    "users": "users",
+}
+
+__all__ = list(_MODULES)
+
+
+def __getattr__(name: str) -> Any:
+    module = _MODULES.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = import_module(f".{module}", __name__)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(__all__))

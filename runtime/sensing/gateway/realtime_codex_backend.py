@@ -13,6 +13,7 @@ import contextlib
 import logging
 import os
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +55,7 @@ from runtime.safety.sandboxing.sandbox import (
     effective_process_sandbox_mode,
     resolved_process_backend,
 )
+from runtime.sensing.gateway.realtime_engine_history import engine_history_for_turn
 
 _logger = logging.getLogger(__name__)
 
@@ -259,6 +261,8 @@ def _request_for_turn(
         )
         if server_auto_approve and resolved_sandbox_mode == "workspace-write":
             resolved_sandbox_mode = "danger-full-access"
+        from runtime.safety.approval.permission_modes import approval_reviewer_for_mode
+
         return CodexExecutionRequest(
             outer_thread_id=str(getattr(turn, "thread_id", "") or ""),
             outer_turn_id=str(getattr(turn, "id", "") or ""),
@@ -272,6 +276,11 @@ def _request_for_turn(
             model=model or None,
             effort=str(context.get("reasoning_effort") or "").strip() or None,
             approval_policy="never" if server_auto_approve else "on-request",
+            approval_reviewer=(
+                "user"
+                if server_auto_approve
+                else approval_reviewer_for_mode(context.get("permission_mode"))
+            ),
             sandbox_mode=resolved_sandbox_mode,
             execution=current_execution_request(),
         )
@@ -357,6 +366,13 @@ async def drive_codex_app_server(
         approval_provider=provider,
         is_interrupted=interrupted,
     )
+    history = engine_history_for_turn(log, turn, "codex")
+    # Select tools and permissions from the current task before adding history.
+    request = replace(
+        request,
+        prompt=history.prompt(request.prompt, resumed=True),
+        fresh_thread_prompt=history.prompt(request.prompt, resumed=False),
+    )
     # Persist the engine-owned effective model, not an outer smart-routing
     # candidate. This is the authoritative coordinate used by history,
     # outcome/evolution records and any UI that inspects the completed turn.
@@ -393,6 +409,7 @@ async def drive_codex_app_server(
         session = prepared.session
         try:
             await session.start()
+            history.mark_delivered()
         except CodexBackendUnavailable:
             if session.turn_started or _deployment_mode() in _PRODUCTION_MODES:
                 raise

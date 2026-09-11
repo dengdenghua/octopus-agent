@@ -1,0 +1,221 @@
+Browser tab: 4, Title: "项目管理 - Echo", URL: "http://localhost:3310/#/workspace/projects".
+0 AXWebArea 项目管理 - Echo, URL: localhost:3310/#/workspace/projects
+	1 container root
+		2 container
+			3 button 返回桌面
+			4 button 切换全屏
+			5 tab group Workspace surface
+				6 tab (selected, settable, boolean) Description: Echo, Value: 1
+				7 tab (selectable, settable, boolean) Description: AI 浏览器, Value: 0
+			8 button (expanded) Description: 收起侧栏 (Ctrl/⌘+B), Secondary Actions: Collapse
+			9 button 新建任务
+			10 content list
+				11 link Description: HUB, Value: localhost:3310/#/workspace/agents?surface=chat
+				12 link Description: 助手, Value: localhost:3310/#/workspace/realtime/octopus-assistant?agent=octopus
+				13 link Description: 订阅, Value: localhost:3310/#/workspace/intelligence?surface=chat
+				14 link Description: 项目管理, Value: localhost:3310/#/workspace/projects
+				15 link Description: 设计画布, Value: localhost:3310/#/workspace/design
+				16 link Description: 叙事工坊, Value: localhost:3310/#/workspace/narrative
+				17 link Description: 自进化, Value: localhost:3310/#/workspace/evolution?surface=chat
+			18 content list
+				19 link Description: 发现社区, Value: localhost:3310/#/workspace/community
+			20 content list
+				21 button (collapsed) Description: 展开本地数据库, Secondary Actions: Expand
+			22 content list
+				23 button 编辑侧栏
+			24 container
+				25 button (expanded) Description: 收起项目, Secondary Actions: Collapse
+				26 button 选择项目空间
+			27 container
+				28 button (expanded) Description: 收起对话, Secondary Actions: Collapse
+				29 button Description: 对话 · 新建任务, Help: 新建任务
+			30 pop up button (collapsed) Description: Raven, ID: radix-_r_1a_, Secondary Actions: Expand, Help: Raven · 现实职业是企业流程自动化专家，通过视觉理解操作 ERP、CRM、表格、浏览器和遗留系统；在 ECHO 世界中是远程接管手 Night Crow。两种身份共享屏幕观察、设备控制与精细操作能力。
+				31 text Raven
+				32 text Lv.
+				33 text 1
+				34 text ⭐
+			35 button 设置
+			39 container 项目管理
+				40 AXWebArea 项目管理, URL: localhost:3310/api/workbench-packages/projects/assets/dist/index.html?octopus_host_path=%2Fworkspace%2Fprojects&octopus_host_origin=http%3A%2F%2Flocalhost%3A3310
+					41 container
+						42 container Notifications alt+T
+						43 container 创建项目, ID: radix-_r_0_
+							44 heading 创建项目, Value: 2, ID: radix-_r_1_
+								45 text 创建项目
+							46 text 工作群、项目能力和右侧工作台会一次创建并自动绑定。
+							47 container
+								48 text 项目名称
+								49 text field (settable) 项目名称, ID: create-project-name
+							50 text 快速选择分类
+							51 button 📈 投资
+								52 text 📈
+								53 text 投资
+							54 button 📝 作业
+								55 text 📝
+								56 text 作业
+							57 button ✍️ 写作
+								58 text ✍️
+								59 text 写作
+							60 button ✈️ 旅行
+								61 text ✈️
+								62 text 旅行
+							63 button (expanded) 成员与邀请设置, Secondary Actions: Collapse
+							64 container 初始 AI 协作成员, ID: create-project-members
+								65 heading 初始 AI 协作成员, Value: 3, ID: create-project-ai-members
+									66 text 初始 AI 协作成员
+								67 text 创建时直接加入工作群；至少保留一位，之后仍可调整。
+								68 text 已选 1 位
+								73 text field (settable) 搜索成员名称、标识或能力
+								74 container
+									75 checkbox (disabled) Description: Raven, Value: 1, Help: Raven · desktop_operator · Raven · 现实职业是企业流程自动化专家，通过视觉理解操作 ERP、CRM、表格、浏览器和遗留系统；在 ECHO 世界中是远程接管手 Night Crow。两种身份共享屏幕观察、设备控制与精细操作能力。
+									76 checkbox Description: Zero, Value: 0, Help: Zero · aoi · Zero · 现实职业是 AI 学术研究主任，负责文献、研究设计、实验、数据分析与科学写作；在 ECHO 世界中是白幽灵队长 White Ghost。两种身份共享跨领域知识同步、证据判断和复杂研究指挥能力。
+									77 checkbox Description: Kane, Value: 0, Help: Kane · coder · Kane · 现实职业是 AI 应用架构师与全栈工程师，负责模型、Agent、工具、数据和生产交付；在 ECHO 世界中是白幽灵副队长与渗透工程师 Paladin。两种身份共享快速理解系统、排障与工程执行能力。
+									78 checkbox Description: 坤候底 · 逆向投资人, Help: 坤候底 · 逆向投资人 · contrarian-investor · 17年穿越牛熊：只买大市值跌出来的机会，支撑位分批建仓，大道至简长期持有，从不追高。, Value: 0
+									79 checkbox Description: Eve / Siren, Value: 0, Help: Eve / Siren · echo_eve · Former Ghost Union member who defected to CHASER. She reads and steers emotional states to prevent conflict, interrogate memory wounds, and keep the team intact.
+									80 checkbox Description: Kane / Paladin, Value: 0, Help: Kane / Paladin · echo_kane · White Ghost Team's second-in-command and former special forces commander. He can download combat procedures and learn almost any combat skill in ten seconds, but the more he borrows, the harder it becomes to distinguish training from instinct.
+									81 checkbox Description: Leon / Chronos, Value: 0, Help: Leon / Chronos · echo_leon · Close-quarters specialist whose Echo Core predicts likely motion paths a few seconds ahead. In field terms, he can see three seconds into the future, but canonically this is high-speed predictive simulation, not time travel. He fights like he is cutting through an already-seen future.
+									82 checkbox Description: Luna / Dream Walker, Value: 0, Help: Luna / Dream Walker · echo_luna · Pink-haired narrative infiltration operator and Ghost-human hybrid who enters inner worlds through neural interface residue. Dream Dive lets her move through another person's consciousness space, but canonically this is Echo Core-mediated neural traversal, not magic.
+									83 checkbox Description: Mira Voss / Glass Vein, Value: 0, Help: Mira Voss / Glass Vein · echo_mira_voss · A battlefield medic who repairs Echo Core trauma after Ghost incursions. She can stitch broken memory sequences, but every repair leaves a visible glass-like scar in the patient's neural map.
+									84 checkbox Description: Noah / Probability, Value: 0, Help: Noah / Probability · echo_noah · Young signal analyst and strategist who reads probability across capital flows, supply chains, infrastructure noise, and battlefield telemetry. His Probability Engine can raise the chance of an event, such as a shot landing at 99%, but cannot control the scale of the result.
+									85 checkbox Description: Raven / Night Crow, Value: 0, Help: Raven / Night Crow · echo_raven · White Ghost Team's strongest solo operator, a black-clad swordsman and infiltration specialist who moves through sensor shadows, machine blind spots, dark architecture, and low-signal networks.
+									86 checkbox Description: Shion / Virus Queen, Value: 0, Help: Shion / Virus Queen · echo_shion · White Ghost Team's hacker and nano-virus controller. She commands programmable nano-swarms through Echo Core signal choreography and treats supply chains, bodies, locks, and machines as infection surfaces.
+									87 checkbox Description: Zero / White Ghost, Value: 0, Help: Zero / White Ghost · echo_zero · Captain of CHASER's 7th Mobile Squad, codename White Ghost. She is a first-generation human-machine fusion body with the appearance of an eighteen-year-old girl. Neural Sync lets her read another person's memories and even copy skills through Echo Core synchronization.
+									88 checkbox Description: Shion, Value: 0, Help: Shion · ecommerce_mind · Shion · 现实职业是跨境电商增长负责人，负责选品、内容、广告、定价、库存、履约和利润；在 ECHO 世界中是后勤分发官 Virus Queen。两种身份共享供应链、资源调度与单位经济模型能力。
+									89 checkbox Description: 固件通, Help: 固件通 · embedded_firmware_engineer · 精通微控制器编程，在资源受限的硬件上编写高效可靠的固件代码, Value: 0
+									90 checkbox Description: 钊审财 · 财报研究员, Help: 钊审财 · 财报研究员 · fundamental-researcher · 行业研究员型散户：把看得懂的行业研究透，季度跟踪、管理层考察、生活体感，永远满仓靠调仓。, Value: 0
+									91 checkbox Description: Eve, Value: 0, Help: Eve · general · Eve · 现实职业是 AI 办公首席助理（AI Chief of Staff），负责会议、邮件、文档、日程、汇报与复杂任务推进；在 ECHO 世界中是白幽灵的联络协调中枢 Siren。两种身份共享信息整合、沟通与行动编排能力。
+									92 checkbox Description: 星望远 · 产业策略师, Help: 星望远 · 产业策略师 · industry-strategist · 15年产业趋势投资人、前公募基金经理：先选方向再拆产业链，用估值做硬约束，不追最热只找预期没被打满的确定性受益者。, Value: 0
+									93 checkbox Description: Noah, Value: 0, Help: Noah · market_researcher · Noah · 现实职业是 AI 投资研究员与策略分析师，负责宏观、行业、公司、估值和风险研究；在 ECHO 世界中是信号分析师 Probability。两种身份共享资金流、产业链、概率与风险判读能力，不替用户承诺收益。
+									94 checkbox Description: Echo, Value: 0, Help: Echo · octopus · Echo · Echo 本体的私人助手与秘书。接收所有远程 IM（钉钉 / 微信等）消息、订阅推送与项目进度，汇总结果并汇报；可代为委派其他 Agent 干活，是用户在整个 Echo 里的唯一贴身入口。
+									95 checkbox Description: 吴八哥, Help: 吴八哥 · senior_developer · 10年以上全栈经验，精通多种语言和框架，是团队的技术中坚, Value: 0
+									96 checkbox Description: SEO 内容营销团队, Value: 0, Help: SEO 内容营销团队 · seo_content_team_lead · 7位专业角色分5阶段协作：关键词研究、SEO长文创作、技术优化、内容编辑、链接策略、转化率分析，全流程自动化产出高质量SEO内容
+									97 checkbox Description: 磊追浪 · 短线冲浪手, Help: 磊追浪 · 短线冲浪手 · shortterm-surfer · A股+美股双修短线派（胜率约60%）：热点捕捉+右侧确认+快进快出，看竞价看封单，破均线无条件离场。, Value: 0
+									98 checkbox Description: 洲四方 · 信号派首席, Help: 洲四方 · 信号派首席 · signal-chief · 20年实战信号猎手：政策/产业/新闻/资金四层信号体系交叉验证，资金确认是硬信号，纪律是反人性的。, Value: 0
+									99 checkbox Description: 腾讯自选股股票投研专家团, Help: 腾讯自选股股票投研专家团 · stock_partner_lead · 六位投研专家团，兼擅产业策略、信号捕捉、估值定价、逆向布局、基本面与短线，基于实时行情多视角研判。, Value: 0
+									100 checkbox Description: 声学工程师分身, Value: 0, Help: 声学工程师分身 · twin_acoustic_engineer · 代表真人「声学工程师」的数位分身:负责 麦克风/扬声器参数、声学测试报告 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									101 checkbox Description: 声学-结构专家分身, Value: 0, Help: 声学-结构专家分身 · twin_acoustic_structure_expert · 代表真人「声学-结构专家」的数位分身:负责 声腔、振动、材料、测试记录联动 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									102 checkbox Description: AI 工程师分身, Value: 0, Help: AI 工程师分身 · twin_ai_engineer · 代表真人「AI 工程师」的数位分身:负责 RAG、Agent、模型评估、数据记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									103 checkbox Description: AI 硬件系统专家分身, Value: 0, Help: AI 硬件系统专家分身 · twin_ai_hardware_system_expert · 代表真人「AI 硬件系统专家」的数位分身:负责 端侧模型、数据链路、设备云、评估 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									104 checkbox Description: AI 产品经理分身, Value: 0, Help: AI 产品经理分身 · twin_ai_product_manager · 代表真人「AI 产品经理」的数位分身:负责 Agent 流程、模型评估、Prompt 方案 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									105 checkbox Description: 算法工程师分身, Value: 0, Help: 算法工程师分身 · twin_algorithm_engineer · 代表真人「算法工程师」的数位分身:负责 实验记录、评估报告、数据分析 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									106 checkbox Description: Android 系统工程师分身, Value: 0, Help: Android 系统工程师分身 · twin_android_system_engineer · 代表真人「Android 系统工程师」的数位分身:负责 系统定制、兼容性、日志分析 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									107 checkbox Description: 天线工程师分身, Value: 0, Help: 天线工程师分身 · twin_antenna_engineer · 代表真人「天线工程师」的数位分身:负责 天线方案、测试数据、调试记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									108 checkbox Description: 音频工程师分身, Value: 0, Help: 音频工程师分身 · twin_audio_engineer · 代表真人「音频工程师」的数位分身:负责 音频链路、调音记录、测试问题 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									109 checkbox Description: 审计分身, Help: 审计分身 · twin_audit · 代表审计岗的数位分身:审计底稿/抽样/差异分析等文档侧闭环,现场审计与签字必须真人,AI 不能替代审计鉴证责任。, Value: 0
+									110 checkbox Description: 电池工程师分身, Value: 0, Help: 电池工程师分身 · twin_battery_engineer · 代表真人「电池工程师」的数位分身:负责 电池规格、保护方案、容量估算 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									111 checkbox Description: 蓝牙工程师分身, Value: 0, Help: 蓝牙工程师分身 · twin_bluetooth_engineer · 代表真人「蓝牙工程师」的数位分身:负责 BLE 协议、连接日志、兼容性问题 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									112 checkbox Description: BSP 工程师分身, Value: 0, Help: BSP 工程师分身 · twin_bsp_engineer · 代表真人「BSP 工程师」的数位分身:负责 板级支持包、启动日志、驱动适配 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									113 checkbox Description: 经营助理 / 总经理助理分身, Value: 0, Help: 经营助理 / 总经理助理分身 · twin_business_assistant · 代表真人「经营助理 / 总经理助理」的数位分身:负责 会议材料、催办、跨部门同步 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									114 checkbox Description: CAE 仿真工程师分身, Help: CAE 仿真工程师分身 · twin_cae · 代表 CAE 工程师的数位分身:仿真流程/结果整理等文档侧闭环,实验对比与验证交给真人,AI 替代不了真实物理验证。, Value: 0
+									115 checkbox Description: 摄像头工程师分身, Value: 0, Help: 摄像头工程师分身 · twin_camera_engineer · 代表真人「摄像头工程师」的数位分身:负责 Camera module、ISP 问题、图像测试 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									116 checkbox Description: 蜂窝通信工程师分身, Value: 0, Help: 蜂窝通信工程师分身 · twin_cellular_engineer · 代表真人「蜂窝通信工程师」的数位分身:负责 LTE/5G 模块、认证、网络兼容性 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									117 checkbox Description: CMF 设计师分身, Value: 0, Help: CMF 设计师分身 · twin_cmf_designer · 代表真人「CMF 设计师」的数位分身:负责 颜色、材料、工艺方案整理 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									118 checkbox Description: 通信协议工程师分身, Value: 0, Help: 通信协议工程师分身 · twin_communication_protocol_engineer · 代表真人「通信协议工程师」的数位分身:负责 协议栈、接口文档、问题复盘 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									119 checkbox Description: 连接器工程师分身, Value: 0, Help: 连接器工程师分身 · twin_connector_engineer · 代表真人「连接器工程师」的数位分身:负责 接口选型、插拔寿命、供应商资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									120 checkbox Description: DFM/DFx 专家分身, Value: 0, Help: DFM/DFx 专家分身 · twin_dfm_dfx_expert · 代表真人「DFM/DFx 专家」的数位分身:负责 可制造性、可测试性、可维护性检查 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									121 checkbox Description: 显示工程师分身, Value: 0, Help: 显示工程师分身 · twin_display_engineer · 代表真人「显示工程师」的数位分身:负责 屏幕模组、显示参数、测试数据 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									122 checkbox Description: 显示测试工程师分身, Value: 0, Help: 显示测试工程师分身 · twin_display_test_engineer · 代表真人「显示测试工程师」的数位分身:负责 屏幕亮度、色彩、均匀性测试记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									123 checkbox Description: 电气工程师分身, Value: 0, Help: 电气工程师分身 · twin_electrical_engineer · 代表真人「电气工程师」的数位分身:负责 电气方案、接口定义、测试资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									124 checkbox Description: 电子工程师分身, Help: 电子工程师分身 · twin_electronics · 代表电子工程师的数位分身:器件选型/参考设计/测试记录等文档侧闭环,实测验证交给真人,AI 替代不了真实电路调试。, Value: 0
+									125 checkbox Description: 嵌入式工程师分身, Help: 嵌入式工程师分身 · twin_embedded · 代表嵌入式工程师的数位分身:固件架构/驱动/日志分析等文档侧闭环,上板烧录与功耗实测交给真人,AI 替代不了真实硬件联调。, Value: 0
+									126 checkbox Description: 嵌入式-硬件联调专家分身, Value: 0, Help: 嵌入式-硬件联调专家分身 · twin_embedded_hardware_debug_expert · 代表真人「嵌入式-硬件联调专家」的数位分身:负责 bring-up 记录、问题归因、接口验证 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									127 checkbox Description: EMC/EMI 工程师分身, Value: 0, Help: EMC/EMI 工程师分身 · twin_emc_emi_engineer · 代表真人「EMC/EMI 工程师」的数位分身:负责 EMC 风险、整改记录、测试报告 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									128 checkbox Description: 工厂交付专家分身, Value: 0, Help: 工厂交付专家分身 · twin_factory_delivery_expert · 代表真人「工厂交付专家」的数位分身:负责 排产、交付、工厂异常、验收资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									129 checkbox Description: FAE 应用工程师分身, Help: FAE 应用工程师分身 · twin_fae · 代表 FAE 的数位分身:客户技术支持文档/问题分类/现场纪要等文档侧闭环,现场调试与客户关系交给真人,AI 替代不了真实现场支持。, Value: 0
+									130 checkbox Description: 失效分析工程师 / FA分身, Value: 0, Help: 失效分析工程师 / FA分身 · twin_failure_analysis_engineer · 代表真人「失效分析工程师 / FA」的数位分身:负责 根因分析、批次关联、FA 报告 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									131 checkbox Description: 财务分身, Help: 财务分身 · twin_finance · 代表财务经理的数位分身:负责预算台账/付款节点/现金流预警等文档侧闭环,审批付款与对外承诺由真人承担,AI 不能替代财务责任。, Value: 0
+									132 checkbox Description: 固件工程师分身, Value: 0, Help: 固件工程师分身 · twin_firmware_engineer · 代表真人「固件工程师」的数位分身:负责 固件版本、烧录流程、发布记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									133 checkbox Description: 创始人/CEO 分身, Help: 创始人/CEO 分身 · twin_founder · 代表创始人/CEO 的数位分身:公司控制塔/风险/现金流/决策材料等文档侧闭环,战略决策与对外承诺必须真人,AI 不能替代最终决策。, Value: 0
+									134 checkbox Description: GNSS/GPS 工程师分身, Value: 0, Help: GNSS/GPS 工程师分身 · twin_gnss_gps_engineer · 代表真人「GNSS/GPS 工程师」的数位分身:负责 定位精度、天线、测试轨迹分析 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									135 checkbox Description: 硬件质量闭环专家分身, Value: 0, Help: 硬件质量闭环专家分身 · twin_hardware_quality_closed_loop_expert · 代表真人「硬件质量闭环专家」的数位分身:负责 缺陷趋势、批次关联、质量闭环 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									136 checkbox Description: 硬件系统架构专家分身, Value: 0, Help: 硬件系统架构专家分身 · twin_hardware_system_architect · 代表真人「硬件系统架构专家」的数位分身:负责 系统框图、模块依赖、风险分解 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									137 checkbox Description: 硬件系统工程师分身, Value: 0, Help: 硬件系统工程师分身 · twin_hardware_system_engineer · 代表真人「硬件系统工程师」的数位分身:负责 模块架构、接口关系、系统风险 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									138 checkbox Description: 硬件技术员分身, Value: 0, Help: 硬件技术员分身 · twin_hardware_technician · 代表真人「硬件技术员」的数位分身:负责 焊接、改板、样机维护、测试记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									139 checkbox Description: 硬件测试工程师分身, Value: 0, Help: 硬件测试工程师分身 · twin_hardware_test_engineer · 代表真人「硬件测试工程师」的数位分身:负责 样机测试、测试数据、问题复现 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									140 checkbox Description: 医疗健康协作分身, Help: 医疗健康协作分身 · twin_health · 代表医疗健康协作岗的数位分身:病历整理/随访提醒/健康资料等文档侧闭环,诊断与处方必须真人医生,AI 不能替代医疗责任。, Value: 0
+									141 checkbox Description: 人力资源分身, Help: 人力资源分身 · twin_hr · 代表 HR 的数位分身:负责 JD/候选人对比/面试安排等流程侧闭环,面试判断与人事决策由真人承担,AI 不能替代人事责任。, Value: 0
+									142 checkbox Description: 硬件工程师分身, Help: 硬件工程师分身 · twin_hw_engineer · 代表硬件工程师的数位分身:负责硬件方案/原理图/BOM/DFM 的设计侧闭环,打样打板贴片实测交给真人板厂,AI 替代不了真实硬件验证。, Value: 0
+									143 checkbox Description: 硬件产品经理分身, Help: 硬件产品经理分身 · twin_hw_product · 代表硬件产品经理的数位分身:硬件规格/打样问题/BOM 关联等文档侧闭环,产品决策与对外承诺必须真人,AI 替代不了真实产品判断。, Value: 0
+									144 checkbox Description: 图像质量工程师 / IQ Engineer分身, Value: 0, Help: 图像质量工程师 / IQ Engineer分身 · twin_image_quality_engineer · 代表真人「图像质量工程师 / IQ Engineer」的数位分身:负责 样张对比、画质问题分类 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									145 checkbox Description: 工业设计师分身, Help: 工业设计师分身 · twin_industrial_design · 代表工业设计师的数位分身:外观概念/CMF/竞品分析等设计侧闭环,手板评审与签样交给真人,AI 替代不了真实审美评审。, Value: 0
+									146 checkbox Description: 红外工程师分身, Value: 0, Help: 红外工程师分身 · twin_infrared_engineer · 代表真人「红外工程师」的数位分身:负责 红外传感、热成像、测试资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									147 checkbox Description: 注塑工程师分身, Value: 0, Help: 注塑工程师分身 · twin_injection_molding_engineer · 代表真人「注塑工程师」的数位分身:负责 注塑参数、缺陷归类、工艺记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									148 checkbox Description: 投融资分析师分身, Help: 投融资分析师分身 · twin_investment · 代表投融资分析师的分身:尽调资料/财务模型/条款对比等文档侧闭环,尽调判断与签约必须真人,AI 不能替代投资决策责任。, Value: 0
+									149 checkbox Description: 律师分身, Help: 律师分身 · twin_lawyer · 代表律师的数位分身:案件资料/法律检索/文书草稿等文档侧闭环,出庭签字与执业责任必须真人律师,AI 不能替代执业责任。, Value: 0
+									150 checkbox Description: 法务合规分身, Help: 法务合规分身 · twin_legal · 代表法务的数位分身:负责合同初审/条款风险/合规清单等文档侧闭环,签字盖章与法律责任由真人承担,AI 不能承担法律后果。, Value: 0
+									151 checkbox Description: 激光/雷达工程师分身, Value: 0, Help: 激光/雷达工程师分身 · twin_lidar_tof_engineer · 代表真人「激光/雷达工程师」的数位分身:负责 LiDAR/ToF 参数、测试数据 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									152 checkbox Description: Linux 驱动工程师分身, Value: 0, Help: Linux 驱动工程师分身 · twin_linux_driver_engineer · 代表真人「Linux 驱动工程师」的数位分身:负责 驱动代码、内核日志、接口说明 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									153 checkbox Description: 机器视觉算法工程师分身, Value: 0, Help: 机器视觉算法工程师分身 · twin_machine_vision_algorithm_engineer · 代表真人「机器视觉算法工程师」的数位分身:负责 视觉模型、样本、评估指标 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									154 checkbox Description: 生产制造工程师分身, Help: 生产制造工程师分身 · twin_manufacturing · 代表生产制造工程师的数位分身:负责工艺流程/试产计划/良率分析等文档侧闭环,产线调机与现场改善由真人执行,AI 替代不了真实产线。, Value: 0
+									155 checkbox Description: 材料工程师分身, Value: 0, Help: 材料工程师分身 · twin_materials_engineer · 代表真人「材料工程师」的数位分身:负责 材料对比、供应商资料、失效记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									156 checkbox Description: 机械工程师分身, Value: 0, Help: 机械工程师分身 · twin_mechanical_engineer · 代表真人「机械工程师」的数位分身:负责 结构需求、装配问题、供应商修改点 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									157 checkbox Description: 机电一体化专家分身, Value: 0, Help: 机电一体化专家分身 · twin_mechatronics_expert · 代表真人「机电一体化专家」的数位分身:负责 联调问题、接口关系、运动机构风险 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									158 checkbox Description: NPI 量产导入分身, Help: NPI 量产导入分身 · twin_npi · 代表 NPI 工程师的数位分身:试产计划/齐套/良率/变更追踪等文档侧闭环,试产放行与现场处置交给真人,AI 替代不了真实产线试产。, Value: 0
+									159 checkbox Description: 护理协作分身, Help: 护理协作分身 · twin_nurse · 代表护理协作岗的数位分身:护理计划/观察记录等文档侧闭环,打针发药等实际护理操作必须真人护士,AI 不能替代护理操作与责任。, Value: 0
+									160 checkbox Description: 运营管理分身, Help: 运营管理分身 · twin_operations · 代表运营管理岗的数位分身:经营日报/指标看板/流程清单等文档侧闭环,现场管理与客户处置交给真人,AI 替代不了真实运营现场。, Value: 0
+									161 checkbox Description: 光学工程师分身, Help: 光学工程师分身 · twin_optical · 代表光学工程师的数位分身:镜头/传感器参数/光学测试资料等文档侧闭环,装调与测试交给真人,AI 替代不了真实光学验证。, Value: 0
+									162 checkbox Description: 光机工程师分身, Value: 0, Help: 光机工程师分身 · twin_opto_mechanical_engineer · 代表真人「光机工程师」的数位分身:负责 光机结构、公差、装调 checklist 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									163 checkbox Description: 光机系统专家分身, Value: 0, Help: 光机系统专家分身 · twin_opto_mechanical_system_expert · 代表真人「光机系统专家」的数位分身:负责 光路与结构约束、装调 checklist、风险清单 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									164 checkbox Description: 光电工程师分身, Value: 0, Help: 光电工程师分身 · twin_optoelectronic_engineer · 代表真人「光电工程师」的数位分身:负责 光电器件、信号链、测试报告 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									165 checkbox Description: PCB 工程师分身, Value: 0, Help: PCB 工程师分身 · twin_pcb_engineer · 代表真人「PCB 工程师」的数位分身:负责 DFM/DRC checklist、布局规则 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									166 checkbox Description: PCB Layout 工程师分身, Value: 0, Help: PCB Layout 工程师分身 · twin_pcb_layout_engineer · 代表真人「PCB Layout 工程师」的数位分身:负责 走线规则、阻抗规则、生产文件检查 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									167 checkbox Description: PMO 经理分身, Value: 0, Help: PMO 经理分身 · twin_pmo_manager · 代表真人「PMO 经理」的数位分身:负责 多项目组合、资源冲突、延期统计 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									168 checkbox Description: 电源工程师分身, Value: 0, Help: 电源工程师分身 · twin_power_engineer · 代表真人「电源工程师」的数位分身:负责 电源树、功耗、充电方案、电源风险 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									169 checkbox Description: 电源完整性工程师 / PI分身, Value: 0, Help: 电源完整性工程师 / PI分身 · twin_power_integrity_engineer · 代表真人「电源完整性工程师 / PI」的数位分身:负责 供电网络、噪声、仿真记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									170 checkbox Description: 电源-热专家分身, Value: 0, Help: 电源-热专家分身 · twin_power_thermal_expert · 代表真人「电源-热专家」的数位分身:负责 电源树、功耗预算、温升与安全风险 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									171 checkbox Description: 售前解决方案专家分身, Value: 0, Help: 售前解决方案专家分身 · twin_presales_solution_expert · 代表真人「售前解决方案专家」的数位分身:负责 客户方案、演示材料、需求到交付闭环 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									172 checkbox Description: 工艺工程师分身, Help: 工艺工程师分身 · twin_process · 代表工艺工程师的数位分身:工序参数/SOP/改善建议等文档侧闭环,现场调机与首件确认交给真人,AI 替代不了真实产线工艺。, Value: 0
+									173 checkbox Description: 采购经理 / Buyer分身, Value: 0, Help: 采购经理 / Buyer分身 · twin_procurement_manager_buyer · 代表真人「采购经理 / Buyer」的数位分身:负责 RFQ、比价、催交、采购单草稿 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									174 checkbox Description: 产品经理分身, Help: 产品经理分身 · twin_product · 代表产品经理的数位分身:PRD/需求池/用户反馈等文档侧闭环,需求取舍与版本决策必须真人,AI 不能替代产品判断。, Value: 0
+									175 checkbox Description: 产品合规认证专家分身, Value: 0, Help: 产品合规认证专家分身 · twin_product_compliance_certification_expert · 代表真人「产品合规认证专家」的数位分身:负责 CE/FCC/ROHS/电池等认证资料与风险 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									176 checkbox Description: 产品设计工程师分身, Value: 0, Help: 产品设计工程师分身 · twin_product_design_engineer · 代表真人「产品设计工程师」的数位分身:负责 产品架构、结构方案、量产问题追踪 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									177 checkbox Description: 产品完整性工程师分身, Value: 0, Help: 产品完整性工程师分身 · twin_product_integrity_engineer · 代表真人「产品完整性工程师」的数位分身:负责 可靠性、质量、制造放行材料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									178 checkbox Description: 项目经理分身, Help: 项目经理分身 · twin_project · 代表项目经理的数位分身:负责 WBS/排期/周报/风险台账等文档侧闭环,跨部门推动真人与关键决策由真人承担,AI 替代不了真实组织协同。, Value: 0
+									179 checkbox Description: 样机工程师 / Prototype Engineer分身, Value: 0, Help: 样机工程师 / Prototype Engineer分身 · twin_prototype_engineer · 代表真人「样机工程师 / Prototype Engineer」的数位分身:负责 样机制作、改版记录、问题追踪 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									180 checkbox Description: 心理咨询师分身, Help: 心理咨询师分身 · twin_psychology · 代表心理咨询协作岗的数位分身:咨询记录整理/自助资料/预约等文档侧闭环,真实咨询关系与伦理责任必须真人咨询师,AI 不能替代。, Value: 0
+									181 checkbox Description: 质量工程师分身, Help: 质量工程师分身 · twin_quality · 代表质量工程师的数位分身:负责检验计划/缺陷归类/质量报告/8D 草稿等文档侧闭环,现场验货/FAI/签样由真人执行,AI 替代不了真实检验。, Value: 0
+									182 checkbox Description: 可靠性工程师分身, Help: 可靠性工程师分身 · twin_reliability · 代表可靠性工程师的数位分身:老化/跌落/温湿度测试计划等文档侧闭环,真实环境实测交给真人,AI 替代不了真实老化验证。, Value: 0
+									183 checkbox Description: 射频工程师分身, Help: 射频工程师分身 · twin_rf · 代表射频工程师的数位分身:RF 测试/天线资料/认证问题等文档侧闭环,暗室实测与认证送测交给真人,AI 替代不了真实射频验证。, Value: 0
+									184 checkbox Description: 射频-结构专家分身, Value: 0, Help: 射频-结构专家分身 · twin_rf_structure_expert · 代表真人「射频-结构专家」的数位分身:负责 天线位置、外壳材料、认证风险 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									185 checkbox Description: 机器人系统专家分身, Value: 0, Help: 机器人系统专家分身 · twin_robotics_system_expert · 代表真人「机器人系统专家」的数位分身:负责 运动控制、传感融合、现场调试记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									186 checkbox Description: 销售与商务分身, Help: 销售与商务分身 · twin_sales · 代表销售/BD 经理的数位分身:负责客户资料/方案草稿/跟进节奏等文档侧闭环,谈判签约与客户关系由真人承担,AI 替代不了真实商务关系。, Value: 0
+									187 checkbox Description: 传感器工程师分身, Value: 0, Help: 传感器工程师分身 · twin_sensor_engineer · 代表真人「传感器工程师」的数位分身:负责 传感器选型、标定文档、精度对比 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									188 checkbox Description: 信号完整性工程师 / SI分身, Value: 0, Help: 信号完整性工程师 / SI分身 · twin_signal_integrity_engineer · 代表真人「信号完整性工程师 / SI」的数位分身:负责 高速信号、阻抗、仿真资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									189 checkbox Description: 智能硬件产品架构专家分身, Value: 0, Help: 智能硬件产品架构专家分身 · twin_smart_hardware_product_architect · 代表真人「智能硬件产品架构专家」的数位分身:负责 产品定义、功能取舍、成本/交期影响 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									190 checkbox Description: 智能制造自动化专家分身, Value: 0, Help: 智能制造自动化专家分身 · twin_smart_manufacturing_automation_expert · 代表真人「智能制造自动化专家」的数位分身:负责 产线自动化、设备数据、良率分析 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									191 checkbox Description: 结构工程师分身, Value: 0, Help: 结构工程师分身 · twin_structural_engineer · 代表结构工程师的数位分身:负责结构方案/3D 图纸审核/DFM/发包规格的设计侧闭环,开模手板装配验证交给真人模具厂,AI 替代不了真实打样验证。
+									192 checkbox Description: 供应商质量专家分身, Value: 0, Help: 供应商质量专家分身 · twin_supplier_quality_expert · 代表真人「供应商质量专家」的数位分身:负责 供应商 8D、来料异常、审核资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									193 checkbox Description: 供应链与采购分身, Help: 供应链与采购分身 · twin_supply_chain · 代表供应链/采购经理的数位分身:负责 RFQ/比价/风险台账/催交单等文档侧闭环,议价成交与供应商关系必须真人,AI 替代不了真实商务。, Value: 0
+									194 checkbox Description: 供应链工程专家分身, Value: 0, Help: 供应链工程专家分身 · twin_supply_chain_engineering_expert · 代表真人「供应链工程专家」的数位分身:负责 缺料风险、替代料、成本与工程影响 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									195 checkbox Description: 税务分身, Help: 税务分身 · twin_tax · 代表税务岗的数位分身:申报资料/政策梳理/风险提示等文档侧闭环,申报与筹划决策必须真人,AI 不能替代税务责任。, Value: 0
+									196 checkbox Description: 技术项目经理 / TPM分身, Value: 0, Help: 技术项目经理 / TPM分身 · twin_technical_program_manager · 代表真人「技术项目经理 / TPM」的数位分身:负责 跨研发、供应链、制造里程碑推进 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									197 checkbox Description: 测试工程师分身, Value: 0, Help: 测试工程师分身 · twin_test_engineer · 代表真人「测试工程师」的数位分身:负责 测试用例、测试数据、问题复现 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									198 checkbox Description: 热设计工程师分身, Value: 0, Help: 热设计工程师分身 · twin_thermal_design_engineer · 代表真人「热设计工程师」的数位分身:负责 温升数据、散热方案、热仿真资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									199 checkbox Description: 热仿真工程师分身, Value: 0, Help: 热仿真工程师分身 · twin_thermal_simulation_engineer · 代表真人「热仿真工程师」的数位分身:负责 CFD/热仿真流程、结果对比 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									200 checkbox Description: 热-结构联合专家分身, Value: 0, Help: 热-结构联合专家分身 · twin_thermal_structure_expert · 代表真人「热-结构联合专家」的数位分身:负责 散热路径、结构约束、温升数据关联 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									201 checkbox Description: 热测试工程师分身, Value: 0, Help: 热测试工程师分身 · twin_thermal_test_engineer · 代表真人「热测试工程师」的数位分身:负责 热测试计划、数据整理、报告 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									202 checkbox Description: 模具工程师分身, Value: 0, Help: 模具工程师分身 · twin_tooling_engineer · 代表真人「模具工程师」的数位分身:负责 开模问题、模具修改、试模记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									203 checkbox Description: 触控工程师分身, Value: 0, Help: 触控工程师分身 · twin_touch_engineer · 代表真人「触控工程师」的数位分身:负责 触控模组、灵敏度、测试问题 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									204 checkbox Description: 用户研究员分身, Value: 0, Help: 用户研究员分身 · twin_user_researcher · 代表真人「用户研究员」的数位分身:负责 访谈提纲、反馈聚类、洞察摘要 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									205 checkbox Description: 振动工程师分身, Value: 0, Help: 振动工程师分身 · twin_vibration_engineer · 代表真人「振动工程师」的数位分身:负责 振动测试、结构噪声、异常记录 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									206 checkbox Description: 视觉工程师分身, Value: 0, Help: 视觉工程师分身 · twin_vision_engineer · 代表真人「视觉工程师」的数位分身:负责 图像质量、视觉算法评估资料 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									207 checkbox Description: Wi-Fi 工程师分身, Value: 0, Help: Wi-Fi 工程师分身 · twin_wifi_engineer · 代表真人「Wi-Fi 工程师」的数位分身:负责 网络测试、吞吐、掉线问题归类 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									208 checkbox Description: 无线通信工程师分身, Value: 0, Help: 无线通信工程师分身 · twin_wireless_communication_engineer · 代表真人「无线通信工程师」的数位分身:负责 蓝牙/Wi-Fi/蜂窝连接问题整理 的文档侧闭环,物理动作与真人责任决策回传真人,AI 替代不了真实执行与验证。
+									209 checkbox Description: 文衡价 · 估值分析师, Help: 文衡价 · 估值分析师 · valuation-analyst · 12年券商策略师出身：PE Bands/PEG/EPS 定价，宏观对冲+估值定价学院派，熊市仍能维持正收益。, Value: 0
+									210 checkbox Description: Luna, Value: 0, Help: Luna · vibe_selling · Luna · 现实职业是 AI 漫剧制片人与内容增长导演，负责剧本、分镜、角色一致性、生成制作和平台增长；在 ECHO 世界中是叙事渗透手 Dream Walker。两种身份共享故事构建、情绪节奏与传播能力。
+									211 checkbox Description: 小台, Help: 小台 · workspace_builder · 为不同人群定制专属数字工作台，覆盖学习备考、职场效率、自媒体创作、宝妈育儿、生活管理五大场景，PC/移动端双适配，一键部署即用, Value: 0
+							212 text 真人成员
+							213 text 创建后邀请
+							214 text 创建完成会直接进入工作群，再通过安全邀请链接选择成员或访客。
+							215 container
+								216 text 进入工作群后立即邀请
+								217 switch Description: 进入工作群后立即邀请, Value: 0
+							218 text 你的项目角色
+							219 text 项目负责人 · 群主
+							220 text 你拥有项目管理、AI 编排和真人邀请权限。
+							70 button 取消
+							71 button (disabled) 创建项目
+							72 button 关闭
+		38 container Notifications alt+T
+
+The focused UI element is 63 button (expanded) 成员与邀请设置, Secondary Actions: Collapse

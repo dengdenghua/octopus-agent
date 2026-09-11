@@ -1,0 +1,8 @@
+Browser tab: 4, Title: "未命名 - Echo", URL: "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+~								314 text 终端连接失败。点击重启以重新连接。
++		316 container
++			317 text 标签页列表
++			318 container 标签页列表, ID: radix-_r_14q_
++				319 text 标签页列表
+The focused UI element is 306 pop up button (collapsed) Description: 标签页列表, ID: radix-_r_14o_, Secondary Actions: Expand

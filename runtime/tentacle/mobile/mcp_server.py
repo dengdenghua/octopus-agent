@@ -97,7 +97,7 @@ class TentacleMcpServer:
 
     def list_tools(self) -> list[dict[str, Any]]:
         """返回所有 MCP tool 定义（30 个手机工具 + 管理类工具）."""
-        if self._skill_tools is None:
+        if self._skill_tools is None or self.skills_root is None:
             self._skill_tools = load_all_skill_tools(self.skills_root)
         if self._management_tools is None:
             self._management_tools = _build_management_tools()
@@ -536,14 +536,17 @@ class TentacleMcpServer:
         replacement, because names like ``android.browser.install_extension``
         intentionally contain both dots and underscores.
         """
-        if mcp_name in ANDROID_CAPABILITIES:
+        from runtime.tentacle.mobile.capabilities import android_capabilities
+        from runtime.tentacle.ios.capabilities import ios_capabilities
+        active_capabilities = {*android_capabilities(), *ios_capabilities()}
+        if mcp_name in active_capabilities:
             return mcp_name
 
         for tool in self.list_tools():
             if tool.get("name") != mcp_name:
                 continue
             skill_name = (tool.get("_meta") or {}).get("skill_name")
-            if isinstance(skill_name, str) and skill_name in ANDROID_CAPABILITIES:
+            if isinstance(skill_name, str) and skill_name in active_capabilities:
                 return skill_name
             return None
 

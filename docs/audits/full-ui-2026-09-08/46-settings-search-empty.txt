@@ -1,0 +1,24 @@
+Browser tab: 4, Title: "新对话 - Echo", URL: "http://localhost:3310/#/workspace/realtime/new".
+0 AXWebArea 新对话 - Echo, URL: localhost:3310/#/workspace/realtime/new
+	1 container
+		2 container root
+			60 container 对话工作区
+			59 container Notifications alt+T
+		61 container 设置, ID: radix-_r_e6_
+			62 heading 设置, Value: 2, ID: radix-_r_e7_
+				63 text 设置
+			64 text 管理你的 Echo 账户和偏好设置
+			65 text 123
+			66 text 当前登录账号
+			67 button 退出登录
+			68 container
+				69 text field (settable) Description: 搜索设置, Value: 不存在的设置
+				148 button 清空搜索
+				70 text 设置项 0 项
+				149 text 没有找到匹配设置
+			150 container
+				151 text 没有找到匹配设置 换个关键词试试，例如模型、权限、主题或 MCP。
+			146 splitter Description: 拖动调整大小, Value: 50
+			147 button 关闭
+
+The focused UI element is 69 text field (settable) Description: 搜索设置, Value: 不存在的设置

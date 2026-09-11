@@ -1,5 +1,5 @@
 import { screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/harness";
 
@@ -13,6 +13,38 @@ afterEach(() => {
 });
 
 describe("WorkspaceSurfaceSwitch", () => {
+  it("slides from the previous position when the other route remounts the header", () => {
+    const original = HTMLElement.prototype.animate;
+    const animate = vi.fn(() => ({ cancel: vi.fn() }));
+    HTMLElement.prototype.animate = animate as unknown as typeof original;
+    try {
+      const first = renderWithProviders(
+        <WorkspaceSurfaceSwitch active="agent" />,
+        {
+          initialRoute: "/workspace/realtime/new",
+        },
+      );
+      first.unmount();
+      animate.mockClear();
+      const second = renderWithProviders(
+        <WorkspaceSurfaceSwitch active="browser" />,
+        {
+          initialRoute: "/browser",
+        },
+      );
+      expect(animate).toHaveBeenCalledWith(
+        [
+          { transform: "translateX(0)", width: "44px" },
+          { transform: "translateX(48px)", width: "44px" },
+        ],
+        expect.objectContaining({ duration: 180 }),
+      );
+      second.unmount();
+    } finally {
+      if (original) HTMLElement.prototype.animate = original;
+      else Reflect.deleteProperty(HTMLElement.prototype, "animate");
+    }
+  });
   it("links directly to the desktop browser mode", () => {
     renderWithProviders(<WorkspaceSurfaceSwitch active="agent" />, {
       initialRoute: "/workspace/realtime/thread-7?mode=team",

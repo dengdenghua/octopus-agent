@@ -1,0 +1,255 @@
+{
+  "sample": "profile",
+  "import_seconds": 1.2339898999925936,
+  "assembly_seconds": 1.1075659000052838,
+  "total_seconds": 2.3415557999978773,
+  "rss_mib": 110.109375,
+  "scratch_directory": "D:\\echo agent\\.codex-run\\stack-profile-rqcymdx3",
+  "module_count": 1179,
+  "skill_count": 329,
+  "member_engine": "opencode",
+  "native_planner_created": true,
+  "scope": "complete library stack assembly, not web app lifespan or desktop launch",
+  "profile_top_cumulative": [
+    {
+      "file": "<frozen importlib._bootstrap>",
+      "line": 1349,
+      "function": "_find_and_load",
+      "calls": 1111,
+      "own_seconds": 0.009055,
+      "cumulative_seconds": 2.0396271
+    },
+    {
+      "file": "<frozen importlib._bootstrap>",
+      "line": 1304,
+      "function": "_find_and_load_unlocked",
+      "calls": 1096,
+      "own_seconds": 0.005081400000000001,
+      "cumulative_seconds": 2.0380625
+    },
+    {
+      "file": "<frozen importlib._bootstrap>",
+      "line": 911,
+      "function": "_load_unlocked",
+      "calls": 1058,
+      "own_seconds": 0.0036151000000000004,
+      "cumulative_seconds": 2.0322749
+    },
+    {
+      "file": "<frozen importlib._bootstrap_external>",
+      "line": 993,
+      "function": "exec_module",
+      "calls": 1018,
+      "own_seconds": 0.0029495000000000003,
+      "cumulative_seconds": 2.0311055000000002
+    },
+    {
+      "file": "<frozen importlib._bootstrap>",
+      "line": 480,
+      "function": "_call_with_frames_removed",
+      "calls": 2338,
+      "own_seconds": 0.0013917,
+      "cumulative_seconds": 2.016695
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method builtins.exec>",
+      "calls": 2747,
+      "own_seconds": 0.13270510000000002,
+      "cumulative_seconds": 2.0119925000000003
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method builtins.__import__>",
+      "calls": 183,
+      "own_seconds": 0.0005699,
+      "cumulative_seconds": 1.518753
+    },
+    {
+      "file": "<frozen importlib._bootstrap>",
+      "line": 1390,
+      "function": "_handle_fromlist",
+      "calls": 856,
+      "own_seconds": 0.0011208000000000001,
+      "cumulative_seconds": 1.2081114000000002
+    },
+    {
+      "file": "D:\\echo agent\\runtime\\platform\\config\\builder.py",
+      "line": 122,
+      "function": "build_from_config",
+      "calls": 1,
+      "own_seconds": 0.0001705,
+      "cumulative_seconds": 1.1074382
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method builtins.hasattr>",
+      "calls": 26013,
+      "own_seconds": 0.007797,
+      "cumulative_seconds": 1.0033514000000001
+    },
+    {
+      "file": "C:\\Users\\Administrator\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\Lib\\importlib\\__init__.py",
+      "line": 73,
+      "function": "import_module",
+      "calls": 25,
+      "own_seconds": 9.230000000000001e-05,
+      "cumulative_seconds": 1.0003300000000002
+    },
+    {
+      "file": "<frozen importlib._bootstrap>",
+      "line": 1375,
+      "function": "_gcd_import",
+      "calls": 25,
+      "own_seconds": 6.93e-05,
+      "cumulative_seconds": 1.0002761
+    },
+    {
+      "file": "D:\\echo agent\\runtime\\platform\\config\\builder.py",
+      "line": 1,
+      "function": "<module>",
+      "calls": 1,
+      "own_seconds": 4.3700000000000005e-05,
+      "cumulative_seconds": 0.9428903000000001
+    },
+    {
+      "file": "D:\\echo agent\\runtime\\core\\cerebrum\\__init__.py",
+      "line": 18,
+      "function": "__getattr__",
+      "calls": 2,
+      "own_seconds": 1.3000000000000001e-05,
+      "cumulative_seconds": 0.8856065000000001
+    },
+    {
+      "file": "D:\\echo agent\\runtime\\core\\cerebrum\\llm_planner.py",
+      "line": 1,
+      "function": "<module>",
+      "calls": 1,
+      "own_seconds": 6.0400000000000004e-05,
+      "cumulative_seconds": 0.8839052000000001
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method builtins.__build_class__>",
+      "calls": 2835,
+      "own_seconds": 0.032472400000000005,
+      "cumulative_seconds": 0.6890706000000001
+    },
+    {
+      "file": "D:\\echo agent\\runtime\\memory\\__init__.py",
+      "line": 1,
+      "function": "<module>",
+      "calls": 1,
+      "own_seconds": 3.93e-05,
+      "cumulative_seconds": 0.666517
+    },
+    {
+      "file": "D:\\echo agent\\runtime\\execution\\all_skills\\__init__.py",
+      "line": 1,
+      "function": "<module>",
+      "calls": 1,
+      "own_seconds": 0.0005524,
+      "cumulative_seconds": 0.5440507
+    },
+    {
+      "file": "<frozen importlib._bootstrap_external>",
+      "line": 1066,
+      "function": "get_code",
+      "calls": 1018,
+      "own_seconds": 0.0104171,
+      "cumulative_seconds": 0.5330830000000001
+    },
+    {
+      "file": "D:\\echo agent\\.venv\\Lib\\site-packages\\pydantic\\_internal\\_model_construction.py",
+      "line": 84,
+      "function": "__new__",
+      "calls": 207,
+      "own_seconds": 0.0052608,
+      "cumulative_seconds": 0.4995658
+    },
+    {
+      "file": "D:\\echo agent\\runtime\\execution\\all_skills\\__init__.py",
+      "line": 539,
+      "function": "register_all",
+      "calls": 1,
+      "own_seconds": 3.65e-05,
+      "cumulative_seconds": 0.4463724
+    },
+    {
+      "file": "D:\\echo agent\\runtime\\execution\\all_skills\\__init__.py",
+      "line": 510,
+      "function": "_register_groups",
+      "calls": 2,
+      "own_seconds": 0.00022260000000000002,
+      "cumulative_seconds": 0.3956521
+    },
+    {
+      "file": "D:\\echo agent\\.venv\\Lib\\site-packages\\pydantic\\_internal\\_model_construction.py",
+      "line": 600,
+      "function": "complete_model_class",
+      "calls": 209,
+      "own_seconds": 0.0073068000000000004,
+      "cumulative_seconds": 0.3730042
+    },
+    {
+      "file": "<frozen importlib._bootstrap_external>",
+      "line": 1187,
+      "function": "get_data",
+      "calls": 1018,
+      "own_seconds": 0.0038473,
+      "cumulative_seconds": 0.36822350000000004
+    },
+    {
+      "file": "D:\\echo agent\\runtime\\memory\\diagnostics\\trace_store.py",
+      "line": 1,
+      "function": "<module>",
+      "calls": 1,
+      "own_seconds": 3.77e-05,
+      "cumulative_seconds": 0.3352836
+    },
+    {
+      "file": "D:\\echo agent\\runtime\\memory\\diagnostics\\_trace_store_storage.py",
+      "line": 1,
+      "function": "<module>",
+      "calls": 1,
+      "own_seconds": 4.1400000000000003e-05,
+      "cumulative_seconds": 0.3300313
+    },
+    {
+      "file": "D:\\echo agent\\runtime\\execution\\suckers\\registry.py",
+      "line": 158,
+      "function": "register",
+      "calls": 330,
+      "own_seconds": 0.0004777,
+      "cumulative_seconds": 0.3272143
+    },
+    {
+      "file": "D:\\echo agent\\runtime\\execution\\suckers\\testing.py",
+      "line": 119,
+      "function": "verify",
+      "calls": 107,
+      "own_seconds": 8.520000000000001e-05,
+      "cumulative_seconds": 0.32655660000000003
+    },
+    {
+      "file": "D:\\echo agent\\runtime\\execution\\suckers\\testing.py",
+      "line": 91,
+      "function": "run",
+      "calls": 107,
+      "own_seconds": 0.0005054,
+      "cumulative_seconds": 0.3264551
+    },
+    {
+      "file": "D:\\echo agent\\runtime\\execution\\suckers\\testing.py",
+      "line": 125,
+      "function": "_run_case",
+      "calls": 123,
+      "own_seconds": 0.0032340000000000003,
+      "cumulative_seconds": 0.32540230000000003
+    }
+  ]
+}

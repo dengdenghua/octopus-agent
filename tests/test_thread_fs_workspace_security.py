@@ -774,8 +774,9 @@ def test_authenticated_loopback_realtime_recovers_context_only_workspace(
     assert intent.user_context["workspace_scope"] == "project"
 
 
+@pytest.mark.parametrize("local_project", [False, True])
 def test_authenticated_realtime_new_thread_ignores_all_client_path_authority(
-    tmp_path: Path,
+    tmp_path: Path, local_project: bool,
 ) -> None:
     from runtime.platform.runtime_policy.workspaces import WorkspaceManager
     from runtime.protocol import TurnParams
@@ -815,10 +816,11 @@ def test_authenticated_realtime_new_thread_ignores_all_client_path_authority(
     params = TurnParams.model_validate(raw)
 
     intent = _build_intent(
-        "write the artifact",
+        "/project run write the artifact" if local_project else "write the artifact",
         params,
         workspaces=manager,
         thread_store=store,
+        allow_local_workspace_access=local_project,
     )
 
     expected = managed_workspace_path(

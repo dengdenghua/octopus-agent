@@ -116,7 +116,7 @@ export function buildThreadRunStatusByHref({
 }: {
   activeTeamTasks: TeamTask[];
   backgroundTasks?: TasksListResponse;
-  liveThreadRunStatusByHref?: Map<string, ThreadRunStatus>;
+  liveThreadRunStatusByHref?: Map<string, ThreadRunStatus | "done">;
   threadHrefById: Map<string, string>;
 }): Map<string, ThreadRunStatus> {
   const byHref = new Map<string, ThreadRunStatus>();
@@ -143,7 +143,9 @@ export function buildThreadRunStatusByHref({
     // Live state is scoped to the current objective and is newer than the
     // heterogeneous historical task projections above.  A stale failed team
     // task must not keep a newly running/resumed thread red forever.
-    byHref.set(href, status);
+    if (status === "done") {
+      if (byHref.get(href) === "error") byHref.delete(href);
+    } else byHref.set(href, status);
   }
 
   return byHref;

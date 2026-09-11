@@ -751,8 +751,8 @@ python -m playwright install chromium
 |---|---|
 | `python -m runtime status` | 查看本机能力 |
 | `python -m runtime bugfix-demo` | 跑确定性 bugfix demo（不依赖外部 LLM） |
-| `python -m runtime serve --port 8000` | 启动 FastAPI Web UI 服务 |
-| `python -m runtime ui --port 8000` | 启动 UI（同 serve 的简写） |
+| `python -m runtime serve --port 8310` | 启动 FastAPI Web UI 服务 |
+| `python -m runtime ui --port 8310` | 启动 UI（同 serve 的简写） |
 | `python -m runtime quickstart --non-interactive --serve` | 引导配置并启动服务 |
 | `python -m runtime run "目标"` | 无头模式跑一个目标 |
 | `python -m runtime loop "目标"` | 循环模式 |
@@ -768,8 +768,8 @@ CLI 子命令分布在：`cli_core.py`（status/build_stack）、`cli_serve.py`�
 ### 7.3 Web UI 端点
 
 ```bash
-python -m runtime serve --port 8000
-# 打开 http://127.0.0.1:8000
+python -m runtime serve --port 8310
+# 打开 http://127.0.0.1:8310
 ```
 
 | 路径 | 作用 |
@@ -805,7 +805,7 @@ cp .env.example .env
 cp config.example.yaml config.yaml
 docker compose up -d
 docker compose logs -f octopus-agent
-# → http://localhost:8000/
+# → http://localhost:8310/
 
 # 完整栈（含 Redis + Jaeger + Grafana）
 docker compose -f docker-compose.full.yml up -d

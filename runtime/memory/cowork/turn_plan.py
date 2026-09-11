@@ -91,10 +91,27 @@ def plan_turn(
         state = replace(state, mode=mode_override)
     text = text or ""
     addressed = list(parse_input_mentions(text).agents)
+    explicit_addressed = set(addressed)
     broadcast_addressed = _chat_broadcast_addressed(state, text)
     if broadcast_addressed is not None:
         addressed = broadcast_addressed
-    resp = responders(state, addressed)
+    eligible_state = replace(
+        state,
+        roster=[
+            member
+            for member in state.roster
+            if not member.id.startswith("a2a_") or member.id in explicit_addressed
+        ],
+    )
+    resp = responders(state if state.mode == "chat" else eligible_state, addressed)
+    # Remote accounts are opt-in per message, including in automatic modes.
+    resp = [
+        member_id
+        for member_id in resp
+        if not member_id.startswith("a2a_") or member_id in explicit_addressed
+    ]
+    if any(member_id.startswith("a2a_") for member_id in explicit_addressed):
+        resp = [member_id for member_id in resp if member_id in set(addressed)]
     # A linked room/project home is a real group surface even when its roster
     # currently contains only one AI member.  Do not collapse that durable
     # room into the 1:1 convenience rule: ordinary chat stays human-only until

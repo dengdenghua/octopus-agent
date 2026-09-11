@@ -752,10 +752,22 @@ def test_failed_verification_metadata_classifies_missing_tool(
 
 def test_hunk_decide_rejected_reverts_file(gateway: Any, tmp_path: Path) -> None:
     """Client rejecting a hunk reverse-applies its diff to the file."""
-    client, _ = gateway
+    client, logs_root = gateway
     target = tmp_path / "sample.txt"
     target.write_text("x\nnew\ny\n", encoding="utf-8")
     diff = "--- a/sample.txt\n+++ b/sample.txt\n@@ -1,3 +1,3 @@\n x\n-old\n+new\n y\n"
+    from runtime.memory.threads._event_log_helpers import thread_log_path
+    from runtime.memory.threads.event_log import EventLog
+    from runtime.protocol.items import FileChange, FileChangeItem, Turn, TurnStatus
+
+    log = EventLog(thread_log_path(logs_root, "th"))
+    log.turn_started("th", Turn(id="tn", threadId="th"))
+    log.item_completed(
+        "th",
+        "tn",
+        FileChangeItem(id="it", changes=[FileChange(path=str(target), op="update", diff=diff)]),
+    )
+    log.turn_completed("th", "tn", TurnStatus.COMPLETED)
     with client.websocket_connect("/api/realtime") as ws:
         ws.send_text(
             encode_message(

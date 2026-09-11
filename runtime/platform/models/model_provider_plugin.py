@@ -18,6 +18,8 @@ from urllib.parse import urlsplit, urlunsplit
 def model_provider_responses_models(entry: dict[str, Any], models: list[str]) -> list[str]:
     """Resolve reviewed Responses families, including older saved Zen entries."""
 
+    if entry.get("wire_api") == "responses":
+        return list(models)
     explicit = set(entry.get("responses_models") or [])
     prefixes = tuple(
         value.strip()
@@ -158,7 +160,7 @@ class ModelProviderPluginManager:
         *,
         tokens: dict[str, str] | None,
     ) -> dict[str, Any]:
-        """Validate the submitted key and discover currently available free models."""
+        """Validate the submitted key and discover currently available models."""
 
         descriptor = self._descriptor(item)
         tokens = tokens or {}
@@ -170,7 +172,9 @@ class ModelProviderPluginManager:
                 from runtime.platform.connectors.credential_store import CredentialStore
 
                 store = CredentialStore()
-            api_key = str(store.get_secret(str(item.get("id") or ""), "api_key") or "")
+            if item.get("id") == "opencode-go":
+                api_key = str(store.get_secret("opencode-zen", "api_key") or "")
+            api_key = api_key or str(store.get_secret(str(item.get("id") or ""), "api_key") or "")
         if not api_key:
             raise ValueError(f"请先填写 {provider_name} API Key")
 
@@ -228,12 +232,25 @@ class ModelProviderPluginManager:
         )
         models = [model for model in configured if model in available and model not in excluded]
         models.extend(model for model in discovered if model not in models)
+        if descriptor.get("discover_all_models"):
+            models.sort(key=lambda model: model not in configured and not model.endswith("-free"))
         if not models:
             raise ValueError(f"当前账号没有检测到可用的 {provider_name} 模型")
+        channels = {}
+        for channel_id, channel in (descriptor.get("channels") or {}).items():
+            try:
+                channels[channel_id] = self.validate(
+                    {**item, "model_provider": channel}, tokens={"api_key": api_key}
+                )["models"]
+            except ValueError:
+                # A missing subscription or unavailable secondary catalog must
+                # not prevent use of the main channel. Never route across them.
+                channels[channel_id] = []
         return {
             "models": models,
             "available_count": len(available),
             "base_url": base_url,
+            **({"channels": channels} if channels else {}),
         }
 
     def configure(
@@ -242,6 +259,7 @@ class ModelProviderPluginManager:
         *,
         models: list[str] | None = None,
         base_url: str | None = None,
+        channels: dict[str, list[str]] | None = None,
     ) -> dict[str, Any]:
         """Persist a secret-free model entry and hot-register its routes."""
 
@@ -278,6 +296,10 @@ class ModelProviderPluginManager:
             "supports_vision": bool(descriptor.get("supports_vision", False)),
             "supports_tool_use": bool(descriptor.get("supports_tool_use", True)),
             "is_free": bool(descriptor.get("models_are_free", False)),
+            "model_free_status": {
+                model: (model in (descriptor.get("free_models") or []) or model.endswith("-free"))
+                for model in selected
+            } if entry_id == "opencode-zen" else {},
             "compat_profile": str(descriptor.get("compat_profile") or "openai_compat"),
             "responses_model_prefixes": list(descriptor.get("responses_model_prefixes") or []),
             "responses_models": model_provider_responses_models(descriptor, selected),
@@ -299,6 +321,13 @@ class ModelProviderPluginManager:
             status = self._rebuild_routes().get(entry_id, {"ok": False})
         if not status.get("ok"):
             raise RuntimeError(str(status.get("error") or "模型路由注册失败"))
+        for channel_id, channel in (descriptor.get("channels") or {}).items():
+            channel_models = (channels or {}).get(channel_id, [])
+            channel_item = {**item, "model_provider": channel}
+            if channel_models:
+                self.configure(channel_item, models=channel_models)
+            elif channels is not None:
+                self.remove(channel_item)
         return {
             "configured": True,
             "entry_id": entry_id,
@@ -311,12 +340,17 @@ class ModelProviderPluginManager:
         descriptor = self._descriptor(item)
         entry_id = self._entry_id(item, descriptor)
         with self._lock:
-            current = self._custom_models.get(entry_id)
-            if not isinstance(current, dict) or current.get("managed_by_plugin") != item.get("id"):
+            removed = False
+            for target_id in [entry_id, *(descriptor.get("channels") or {})]:
+                current = self._custom_models.get(target_id)
+                if not isinstance(current, dict) or current.get("managed_by_plugin") != item.get("id"):
+                    continue
+                self._custom_models.pop(target_id, None)
+                self._unregister_entry(current, fallback_id=target_id)
+                self._save(target_id)
+                removed = True
+            if not removed:
                 return {"removed": False, "entry_id": entry_id}
-            self._custom_models.pop(entry_id, None)
-            self._unregister_entry(current, fallback_id=entry_id)
-            self._save(entry_id)
             self._rebuild_routes()
         return {"removed": True, "entry_id": entry_id}
 

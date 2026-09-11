@@ -120,9 +120,9 @@ bootstrap-skills:  ## Refresh local registry skills from skills.lock.json → sk
 dev:  ## Run local development server with config.local.yaml and .env
 	@test -f config.local.yaml || { echo "ERROR: config.local.yaml 不存在 · 先建一份真 LLM 配置（可参考 config.example.yaml 然后改 model + mock_response=null）"; exit 1; }
 	@test -f .env || { echo "ERROR: .env 不存在 · 填 ANTHROPIC_API_KEY + ANTHROPIC_BASE_URL 等"; exit 1; }
-	$(PYTHON) -m runtime serve --config config.local.yaml --port 8000
+	$(PYTHON) -m runtime serve --config config.local.yaml --port 8310
 
-dev-stack-start:  ## Start persistent macOS frontend:3888 + backend:8888 services
+dev-stack-start:  ## Start persistent macOS frontend:3310 + backend:8310 services
 	$(PYTHON) tools/dev_stack.py start
 
 dev-stack-stop:  ## Stop persistent local development services
@@ -142,16 +142,16 @@ up:  ## Start the minimal single-container compose stack
 	@test -f .env || cp .env.example .env
 	@mkdir -p data
 	docker compose up -d
-	@echo "→ http://localhost:8000/  ·  logs: make logs"
+	@echo "→ http://localhost:8310/  ·  logs: make logs"
 
 up-full:  ## Start the full compose stack
 	@if [ ! -f config.yaml ]; then cp config.example.yaml config.yaml; test -f .env || cp .env.example .env; echo "ERROR: created config.yaml/.env; enable oct or local_auth with a strong secret, then rerun make up-full"; exit 1; fi
 	@test -f .env || cp .env.example .env
 	@mkdir -p data data/redis data/grafana
 	docker compose -f docker-compose.full.yml up -d
-	@echo "→ Agent    http://localhost:8000/"
+	@echo "→ Agent    http://localhost:8310/"
 	@echo "→ Jaeger   http://localhost:16686/"
-	@echo "→ Grafana  http://localhost:3000/   (admin / configured GRAFANA_PASSWORD)"
+	@echo "→ Grafana  http://localhost:3311/   (admin / configured GRAFANA_PASSWORD)"
 
 down:  ## Stop and remove containers while keeping ./data
 	-docker compose down

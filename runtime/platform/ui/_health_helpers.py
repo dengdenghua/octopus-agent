@@ -112,7 +112,7 @@ def _frontend_runtime_info(
 ) -> dict[str, Any]:
     observed_origin = _request_frontend_origin(request)
     frontend_env_port = _coerce_port(os.environ.get("FRONTEND_PORT"))
-    port = _coerce_port(frontend_port) or _origin_port(observed_origin) or frontend_env_port or 3000
+    port = _coerce_port(frontend_port) or _origin_port(observed_origin) or frontend_env_port or 3310
     configured_host = _clean_host(
         frontend_host or os.environ.get("VITE_CANONICAL_LOOPBACK_HOST") or "localhost"
     )
@@ -126,7 +126,7 @@ def _frontend_runtime_info(
     proxy_target = _normalize_base_url(
         frontend_proxy_target
         or os.environ.get("OCTOPUS_INTERNAL_GATEWAY_BASE_URL")
-        or f"http://127.0.0.1:{os.environ.get('GATEWAY_PORT') or '8000'}"
+        or f"http://127.0.0.1:{os.environ.get('GATEWAY_PORT') or '8310'}"
     )
     proxy_targets_backend = (
         _same_local_base_url(proxy_target, backend_canonical_base_url) if proxy_target else False

@@ -1,0 +1,4 @@
+Browser tab: 4, Title: "自进化 - Echo", URL: "http://localhost:3310/#/workspace/evolution?section=governance".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
++										116 text 尚未运行任何基准测试。请注册策略并 POST 到 /frameworks/benchmarks/run。
+The focused UI element is 110 checkbox 框架, Value: 1

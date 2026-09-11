@@ -4,15 +4,13 @@ import json
 import os
 import sys
 import time
+from asyncio import CancelledError
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
-from runtime.cli_core import _build_stack
-from runtime.core.cerebrum.react_loop import ReActResult, stream_react_loop
-from runtime.core.cerebrum.react_step_evaluator import build_runtime_step_evaluator
 from runtime.platform.models import ParsedIntent
 from runtime.platform.process.session import Session, session_scope
 from runtime.safety.approval.approval_gate import (
@@ -60,8 +58,6 @@ class CliApprovalProvider(ApprovalProvider):
     ) -> ApprovalDecision:
         if self.mode == "bypassPermissions":
             return self._auto_approve.request(req)
-        if self.mode == "acceptEdits" and _is_edit_tool(req.tool_name):
-            return self._auto_approve.request(req)
         if self.mode == "plan":
             return self._auto_deny.request(req)
         if not self.interactive:
@@ -97,32 +93,69 @@ def run_code_command(args: Any, *, color: bool = True) -> int:  # noqa: ARG001
     session_record = _load_requested_session(args)
     session_id = session_record.get("id") or uuid4().hex[:12]
     workspace = _resolve_workspace(args, session_record)
-    model = _resolve_model(args, session_record)
+    requested_engine = getattr(args, "engine", "auto")
+    engine = requested_engine
+    if engine == "auto":
+        engine = (
+            "octopus"
+            if getattr(args, "mock_response", None) is not None
+            else session_record.get("execution_engine")
+            or ("octopus" if session_record else "opencode")
+        )
+    if engine not in {"octopus", "opencode", "codex"}:
+        print("Unsupported saved execution engine.", file=sys.stderr)
+        return 2
+    if engine in {"opencode", "codex"}:
+        model = (
+            getattr(args, "model", None)
+            or (
+                session_record.get("model")
+                if session_record.get("execution_engine") == engine
+                else None
+            )
+            or "auto"
+        )
+    else:
+        model = _resolve_model(
+            args,
+            session_record
+            if session_record.get("execution_engine") not in {"opencode", "codex"}
+            else {},
+        )
     thread_id = str(session_record.get("thread_id") or f"cli-{session_id}")
     history = list(session_record.get("messages") or [])
     history.append({"role": "user", "content": prompt, "ts": _now()})
 
-    planner, executor, journal = _build_stack(
-        planner_type="llm",
-        planner_model=model,
-        mock_response=getattr(args, "mock_response", None),
-        allow_untrusted=True,
-    )
-    # Shell is opt-in everywhere else (``register_all`` excludes it): the
-    # headless coding CLI is the surface where compile/test/run commands
-    # are the point, and the approval provider still gates dangerous
-    # invocations. Without it the model cannot verify or run anything and
-    # SWE-bench-style tasks end with empty patches.
-    from runtime.execution.suckers.write_skills import register_exec_skill
+    if engine in {"opencode", "codex"}:
+        from runtime.cli_execution import build_cli_tool_stack
 
-    register_exec_skill(executor.registry)
-    stack = SimpleNamespace(planner=planner, executor=executor, journal=journal)
+        stack = build_cli_tool_stack()
+    else:
+        from runtime.cli_core import _build_stack
+
+        planner, executor, journal = _build_stack(
+            planner_type="llm",
+            planner_model=model,
+            mock_response=getattr(args, "mock_response", None),
+            allow_untrusted=True,
+        )
+        # Shell is opt-in everywhere else (``register_all`` excludes it): the
+        # headless coding CLI is the surface where compile/test/run commands
+        # are the point, and the approval provider still gates dangerous
+        # invocations. Without it the model cannot verify or run anything and
+        # SWE-bench-style tasks end with empty patches.
+        from runtime.execution.suckers.write_skills import register_exec_skill
+
+        register_exec_skill(executor.registry)
+        stack = SimpleNamespace(planner=planner, executor=executor, journal=journal)
     agent = _CliCodeAgent(model=model)
     metadata = {
         "mode": "plan" if permission_mode == "plan" else "code",
         "workspace_path": str(workspace),
         "model_name": model,
         "permission_mode": permission_mode,
+        "approval_policy": "never" if permission_mode == "bypassPermissions" else "on-request",
+        "approvals_reviewer": ("auto_review" if permission_mode == "acceptEdits" else "user"),
         "sandbox_mode": "sandbox" if getattr(args, "worktree", False) else "full",
         "extra_workspaces": [str(p) for p in _extra_workspaces(args)],
     }
@@ -142,39 +175,82 @@ def run_code_command(args: Any, *, color: bool = True) -> int:  # noqa: ARG001
         permission_mode,
         interactive=sys.stdin.isatty() and not getattr(args, "print", False),
     )
+    if permission_mode == "acceptEdits" and engine == "octopus":
+        from runtime.safety.approval.guardian_review import AutoReviewApprovalProvider
+
+        provider = AutoReviewApprovalProvider(
+            planner.router,
+            user_intent=prompt,
+            default_model=model,
+        )
     if permission_mode == "bypassPermissions":
         provider = AutoApproveProvider()
 
     events: list[dict[str, Any]] = []
-    result: ReActResult | None = None
+    result: Any = None
     text_buffer: list[str] = []
-    with session_scope(Session(agent=agent, thread_id=thread_id, metadata=metadata)):
-        gen = stream_react_loop(
-            stack,
-            intent,
-            agent=agent,
-            model=model,
-            thread_id=thread_id,
-            max_iterations=int(getattr(args, "max_iterations", 30) or 30),
-            max_tokens_budget=int(getattr(args, "max_tokens", 100_000) or 100_000),
-            max_usd_budget=float(getattr(args, "max_usd", 1.00) or 1.00),
-            approval_provider=provider,
-            step_evaluator=build_runtime_step_evaluator(),
-            planning_mode=permission_mode == "plan",
-        )
-        while True:
-            try:
-                event = next(gen)
-            except StopIteration as stop:
-                result = stop.value
-                break
-            if not isinstance(event, dict):
-                continue
-            events.append(event)
-            if output_format == "stream-json":
-                print(json.dumps(event, ensure_ascii=False), flush=True)
-            elif output_format == "text" and not getattr(args, "print", False):
-                _render_text_event(event, text_buffer)
+
+    def emit(event):
+        events.append(event)
+        if output_format == "stream-json":
+            print(json.dumps(event, ensure_ascii=False), flush=True)
+        elif output_format == "text" and not getattr(args, "print", False):
+            _render_text_event(event, text_buffer)
+
+    if engine in {"opencode", "codex"}:
+        if engine == "opencode":
+            from runtime.cli_opencode import run_cli_opencode as run_external
+        else:
+            from runtime.cli_codex import run_cli_codex as run_external
+
+        try:
+            result = run_external(
+                stack=stack,
+                agent=agent,
+                prompt=prompt,
+                model=model,
+                thread_id=thread_id,
+                metadata=metadata,
+                history=history[:-1],
+                provider=provider,
+                args=args,
+                emit=emit,
+            )
+            model = result.model
+        except (Exception, KeyboardInterrupt, CancelledError) as exc:
+            reason = (
+                "interrupted" if isinstance(exc, (KeyboardInterrupt, CancelledError)) else str(exc)
+            )
+            emit({"type": "error", "message": reason})
+            print(f"{engine}: {reason}", file=sys.stderr)
+            result = SimpleNamespace(final_answer="", success=False, terminated_reason=reason)
+    else:
+        from runtime.core.cerebrum.react_loop import stream_react_loop
+        from runtime.core.cerebrum.react_step_evaluator import build_runtime_step_evaluator
+
+        with session_scope(Session(agent=agent, thread_id=thread_id, metadata=metadata)):
+            gen = stream_react_loop(
+                stack,
+                intent,
+                agent=agent,
+                model=model,
+                thread_id=thread_id,
+                max_iterations=int(getattr(args, "max_iterations", 30) or 30),
+                max_tokens_budget=int(getattr(args, "max_tokens", 100_000) or 100_000),
+                max_usd_budget=float(getattr(args, "max_usd", 1.00) or 1.00),
+                approval_provider=provider,
+                step_evaluator=build_runtime_step_evaluator(),
+                planning_mode=permission_mode == "plan",
+            )
+            while True:
+                try:
+                    event = next(gen)
+                except StopIteration as stop:
+                    result = stop.value
+                    break
+                if not isinstance(event, dict):
+                    continue
+                emit(event)
 
     final_answer = result.final_answer if result is not None else "".join(text_buffer).strip()
     history.append({"role": "assistant", "content": final_answer, "ts": _now()})
@@ -186,6 +262,7 @@ def run_code_command(args: Any, *, color: bool = True) -> int:  # noqa: ARG001
             "updated_at": _now(),
             "workspace_path": str(workspace),
             "model": model,
+            "execution_engine": engine,
             "permission_mode": permission_mode,
             "messages": history,
             "last_result": {
@@ -198,6 +275,7 @@ def run_code_command(args: Any, *, color: bool = True) -> int:  # noqa: ARG001
     payload = {
         "session_id": session_id,
         "session_path": str(saved),
+        "execution_engine": engine,
         "model": model,
         "workspace_path": str(workspace),
         "permission_mode": permission_mode,
@@ -366,13 +444,6 @@ def _render_text_event(event: dict[str, Any], text_buffer: list[str]) -> None:
     elif typ == "tool_end":
         status = event.get("status") or "done"
         print(f"[tool:{status}] {event.get('tool_name') or 'tool'}", file=sys.stderr)
-
-
-def _is_edit_tool(tool_name: str) -> bool:
-    return tool_name.startswith(("write_", "append_", "edit_")) or tool_name in {
-        "propose_patch",
-        "multi_edit_file",
-    }
 
 
 def _now() -> str:

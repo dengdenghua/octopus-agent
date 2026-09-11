@@ -128,6 +128,10 @@ jobs:
         working-directory: frontend
         run: pnpm codex:prepare:win
 
+      - name: Prepare pinned OpenCode Windows runtime
+        working-directory: frontend
+        run: pnpm opencode:prepare:win
+
       - name: Verify pinned Codex before packaging
         shell: pwsh
         run: |
@@ -276,13 +280,15 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGNING_CERTIFICATE_PASSWORD }}
         run: pnpm electron:build:win
 
-      - name: Verify packaged backend and Codex are present and runnable
+      - name: Verify packaged backend and engines are present and runnable
         shell: pwsh
         run: |
           $backend = Join-Path $PWD "frontend/release/win-unpacked/resources/backend/octopus-backend.exe"
           $codexRoot = Join-Path $PWD "frontend/release/win-unpacked/resources/codex"
           $codex = Join-Path $codexRoot "bin/codex.exe"
           $codexManifestPath = Join-Path $codexRoot "octopus-codex-bundle.json"
+          $opencodeRoot = Join-Path $PWD "frontend/release/win-unpacked/resources/opencode"
+          $opencode = Join-Path $opencodeRoot "opencode.exe"
           if (-not (Test-Path -LiteralPath $backend -PathType Leaf)) {
             throw "Packaged backend is missing: $backend"
           }
@@ -291,6 +297,15 @@ jobs:
           }
           if (-not (Test-Path -LiteralPath $codexManifestPath -PathType Leaf)) {
             throw "Packaged Codex manifest is missing: $codexManifestPath"
+          }
+          if (-not (Test-Path -LiteralPath $opencode -PathType Leaf)) {
+            throw "Packaged OpenCode is missing: $opencode"
+          }
+          node -e 'const m=require(process.argv[1]);m.requirePackagedOpenCode(process.argv[2],"win32","x64");' `
+            (Join-Path $PWD "frontend/electron/opencode-runtime.cjs") `
+            (Join-Path $PWD "frontend/release/win-unpacked/resources")
+          if ($LASTEXITCODE -ne 0) {
+            throw "Packaged OpenCode bundle validation failed"
           }
           $codexManifest = Get-Content -LiteralPath $codexManifestPath -Raw | ConvertFrom-Json
           if ($codexManifest.licenses.native.schemaVersion -ne "codex-native-notices.v1" -or
@@ -331,6 +346,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw "Packaged Codex App Server failed its startup check"
           }
+          $opencodeVersion = (& $opencode --version | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $opencodeVersion -notmatch "1\.18\.29") {
+            throw "Packaged OpenCode version check failed: $opencodeVersion"
+          }
 
           $smokeRoot = Join-Path $env:RUNNER_TEMP "octopus-packaged-backend-smoke"
           $config = Join-Path $smokeRoot "config.yaml"
@@ -349,6 +368,7 @@ jobs:
           $env:OCTOPUS_DATA_DIR = Join-Path $smokeRoot "data"
           $env:OCTOPUS_RESOURCES_DIR = $mutableResources
           $env:OCTOPUS_CODEX_EXECUTABLE = $codex
+          $env:OCTOPUS_OPENCODE_BIN = $opencode
           $stdout = Join-Path $smokeRoot "backend.stdout.log"
           $stderr = Join-Path $smokeRoot "backend.stderr.log"
           $port = 18765
@@ -414,6 +434,8 @@ jobs:
             Join-Path $releaseRoot "win-unpacked/resources/codex/codex-resources/codex-windows-sandbox-setup.exe"
           $signedFiles["win-unpacked/resources/codex/codex-path/rg.exe"] = `
             Join-Path $releaseRoot "win-unpacked/resources/codex/codex-path/rg.exe"
+          $signedFiles["win-unpacked/resources/opencode/opencode.exe"] = `
+            Join-Path $releaseRoot "win-unpacked/resources/opencode/opencode.exe"
 
           $installerChecksumLine = $null
           $expectedSignerThumbprint = $null

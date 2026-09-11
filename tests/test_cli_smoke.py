@@ -107,7 +107,15 @@ class TestInvalidInvocation:
     @pytest.mark.integration
     def test_unknown_subcommand_treated_as_goal(self):
         """Product behavior: unknown args route to `code` as a goal."""
-        r = _run_cli(["this-does-not-exist"])
+        r = _run_cli(
+            [
+                "this-does-not-exist",
+                "--model",
+                "mock/react",
+                "--mock-response",
+                "CLI routing verified.",
+            ]
+        )
         # CLI interprets "this-does-not-exist" as a coding goal, so it
         # launches a session (returncode 0) and prints session/plan output.
         assert r.returncode == 0

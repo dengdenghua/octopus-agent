@@ -1,0 +1,14 @@
+Browser tab: 4, Title: "新对话 - Echo", URL: "http://localhost:3310/#/workspace/realtime/new".
+0 AXWebArea 新对话 - Echo, URL: localhost:3310/#/workspace/realtime/new
+	1 container
+		2 container root
+			60 container 对话工作区
+			59 container Notifications alt+T
+		61 menu 标签页列表, ID: radix-_r_ds_
+			62 自动化工作台
+			63 Diff
+			64 终端
+			65 预览
+			66 产物
+
+The focused UI element is 61 menu 标签页列表, ID: radix-_r_ds_

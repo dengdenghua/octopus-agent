@@ -13,7 +13,12 @@ import userEvent from "@testing-library/user-event";
 
 import { AllProviders } from "@/test/harness";
 
-import { ModelPicker, type PickerModel } from "./model-picker";
+import {
+  isFreePickerModel,
+  partitionModelReleases,
+  ModelPicker,
+  type PickerModel,
+} from "./model-picker";
 
 // Stub useOctLink — picker reads `link.oct_user_id` to auto-enable
 // unconfigured models.
@@ -47,6 +52,199 @@ const MODELS: PickerModel[] = [
 ];
 
 describe("<ModelPicker />", () => {
+  it("searches hidden older releases, keeps selection unchanged, and supports keyboard selection", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      withProviders(
+        <ModelPicker
+          models={[
+            { name: "glm-5.9", provider: "zhipu" },
+            { name: "glm-5.3", provider: "zhipu" },
+            { name: "other-model", provider: "other" },
+          ]}
+          value="glm-5.9"
+          onChange={onChange}
+        />,
+      ),
+    );
+    await user.click(screen.getByTestId("model-picker-trigger"));
+    const search = screen.getByRole("textbox", { name: "搜索模型或提供商" });
+    expect(search).toHaveFocus();
+    await user.type(search, "ZHIpU 5.3");
+    expect(
+      screen.getByRole("button", { name: "glm-5.3", exact: true }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "glm-5.9", exact: true }),
+    ).not.toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(onChange).toHaveBeenCalledWith("glm-5.3");
+  });
+
+  it("shows an empty result without changing the model and clears search on reopen", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      withProviders(
+        <ModelPicker models={MODELS} value="glm-5" onChange={onChange} />,
+      ),
+    );
+    await user.click(screen.getByTestId("model-picker-trigger"));
+    await user.type(screen.getByRole("textbox"), "no-such-model");
+    expect(screen.getByRole("status")).toHaveTextContent("没有匹配的模型");
+    await user.keyboard("{Enter}{Escape}");
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByTestId("model-picker-trigger")).toHaveFocus();
+    await user.click(screen.getByTestId("model-picker-trigger"));
+    expect(screen.getByRole("textbox")).toHaveValue("");
+  });
+
+  it("switches Zen and Go catalogs without changing the selected billing source until selection", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      withProviders(
+        <ModelPicker
+          engineSource="opencode"
+          value="zen-glm"
+          onChange={onChange}
+          models={[
+            {
+              name: "glm-5.3",
+              model: "glm-5.3",
+              entry_id: "opencode-zen",
+              selection_id: "zen-glm",
+            },
+            {
+              name: "glm-5.3",
+              model: "glm-5.3",
+              entry_id: "opencode-go",
+              selection_id: "go-glm",
+            },
+          ]}
+        />,
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: "选择模型" }));
+    await user.click(
+      screen.getByRole("button", { name: "OpenCode", exact: true }),
+    );
+    expect(
+      screen.getAllByRole("button", { name: "glm-5.3", exact: true }),
+    ).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "Go", exact: true }));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: /Auto/ }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "glm-5.3", exact: true }),
+    );
+    expect(onChange).toHaveBeenCalledWith("go-glm");
+  });
+
+  it("folds old GPT generations even when their tier has no direct replacement", () => {
+    const models = [
+      "gpt-5.1-codex-max",
+      "gpt-5.1-codex-mini",
+      "gpt-5.3-codex-spark",
+      "gpt-5.4-nano",
+      "gpt-5.5-pro",
+      "gpt-5.6-sol",
+      "gpt-5.6-luna",
+      "gpt-6-astra",
+    ].map((name) => ({ name }));
+    expect(partitionModelReleases(models).current.map((m) => m.name)).toEqual([
+      "gpt-5.6-sol",
+      "gpt-5.6-luna",
+      "gpt-6-astra",
+    ]);
+    expect(
+      partitionModelReleases(models, "gpt-5.1-codex-max").current.map(
+        (m) => m.name,
+      ),
+    ).toContain("gpt-5.1-codex-max");
+  });
+
+  it.each([
+    ["gemini-3.1-pro", "gemini-3.7-flash", "gemini-3.8-flash"],
+    ["claude-haiku-4-5", "claude-sonnet-5", "claude-fable-5-1"],
+    ["kimi-k2.5-code", "kimi-k2.7", "kimi-k3"],
+    ["deepseek-v2-chat", "deepseek-v3.2", "deepseek-v4-pro"],
+    ["qwen2.5-max", "qwen3.5-plus", "qwen3.6-plus"],
+    ["glm-4-flash", "glm-5.2", "glm-5.3"],
+    ["minimax-m1-preview", "minimax-m2.7", "minimax-m3"],
+  ])("folds old cross-tier releases for %s", (old, recent, newest) => {
+    const models = [old, recent, newest].map((name) => ({ name }));
+    expect(partitionModelReleases(models).older.map((m) => m.name)).toContain(
+      old,
+    );
+    expect(partitionModelReleases(models).current.map((m) => m.name)).toContain(
+      newest,
+    );
+  });
+
+  it("collapses older numeric releases while preserving providers and selection", () => {
+    const models = [
+      "glm-5.9",
+      "glm-5.10",
+      "claude-opus-4-8",
+      "claude-opus-5",
+      "claude-sonnet-4-6",
+      "unknown-model",
+    ].map((name) => ({ name }));
+    expect(partitionModelReleases(models).older.map((m) => m.name)).toEqual([
+      "glm-5.9",
+      "claude-opus-4-8",
+      "claude-sonnet-4-6",
+    ]);
+    expect(
+      partitionModelReleases(models, "glm-5.9").older.map((m) => m.name),
+    ).toEqual(["claude-opus-4-8", "claude-sonnet-4-6"]);
+    expect(
+      partitionModelReleases([
+        { name: "gpt-5", entry_id: "a", is_free: true },
+        { name: "gpt-6", entry_id: "a", is_free: false },
+        { name: "gpt-4", entry_id: "b", is_free: false },
+      ]).older,
+    ).toEqual([]);
+  });
+
+  it("reveals older releases on demand and lets users select them", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      withProviders(
+        <ModelPicker
+          models={[{ name: "glm-5" }, { name: "glm-5.3" }]}
+          value="glm-5.3"
+          onChange={onChange}
+        />,
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: "选择模型" }));
+    expect(
+      screen.queryByText("glm-5", { exact: true }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /旧版模型/ }));
+    await user.click(screen.getByText("glm-5", { exact: true }));
+    expect(onChange).toHaveBeenCalledWith("glm-5");
+  });
+
+  it.each([undefined, false, true])(
+    "uses declared price metadata for Zen (%s)",
+    (is_free) => {
+      expect(
+        isFreePickerModel({
+          name: "zen-model",
+          entry_id: "opencode-zen",
+          is_free,
+        }),
+      ).toBe(is_free === true);
+    },
+  );
   function setup(value = "kimi-k2.5") {
     const onChange = vi.fn();
     const utils = render(
@@ -64,7 +262,7 @@ describe("<ModelPicker />", () => {
     );
   });
 
-  it("renders OpenCode Zen free model names in green without a duplicate badge", async () => {
+  it("identifies an explicitly free model in both the trigger and menu", async () => {
     const user = userEvent.setup();
     render(
       withRouter(
@@ -76,6 +274,7 @@ describe("<ModelPicker />", () => {
               model: "big-pickle",
               entry_id: "opencode-zen",
               selection_id: "zen-big-pickle",
+              is_free: true,
             },
             {
               name: "mimo-v2.5-free",
@@ -83,6 +282,7 @@ describe("<ModelPicker />", () => {
               model: "mimo-v2.5-free",
               entry_id: "opencode-zen",
               selection_id: "zen-mimo-v2.5-free",
+              is_free: true,
             },
           ]}
           value="zen-big-pickle"
@@ -92,6 +292,9 @@ describe("<ModelPicker />", () => {
     );
 
     const trigger = screen.getByTestId("model-picker-trigger");
+    expect(trigger).toHaveTextContent("big-pickle");
+    expect(trigger).not.toHaveTextContent("免费");
+    expect(trigger).toHaveAttribute("title", "big-pickle · 免费");
     expect(within(trigger).getByText("big-pickle")).toHaveClass(
       "text-emerald-600",
     );
@@ -105,6 +308,124 @@ describe("<ModelPicker />", () => {
       "text-emerald-600",
     );
     expect(within(menu).queryByText("FREE")).not.toBeInTheDocument();
+  });
+
+  it("shows only supported OpenCode channels without a dead system tab", async () => {
+    const user = userEvent.setup();
+    const change = vi.fn();
+    render(
+      withRouter(
+        <ModelPicker
+          engineSource="opencode"
+          value="big-pickle"
+          onChange={change}
+          models={[
+            { name: "big-pickle", entry_id: "opencode-zen", is_free: true },
+            { name: "System GPT", entry_id: "openai" },
+          ]}
+        />,
+      ),
+    );
+    await user.click(screen.getByTestId("model-picker-trigger"));
+    const menu = await screen.findByTestId("model-picker-menu");
+    expect(
+      within(menu).queryByRole("button", { name: /Auto/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(menu).getByRole("button", {
+        name: "OpenCode",
+        exact: true,
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      within(menu).queryByRole("button", { name: "System GPT" }),
+    ).toBeNull();
+    expect(within(menu).queryByRole("button", { name: "系统模型" })).toBeNull();
+    expect(
+      within(menu).getByRole("button", { name: "big-pickle" }),
+    ).toBeEnabled();
+    expect(change).not.toHaveBeenCalled();
+  });
+
+  it("lets OpenCode select shared official and custom API routes", async () => {
+    const user = userEvent.setup();
+    const change = vi.fn();
+    render(
+      withRouter(
+        <ModelPicker
+          engineSource="opencode"
+          onChange={change}
+          models={[
+            {
+              name: "official/qwen",
+              entry_id: "official",
+              selection_id: "official/qwen",
+              display_name: "极速",
+            },
+            {
+              name: "qwen",
+              entry_id: "private-api",
+              selection_id: "private-route",
+              display_name: "私有 Qwen",
+            },
+          ]}
+        />,
+      ),
+    );
+    await user.click(screen.getByTestId("model-picker-trigger"));
+    await user.click(
+      screen.getByRole("button", { name: "官方模型", exact: true }),
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "私有 Qwen", exact: true })
+        .compareDocumentPosition(
+          screen.getByRole("button", { name: "极速", exact: true }),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "自定义 API", exact: true }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "极速", exact: true }));
+    expect(change).toHaveBeenLastCalledWith("official/qwen");
+    await user.click(screen.getByTestId("model-picker-trigger"));
+    await user.click(
+      screen.getByRole("button", { name: "官方模型", exact: true }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "私有 Qwen", exact: true }),
+    );
+    expect(change).toHaveBeenLastCalledWith("private-route");
+  });
+
+  it("shows paid OpenCode models after free models without free styling", async () => {
+    const user = userEvent.setup();
+    render(
+      withRouter(
+        <ModelPicker
+          engineSource="opencode"
+          value="big-pickle"
+          onChange={vi.fn()}
+          models={[
+            { name: "Paid model", entry_id: "opencode-zen", is_free: false },
+            { name: "big-pickle", entry_id: "opencode-zen", is_free: true },
+          ]}
+        />,
+      ),
+    );
+    await user.click(screen.getByTestId("model-picker-trigger"));
+    const menu = await screen.findByTestId("model-picker-menu");
+    const labels = within(menu)
+      .getAllByRole("button")
+      .map((el) => el.textContent);
+    expect(
+      labels.findIndex((label) => label?.startsWith("Paid model")),
+    ).toBeGreaterThan(
+      labels.findIndex((label) => label?.startsWith("big-pickle")),
+    );
+    expect(within(menu).getByText("Paid model")).not.toHaveClass(
+      "text-emerald-600",
+    );
   });
 
   it("lists every model in one flat list, no tabs", async () => {
@@ -156,7 +477,7 @@ describe("<ModelPicker />", () => {
 
     await user.click(screen.getByTestId("model-picker-trigger"));
     const menu = await screen.findByTestId("model-picker-menu");
-    expect(menu).toHaveClass("w-56");
+    expect(menu).toHaveClass("w-72");
     expect(menu.querySelector("button button")).toBeNull();
     // One row for the model, not two near-identical ones. Scoped to the menu
     // because the trigger also renders the selected model's label.
@@ -417,7 +738,10 @@ describe("<ModelPicker />", () => {
     render(
       withRouter(
         <ModelPicker
-          models={MODELS}
+          models={MODELS.map((model) => ({
+            ...model,
+            reasoning_efforts: ["medium", "high", "xhigh"],
+          }))}
           value="kimi-k2.5"
           onChange={vi.fn()}
           reasoningEffort="medium"
@@ -567,7 +891,7 @@ describe("<ModelPicker />", () => {
 
     const menu = await screen.findByRole("menu");
     expect(
-      within(menu).getByRole("button", { name: /添加模型/ }),
+      within(menu).getByRole("button", { name: /添加自定义模型/ }),
     ).toBeInTheDocument();
   });
 

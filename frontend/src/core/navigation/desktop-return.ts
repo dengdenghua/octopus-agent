@@ -28,7 +28,7 @@ function withDesktopHash(url: URL): string {
 /**
  * Resolve the Echo OS desktop independently from the Agent router.
  *
- * Local development deliberately runs the shell on :3000 and the current
+ * Local development deliberately runs the shell on :3310 and the current
  * Agent UI on :3001. Deployments can provide an explicit desktop URL; a
  * loopback referrer is also accepted so an OS-hosted Agent keeps the shell's
  * actual hostname and port.
@@ -60,7 +60,7 @@ export function resolveEchoOsDesktopUrl({
 
   if (isLoopbackHostname(current.hostname) && current.port === "3001") {
     current.hostname = "localhost";
-    current.port = "3000";
+    current.port = "3310";
     current.pathname = "/";
     return withDesktopHash(current);
   }

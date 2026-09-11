@@ -1,0 +1,21 @@
+Browser tab: 4, Title: "叙事工坊 - Echo", URL: "http://localhost:3310/#/workspace/narrative".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
++							60 container 插件能力
++								61 heading 插件能力, Value: 2, ID: narrative-modal-title
++									62 text 插件能力
++								63 text Narrative Studio 随插件安装、停用和卸载同步管理。
++								64 button 关闭
++								65 text Narrative MCP
++								66 text 可供其他 Agent 和 MCP 客户端读取项目、构建上下文并创建候选章节；直接继承 Echo 当前身份与权限，无需再次登录或授权。
++								67 text 已启用
++								68 text /api/plugins/narrative-studio/mcp
++								69 text narrative_list_projects narrative_get_project narrative_list_chapters narrative_build_context_candidate narrative_create_chapter_candidate 插件自带 Skills
++								70 text 安装时注册，停用或卸载时一并撤销；所有写入都只生成候选稿。
++								71 text narrative_studio.narrative_authoring
++								72 text Develop outlines, scenes, and chapters in Narrative Studio when the requested output must remain a reviewable candidate.
++								73 text narrative_studio.continuity
++								74 text Check Narrative Studio candidates for timeline, character-state, world-rule, relationship, and foreshadow continuity against cited project sources.
++								75 text narrative_studio.editorial_readiness
++								76 text Prepare an evidence-based editorial recommendation for a Narrative Studio candidate without exercising human canon-governance authority.
++								77 text MCP 与 Skills 均不提供直接写入正典、跳过投票或解除审核阻断的能力。
+The focused UI element is 48 button MCP · 3 Skills

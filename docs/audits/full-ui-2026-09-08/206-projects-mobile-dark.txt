@@ -1,0 +1,25 @@
+Browser tab: 4, Title: "项目管理 - Echo", URL: "http://localhost:3310/#/workspace/projects".
+0 AXWebArea 项目管理 - Echo, URL: localhost:3310/#/workspace/projects
+	1 container
+		2 container root
+			6 container
+				7 container 应用导航
+					8 button 返回 HUB
+					9 text 项目管理
+				10 container 项目管理
+					11 AXWebArea 项目管理, URL: localhost:3310/api/workbench-packages/projects/assets/dist/index.html?octopus_host_path=%2Fworkspace%2Fprojects&octopus_host_origin=http%3A%2F%2Flocalhost%3A3310
+						12 container root
+							13 container
+								14 heading 项目管理, Value: 1
+									15 text 项目管理
+								16 text 规划里程碑，跟进风险与团队进度
+								17 button 新建项目
+								18 button 刷新
+								19 heading 把目标变成一个项目, Value: 2
+									20 text 把目标变成一个项目
+								21 text 为项目起个名字，和助手一起拆解里程碑、安排任务并跟进进度。成员和协作设置可以稍后调整。
+								22 button 创建第一个项目
+							23 container Notifications alt+T
+			5 container Notifications alt+T
+
+The focused UI element is 0 AXWebArea 项目管理 - Echo, URL: localhost:3310/#/workspace/projects

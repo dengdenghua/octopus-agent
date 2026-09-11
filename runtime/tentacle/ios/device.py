@@ -95,7 +95,7 @@ class IOSDevice:
 
     @property
     def capabilities(self) -> list[str]:
-        return list(self._capabilities)
+        return list(ios_capabilities())
 
     @property
     def status(self) -> TentacleStatus:
@@ -174,7 +174,7 @@ class IOSDevice:
         start = time.time()
         if not self.is_online:
             return ToolResult.fail(call.call_id, -32011, "Device offline", 0)
-        if call.tool not in self._capabilities:
+        if call.tool not in self.capabilities:
             return ToolResult.fail(call.call_id, -32003, f"Unknown tool: {call.tool}", 0)
 
         self._status = TentacleStatus.BUSY

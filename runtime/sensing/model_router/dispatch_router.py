@@ -307,7 +307,10 @@ class ModelDispatchRouter(ModelRouter):
             return r
 
     def _resolve(self, model_id: str) -> ModelRouter:
-        return self._route_for(model_id) or self._fallback
+        routed = self._route_for(model_id)
+        if routed is None and model_id.startswith("octopus-custom-model:v1:"):
+            raise ValueError("所选模型已下线或连接不可用，请重新选择模型。")
+        return routed or self._fallback
 
     def _rewrite_unrouted(self, request: ModelRequest) -> ModelRequest:
         """Gracefully degrade an unrouted model to the fallback's default.

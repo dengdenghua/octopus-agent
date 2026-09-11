@@ -545,8 +545,8 @@ class TurnParams(BaseModel):
     )
     model: str | None = None
     # Per-task backend preference; role identity and model selection are
-    # independent. "auto" uses capability/work-mode signals before dispatch.
-    execution_engine: Literal["auto", "octopus", "codex"] = Field(
+    # independent. "auto" follows host defaults after explicit role routing.
+    execution_engine: Literal["auto", "octopus", "codex", "opencode"] = Field(
         default="auto", alias="executionEngine"
     )
     effort: Literal["minimal", "low", "medium", "high", "xhigh", "max"] = "medium"
@@ -592,7 +592,7 @@ class ExecutionSnapshot(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    engine: Literal["octopus", "codex"]
+    engine: Literal["octopus", "codex", "opencode"]
     driver: str
     reason: str
     phase: Literal["primary", "steering", "verification", "repair"]

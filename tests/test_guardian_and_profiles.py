@@ -8,6 +8,7 @@ permission profile catalog. All defaults keep existing behavior identical.
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -15,15 +16,21 @@ import pytest
 
 from runtime.safety.approval.approval_gate import (
     ApprovalPolicy,
+    ApprovalRequest,
     ApprovalRule,
     DenialCircuitBreaker,
     assess_approval_risk,
 )
 from runtime.safety.approval.approval_policy_store import load_policy, save_policy
 from runtime.safety.approval.guardian_review import (
+    AutoReviewApprovalProvider,
     GuardianReviewer,
     GuardianReviewerConfig,
     decide_with_guardian,
+)
+from runtime.safety.approval.permission_modes import (
+    approval_reviewer_for_mode,
+    canonical_permission_mode,
 )
 
 # ── ② egress / credential rules (approval_gate) ─────────────
@@ -225,6 +232,69 @@ def test_guardian_router_failure_degrades() -> None:
         )
         is None
     )
+
+
+def test_guardian_timeout_degrades_without_waiting_for_review_completion() -> None:
+    class _Slow:
+        def call(self, request: Any) -> Any:
+            time.sleep(0.2)
+            return type("_R", (), {"text": '{"outcome": "allow"}'})()
+
+    reviewer = GuardianReviewer(
+        _Slow(),
+        GuardianReviewerConfig(enabled=True, timeout_s=0.01),
+    )
+    started = time.monotonic()
+    verdict = reviewer.review(
+        thread_id="th-timeout",
+        tool_name="exec_shell",
+        args_preview="python -m pytest",
+        user_intent="run tests",
+        rule_engine_risk="high",
+        rule_engine_categories=("shell_execution",),
+    )
+    assert verdict is None
+    assert time.monotonic() - started < 0.15
+
+
+@pytest.mark.parametrize("mode", ["acceptEdits", "auto-review", "approve-for-me"])
+def test_permission_mode_aliases_select_auto_review(mode: str) -> None:
+    assert canonical_permission_mode(mode) == "acceptEdits"
+    assert approval_reviewer_for_mode(mode) == "auto_review"
+
+
+def test_auto_review_provider_approves_without_human_round_trip() -> None:
+    provider = AutoReviewApprovalProvider(
+        _verdict_router("allow", "within the requested boundary"),
+        user_intent="运行测试",
+    )
+    decision = provider.request(
+        ApprovalRequest(
+            thread_id="th-auto",
+            tool_name="exec_shell",
+            tool_call_id="call-1",
+            args_preview="python -m pytest",
+        )
+    )
+    assert decision.approved is True
+    assert decision.reason == "auto-review: within the requested boundary"
+
+
+def test_auto_review_provider_denies_when_review_is_unavailable() -> None:
+    provider = AutoReviewApprovalProvider(
+        _FakeRouter("malformed"),
+        user_intent="运行测试",
+    )
+    decision = provider.request(
+        ApprovalRequest(
+            thread_id="th-auto",
+            tool_name="exec_shell",
+            tool_call_id="call-2",
+            args_preview="python -m pytest",
+        )
+    )
+    assert decision.approved is False
+    assert decision.reason == "automatic review was unavailable or timed out"
 
 
 # ── ④ permission profile catalog ────────────────────────────

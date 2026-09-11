@@ -1,0 +1,169 @@
+Browser tab: 4, Title: "发现社区 - Echo", URL: "http://localhost:3310/#/workspace/community".
+0 AXWebArea 发现社区 - Echo, URL: localhost:3310/#/workspace/community
+	1 container root
+		2 container
+			3 button 返回桌面
+			4 button 切换全屏
+			5 tab group Workspace surface
+				39 tab (selected, settable, boolean) Description: Echo, Value: 1
+				7 tab (selectable, settable, boolean) Description: AI 浏览器, Value: 0
+			8 button (expanded) Description: 收起侧栏 (Ctrl/⌘+B), Secondary Actions: Collapse
+			9 button 新建任务
+			10 content list
+				11 link Description: HUB, Value: localhost:3310/#/workspace/agents?surface=chat
+				12 link Description: 助手, Value: localhost:3310/#/workspace/realtime/octopus-assistant?agent=octopus
+				13 link Description: 订阅, Value: localhost:3310/#/workspace/intelligence?surface=chat
+				14 link Description: 项目管理, Value: localhost:3310/#/workspace/projects
+				15 link Description: 设计画布, Value: localhost:3310/#/workspace/design
+				16 link Description: 叙事工坊, Value: localhost:3310/#/workspace/narrative
+				17 link Description: 自进化, Value: localhost:3310/#/workspace/evolution?surface=chat
+			18 content list
+				19 link Description: 发现社区, Value: localhost:3310/#/workspace/community
+			20 content list
+				21 button (collapsed) Description: 展开本地数据库, Secondary Actions: Expand
+			22 content list
+				23 button 编辑侧栏
+			24 container
+				25 button (expanded) Description: 收起项目, Secondary Actions: Collapse
+				26 button 选择项目空间
+			27 container
+				28 button (expanded) Description: 收起对话, Secondary Actions: Collapse
+				29 button Description: 对话 · 新建任务, Help: 新建任务
+			30 pop up button (collapsed) Description: Raven, ID: radix-_r_1a_, Secondary Actions: Expand, Help: Raven · 现实职业是企业流程自动化专家，通过视觉理解操作 ERP、CRM、表格、浏览器和遗留系统；在 ECHO 世界中是远程接管手 Night Crow。两种身份共享屏幕观察、设备控制与精细操作能力。
+				31 text Raven
+				32 text Lv.
+				33 text 1
+				34 text ⭐
+			35 button 设置
+			40 container 发现社区
+				41 AXWebArea 发现社区, URL: localhost:3310/api/workbench-packages/community/assets/dist/index.html?octopus_host_path=%2Fworkspace%2Fcommunity&octopus_host_origin=http%3A%2F%2Flocalhost%3A3310
+					42 container root
+						43 container
+							44 heading 发现, Value: 1
+								45 text 发现
+							46 button 社区
+							47 button 集市
+							48 text field (settable)
+							49 button 刷新
+							50 button 发布
+							51 button 推荐
+							52 button 订阅
+							53 button 关注
+							54 button 职场
+							55 button 效率
+							56 button 生活
+							57 button 学习
+							58 button 购物
+							59 button 科技
+							60 button 游戏
+							61 button 最新
+							62 button 热门
+							63 container
+								64 text 封面暂时无法加载 小程序
+								65 button Description: 免费复刻 让 AI 每天自动整理相册，生成回忆视频, Help: 免费加入工作台
+							66 heading 让 AI 每天自动整理相册，生成回忆视频, Value: 3
+								67 text 让 AI 每天自动整理相册，生成回忆视频
+							68 button 查看作者 影像助手
+								69 text 影
+								70 text 影像助手
+							71 button 关注 影像助手
+							72 text 1.2k
+							73 button Description: 查看评论, Help: 查看 让 AI 每天自动整理相册，生成回忆视频 的 88 条评论
+							74 button 点赞
+							75 button 收藏
+							76 container
+								77 text 封面暂时无法加载 小程序
+								78 button Description: 复刻 自动写一周周报，老板直呼专业，需要 5 积分, Help: 复刻需要 5 积分
+							79 heading 自动写一周周报，老板直呼专业, Value: 3
+								80 text 自动写一周周报，老板直呼专业
+							81 button 查看作者 打工侠
+								82 text 打
+								83 text 打工侠
+							84 button 关注 打工侠
+							85 text 2.3k
+							86 button Description: 查看评论, Help: 查看 自动写一周周报，老板直呼专业 的 156 条评论
+							87 button 点赞
+							88 button 收藏
+							89 container
+								90 text 封面暂时无法加载 小程序
+								91 button Description: 复刻 自动比价，618 我省了 2000+，需要 2 积分, Help: 复刻需要 2 积分
+							92 heading 自动比价，618 我省了 2000+, Value: 3
+								93 text 自动比价，618 我省了 2000+
+							94 button 查看作者 省钱 Bot
+								95 text 省
+								96 text 省钱 Bot
+							97 button 关注 省钱 Bot
+							98 text 3.1k
+							99 button Description: 查看评论, Help: 查看 自动比价，618 我省了 2000+ 的 203 条评论
+							100 button 点赞
+							101 button 收藏
+							102 container
+								103 image 生成旅行攻略，细到每天照着走
+								104 text 小程序
+								105 button Description: 免费复刻 生成旅行攻略，细到每天照着走, Help: 免费加入工作台
+							106 heading 生成旅行攻略，细到每天照着走, Value: 3
+								107 text 生成旅行攻略，细到每天照着走
+							108 button 查看作者 旅行灵感
+								109 text 旅
+								110 text 旅行灵感
+							111 button 关注 旅行灵感
+							112 text 987
+							113 button Description: 查看评论, Help: 查看 生成旅行攻略，细到每天照着走 的 54 条评论
+							114 button 点赞
+							115 button 收藏
+							116 container
+								117 text 封面暂时无法加载 教程
+							118 heading 3 步搭一个会订外卖的助手, Value: 3
+								119 text 3 步搭一个会订外卖的助手
+							120 text 绑定地址后，一句话就能帮你下单常点的外卖。
+							121 button 查看作者 效率玩家
+								122 text 效
+								123 text 效率玩家
+							124 button 关注 效率玩家
+							125 text 856
+							126 button Description: 查看评论, Help: 查看 3 步搭一个会订外卖的助手 的 41 条评论
+							127 button 点赞
+							128 button 收藏
+							129 container
+								130 text 封面暂时无法加载 语音
+								131 button Description: 免费复刻 用语音唤醒助手，开车时也能回消息, Help: 免费加入工作台
+							132 heading 用语音唤醒助手，开车时也能回消息, Value: 3
+								133 text 用语音唤醒助手，开车时也能回消息
+							134 text 按下说话，自动识别收件人、调整语气并发送。
+							135 button 查看作者 车载达人
+								136 text 车
+								137 text 车载达人
+							138 button 关注 车载达人
+							139 text 634
+							140 button Description: 查看评论, Help: 查看 用语音唤醒助手，开车时也能回消息 的 29 条评论
+							141 button 点赞
+							142 button 收藏
+							143 container
+								144 text 封面暂时无法加载 IoT
+							145 heading 接入智能家居，一句话控制全屋, Value: 3
+								146 text 接入智能家居，一句话控制全屋
+							147 text 绑定设备后，语音或文字即可控制灯光与空调。
+							148 button 查看作者 极客居
+								149 text 极
+								150 text 极客居
+							151 button 关注 极客居
+							152 text 1.5k
+							153 button Description: 查看评论, Help: 查看 接入智能家居，一句话控制全屋 的 97 条评论
+							154 button 点赞
+							155 button 收藏
+							156 container
+								157 image 让助手帮你读论文，10 分钟抓重点
+								158 text 学习
+							159 heading 让助手帮你读论文，10 分钟抓重点, Value: 3
+								160 text 让助手帮你读论文，10 分钟抓重点
+							161 text 读取 PDF 与网页，自动抽取结论与可引用观点。
+							162 button 查看作者 学术喵
+								163 text 学
+								164 text 学术喵
+							165 button 关注 学术喵
+							166 text 742
+							167 button Description: 查看评论, Help: 查看 让助手帮你读论文，10 分钟抓重点 的 33 条评论
+							168 button 点赞
+							169 button 收藏
+						170 container Notifications alt+T
+		38 container Notifications alt+T

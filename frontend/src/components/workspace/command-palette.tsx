@@ -1,3 +1,4 @@
+import { WORKBENCH_BUILTIN_APPS } from "@/core/workbench/apps";
 import {
   ActivityIcon,
   BoxesIcon,
@@ -14,10 +15,7 @@ import {
   RadarIcon,
   SettingsIcon,
   SparklesIcon,
-  StethoscopeIcon,
   StoreIcon,
-  UsersIcon,
-  ZapIcon,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -110,20 +108,14 @@ export function CommandPalette() {
   );
   const PAGE_ITEMS = useMemo(
     () => [
-      {
-        id: "new-chat",
-        to: "/workspace/realtime/new",
-        label: t.sidebar.newChat,
-        icon: MessageSquarePlusIcon,
-        keywords: "chat new realtime conversation",
-      },
-      {
-        id: "agents",
-        to: "/workspace/agents",
-        label: t.agents.title,
-        icon: UsersIcon,
-        keywords: "agent team",
-      },
+      ...WORKBENCH_BUILTIN_APPS.map((app) => ({
+        id: app.id,
+        to: app.workspaceRoute,
+        label: app.name,
+        icon: BoxesIcon,
+        keywords: `${app.id} ${app.description}`,
+      })),
+
       {
         id: "skills",
         to: "/workspace/agents?surface=chat&tab=skills",
@@ -134,7 +126,7 @@ export function CommandPalette() {
       {
         id: "plugins",
         to: "/workspace/agents?surface=chat&tab=plugins",
-        label: `${t.sidebar.navHR} · ${t.metaSkills.title}`,
+        label: `${t.sidebar.navHR} · 应用与插件`,
         icon: BoxesIcon,
         keywords: "skill pack meta workflow template plugin",
       },
@@ -173,20 +165,7 @@ export function CommandPalette() {
         icon: ActivityIcon,
         keywords: "observability monitoring health",
       },
-      {
-        id: "diagnostics",
-        to: "/workspace/observability",
-        label: t.sidebar.diagnostics,
-        icon: StethoscopeIcon,
-        keywords: "diagnostics debug troubleshoot",
-      },
-      {
-        id: "intelligence",
-        to: "/workspace/intelligence",
-        label: t.intelligence.title,
-        icon: ZapIcon,
-        keywords: "intelligence subscription automation schedule",
-      },
+
       {
         id: "knowledge",
         to: "/workspace/knowledge",
@@ -201,13 +180,7 @@ export function CommandPalette() {
         icon: FolderIcon,
         keywords: "desktop organizer folder",
       },
-      {
-        id: "evolution",
-        to: "/workspace/evolution",
-        label: t.evolutionDashboard.title,
-        icon: DnaIcon,
-        keywords: "evolution dna self",
-      },
+
       {
         id: "reflex",
         to: "/workspace/reflex",

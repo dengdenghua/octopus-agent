@@ -74,7 +74,7 @@ class MobileDevice:
 
     @property
     def capabilities(self) -> list[str]:
-        return list(self._capabilities)
+        return list(android_capabilities())
 
     @property
     def manifest(self) -> DeviceManifest:
@@ -83,7 +83,7 @@ class MobileDevice:
             device_id=self.tentacle_id,
             kind=self.tentacle_type.value,
             platform=self.platform,
-            capabilities=self._capabilities,
+            capabilities=self.capabilities,
             meta=self.meta,
         )
 
@@ -155,7 +155,7 @@ class MobileDevice:
         start = time.time()
         if not self.is_online:
             return ToolResult.fail(call.call_id, -32011, "Device offline", 0)
-        if call.tool not in self._capabilities:
+        if call.tool not in self.capabilities:
             return ToolResult.fail(call.call_id, -32003, f"Unknown tool: {call.tool}", 0)
         safety_errors = self.manifest.validate_action(call.tool, call.args)
         if safety_errors:

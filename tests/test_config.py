@@ -207,6 +207,7 @@ class TestBuildFromConfig:
         )
         stack = build_from_config(cfg)
         assert stack.is_llm_planner
+        assert stack.approval_router is stack.planner.router
 
     def test_web_disabled_keeps_local_coding_tools(self):
         stack = build_from_config(AgentConfig(enable_web_skills=False))

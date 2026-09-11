@@ -1,0 +1,4 @@
+Browser tab: 4, Title: "自进化 - Echo", URL: "http://localhost:3310/#/workspace/evolution?section=governance".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
++										116 text 暂无待处理的技能提案。
+The focused UI element is 106 checkbox 技能提案, Value: 1

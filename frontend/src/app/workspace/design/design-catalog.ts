@@ -15,7 +15,7 @@ import {
 
 import type { DesignNodeKind } from "./canvas-model";
 
-export type DesignSection = "home" | "canvas" | "assets" | "skills" | "comfyui";
+export type DesignSection = "home" | "canvas" | "assets" | "comfyui";
 export type WorkspaceLayout = "split" | "chat-left" | "chat" | "canvas";
 
 export type NativeNodeTemplate = {

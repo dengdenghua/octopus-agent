@@ -1,0 +1,9 @@
+Browser tab: 4, Title: "HUB - Echo", URL: "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=installed".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 6
+~0 AXWebArea HUB - Echo, URL: localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=installed
++				94 tab (selected, settable, boolean) Description: Echo, Value: 1
+~							90 tab (selectable, settable, boolean) 全部, Value: 0
+~							91 tab (selected, settable, boolean) 已安装, Value: 1
++						95 text 还没有已安装应用
+The focused UI element is 91 tab (selected, settable, boolean) 已安装, Value: 1

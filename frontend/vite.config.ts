@@ -58,7 +58,7 @@ function omitDuplicatePetAssetsFromWebBuild(): Plugin {
 
 const gatewayTarget =
   process.env.OCTOPUS_INTERNAL_GATEWAY_BASE_URL ||
-  `http://127.0.0.1:${process.env.GATEWAY_PORT || "8888"}`;
+  `http://127.0.0.1:${process.env.GATEWAY_PORT || "8310"}`;
 
 function packageNameFromNodeModule(id: string): string | null {
   const normalized = id.replace(/\\/g, "/");
@@ -243,14 +243,14 @@ export default defineConfig({
   },
   server: {
     // PORT is honoured so a supervisor that assigns a free port (the IDE
-    // preview pane) can run alongside a dev server already holding 3000.
+    // preview pane) can run alongside a dev server already holding 3310.
     // FRONTEND_PORT stays the explicit override and wins.
-    port: parseInt(process.env.FRONTEND_PORT || process.env.PORT || "3888"),
+    port: parseInt(process.env.FRONTEND_PORT || process.env.PORT || "3310"),
     host: "0.0.0.0",
     proxy: proxyConfig,
   },
   preview: {
-    port: parseInt(process.env.FRONTEND_PORT || process.env.PORT || "3888"),
+    port: parseInt(process.env.FRONTEND_PORT || process.env.PORT || "3310"),
     host: "0.0.0.0",
     proxy: proxyConfig,
   },

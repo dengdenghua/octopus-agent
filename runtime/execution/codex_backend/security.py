@@ -6,9 +6,10 @@ The sidecar intentionally has two policy layers:
   ``workspace-write`` before a thread/turn starts and handles every Codex
   approval request. A server-authorized local full-access turn may choose
   ``danger-full-access`` while the isolated sidecar state remains denied.
-* Codex runs with ``approval_policy = "on-request"``, a user reviewer, and
-  network disabled. It can request more authority, but cannot grant it. This
-  validated inner profile is also the generated-tool sandbox on macOS local
+* Codex runs with ``approval_policy = "on-request"``, the reviewer selected by
+  the canonical permission mode, and network disabled. It can request more
+  authority, but cannot grant it. This validated inner profile is also the
+  generated-tool sandbox on macOS local
   runs, where wrapping App Server in an outer Seatbelt would prevent Codex
   from applying its own nested Seatbelt profile. Production/shared remains
   fail-closed unless a compatible full-enforcement outer backend is active.
@@ -61,6 +62,7 @@ from ._security_support import (
 from .types import CodexProviderProfile
 
 CodexSandboxMode = Literal["read-only", "workspace-write", "danger-full-access"]
+CodexApprovalReviewer = Literal["user", "auto_review"]
 ApprovalFailureDecision = Literal["decline"]
 
 APPROVAL_FAILURE_DECISION: ApprovalFailureDecision = "decline"
@@ -206,6 +208,7 @@ class CodexSidecarContext:
     config_path: Path
     binding_path: Path
     sandbox_mode: CodexSandboxMode
+    approval_reviewer: CodexApprovalReviewer
     realm_key: str
     tenant_key: str
     thread_key: str
@@ -236,7 +239,7 @@ class CodexSidecarContext:
             "cwd": str(self.workspace),
             "runtimeWorkspaceRoots": [str(self.workspace)],
             "approvalPolicy": APPROVAL_POLICY,
-            "approvalsReviewer": APPROVAL_REVIEWER,
+            "approvalsReviewer": self.approval_reviewer,
             "permissions": PERMISSION_PROFILE,
             "dynamicTools": [],
             "selectedCapabilityRoots": [],
@@ -249,7 +252,7 @@ class CodexSidecarContext:
             "cwd": str(self.workspace),
             "runtimeWorkspaceRoots": [str(self.workspace)],
             "approvalPolicy": APPROVAL_POLICY,
-            "approvalsReviewer": APPROVAL_REVIEWER,
+            "approvalsReviewer": self.approval_reviewer,
             "permissions": PERMISSION_PROFILE,
         }
 
@@ -269,7 +272,7 @@ class CodexSidecarContext:
         errors: list[str] = []
 
         _expect_value(config, "approval_policy", APPROVAL_POLICY, errors)
-        _expect_value(config, "approvals_reviewer", APPROVAL_REVIEWER, errors)
+        _expect_value(config, "approvals_reviewer", self.approval_reviewer, errors)
         _expect_value(config, "default_permissions", PERMISSION_PROFILE, errors)
         _expect_value(config, "web_search", "disabled", errors)
         _expect_value(config, "allow_login_shell", False, errors)
@@ -327,7 +330,12 @@ class CodexSidecarContext:
         if agents is not None and _non_null_items(agents) != {"enabled": False}:
             errors.append("agents must be fully disabled")
 
-        _validate_apps_config(config, self.selected_app_ids, errors)
+        _validate_apps_config(
+            config,
+            self.selected_app_ids,
+            errors,
+            approval_reviewer=self.approval_reviewer,
+        )
 
         _validate_permission_profile_section(
             config,
@@ -493,6 +501,7 @@ class CodexSidecarSecurity:
         task_id: str,
         workspace: Path,
         sandbox_mode: CodexSandboxMode = "workspace-write",
+        approval_reviewer: CodexApprovalReviewer = "user",
         provider_profile: CodexProviderProfile | None = None,
         selected_app_ids: tuple[str, ...] = (),
         outer_hard_sandbox_active: bool = False,
@@ -504,6 +513,10 @@ class CodexSidecarSecurity:
             raise CodexSecurityError(
                 "Codex sidecars only allow 'read-only', 'workspace-write', or "
                 "'danger-full-access' sandbox modes"
+            )
+        if approval_reviewer not in {"user", "auto_review"}:
+            raise CodexSecurityError(
+                "Codex sidecars only allow 'user' or 'auto_review' approval reviewers"
             )
         if provider_profile is not None and not isinstance(provider_profile, CodexProviderProfile):
             raise CodexSecurityError("provider_profile must be server-resolved")
@@ -626,6 +639,7 @@ class CodexSidecarSecurity:
             config_path=codex_home / "config.toml",
             binding_path=thread_root / "binding.json",
             sandbox_mode=sandbox_mode,
+            approval_reviewer=approval_reviewer,
             realm_key=realm_key,
             tenant_key=tenant_key,
             thread_key=thread_key,
@@ -739,7 +753,7 @@ def _render_codex_config(context: CodexSidecarContext) -> str:
     lines = [
         "# Managed by Octopus. Do not merge ambient user/project configuration.",
         f"approval_policy = {_toml_string(APPROVAL_POLICY)}",
-        f"approvals_reviewer = {_toml_string(APPROVAL_REVIEWER)}",
+        f"approvals_reviewer = {_toml_string(context.approval_reviewer)}",
         f"default_permissions = {_toml_string(PERMISSION_PROFILE)}",
         "allow_login_shell = false",
         'web_search = "disabled"',
@@ -800,7 +814,10 @@ def _render_codex_config(context: CodexSidecarContext) -> str:
             "destructive_enabled = false",
             "open_world_enabled = false",
             *(
-                ('approvals_reviewer = "user"', 'default_tools_approval_mode = "prompt"')
+                (
+                    f'approvals_reviewer = "{context.approval_reviewer}"',
+                    'default_tools_approval_mode = "prompt"',
+                )
                 if context.selected_app_ids
                 else ()
             ),
@@ -830,7 +847,7 @@ def _render_codex_config(context: CodexSidecarContext) -> str:
                 "enabled = true",
                 "destructive_enabled = false",
                 "open_world_enabled = false",
-                'approvals_reviewer = "user"',
+                f'approvals_reviewer = "{context.approval_reviewer}"',
                 'default_tools_approval_mode = "prompt"',
             ]
         )

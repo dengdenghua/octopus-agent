@@ -77,6 +77,7 @@ def child_execution_scope(
             goal=instruction,
             permissions=permissions,
             artifacts=artifacts,
+            execution_engine=None,
         )
         child.metadata["_execution_task"] = child_task
         request = ExecutionRequest(child_task, instruction)

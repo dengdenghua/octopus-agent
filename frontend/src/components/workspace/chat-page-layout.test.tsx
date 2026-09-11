@@ -241,6 +241,23 @@ describe("ChatPageLayout", () => {
     expect(opener).toHaveFocus();
   });
 
+  test("returns to the composer when a responsive transition lost the opener", () => {
+    layoutWidth = 900;
+    const content = {
+      header: <div>Header</div>,
+      messageList: <div>Messages</div>,
+      inputArea: <textarea aria-label="Draft" />,
+    };
+    const { rerender } = renderWithProviders(
+      <ChatPageLayout {...content} secondaryPanel={<div>Workbench</div>} />,
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Agent workbench" }),
+    ).toHaveFocus();
+    rerender(<ChatPageLayout {...content} />);
+    expect(screen.getByRole("textbox", { name: "Draft" })).toHaveFocus();
+  });
+
   test("lets editable controls and nested popup surfaces consume Escape", () => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
@@ -549,5 +566,200 @@ describe("ChatPageLayout", () => {
     expect(
       screen.getByRole("complementary", { name: "Agent workbench" }),
     ).toHaveStyle({ width: "380px" });
+  });
+  test("expands content without remounting the editor or panel and restores split width", () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1440,
+    });
+    const { container } = renderWithProviders(
+      <ChatPageLayout
+        header={<div>Header</div>}
+        messageList={<div>Messages</div>}
+        inputArea={<textarea aria-label="Draft" defaultValue="Keep my draft" />}
+        secondaryPanel={
+          <input
+            aria-label="Browser address"
+            defaultValue="https://example.com"
+          />
+        }
+      />,
+    );
+    const editor = screen.getByRole("textbox", { name: "Draft" });
+    const address = screen.getByRole("textbox", { name: "Browser address" });
+    const panel = screen.getByRole("complementary", {
+      name: "Agent workbench",
+    });
+    const width = panel.style.width;
+    fireEvent.change(editor, { target: { value: "Edited draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "Expand workbench" }));
+    expect(panel).toHaveAttribute("data-secondary-panel-presentation", "full");
+    expect(screen.getByRole("textbox", { name: "Draft" })).toBe(editor);
+    expect(screen.getByRole("textbox", { name: "Browser address" })).toBe(
+      address,
+    );
+    expect(editor).toHaveValue("Edited draft");
+    expect(
+      container.querySelector('[data-composer-placement="floating"]'),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Collapse composer" }));
+    expect(editor).toBeInTheDocument();
+    expect(editor).not.toBeVisible();
+    expect(panel.style.paddingBottom).toBe("");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue conversation" }),
+    );
+    expect(screen.getByRole("textbox", { name: "Draft" })).toBe(editor);
+    expect(editor).toHaveValue("Edited draft");
+    fireEvent.click(screen.getByRole("button", { name: "Restore split view" }));
+    expect(panel.style.width).toBe(width);
+    expect(editor).toHaveValue("Edited draft");
+    expect(
+      container.querySelector('[data-composer-placement="docked"]'),
+    ).toBeInTheDocument();
+  });
+
+  test("pending approvals reveal a compact composer and prevent collapsing it", () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1440,
+    });
+    function AttentionHarness() {
+      const [attention, setAttention] = useState(false);
+      return (
+        <ChatPageLayout
+          header={<div>Header</div>}
+          messageList={<div>Messages</div>}
+          composerNeedsAttention={attention}
+          inputArea={
+            <textarea aria-label="Approval draft" defaultValue="Retained" />
+          }
+          secondaryPanel={
+            <button onClick={() => setAttention(true)}>Request approval</button>
+          }
+        />
+      );
+    }
+    renderWithProviders(<AttentionHarness />);
+    const editor = screen.getByRole("textbox", { name: "Approval draft" });
+    fireEvent.click(screen.getByRole("button", { name: "Expand workbench" }));
+    fireEvent.compositionStart(editor);
+    fireEvent.click(screen.getByRole("button", { name: "Collapse composer" }));
+    expect(editor).toBeVisible();
+    fireEvent.compositionEnd(editor);
+    fireEvent.click(screen.getByRole("button", { name: "Collapse composer" }));
+    expect(editor).not.toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Request approval" }));
+    expect(editor).toBeVisible();
+    expect(editor).toHaveValue("Retained");
+    expect(
+      screen.getByRole("button", { name: "Collapse composer" }),
+    ).toBeDisabled();
+  });
+
+  test("keeps the desktop drawer content mounted when expanding into full view", () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1200,
+    });
+    layoutWidth = 900;
+    renderWithProviders(
+      <ChatPageLayout
+        header={<div>Header</div>}
+        messageList={<div>Messages</div>}
+        inputArea={<textarea aria-label="Draft" />}
+        secondaryPanel={<input aria-label="Browser address" />}
+      />,
+    );
+    const address = screen.getByRole("textbox", { name: "Browser address" });
+    fireEvent.click(screen.getByRole("button", { name: "Expand workbench" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Browser address" })).toBe(
+      address,
+    );
+    expect(screen.getByRole("textbox", { name: "Draft" })).toBeInTheDocument();
+  });
+  test("dragging beyond the conversation threshold enters full view without overwriting split width", () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1440,
+    });
+    window.localStorage.setItem("octopus:chatSecondaryPanelWidth", "500");
+    renderWithProviders(
+      <ChatPageLayout
+        header={<div>Header</div>}
+        messageList={<div>Messages</div>}
+        inputArea={<textarea aria-label="Draft" />}
+        secondaryPanel={<div>Workbench</div>}
+      />,
+    );
+    const panel = screen.getByRole("complementary", {
+      name: "Agent workbench",
+    });
+    vi.spyOn(panel, "getBoundingClientRect").mockReturnValue({
+      width: 500,
+    } as DOMRect);
+    const separator = screen.getByRole("separator", {
+      name: "Resize agent workbench width",
+    });
+    fireEvent.mouseDown(separator, { clientX: 900 });
+    fireEvent.mouseMove(document, { clientX: 100 });
+    fireEvent.mouseUp(document);
+    expect(panel).toHaveAttribute("data-secondary-panel-presentation", "full");
+    expect(window.localStorage.getItem("octopus:chatSecondaryPanelWidth")).toBe(
+      "500",
+    );
+    expect(document.body.style.cursor).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "Restore split view" }));
+    expect(panel).toHaveStyle({ width: "500px" });
+    // Crossing the threshold and then moving back before release must not expand.
+    fireEvent.mouseDown(separator, { clientX: 900 });
+    fireEvent.mouseMove(document, { clientX: 100 });
+    fireEvent.mouseMove(document, { clientX: 850 });
+    fireEvent.mouseUp(document);
+    expect(panel).toHaveAttribute(
+      "data-secondary-panel-presentation",
+      "inline",
+    );
+    expect(panel).toHaveStyle({ width: "550px" });
+  });
+
+  test("full view yields to the mobile sheet and returns without remounting the composer", () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1440,
+    });
+    renderWithProviders(
+      <ChatPageLayout
+        header={<div>Header</div>}
+        messageList={<div>Messages</div>}
+        inputArea={<textarea aria-label="Draft" defaultValue="Keep" />}
+        secondaryPanel={<div>Workbench</div>}
+      />,
+    );
+    const editor = screen.getByRole("textbox", { name: "Draft" });
+    fireEvent.click(screen.getByRole("button", { name: "Expand workbench" }));
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 500,
+    });
+    layoutWidth = 500;
+    fireEvent(window, new Event("resize"));
+    expect(screen.getByRole("dialog")).toHaveAttribute(
+      "data-secondary-panel-presentation",
+      "bottom-sheet",
+    );
+    expect(editor).toBeInTheDocument();
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1440,
+    });
+    layoutWidth = 1400;
+    fireEvent(window, new Event("resize"));
+    expect(
+      screen.getByRole("complementary", { name: "Agent workbench" }),
+    ).toHaveAttribute("data-secondary-panel-presentation", "full");
+    expect(screen.getByRole("textbox", { name: "Draft" })).toBe(editor);
+    expect(editor).toHaveValue("Keep");
   });
 });

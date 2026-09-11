@@ -77,6 +77,7 @@ if FASTAPI_AVAILABLE:
         max_temperature: float | None = None
         unsupported_request_fields: list[str] | None = None
         codex_wire_api: Literal["responses"] | None = None
+        wire_api: Literal["responses"] | None = None
         default_header_names: list[str] = Field(default_factory=list)
         has_default_headers: bool = False
 

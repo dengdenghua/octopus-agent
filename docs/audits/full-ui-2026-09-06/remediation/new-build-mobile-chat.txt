@@ -1,0 +1,28 @@
+- banner:
+  - button "选择本地创作项目":
+    - generic: 创作空间
+  - generic: /
+  - textbox "画布名称": 创作空间 · 创作画布
+  - navigation:
+    - button "创作首页"
+    - button "创作画布"
+    - button "资产中心"
+    - button "Skill"
+    - button "ComfyUI"
+  - button "自由画布"
+  - button "工作流"
+- generic "画布视图":
+  - button "画布"
+  - button "对话" [active] [pressed]
+- complementary:
+  - generic: 个人工作台
+  - button "新建对话":
+  - button "收起对话":
+  - paragraph: 把想法说给我，产物会直接落在画布上。
+  - paragraph: 我会先拆解任务，再调用画布里绑定的角色、Skill 和插件。工作流模式按连线执行，自由画布模式由我自主编排。
+  - textbox "创作需求":
+    - /placeholder: 描述你想创作的内容…
+  - text: Skill
+  - button "发送创作需求" [disabled]:
+  - paragraph: 内容会自动保存到当前项目
+- region "Notifications alt+T"

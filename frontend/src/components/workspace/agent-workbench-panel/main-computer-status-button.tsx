@@ -9,8 +9,6 @@ import {
 } from "@/components/ui/tooltip";
 import type { AgentRunState } from "../agent-run-status";
 import {
-  agentRunRobotButtonClass,
-  agentRunIconClass,
   agentRunStatusLightPulseClass,
   agentRunStatusLightClass,
 } from "../agent-run-status";
@@ -30,14 +28,12 @@ export function MainComputerStatusButton({
 }) {
   const { t } = useI18n();
   const buttonClassName = cn(
-    "relative flex size-9 shrink-0 items-center justify-center rounded-md border font-mono shadow-[var(--shadow-xs)] transition-colors",
-    active && "ring-1 ring-primary/30",
-    agentRunRobotButtonClass(runState),
+    "relative flex size-9 shrink-0 items-center justify-center rounded-md font-mono transition-colors",
+    active
+      ? "bg-muted/60 text-foreground"
+      : "bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
   );
-  const iconClassName = cn(
-    "size-4 transition-colors",
-    agentRunIconClass(runState),
-  );
+  const iconClassName = "size-4 transition-colors";
   const pulseClassName = agentRunStatusLightPulseClass(runState);
 
   return (
@@ -47,14 +43,15 @@ export function MainComputerStatusButton({
           type="button"
           onClick={onClick}
           className={buttonClassName}
-          aria-label={`${t.agentWorkbenchPanel.mainComputer} · ${label}`}
-          title={`${t.agentWorkbenchPanel.mainComputer} · ${label}`}
+          aria-pressed={active}
+          aria-label={`${t.agentWorkbenchPanel.currentConversation} · ${label}`}
+          title={`${t.agentWorkbenchPanel.currentConversation} · ${label}`}
         >
           <MonitorIcon className={iconClassName} />
-          {pulseClassName && (
+          {runState !== "done" && (
             <span
               className={cn(
-                "absolute -top-0.5 -right-0.5 size-2 rounded-full",
+                "absolute top-0.5 right-0.5 size-1.5 rounded-full ring-2 ring-background",
                 agentRunStatusLightClass(runState),
                 pulseClassName,
               )}
@@ -63,7 +60,9 @@ export function MainComputerStatusButton({
         </button>
       </TooltipTrigger>
       <TooltipContent align="start" side="bottom" className="max-w-52">
-        <div className="font-medium">{t.agentWorkbenchPanel.mainComputer}</div>
+        <div className="font-medium">
+          {t.agentWorkbenchPanel.currentConversation}
+        </div>
         <div className="mt-0.5 text-xs opacity-80">
           {t.agentWorkbenchPanel.currentConversation}
           {" · "}

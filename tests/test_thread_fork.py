@@ -146,6 +146,9 @@ def test_fork_round_trip_survives_store_reload() -> None:
         reloaded = ThreadStateStore(path=path)
         assert reloaded.get(child_id)["metadata"]["parent_thread_id"] == source_id
         assert len(reloaded.get(child_id)["values"]["messages"]) == 4
+        for instance in (store, reloaded):
+            if instance._search is not None:
+                instance._search.close()
 
 
 # ─── HTTP layer ─────────────────────────────────────────────

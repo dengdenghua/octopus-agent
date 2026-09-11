@@ -337,7 +337,7 @@ def rerun_browser_desktop_repair_recipe_evidence(
     *,
     item_id: str,
     review_queue_path: str | Path | None = None,
-    api_base_url: str = "http://127.0.0.1:8000",
+    api_base_url: str = "http://127.0.0.1:8310",
     promote_source_cases: bool = False,
     actor: str = "auto_rerun",
     api_get: Callable[[str], dict[str, Any]] | None = None,
@@ -424,7 +424,7 @@ def rerun_browser_desktop_repair_recipe_evidence(
 def rerun_browser_desktop_repair_recipe_batch(
     *,
     review_queue_path: str | Path | None = None,
-    api_base_url: str = "http://127.0.0.1:8000",
+    api_base_url: str = "http://127.0.0.1:8310",
     promote_source_cases: bool = False,
     actor: str = "auto_rerun",
     limit: int = 20,

@@ -438,6 +438,7 @@ def create_capability_router(
                 configured = model_provider_plugins.configure(
                     item,
                     models=list(discovered.get("models") or []),
+                    channels=discovered.get("channels"),
                     base_url=str(discovered.get("base_url") or "") or None,
                 )
             except Exception as exc:  # noqa: BLE001 - restore the lifecycle state
@@ -521,6 +522,7 @@ def create_capability_router(
                 configured = model_provider_plugins.configure(
                     item,
                     models=list(discovered.get("models") or []),
+                    channels=discovered.get("channels"),
                     base_url=str(discovered.get("base_url") or "") or None,
                 )
                 registry.set_enabled(cid, True)

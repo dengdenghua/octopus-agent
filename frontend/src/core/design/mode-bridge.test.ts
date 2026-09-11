@@ -35,6 +35,11 @@ describe("design mode bridge", () => {
     ).toBe("/workspace/design?thread=thread%2F1&project=project+1");
   });
 
+  it("opens the creative home for a new design task instead of a blank conversation", () => {
+    expect(designWorkspaceRoute({ newTask: true, threadId: "allocated-id", projectId: "art" }))
+      .toBe("/workspace/design?new_task=new&project=art");
+  });
+
   it("starts a fresh design task while retaining only its creation scope", () => {
     expect(
       freshDesignWorkspaceRoute({

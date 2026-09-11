@@ -262,7 +262,7 @@ export interface UseRealtimeThreadValue {
     sandboxPolicy?: SandboxPolicy;
     planningMode?: boolean;
     model?: string;
-    executionEngine?: "auto" | "octopus" | "codex";
+    executionEngine?: "auto" | "octopus" | "codex" | "opencode";
     effort?: ReasoningEffort;
     metadata?: Record<string, unknown>;
     /** Optional topology id for callers that explicitly need the
@@ -276,7 +276,7 @@ export interface UseRealtimeThreadValue {
    * consumes it at the next safe model boundary (never halfway through a
    * tool side effect). */
   steer: (params: { input: string; itemId?: string }) => Promise<void>;
-  resolveApproval: (requestId: string | number, accept: boolean) => void;
+  resolveApproval: (requestId: string | number, accept: boolean, preparedRoles?: Record<string, string>) => void;
   /** Live streaming vitals for the active turn (TTFT, delta cadence, stall
    * detection). Lets the status strip tell "model still working" apart
    * from "connection stuck". ``phase: "idle"`` between turns. */
@@ -457,7 +457,7 @@ export function useRealtimeThread(
   const approvalResolvers = useRef<
     Map<
       string | number,
-      (decision: { action: string; reason?: string }) => void
+      (decision: { action: string; reason?: string; preparedRoles?: Record<string, string> }) => void
     >
   >(new Map());
   // Client-side expiry timers, keyed like the resolvers. The server
@@ -1826,10 +1826,10 @@ export function useRealtimeThread(
 
   const resolveApproval = useCallback<
     UseRealtimeThreadValue["resolveApproval"]
-  >((requestId, accept) => {
+  >((requestId, accept, preparedRoles) => {
     const resolver = approvalResolvers.current.get(requestId);
     if (!resolver) return;
-    resolver({ action: accept ? "accept" : "decline" });
+    resolver({ action: accept ? "accept" : "decline", ...(preparedRoles ? { preparedRoles } : {}) });
   }, []);
 
   const resume = useCallback(async () => {

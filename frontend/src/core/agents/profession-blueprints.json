@@ -1,0 +1,970 @@
+[
+  {
+    "id": "dangbei-role-01",
+    "category": "研发",
+    "name": "移动端开发工程师",
+    "original_indices": [
+      1,
+      2,
+      4
+    ],
+    "original_jobs": [
+      "Android 开发",
+      "iOS 开发",
+      "Framework 开发"
+    ],
+    "configuration_dimensions": "操作系统、语言、应用层/系统层",
+    "boundary": "Android、iOS、Framework 分别配置技术栈，不能仅改名称就视为能力相同",
+    "candidates": [
+      {
+        "role_id": "wb_mobile-application-developer",
+        "role_name": "移动应用开发工程师",
+        "source": "精选目录",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      },
+      {
+        "role_id": "twin_android_system_engineer",
+        "role_name": "Android 系统工程师",
+        "source": "本地职业模板",
+        "match": "部分匹配",
+        "author": "本地职业模板"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-02",
+    "category": "研发",
+    "name": "后端开发工程师",
+    "original_indices": [
+      3
+    ],
+    "original_jobs": [
+      "后端开发"
+    ],
+    "configuration_dimensions": "语言、框架、数据库",
+    "boundary": "接口、服务端实现与架构协作",
+    "candidates": [
+      {
+        "role_id": "wb_backend-architect",
+        "role_name": "后端架构师",
+        "source": "精选目录",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-03",
+    "category": "研发",
+    "name": "测试工程师",
+    "original_indices": [
+      5
+    ],
+    "original_jobs": [
+      "测试工程师"
+    ],
+    "configuration_dimensions": "软件/硬件、测试类型",
+    "boundary": "测试计划、用例、复现与自动化验证",
+    "candidates": [
+      {
+        "role_id": "twin_test_engineer",
+        "role_name": "测试工程师",
+        "source": "本地职业模板",
+        "match": "直接匹配",
+        "author": "本地职业模板"
+      }
+    ],
+    "needs_extension": false
+  },
+  {
+    "id": "dangbei-role-04",
+    "category": "研发",
+    "name": "数据工程师",
+    "original_indices": [
+      6
+    ],
+    "original_jobs": [
+      "数据工程师"
+    ],
+    "configuration_dimensions": "数据源、计算引擎",
+    "boundary": "数据采集、管道与质量校验",
+    "candidates": [
+      {
+        "role_id": "wb_data-engineer",
+        "role_name": "数据工程师",
+        "source": "精选目录",
+        "match": "直接匹配",
+        "author": "原作者未标注"
+      }
+    ],
+    "needs_extension": false
+  },
+  {
+    "id": "dangbei-role-05",
+    "category": "研发",
+    "name": "技术负责人助手",
+    "original_indices": [
+      7,
+      8,
+      9
+    ],
+    "original_jobs": [
+      "技术专家",
+      "研发经理",
+      "研发总监"
+    ],
+    "configuration_dimensions": "技术领域、管理范围",
+    "boundary": "复用技术评审、研发计划、风险与团队协作流程；组织任免与预算决策仍由负责人承担",
+    "candidates": [
+      {
+        "role_id": "wb_software-architect",
+        "role_name": "软件架构师",
+        "source": "精选目录",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      },
+      {
+        "role_id": "twin_technical_program_manager",
+        "role_name": "技术项目经理 / TPM",
+        "source": "本地职业模板",
+        "match": "部分匹配",
+        "author": "本地职业模板"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-06",
+    "category": "产品设计",
+    "name": "产品经理",
+    "original_indices": [
+      10,
+      38
+    ],
+    "original_jobs": [
+      "产品经理",
+      "海外产品经理"
+    ],
+    "configuration_dimensions": "市场、语言、产品线",
+    "boundary": "国内海外共用需求、路线图和反馈工作流",
+    "candidates": [
+      {
+        "role_id": "twin_product",
+        "role_name": "产品经理",
+        "source": "本地职业模板",
+        "match": "直接匹配",
+        "author": "本地职业模板"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-07",
+    "category": "产品设计",
+    "name": "项目经理",
+    "original_indices": [
+      11
+    ],
+    "original_jobs": [
+      "项目经理"
+    ],
+    "configuration_dimensions": "项目类型、交付阶段",
+    "boundary": "进度、依赖、风险与交付协调",
+    "candidates": [
+      {
+        "role_id": "twin_project",
+        "role_name": "项目经理",
+        "source": "本地职业模板",
+        "match": "直接匹配",
+        "author": "本地职业模板"
+      }
+    ],
+    "needs_extension": false
+  },
+  {
+    "id": "dangbei-role-08",
+    "category": "产品设计",
+    "name": "体验与视觉设计师",
+    "original_indices": [
+      12,
+      13,
+      15,
+      75
+    ],
+    "original_jobs": [
+      "UX 设计师",
+      "视觉设计师",
+      "设计总监",
+      "创意设计主管"
+    ],
+    "configuration_dimensions": "交互/视觉/设计评审",
+    "boundary": "共用设计资料与评审流程，分别加载 UX、视觉和设计管理技能",
+    "candidates": [
+      {
+        "role_id": "wb_user-experience-architect",
+        "role_name": "用户体验架构师",
+        "source": "源目录（未入选当前50岗）",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      },
+      {
+        "role_id": "wb_ui-designer",
+        "role_name": "UI设计师",
+        "source": "精选目录",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      },
+      {
+        "role_id": "wb_design-prototype-expert",
+        "role_name": "设计工作室主理人",
+        "source": "源目录（未入选当前50岗）",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-09",
+    "category": "产品设计",
+    "name": "工业设计师",
+    "original_indices": [
+      14
+    ],
+    "original_jobs": [
+      "工业设计师"
+    ],
+    "configuration_dimensions": "产品类型、材料、制造约束",
+    "boundary": "保留实体产品设计与可制造性边界",
+    "candidates": [
+      {
+        "role_id": "twin_industrial_design",
+        "role_name": "工业设计师",
+        "source": "本地职业模板",
+        "match": "直接匹配",
+        "author": "本地职业模板"
+      }
+    ],
+    "needs_extension": false
+  },
+  {
+    "id": "dangbei-role-10",
+    "category": "产品设计",
+    "name": "3D 与 AI 美术师",
+    "original_indices": [
+      74,
+      76
+    ],
+    "original_jobs": [
+      "3D 设计师",
+      "AI 美术工程师"
+    ],
+    "configuration_dimensions": "建模/渲染/生成/精修",
+    "boundary": "按资产类型加载 3D 或图像生成工具，现有提示词角色只能作为基础",
+    "candidates": [
+      {
+        "role_id": "wb_technical-artist",
+        "role_name": "技术美术",
+        "source": "完整源目录，安装状态未核实",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      },
+      {
+        "role_id": "wb_ai-image-prompt-engineer",
+        "role_name": "AI图像提示词工程师",
+        "source": "完整源目录，安装状态未核实",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      }
+    ],
+    "needs_extension": true,
+    "reuse_review": "已有技术美术、着色器/VFX 与 AI 图像提示词基础；仍需补通用建模、灯光渲染及图像精修工作流。"
+  },
+  {
+    "id": "dangbei-role-11",
+    "category": "营销内容",
+    "name": "内容与社媒运营",
+    "original_indices": [
+      16,
+      21,
+      22,
+      27
+    ],
+    "original_jobs": [
+      "内容运营",
+      "新媒体推广",
+      "新媒体运营",
+      "海外社媒营销"
+    ],
+    "configuration_dimensions": "平台、语言、内容形式",
+    "boundary": "选题、内容、排期、发布与复盘共用",
+    "candidates": [
+      {
+        "role_id": "wb_content-creator",
+        "role_name": "内容创作专家",
+        "source": "精选目录",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      },
+      {
+        "role_id": "wb_social-media-strategist",
+        "role_name": "社交媒体策略师",
+        "source": "精选目录",
+        "match": "直接匹配",
+        "author": "原作者未标注"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-12",
+    "category": "营销内容",
+    "name": "用户运营",
+    "original_indices": [
+      17
+    ],
+    "original_jobs": [
+      "用户运营"
+    ],
+    "configuration_dimensions": "用户阶段、触达渠道",
+    "boundary": "留存、社群与用户生命周期单独保留",
+    "candidates": [
+      {
+        "role_id": "wb_private-domain-operations-expert",
+        "role_name": "私域运营专家",
+        "source": "源目录（未入选当前50岗）",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-13",
+    "category": "营销内容",
+    "name": "投放与达人合作",
+    "original_indices": [
+      18,
+      23,
+      26,
+      34
+    ],
+    "original_jobs": [
+      "AI 达人投放",
+      "合作投放",
+      "海外 KOL 运营",
+      "电商推广"
+    ],
+    "configuration_dimensions": "广告平台、达人类型、地区",
+    "boundary": "共用筛选、简报、预算、归因与合作跟进；分别配置广告和达人流程",
+    "candidates": [
+      {
+        "role_id": "wb_social-ad-strategist",
+        "role_name": "社交广告策略师",
+        "source": "源目录（未入选当前50岗）",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      },
+      {
+        "role_id": "wb_social-media-strategist",
+        "role_name": "社交媒体策略师",
+        "source": "精选目录",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      },
+      {
+        "role_id": "wb_ppc-bidding-strategist",
+        "role_name": "PPC竞价广告策略师",
+        "source": "精选目录",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-14",
+    "category": "营销内容",
+    "name": "品牌与市场策划",
+    "original_indices": [
+      20,
+      24,
+      25
+    ],
+    "original_jobs": [
+      "市场营销",
+      "品牌运营",
+      "海外品牌推广"
+    ],
+    "configuration_dimensions": "品牌、市场、语言",
+    "boundary": "定位、活动、传播方案与本地化",
+    "candidates": [
+      {
+        "role_id": "wb_executing-marketing-campaigns",
+        "role_name": "营销活动策划专家",
+        "source": "源目录（未入选当前50岗）",
+        "match": "直接匹配",
+        "author": "原作者未标注"
+      },
+      {
+        "role_id": "wb_brand-guardian",
+        "role_name": "品牌策略师",
+        "source": "精选目录",
+        "match": "直接匹配",
+        "author": "原作者未标注"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-15",
+    "category": "营销内容",
+    "name": "视频内容制作",
+    "original_indices": [
+      19,
+      28,
+      29,
+      30
+    ],
+    "original_jobs": [
+      "AI 视频营销",
+      "摄影摄像",
+      "视频剪辑",
+      "后期制作"
+    ],
+    "configuration_dimensions": "实拍/生成、视频类型",
+    "boundary": "共用脚本、分镜、剪辑与后期；实拍执行仍需摄影人员",
+    "candidates": [
+      {
+        "role_id": "wb_ai-video-script",
+        "role_name": "AI视频脚本创作专家",
+        "source": "源目录（未入选当前50岗）",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      },
+      {
+        "role_id": "wb_short-video-editing-coach",
+        "role_name": "短视频剪辑教练",
+        "source": "精选目录",
+        "match": "直接匹配",
+        "author": "原作者未标注"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-16",
+    "category": "电商销售",
+    "name": "电商运营",
+    "original_indices": [
+      32,
+      33,
+      36
+    ],
+    "original_jobs": [
+      "电商运营",
+      "电商内容运营",
+      "跨境电商运营"
+    ],
+    "configuration_dimensions": "平台、国内/跨境、品类",
+    "boundary": "商品、内容、活动与经营分析；税务物流依赖单独配置",
+    "candidates": [
+      {
+        "role_id": "wb_china-ecommerce-operations-expert",
+        "role_name": "中国电商运营专家",
+        "source": "精选目录",
+        "match": "直接匹配",
+        "author": "原作者未标注"
+      },
+      {
+        "role_id": "wb_cross-border-ecommerce-expert",
+        "role_name": "跨境电商专家",
+        "source": "精选目录",
+        "match": "直接匹配",
+        "author": "原作者未标注"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-17",
+    "category": "电商销售",
+    "name": "直播策划与运营",
+    "original_indices": [
+      31,
+      35
+    ],
+    "original_jobs": [
+      "电商主播",
+      "直播运营"
+    ],
+    "configuration_dimensions": "平台、商品、真人/数字人",
+    "boundary": "合并直播脚本、场控计划与复盘，不代表已经具备数字人出镜能力",
+    "candidates": [
+      {
+        "role_id": "wb_livestream-ecommerce-coach",
+        "role_name": "直播电商教练",
+        "source": "源目录（未入选当前50岗）",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-18",
+    "category": "电商销售",
+    "name": "销售与商务",
+    "original_indices": [
+      37,
+      49,
+      50,
+      66
+    ],
+    "original_jobs": [
+      "海外区域销售",
+      "商务专员",
+      "海外销售支持",
+      "商务副总监"
+    ],
+    "configuration_dimensions": "地区、渠道、管理范围",
+    "boundary": "共用客户、商机、报价、订单与商务支持工作流",
+    "candidates": [
+      {
+        "role_id": "twin_sales",
+        "role_name": "销售与商务经理",
+        "source": "本地职业模板",
+        "match": "部分匹配",
+        "author": "本地职业模板"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-19",
+    "category": "服务供应链",
+    "name": "质量工程师",
+    "original_indices": [
+      39,
+      42,
+      43
+    ],
+    "original_jobs": [
+      "售后品质经理",
+      "供应商质量工程师（SQE）",
+      "品质工程师"
+    ],
+    "configuration_dimensions": "供应商/来料/售后",
+    "boundary": "共用缺陷、8D、质量分析与整改跟踪，各质量环节分别配置",
+    "candidates": [
+      {
+        "role_id": "twin_hardware_quality_closed_loop_expert",
+        "role_name": "硬件质量闭环专家",
+        "source": "本地职业模板",
+        "match": "部分匹配",
+        "author": "本地职业模板"
+      },
+      {
+        "role_id": "twin_supplier_quality_expert",
+        "role_name": "供应商质量专家",
+        "source": "本地职业模板",
+        "match": "直接匹配",
+        "author": "本地职业模板"
+      },
+      {
+        "role_id": "twin_quality",
+        "role_name": "质量工程师",
+        "source": "本地职业模板",
+        "match": "直接匹配",
+        "author": "本地职业模板"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-20",
+    "category": "服务供应链",
+    "name": "客户服务运营",
+    "original_indices": [
+      40,
+      41,
+      57,
+      58,
+      59,
+      60
+    ],
+    "original_jobs": [
+      "售后经理",
+      "海外售后专家",
+      "客服专员",
+      "客服主管",
+      "客服质检",
+      "机器人训练师"
+    ],
+    "configuration_dimensions": "服务渠道、地区、支持/质检/知识训练",
+    "boundary": "共用工单与知识库；答复、质检及知识修改保留独立步骤和记录",
+    "candidates": [
+      {
+        "role_id": "wb_customer-support-expert",
+        "role_name": "客户支持专家",
+        "source": "精选目录",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      },
+      {
+        "role_id": "wb_ai-engineer",
+        "role_name": "AI工程师",
+        "source": "精选目录",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-21",
+    "category": "服务供应链",
+    "name": "采购与供应链",
+    "original_indices": [
+      44,
+      45
+    ],
+    "original_jobs": [
+      "采购专员",
+      "供应链管理"
+    ],
+    "configuration_dimensions": "供应商、品类、交付区域",
+    "boundary": "询价、比价、交期、供应风险与采购协作",
+    "candidates": [
+      {
+        "role_id": "twin_procurement_manager_buyer",
+        "role_name": "采购经理 / Buyer",
+        "source": "本地职业模板",
+        "match": "直接匹配",
+        "author": "本地职业模板"
+      },
+      {
+        "role_id": "twin_supply_chain",
+        "role_name": "供应链与采购经理",
+        "source": "本地职业模板",
+        "match": "直接匹配",
+        "author": "本地职业模板"
+      }
+    ],
+    "needs_extension": false
+  },
+  {
+    "id": "dangbei-role-22",
+    "category": "服务供应链",
+    "name": "仓储与库存运营",
+    "original_indices": [
+      46,
+      48
+    ],
+    "original_jobs": [
+      "仓储管理",
+      "海外仓储账务"
+    ],
+    "configuration_dimensions": "仓库、国家、库存系统",
+    "boundary": "库存、盘点、收发存、海外仓费用台账；财务凭证交会计角色",
+    "candidates": [
+      {
+        "role_id": "wb_supply-chain-strategist",
+        "role_name": "供应链策略师",
+        "source": "完整源目录，安装状态未核实",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      },
+      {
+        "role_id": "wb_cross-border-ecommerce-expert",
+        "role_name": "跨境电商专家",
+        "source": "完整源目录，安装状态未核实",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      }
+    ],
+    "needs_extension": true,
+    "reuse_review": "已有库存优化与海外仓配基础；仍需补收发存、盘点和仓储账务流程。"
+  },
+  {
+    "id": "dangbei-role-23",
+    "category": "财务经营",
+    "name": "会计与资金助理",
+    "original_indices": [
+      47,
+      52,
+      53,
+      54
+    ],
+    "original_jobs": [
+      "账务管理",
+      "会计",
+      "出纳",
+      "会计经理"
+    ],
+    "configuration_dimensions": "账套、币种、核算/资金",
+    "boundary": "复用账务整理、关账、对账与收付材料；制单、审批和付款权限分离",
+    "candidates": [
+      {
+        "role_id": "wb_finance",
+        "role_name": "财务会计专家",
+        "source": "精选目录",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      },
+      {
+        "role_id": "twin_finance",
+        "role_name": "财务经理",
+        "source": "本地职业模板",
+        "match": "部分匹配",
+        "author": "本地职业模板"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-24",
+    "category": "财务经营",
+    "name": "经营财务分析师",
+    "original_indices": [
+      51,
+      55
+    ],
+    "original_jobs": [
+      "首席财务官",
+      "财务 BP 经理"
+    ],
+    "configuration_dimensions": "业务线、预算周期",
+    "boundary": "预算、预测、现金流与经营分析；CFO 战略和签批由人负责",
+    "candidates": [
+      {
+        "role_id": "twin_finance",
+        "role_name": "财务经理",
+        "source": "本地职业模板",
+        "match": "部分匹配",
+        "author": "本地职业模板"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-25",
+    "category": "财务经营",
+    "name": "内控与审计",
+    "original_indices": [
+      56
+    ],
+    "original_jobs": [
+      "内控经理"
+    ],
+    "configuration_dimensions": "制度、审计范围",
+    "boundary": "独立于会计执行角色，避免经办者自审",
+    "candidates": [
+      {
+        "role_id": "twin_audit",
+        "role_name": "审计专员",
+        "source": "本地职业模板",
+        "match": "部分匹配",
+        "author": "本地职业模板"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-26",
+    "category": "技术支持",
+    "name": "IT 基础设施运维",
+    "original_indices": [
+      61,
+      63
+    ],
+    "original_jobs": [
+      "网络工程师",
+      "IT 运维工程师"
+    ],
+    "configuration_dimensions": "网络/终端/服务器",
+    "boundary": "故障诊断、资产与运维计划，网络操作需对应工具和权限",
+    "candidates": [
+      {
+        "role_id": "wb_infrastructure-operations-expert",
+        "role_name": "基础设施运维专家",
+        "source": "源目录（未入选当前50岗）",
+        "match": "直接匹配",
+        "author": "原作者未标注"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-27",
+    "category": "技术支持",
+    "name": "安全工程师",
+    "original_indices": [
+      62
+    ],
+    "original_jobs": [
+      "安全工程师"
+    ],
+    "configuration_dimensions": "安全域、资产范围",
+    "boundary": "与运维分开，负责风险审查与安全验证",
+    "candidates": [
+      {
+        "role_id": "wb_security-engineer",
+        "role_name": "安全工程师",
+        "source": "精选目录",
+        "match": "直接匹配",
+        "author": "原作者未标注"
+      }
+    ],
+    "needs_extension": false
+  },
+  {
+    "id": "dangbei-role-28",
+    "category": "财务经营",
+    "name": "经营决策助手",
+    "original_indices": [
+      64,
+      65
+    ],
+    "original_jobs": [
+      "CEO",
+      "总裁"
+    ],
+    "configuration_dimensions": "经营范围、决策周期",
+    "boundary": "共用经营汇总、战略研究和决策材料，不承接公司法定职权",
+    "candidates": [
+      {
+        "role_id": "twin_founder",
+        "role_name": "创始人/CEO",
+        "source": "本地职业模板",
+        "match": "直接匹配",
+        "author": "本地职业模板"
+      },
+      {
+        "role_id": "twin_business_assistant",
+        "role_name": "经营助理 / 总经理助理",
+        "source": "本地职业模板",
+        "match": "部分匹配",
+        "author": "本地职业模板"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-29",
+    "category": "职能支持",
+    "name": "法务与合规",
+    "original_indices": [
+      67,
+      68
+    ],
+    "original_jobs": [
+      "法务总监",
+      "法务专员"
+    ],
+    "configuration_dimensions": "地区、合同类型、管理范围",
+    "boundary": "共用合同审查、合规清单与法务管理材料",
+    "candidates": [
+      {
+        "role_id": "twin_legal",
+        "role_name": "法务与合规专员",
+        "source": "本地职业模板",
+        "match": "部分匹配",
+        "author": "本地职业模板"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-30",
+    "category": "职能支持",
+    "name": "政策与项目申报",
+    "original_indices": [
+      69
+    ],
+    "original_jobs": [
+      "项目申报专员"
+    ],
+    "configuration_dimensions": "地区、申报项目",
+    "boundary": "政策匹配、条件核验、申报材料与验收跟踪，作为独立专业角色",
+    "candidates": [
+      {
+        "role_id": "wb_mentougou-business-guide",
+        "role_name": "门头沟区营商政策顾问",
+        "source": "完整源目录，安装状态未核实",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      },
+      {
+        "role_id": "wb_charity-doc-finance-expert",
+        "role_name": "公益文书与财务专家",
+        "source": "完整源目录，安装状态未核实",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      }
+    ],
+    "needs_extension": true,
+    "reuse_review": "已有地区政策与公益项目申请材料基础；需替换政策地域、适用主体及申报验收规则，不能直接泛化原政策。"
+  },
+  {
+    "id": "dangbei-role-31",
+    "category": "职能支持",
+    "name": "人力与组织运营",
+    "original_indices": [
+      70,
+      71,
+      72
+    ],
+    "original_jobs": [
+      "HRBP",
+      "人事专员",
+      "企业文化专员"
+    ],
+    "configuration_dimensions": "业务组织、人事/文化",
+    "boundary": "组织诊断、人事流程与文化沟通共用，敏感人事数据按权限隔离",
+    "candidates": [
+      {
+        "role_id": "twin_hr",
+        "role_name": "人力资源经理",
+        "source": "本地职业模板",
+        "match": "部分匹配",
+        "author": "本地职业模板"
+      }
+    ],
+    "needs_extension": true
+  },
+  {
+    "id": "dangbei-role-32",
+    "category": "职能支持",
+    "name": "行政运营",
+    "original_indices": [
+      73
+    ],
+    "original_jobs": [
+      "行政专员"
+    ],
+    "configuration_dimensions": "办公地点、服务范围",
+    "boundary": "资产、办公采购、接待和后勤，不并入人事档案管理",
+    "candidates": [
+      {
+        "role_id": "wb_sg-hr-admin-expert",
+        "role_name": "新加坡人力行政专家",
+        "source": "完整源目录，安装状态未核实",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      },
+      {
+        "role_id": "wb_studio-operations-manager",
+        "role_name": "工作室运营管理者",
+        "source": "完整源目录，安装状态未核实",
+        "match": "部分匹配",
+        "author": "原作者未标注"
+      }
+    ],
+    "needs_extension": true,
+    "reuse_review": "已有办公场地、行政流程与资源调度基础；需去除地区绑定并补资产、接待与后勤流程。"
+  }
+]

@@ -1,0 +1,3 @@
+Browser tab: 4, Title: "发现社区 - Echo", URL: "http://localhost:3310/#/workspace/community?view=market".
+There has been no change in the accessibility tree.
+The focused UI element is 185 button 查看 一键比价监控器

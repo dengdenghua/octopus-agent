@@ -1,0 +1,32 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/channels".
+0 AXWebArea Echo, URL: localhost:3310/#/workspace/channels
+	1 container
+		2 container Notifications alt+T
+		3 container 设置 WhatsApp 机器人, ID: radix-_r_ok_
+			4 heading 设置 WhatsApp 机器人, Value: 2, ID: radix-_r_ol_
+				5 text 设置 WhatsApp 机器人
+			6 container radix-_r_om_
+				7 text 凭证会保存到本地 channel_credentials.json (不上云)。
+				8 link Description: 如何接入?, Value: docs.octopus.ai/channels/whatsapp
+			9 container
+				10 text Phone Number ID *
+			11 text field (settable) Phone Number ID*
+			12 container
+				13 text Access Token *
+			14 container
+				15 text field (settable) Access Token*
+				16 button 显示
+			17 container
+				18 text Verify Token *
+			19 container
+				20 text field (settable) Verify Token*
+				21 button 显示
+			22 text App Secret
+			23 container
+				24 text field (settable) App Secret
+				25 button 显示
+			26 button 取消
+			27 button 保存并连接
+			28 button 关闭
+
+The focused UI element is 11 text field (settable) Phone Number ID*

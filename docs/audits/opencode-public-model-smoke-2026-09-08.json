@@ -1,0 +1,34 @@
+{
+  "model": "big-pickle",
+  "account_key_supplied": false,
+  "tools_enabled": false,
+  "prompt": "Reply exactly ECHO_OK",
+  "events": [
+    {
+      "type": "text_delta",
+      "delta": "ECHO_OK",
+      "start_new_segment": false
+    },
+    {
+      "type": "react_completed",
+      "success": true,
+      "terminated_reason": "completed",
+      "completion_receipt": {
+        "engine": "opencode",
+        "model": "big-pickle",
+        "cost": 0,
+        "tokens": {
+          "total": 1929,
+          "input": 1910,
+          "output": 19,
+          "reasoning": 0,
+          "cache": {
+            "write": 0,
+            "read": 0
+          }
+        }
+      }
+    }
+  ],
+  "seconds": 12.803
+}

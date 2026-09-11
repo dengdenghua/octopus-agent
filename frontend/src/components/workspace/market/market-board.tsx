@@ -1,3 +1,4 @@
+import { ImageWithFallback } from "@/components/ui/image-with-fallback";
 import {
   ArrowRightIcon,
   ClockIcon,
@@ -78,6 +79,9 @@ export function MarketBoard() {
 
   return (
     <>
+      <p className="mb-3 rounded-lg border border-border-subtle bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground">
+        本地演示集市。内置商品为示例；上架、购买和积分记录保存在当前浏览器，尚未接入真实交易与交付服务。
+      </p>
       {!bannerDismissed && (
         <div className="mb-3 flex flex-col gap-2 rounded-lg border border-primary/20 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-2.5">
@@ -262,8 +266,15 @@ export function ListModal({
             <XIcon className="size-4" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+          <label
+            htmlFor="market-item-title"
+            className="mb-1.5 block text-xs font-medium"
+          >
+            标题
+          </label>
           <input
+            id="market-item-title"
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -271,19 +282,30 @@ export function ListModal({
             maxLength={40}
             className="w-full rounded-md border border-border-default bg-background/60 px-3 py-2 text-sm outline-none placeholder:text-muted-foreground/60 focus:border-primary/50 focus:ring-2 focus:ring-primary/10"
           />
+          <label
+            htmlFor="market-item-description"
+            className="mb-1.5 mt-4 block text-xs font-medium"
+          >
+            用途与亮点（可选）
+          </label>
           <textarea
+            id="market-item-description"
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
             placeholder="描述用途、亮点（可选）…"
             rows={3}
-            className="mt-3 w-full resize-none rounded-md border border-border-default bg-background/60 px-3 py-2 text-sm outline-none placeholder:text-muted-foreground/60 focus:border-primary/50 focus:ring-2 focus:ring-primary/10"
+            className="w-full resize-none rounded-md border border-border-default bg-background/60 px-3 py-2 text-sm outline-none placeholder:text-muted-foreground/60 focus:border-primary/50 focus:ring-2 focus:ring-primary/10"
           />
           <div className="mt-3 grid grid-cols-2 gap-3">
             <div>
-              <p className="mb-1.5 text-xs text-muted-foreground">
+              <label
+                htmlFor="market-item-price"
+                className="mb-1.5 block text-xs text-muted-foreground"
+              >
                 售价（积分）
-              </p>
+              </label>
               <input
+                id="market-item-price"
                 type="number"
                 value={price}
                 min={1}
@@ -292,8 +314,14 @@ export function ListModal({
               />
             </div>
             <div>
-              <p className="mb-1.5 text-xs text-muted-foreground">分类</p>
+              <label
+                htmlFor="market-item-category"
+                className="mb-1.5 block text-xs text-muted-foreground"
+              >
+                分类
+              </label>
               <select
+                id="market-item-category"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full rounded-md border border-border-default bg-background px-3 py-2 text-sm outline-none focus:border-primary/50"
@@ -309,11 +337,13 @@ export function ListModal({
           <div className="mt-3">
             <p className="mb-1.5 text-xs text-muted-foreground">选择封面</p>
             <div className="grid grid-cols-6 gap-2">
-              {COVER_OPTIONS.map((c) => (
+              {COVER_OPTIONS.map((c, index) => (
                 <button
                   key={c}
                   type="button"
                   onClick={() => setCover(c)}
+                  aria-label={`封面 ${index + 1}`}
+                  aria-pressed={cover === c}
                   className={cn(
                     "aspect-[4/3] overflow-hidden rounded-md ring-2 transition",
                     cover === c
@@ -321,7 +351,11 @@ export function ListModal({
                       : "ring-transparent hover:ring-border-default",
                   )}
                 >
-                  <img src={c} alt="" className="h-full w-full object-cover" />
+                  <ImageWithFallback
+                    src={c}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
                 </button>
               ))}
             </div>

@@ -1,0 +1,3 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/observability".
+There has been no change in the accessibility tree.
+The focused UI element is 178 tab (selected, settable, boolean) 流式, Value: 1, ID: radix-_r_uf_-trigger-streaming

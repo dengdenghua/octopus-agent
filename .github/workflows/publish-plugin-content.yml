@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: signed-plugin-content-${{ github.ref }}
+  group: signed-plugin-content-${{ inputs.target_repository }}
   cancel-in-progress: false
 
 jobs:
@@ -96,7 +96,15 @@ jobs:
           extensions/workbuddy-experts/scripts/build-cloud-bundles.py
           --kind all
 
-      - name: Prove catalog and content archive are one closed release
+      - name: Sign final skill catalog with independent package hashes
+        # The bundle builder adds per-skill download hashes to the skill index.
+        # Sign those final bytes before any verification or upload.
+        run: >-
+          ./.venv/bin/python
+          extensions/workbuddy-experts/scripts/sign-marketplace-catalog.py
+          extensions/workbuddy-experts/storefront/data/skill-registry.json
+
+      - name: Prove plugin catalog and content archive are one closed release
         run: >-
           ./.venv/bin/python
           extensions/workbuddy-experts/scripts/verify-marketplace-release.py
@@ -171,7 +179,7 @@ jobs:
           cp "${RUNNER_TEMP}/plugin-publishers.json" \
             "extensions/workbuddy-experts/remote/bundles/plugin-publishers.json"
 
-      - name: Publish immutable content assets
+      - name: Upload content before exposing catalog entries
         env:
           GH_TOKEN: ${{ secrets.MARKETPLACE_RELEASE_TOKEN }}
         run: |
@@ -183,11 +191,22 @@ jobs:
               --notes "Marketplace workbenches, plugins, and connectors signed by the protected EchoAI release key."
           fi
           gh release upload octopus-content --repo "${TARGET_REPOSITORY}" --clobber \
+            extensions/workbuddy-experts/remote/bundles/skill-*.tar.gz \
             extensions/workbuddy-experts/remote/bundles/octopus-plugins.tar.gz \
             extensions/workbuddy-experts/remote/bundles/octopus-plugins.tar.gz.sha256 \
             extensions/workbuddy-experts/remote/bundles/octopus-skills.tar.gz \
             extensions/workbuddy-experts/remote/bundles/octopus-skills.tar.gz.sha256 \
-            extensions/workbuddy-experts/remote/bundles/plugin-publishers.json \
+            extensions/workbuddy-experts/remote/bundles/plugin-publishers.json
+
+      # A failed content upload must not publish a catalog pointing at missing assets.
+      # GitHub release asset replacement is not atomic; readers still verify catalog
+      # signatures and retain their verified cache during a metadata mismatch.
+      - name: Publish signed catalogs after all content uploads succeed
+        env:
+          GH_TOKEN: ${{ secrets.MARKETPLACE_RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release upload octopus-content --repo "${TARGET_REPOSITORY}" --clobber \
             extensions/workbuddy-experts/storefront/data/plugin-store.json \
             extensions/workbuddy-experts/storefront/data/plugin-store.provenance.json \
             extensions/workbuddy-experts/storefront/data/skill-registry.json \

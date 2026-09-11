@@ -75,6 +75,11 @@ export function EmptyShellView({
       browserTabPage
     ) : effectiveActiveTab === "workspace" ? (
       personaWorkbenchPage
+    ) : effectiveActiveTab === "artifacts" ? (
+      <WorkbenchEmptyPage
+        title={t.conversation.artifactsTitle}
+        description={t.conversation.noChangesArtifacts}
+      />
     ) : (
       <WorkbenchEmptyPage
         title={t.agentWorkbenchPanel.robot}

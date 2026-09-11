@@ -14,11 +14,17 @@ if (!(Test-Path -LiteralPath $pythonPath) -or !$nodePath) {
     throw 'Python virtual environment or Node.js is missing. See LOCAL-RUN.md.'
 }
 $env:PYTHONUTF8 = '1'
+if (!$env:OCTOPUS_OPENCODE_BIN -and (Test-Path -LiteralPath $runtimePaths)) {
+    $openCodePath = (Get-Content -LiteralPath $runtimePaths -Raw | ConvertFrom-Json).opencode
+    if ($openCodePath -and (Test-Path -LiteralPath $openCodePath)) {
+        $env:OCTOPUS_OPENCODE_BIN = $openCodePath
+    }
+}
 $env:OCTOPUS_HOME = Join-Path $stateDir 'octopus'
 $env:PATH = "$(Split-Path $pythonPath);$(Split-Path $nodePath);$env:PATH"
-$env:OCTOPUS_BACKEND_URL = 'http://127.0.0.1:8000'
+$env:OCTOPUS_BACKEND_URL = 'http://127.0.0.1:8310'
 $env:OCTOPUS_INTERNAL_GATEWAY_BASE_URL = $env:OCTOPUS_BACKEND_URL
-$env:ELECTRON_START_URL = 'http://127.0.0.1:3000'
+$env:ELECTRON_START_URL = 'http://127.0.0.1:3310'
 
 function Test-Endpoint([string]$Url) {
     try { return (Invoke-WebRequest -UseBasicParsing -Uri $Url -TimeoutSec 2).StatusCode -eq 200 }
@@ -38,19 +44,19 @@ function Wait-Endpoint([string]$Url, $Process, [string]$Name) {
     }
     throw "$Name startup timed out. See $stateDir\$Name.err.log"
 }
-if (!(Test-Endpoint 'http://127.0.0.1:8000/api/health')) {
-    $backend = Start-LocalProcess 'backend' $pythonPath '-m runtime serve --config config.local.yaml --host 127.0.0.1 --port 8000' $repoDir
-    Wait-Endpoint 'http://127.0.0.1:8000/api/health' $backend 'backend'
+if (!(Test-Endpoint 'http://127.0.0.1:8310/api/health')) {
+    $backend = Start-LocalProcess 'backend' $pythonPath '-m runtime serve --config config.local.yaml --host 127.0.0.1 --port 8310' $repoDir
+    Wait-Endpoint 'http://127.0.0.1:8310/api/health' $backend 'backend'
 }
-if (!(Test-Endpoint 'http://127.0.0.1:3000/@vite/client')) {
+if (!(Test-Endpoint 'http://127.0.0.1:3310/@vite/client')) {
     $vitePath = Join-Path $frontendDir 'node_modules\vite\bin\vite.js'
-    $frontend = Start-LocalProcess 'frontend' $nodePath ('"' + $vitePath + '" --host 127.0.0.1 --port 3000 --strictPort') $frontendDir
-    Wait-Endpoint 'http://127.0.0.1:3000/@vite/client' $frontend 'frontend'
+    $frontend = Start-LocalProcess 'frontend' $nodePath ('"' + $vitePath + '" --host 127.0.0.1 --port 3310 --strictPort') $frontendDir
+    Wait-Endpoint 'http://127.0.0.1:3310/@vite/client' $frontend 'frontend'
 }
-Write-Host 'Echo is ready: http://127.0.0.1:3000'
+Write-Host 'Echo is ready: http://127.0.0.1:3310'
 Write-Host "Logs: $stateDir"
 if ($NoOpen) { exit 0 }
-if ($Web) { Start-Process 'http://127.0.0.1:3000'; exit 0 }
+if ($Web) { Start-Process 'http://127.0.0.1:3310'; exit 0 }
 $electronPath = Join-Path $frontendDir 'node_modules\electron\dist\electron.exe'
 if (!(Test-Path -LiteralPath $electronPath)) { throw 'Electron is missing. Use Start-Echo.cmd -Web or reinstall frontend dependencies.' }
 $desktop = Start-Process -FilePath $electronPath -ArgumentList ('"' + (Join-Path $frontendDir 'electron\main.cjs') + '"') -WorkingDirectory $frontendDir -PassThru

@@ -1,0 +1,12 @@
+Browser tab: 4, Title: "HUB - Echo", URL: "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=featured".
+0 AXWebArea HUB - Echo, URL: localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=featured
+	1 container
+		2 container Notifications alt+T
+		3 menu 管理项目管理, ID: radix-_r_lb_
+			4 从侧栏移除
+			5 停用应用
+			6 重新安装
+			7 回退上个版本
+			8 卸载
+
+The focused UI element is 3 menu 管理项目管理, ID: radix-_r_lb_

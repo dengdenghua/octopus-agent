@@ -133,11 +133,20 @@ export function ArtifactPanel({
 
           <TabsContent value="all" className="mt-2">
             {artifactCount === 0 ? (
-              <ConversationEmptyState
-                icon={<FilesIcon />}
-                title={t.conversation.noArtifactSelected}
-                description={t.conversation.selectArtifactToView}
-              />
+              <div className="text-center">
+                <ConversationEmptyState
+                  icon={<FilesIcon />}
+                  title="还没有保存为文件的成果"
+                  description="报告、文档、表格、图片与代码文件会汇集在这里。可以在对话中要求将现有结果保存为文件。"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setArtifactsOpen(false)}
+                >
+                  返回对话
+                </Button>
+              </div>
             ) : (
               <ArtifactFileList files={artifacts ?? []} threadId={threadId} />
             )}

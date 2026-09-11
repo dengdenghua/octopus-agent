@@ -76,6 +76,7 @@ if FASTAPI_AVAILABLE:
         commands: list[SlashCommandWire]
 
     class AuthProvider(BaseModel):
+        password_only_username: str | None = None
         # Account-backed and local producers shape differently, so
         # stay permissive at the model level · the frontend checks
         # ``id`` and uses the id-specific fields it knows about.

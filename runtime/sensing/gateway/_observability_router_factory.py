@@ -13,6 +13,7 @@ delegates endpoint registration to the extracted builder submodules
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from runtime.sensing._fastapi_guard import require_fastapi
@@ -31,6 +32,7 @@ def create_observability_router(
     journal: Any,
     registry: Any,
     planner: Any = None,
+    planner_provider: Callable[[], Any] | None = None,
     effect_store: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
@@ -64,6 +66,7 @@ def create_observability_router(
         journal=journal,
         registry=registry,
         planner=planner,
+        planner_provider=planner_provider,
         effect_store=effect_store,
         identity_store=identity_store,
         require_auth=require_auth,

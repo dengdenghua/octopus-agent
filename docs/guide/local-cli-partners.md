@@ -1,6 +1,6 @@
 # Local CLI partners (removed)
 
-Octopus no longer scans the machine for Claude Code, Codex CLI, Trae,
+Echo no longer scans the machine for Claude Code, Codex CLI, Trae,
 CodeBuddy, Kimi, Qoder, or OpenCode executables and no longer creates Agent
 cards from whatever happens to be present in `PATH`.
 
@@ -11,7 +11,7 @@ also made startup behavior depend on unrelated software installed on the host.
 
 ## Current execution choices
 
-- **Kane / Coder** uses the built-in Codex App Server integration. Octopus
+- **Kane / Coder** uses the built-in Codex App Server integration. Echo
   owns the Agent identity, tools, memory, approvals, task lifecycle, and audit
   trail; Codex is the inner coding engine.
 - **OpenCode Zen** is available only through the explicitly installed

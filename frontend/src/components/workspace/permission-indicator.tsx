@@ -2,6 +2,8 @@ import {
   ChevronDownIcon,
   ShieldAlertIcon,
   ShieldCheckIcon,
+  ShieldQuestionIcon,
+  ClipboardListIcon,
 } from "lucide-react";
 
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -17,6 +19,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
+const MODE_ICONS = {
+  default: ShieldQuestionIcon,
+  acceptEdits: ShieldCheckIcon,
+  bypassPermissions: ShieldAlertIcon,
+  plan: ClipboardListIcon,
+};
+
 const PERMISSION_OPTIONS: PermissionMode[] = [
   "default",
   "acceptEdits",
@@ -26,6 +35,7 @@ const PERMISSION_OPTIONS: PermissionMode[] = [
 interface PermissionIndicatorProps {
   mode: PermissionMode;
   onModeChange: (mode: PermissionMode) => void;
+  disabled?: boolean;
   className?: string;
   compact?: boolean;
 }
@@ -36,6 +46,7 @@ const PERMISSION_TRIGGER_TONE =
 export function PermissionIndicator({
   mode,
   onModeChange,
+  disabled = false,
   className,
   compact = false,
 }: PermissionIndicatorProps) {
@@ -61,11 +72,13 @@ export function PermissionIndicator({
       },
     };
   const current = labels[mode] ?? labels.default;
+  const CurrentIcon = MODE_ICONS[mode];
   const isBypassMode = mode === "bypassPermissions";
+  const controlLabel = t.chatInputBox.permissionModeLabel;
+  const options = PERMISSION_OPTIONS;
 
   const handleModeChange = async (value: string) => {
     const nextMode = value as PermissionMode;
-    if (nextMode === mode) return;
     if (nextMode === "bypassPermissions") {
       const accepted = await confirm({
         title: t.chatInputBox.permissionModeBypassConfirmTitle,
@@ -75,7 +88,7 @@ export function PermissionIndicator({
       });
       if (!accepted) return;
     }
-    onModeChange(nextMode);
+    if (nextMode !== mode) onModeChange(nextMode);
   };
 
   return (
@@ -84,9 +97,10 @@ export function PermissionIndicator({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
+            disabled={disabled}
             data-testid="permission-mode-trigger"
             className={cn(
-              "flex items-center gap-1.5 text-xs font-medium transition-colors duration-base",
+              "flex items-center gap-1.5 text-ui font-medium transition-colors duration-base disabled:cursor-not-allowed disabled:opacity-50",
               isBypassMode
                 ? "h-8 rounded-lg px-1.5 text-muted-foreground hover:bg-muted/55 hover:text-foreground"
                 : compact
@@ -94,14 +108,10 @@ export function PermissionIndicator({
                   : cn("h-8 rounded-lg px-2.5", PERMISSION_TRIGGER_TONE),
               className,
             )}
-            title={`${t.chatInputBox.permissionModeLabel}: ${current.description}`}
-            aria-label={`${t.chatInputBox.permissionModeLabel}: ${current.label}`}
+            title={`${controlLabel}: ${current.description}`}
+            aria-label={`${controlLabel}: ${current.label}`}
           >
-            {isBypassMode ? (
-              <ShieldAlertIcon className="size-3.5 text-warning" />
-            ) : (
-              <ShieldCheckIcon className="size-3 opacity-75" />
-            )}
+            <CurrentIcon aria-hidden="true" className={cn("size-3.5 shrink-0", isBypassMode ? "text-warning" : "opacity-75")} />
             <span>{current.label}</span>
             <ChevronDownIcon className="size-3 opacity-35" />
           </button>
@@ -112,11 +122,15 @@ export function PermissionIndicator({
           align="start"
           className="w-64"
         >
-          <DropdownMenuLabel className="text-xs text-muted-foreground">
-            {t.chatInputBox.permissionModeLabel}
+          <DropdownMenuLabel className="text-ui text-muted-foreground">
+            {controlLabel}
           </DropdownMenuLabel>
-          <DropdownMenuRadioGroup value={mode} onValueChange={handleModeChange}>
-            {PERMISSION_OPTIONS.map((option) => {
+          <DropdownMenuRadioGroup
+            value={mode}
+            onValueChange={handleModeChange}
+          >
+            {options.map((option) => {
+              const OptionIcon = MODE_ICONS[option];
               const item = labels[option];
               return (
                 <DropdownMenuRadioItem
@@ -124,20 +138,18 @@ export function PermissionIndicator({
                   data-testid={`permission-mode-option-${option}`}
                   value={option}
                   className={cn(
-                    "items-start py-2 text-left",
+                    "items-start gap-2 py-2.5 text-left",
                     option === "bypassPermissions" &&
                       "text-warning focus:bg-warning/10 focus:text-warning dark:focus:text-warning",
                   )}
                   aria-label={`${item.label}: ${item.description}`}
                 >
+                  <OptionIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
                   <span className="min-w-0">
-                    <span className="flex items-center gap-1.5 text-xs font-medium leading-5">
-                      {option === "bypassPermissions" && (
-                        <ShieldAlertIcon className="size-3.5" />
-                      )}
+                    <span className="flex items-center gap-1.5 text-ui font-medium leading-5">
                       {item.label}
                     </span>
-                    <span className="block text-xs leading-4 text-muted-foreground">
+                    <span className="block text-ui leading-4 text-muted-foreground">
                       {item.description}
                     </span>
                   </span>

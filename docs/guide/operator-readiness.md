@@ -1,6 +1,6 @@
 # Operator Readiness Guide
 
-This guide is the stable handoff page for running Octopus as a coding and
+This guide is the stable handoff page for running Echo as a coding and
 governed agent workspace. It ties the day-to-day operator loop to the runtime
 surfaces that must stay documented: code mode, permissions, replay gates, and
 plugins.

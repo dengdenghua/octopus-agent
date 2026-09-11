@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("@/core/i18n/hooks", () => ({
@@ -144,6 +144,42 @@ describe("ModeSelector.onManualOverrideChange", () => {
     ).toEqual({
       "/workspace/a": { mode: "develop" },
     });
+  });
+
+  it("does not trigger a route-changing mode update while persistence is pending", async () => {
+    let finish!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => pending),
+    );
+    const onModeChange = vi.fn();
+    const onUserModeChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ModeSelector
+        workDir=""
+        sessionId="new"
+        mode="develop"
+        onModeChange={onModeChange}
+        onUserModeChange={onUserModeChange}
+      />,
+    );
+    onModeChange.mockClear();
+    await user.click(screen.getByRole("button", { haspopup: "listbox" }));
+    const design = (await screen.findAllByRole("option")).find((option) =>
+      option.textContent?.includes("界面"),
+    );
+    await user.click(design!);
+    expect(onModeChange).not.toHaveBeenCalled();
+    expect(onUserModeChange).not.toHaveBeenCalled();
+    await act(async () => {
+      finish(new Response("{}", { status: 200 }));
+    });
+    expect(onModeChange).toHaveBeenCalledWith("uxui");
+    expect(onUserModeChange).toHaveBeenCalledWith("uxui");
   });
 
   it("rejects a failed server update without overwriting the saved mode", async () => {

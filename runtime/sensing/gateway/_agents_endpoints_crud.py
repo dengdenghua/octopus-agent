@@ -62,12 +62,6 @@ def _register_agents_crud(router: Any, ctx: _AgentsCtx, auth: _AuthActions) -> N
     _auth = auth.auth
     _require_admin = auth.require_admin
 
-    # Agent IDs that should not appear in the agent gallery/picker.
-    # ``admin`` is system-level (code-mode privileged persona) and has its
-    # own dedicated entry point. ``desktop_operator`` IS user-facing since
-    # #22 (CUA productization) — the Raven persona shows in the picker.
-    _AGENT_GALLERY_SKIP_IDS = frozenset({"admin"})  # noqa: N806
-
     # The roster is read on every workspace bootstrap and can contain well over
     # one hundred personas.  Building the wire payload repeatedly is wasteful;
     # the visual variant also probes profile/avatar files for every agent.  A
@@ -81,11 +75,9 @@ def _register_agents_crud(router: Any, ctx: _AgentsCtx, auth: _AuthActions) -> N
     _visual_cache_ttl_seconds = 2.0
 
     def _cached_agent_wires(*, include_visuals: bool) -> list[AgentWire]:
-        snapshot = tuple(
-            agent
-            for agent in registry.all_agents()
-            if agent.agent_id not in _AGENT_GALLERY_SKIP_IDS
-        )
+        # Leon is a visible persona; mutations still require the caller's
+        # admin authorization independently of the selected agent identity.
+        snapshot = tuple(registry.all_agents())
         now = time.monotonic()
         with _list_cache_lock:
             cached = _list_cache.get(include_visuals)
@@ -177,7 +169,7 @@ def _register_agents_crud(router: Any, ctx: _AgentsCtx, auth: _AuthActions) -> N
             "id": agent_id,
             "templateId": agent_id,
             "templateVersion": "1.0.0",
-            "name": agent_id.replace("-", " ").replace("_", " ").title(),
+            "name": (body.display_name or "").strip() or agent_id.replace("-", " ").replace("_", " ").title(),
             "icon": "🤖",
             "did": identity_code,  # backward-compatible alias
             "identity_code": identity_code,

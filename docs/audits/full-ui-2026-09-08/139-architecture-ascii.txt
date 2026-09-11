@@ -1,0 +1,3 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/architecture".
+There has been no change in the accessibility tree.
+The focused UI element is 48 button 高清架构图 (ASCII), Help: docs/architecture/high-res-map.md

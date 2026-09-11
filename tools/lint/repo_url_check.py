@@ -66,6 +66,7 @@ SKIP_GLOBS: tuple[str, ...] = (
     "docs/openapi-snapshot.json",
     # Tooling output
     "tools/lint/god_files_baseline.txt",
+    "tools/lint/god_files_baseline_frontend.txt",
     "tools/lint/exception_audit_baseline.txt",
     "tools/lint/fixtures/**",
     # Local state

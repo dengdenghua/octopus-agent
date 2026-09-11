@@ -69,6 +69,7 @@ import {
 } from "../agent-run-status";
 
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
+import { publicExecutionErrorMessage } from "@/core/threads/errors";
 import {
   MemberProfilePopover,
   summarizeAgentCapabilities,
@@ -1191,7 +1192,7 @@ export function MessageList({
     display_name?: string | null;
     avatar_url?: string | null;
     icon?: string | null;
-    execution_engine?: "octopus" | "codex";
+    execution_engine?: "octopus" | "codex" | "opencode";
   } | null;
   agentRoster?: MessageListAgentRosterEntry[];
   /** Project path for ambient suggestions */
@@ -1317,10 +1318,11 @@ export function MessageList({
       | Record<string, unknown>
       | undefined;
     const metadataEngine = metadata?.execution_engine;
+    if (metadataEngine === "opencode" || (!metadataEngine && currentAgent?.execution_engine === "opencode")) return undefined;
     const primaryEngine =
       metadataEngine === "codex" || metadataEngine === "octopus"
         ? metadataEngine
-        : currentAgent?.execution_engine || "octopus";
+        : currentAgent?.execution_engine === "codex" ? "codex" : "octopus";
     return {
       goal,
       primaryEngine,
@@ -1587,10 +1589,11 @@ export function MessageList({
                                   ? failure.detail
                                   : t.streaming.turnFailed;
       return {
-        ...failure, kind,
+        ...failure,
+        kind,
         message: /refusing to clean (?:outside sidecar state_root|unsafe sidecar path|sidecar tree with invalid marker)/i.test(failure.detail)
           ? t.streaming.sidecarCleanupBlocked
-          : message,
+          : publicExecutionErrorMessage(message),
       };
     },
     [
@@ -2114,7 +2117,7 @@ export function MessageList({
                 {displayName}
               </span>
               {agentRole === "tl" && (
-                <span className="rounded-md border border-success/50 bg-success/10 px-1.5 py-0 text-xs leading-4 font-medium text-success">
+                <span className="rounded-md border border-border bg-muted/60 px-1.5 py-0 text-xs leading-4 font-medium text-muted-foreground">
                   队长
                 </span>
               )}

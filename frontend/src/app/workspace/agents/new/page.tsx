@@ -1,3 +1,5 @@
+import { CloudAgentCreation } from "@/components/workspace/agents/cloud-agent-creation";
+import { ProfessionPicker } from "@/components/workspace/agents/profession-picker";
 import {
   ArrowLeftIcon,
   BotIcon,
@@ -628,11 +630,13 @@ export default function NewAgentPage() {
     </header>
   );
 
+  if (searchParams.get("cloudExpert")) return <div className="flex min-h-0 flex-1 flex-col">{header}<CloudAgentCreation key={searchParams.get("cloudExpert")} sourceId={searchParams.get("cloudExpert")!} /></div>;
+
   if (step === "name") {
     return (
-      <div className="relative flex size-full items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_50%_18%,hsl(var(--primary)/0.08),transparent_34%),linear-gradient(to_bottom,hsl(var(--background)),hsl(var(--muted)/0.28))] p-6 text-white">
+      <div className="relative flex size-full items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_50%_18%,hsl(var(--primary)/0.08),transparent_34%),linear-gradient(to_bottom,hsl(var(--background)),hsl(var(--muted)/0.28))] p-6 text-foreground">
         <div className="pointer-events-none absolute inset-x-[20%] top-[8%] h-24 rounded-[50%] bg-primary/10 blur-3xl" />
-        <div className="relative h-[min(700px,80vh)] w-[min(1080px,86vw)] overflow-hidden rounded-lg border border-white/10 bg-[#202020]/96 shadow-[0_28px_90px_rgba(15,23,42,0.28)] ring-1 ring-black/20 backdrop-blur-xl">
+        <div className="relative max-h-[calc(100dvh-2rem)] w-full max-w-[1080px] overflow-y-auto rounded-lg border border-border bg-card shadow-[0_28px_90px_rgba(15,23,42,0.28)] ring-1 ring-black/20 backdrop-blur-xl">
           <div className="pointer-events-none absolute inset-0 opacity-[0.09] [background-image:radial-gradient(circle_at_76%_28%,rgba(244,232,111,0.1),transparent_30%),linear-gradient(to_right,rgba(255,255,255,0.032)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.024)_1px,transparent_1px)] [background-size:100%_100%,40px_40px,40px_40px]" />
           <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-[#f4e86f]/24 to-transparent" />
           <div className="pointer-events-none absolute inset-x-14 bottom-0 h-px bg-gradient-to-r from-transparent via-white/8 to-transparent" />
@@ -642,16 +646,16 @@ export default function NewAgentPage() {
               <div className="mb-6 flex shrink-0 items-center justify-between">
                 <Button
                   aria-label={t.agentConfig.back}
-                  className="h-8 w-8 shrink-0 rounded-sm text-white/72 hover:bg-white/8 hover:text-white"
+                  className="h-8 w-8 shrink-0 rounded-sm text-foreground hover:bg-muted/8 hover:text-foreground"
                   size="icon"
                   variant="ghost"
                   onClick={() => navigate(galleryReturnPath)}
                 >
                   <ArrowLeftIcon className="size-4" />
                 </Button>
-                <div className="flex items-center gap-2 rounded-sm border border-white/8 bg-white/[0.025] px-2 py-1 font-mono text-xs uppercase tracking-eyebrow text-white/48">
+                <div className="flex items-center gap-2 rounded-sm border border-border bg-muted/[0.025] px-2 py-1 font-mono text-xs uppercase tracking-eyebrow text-muted-foreground">
                   <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                  AGENT BLUEPRINT
+                  智能体配置
                 </div>
               </div>
 
@@ -659,26 +663,34 @@ export default function NewAgentPage() {
                 <div className="max-w-[560px] pb-6">
                   <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.24em] text-primary">
                     <span className="h-px w-6 bg-primary/70" />
-                    CREATE AGENT
+                    新建智能体
                   </div>
-                  <h1 className="mt-4 text-5xl font-semibold leading-none text-white">
+                  <h1 className="mt-4 text-3xl sm:text-4xl font-semibold leading-none text-foreground">
                     {agentNew.pageTitle}
                   </h1>
-                  <p className="mt-3 text-lg font-medium leading-7 text-[#f4e86f]">
+                  <p className="mt-3 text-lg font-medium leading-7 text-primary">
                     {agentNew.pageSubtitle}
                   </p>
 
-                  <div className="mt-6 rounded-sm border border-white/10 bg-black/16 p-3">
+                  <ProfessionPicker onSelect={(profession) => {
+                    setSelectedTemplateId("");
+                    setAgentBrief(`创建一位${profession.name}数字员工。\n${profession.description}\n请明确岗位职责、常见任务、交付物和协作边界，并根据职责建议合适的技能与工具。仅使用已授权且实际可用的能力。`);
+                    setNameInput((current) => current.trim() ? current : profession.id ? `${profession.id}-assistant` : "");
+                    setNameError("");
+                  }} />
+
+                  <div className="mt-6 rounded-sm border border-border bg-muted/16 p-3">
                     <div className="mb-2 flex items-center justify-between gap-2">
-                      <span className="font-mono text-xs uppercase tracking-eyebrow text-white/46">
-                        SHORT BRIEF
+                      <span className="font-mono text-xs uppercase tracking-eyebrow text-muted-foreground">
+                        任务目标
                       </span>
-                      <span className="font-mono text-xs uppercase tracking-eyebrow text-white/30">
+                      <span className="font-mono text-xs uppercase tracking-eyebrow text-muted-foreground">
                         Ctrl/⌘ + Enter
                       </span>
                     </div>
                     <textarea
                       autoFocus
+                      aria-label="任务目标"
                       value={agentBrief}
                       onChange={(event) => {
                         const value = event.target.value;
@@ -698,15 +710,17 @@ export default function NewAgentPage() {
                         }
                       }}
                       placeholder={agentNew.placeholder}
-                      className="min-h-[190px] w-full resize-none bg-transparent text-sm leading-7 text-white outline-none placeholder:text-white/30"
+                      className="min-h-[190px] w-full resize-none bg-transparent text-sm leading-7 text-foreground outline-none placeholder:text-muted-foreground"
                     />
                   </div>
 
-                  <div className="mt-4 grid grid-cols-[82px_1fr] items-center gap-3 rounded-sm border border-white/10 bg-white/[0.035] px-3 py-2">
-                    <span className="font-mono text-xs uppercase tracking-eyebrow text-white/42">
+                  <div className="mt-4 grid grid-cols-[82px_1fr] items-center gap-3 rounded-sm border border-border bg-muted/[0.035] px-3 py-2">
+                    <span className="font-mono text-xs uppercase tracking-eyebrow text-muted-foreground">
                       Agent ID
                     </span>
                     <Input
+                      aria-label="Agent ID"
+                      aria-invalid={Boolean(nameError)}
                       placeholder={t.agents.nameStepPlaceholder}
                       value={nameInput}
                       onChange={(e) => {
@@ -715,7 +729,7 @@ export default function NewAgentPage() {
                       }}
                       onKeyDown={handleNameKeyDown}
                       className={cn(
-                        "h-8 rounded-sm border-white/10 bg-black/20 font-mono text-xs text-white placeholder:text-white/25",
+                        "h-8 rounded-sm border-border bg-muted/20 font-mono text-xs text-foreground placeholder:text-muted-foreground",
                         nameError && "border-destructive",
                       )}
                     />
@@ -729,7 +743,7 @@ export default function NewAgentPage() {
 
                   <div className="mt-5 flex items-center gap-2">
                     <Button
-                      className="h-9 rounded-sm bg-[#f4e86f] px-5 text-[#232323] hover:bg-[#fff27c]"
+                      className="h-9 rounded-sm bg-primary px-5 text-primary-foreground hover:bg-primary/90"
                       onClick={() => void handleConfirmName()}
                       disabled={
                         (!agentBrief.trim() && !selectedTemplate) ||
@@ -741,7 +755,7 @@ export default function NewAgentPage() {
                         : agentNew.buttons.generate}
                     </Button>
                     <Button
-                      className="h-9 rounded-sm border border-white/14 bg-black/30 px-4 text-white/86 hover:border-white/24 hover:bg-white/8 hover:text-white"
+                      className="h-9 rounded-sm border border-border bg-muted/30 px-4 text-foreground hover:border-border hover:bg-muted/8 hover:text-foreground"
                       variant="outline"
                       onClick={() => navigate(galleryReturnPath)}
                     >
@@ -752,15 +766,15 @@ export default function NewAgentPage() {
               </div>
             </section>
 
-            <section className="relative min-h-0 overflow-hidden border-l border-white/8">
+            <section className="relative min-h-0 overflow-hidden border-l border-border">
               <div className="pointer-events-none absolute inset-0 opacity-[0.14] [background-image:radial-gradient(circle_at_50%_44%,hsl(var(--primary)/0.16),transparent_30%),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(180deg,rgba(255,255,255,0.035)_1px,transparent_1px)] [background-size:100%_100%,34px_34px,34px_34px]" />
               <div className="relative flex h-full min-h-0 flex-col px-5 py-7">
                 <div className="flex shrink-0 items-center justify-between gap-3">
                   <div>
                     <div className="font-mono text-xs uppercase tracking-[0.2em] text-primary/82">
-                      GENERATOR LOADOUT
+                      能力配置
                     </div>
-                    <h2 className="mt-2 text-lg font-semibold text-white">
+                    <h2 className="mt-2 text-lg font-semibold text-foreground">
                       {agentNew.buttons.autoConfig}
                     </h2>
                   </div>
@@ -772,9 +786,9 @@ export default function NewAgentPage() {
                 </div>
 
                 <div className="mt-5 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.2)_transparent]">
-                  <div className="rounded-sm border border-white/8 bg-black/10 p-3">
-                    <div className="mb-2 font-mono text-xs uppercase tracking-eyebrow text-white/38">
-                      ROLE
+                  <div className="rounded-sm border border-border bg-muted/10 p-3">
+                    <div className="mb-2 font-mono text-xs uppercase tracking-eyebrow text-muted-foreground">
+                      角色定位
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {ROLE_PRESETS.map((preset) => {
@@ -786,8 +800,8 @@ export default function NewAgentPage() {
                             className={cn(
                               "rounded-full border px-2.5 py-1 text-xs leading-4 transition",
                               active
-                                ? "border-[#f4e86f]/45 bg-[#f4e86f]/10 text-white"
-                                : "border-white/10 bg-white/[0.025] text-white/52 hover:border-white/20 hover:text-white/82",
+                                ? "border-primary/50 bg-primary/10 text-foreground"
+                                : "border-border bg-muted/[0.025] text-muted-foreground hover:border-border hover:text-foreground",
                             )}
                             onClick={() => setSelectedRolePresetId(preset.id)}
                           >
@@ -798,9 +812,9 @@ export default function NewAgentPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-sm border border-white/8 bg-black/10 p-3">
-                    <div className="mb-2 font-mono text-xs uppercase tracking-eyebrow text-white/38">
-                      SCENE
+                  <div className="rounded-sm border border-border bg-muted/10 p-3">
+                    <div className="mb-2 font-mono text-xs uppercase tracking-eyebrow text-muted-foreground">
+                      使用场景
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {SCENE_PRESETS.map((preset) => {
@@ -814,8 +828,8 @@ export default function NewAgentPage() {
                             className={cn(
                               "rounded-full border px-2.5 py-1 text-xs leading-4 transition",
                               active
-                                ? "border-[#f4e86f]/45 bg-[#f4e86f]/10 text-white"
-                                : "border-white/10 bg-white/[0.025] text-white/52 hover:border-white/20 hover:text-white/82",
+                                ? "border-primary/50 bg-primary/10 text-foreground"
+                                : "border-border bg-muted/[0.025] text-muted-foreground hover:border-border hover:text-foreground",
                             )}
                             onClick={() => toggleSelectedScenePreset(preset.id)}
                           >
@@ -826,9 +840,9 @@ export default function NewAgentPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-sm border border-white/8 bg-black/10 p-3">
-                    <div className="mb-2 font-mono text-xs uppercase tracking-eyebrow text-white/38">
-                      CAPABILITY PACK
+                  <div className="rounded-sm border border-border bg-muted/10 p-3">
+                    <div className="mb-2 font-mono text-xs uppercase tracking-eyebrow text-muted-foreground">
+                      能力组合
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {CAPABILITY_PACKS.map((pack) => {
@@ -842,8 +856,8 @@ export default function NewAgentPage() {
                             className={cn(
                               "rounded-full border px-2.5 py-1 text-xs leading-4 transition",
                               active
-                                ? "border-primary/45 bg-primary/10 text-white"
-                                : "border-white/10 bg-white/[0.025] text-white/52 hover:border-white/20 hover:text-white/82",
+                                ? "border-primary/45 bg-primary/10 text-foreground"
+                                : "border-border bg-muted/[0.025] text-muted-foreground hover:border-border hover:text-foreground",
                             )}
                             onClick={() =>
                               toggleSelectedCapabilityPack(pack.id)
@@ -858,22 +872,22 @@ export default function NewAgentPage() {
 
                   {selectedScenePresets.length > 0 &&
                   selectedCapabilityPacks.length > 0 ? (
-                    <div className="grid gap-1.5 rounded-sm border border-white/8 bg-black/10 p-3 text-xs leading-5 text-white/48">
+                    <div className="grid gap-1.5 rounded-sm border border-border bg-muted/10 p-3 text-xs leading-5 text-muted-foreground">
                       <div>
                         ARM:{" "}
-                        <span className="text-white/72">
+                        <span className="text-foreground">
                           {selectedArms.join(", ")}
                         </span>
                       </div>
                       <div>
                         Skill:{" "}
-                        <span className="text-white/72">
+                        <span className="text-foreground">
                           {selectedSkills.join(", ")}
                         </span>
                       </div>
                       <div>
                         {agentNew.labels.permissions}:{" "}
-                        <span className="text-white/72">
+                        <span className="text-foreground">
                           {selectedPermissions.join(" / ")}
                         </span>
                       </div>
@@ -881,15 +895,15 @@ export default function NewAgentPage() {
                   ) : null}
 
                   <Button
-                    className="h-9 w-full rounded-sm bg-[#f4e86f] text-[#232323] hover:bg-[#fff27c]"
+                    className="h-9 w-full rounded-sm bg-primary text-primary-foreground hover:bg-primary/90"
                     onClick={handleApplyGuidedConfig}
                   >
                     {agentNew.buttons.generateConfig}
                   </Button>
 
-                  <div className="mt-1 rounded-sm border border-white/7 bg-white/[0.018] p-3">
-                    <div className="mb-2 font-mono text-xs uppercase tracking-eyebrow text-white/32">
-                      TEMPLATE REF
+                  <div className="mt-1 rounded-sm border border-border bg-muted/[0.018] p-3">
+                    <div className="mb-2 font-mono text-xs uppercase tracking-eyebrow text-muted-foreground">
+                      参考模板
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {AGENT_TEMPLATES.map((template) => {
@@ -901,8 +915,8 @@ export default function NewAgentPage() {
                             className={cn(
                               "rounded-full border px-2 py-0.5 text-xs leading-4 transition",
                               active
-                                ? "border-[#f4e86f]/30 bg-[#f4e86f]/8 text-white"
-                                : "border-white/8 bg-black/12 text-white/40 hover:border-white/16 hover:text-white/72",
+                                ? "border-primary/50 bg-primary/8 text-foreground"
+                                : "border-border bg-muted/12 text-muted-foreground hover:border-border hover:text-foreground",
                             )}
                             onClick={() => handleSelectTemplate(template)}
                           >
@@ -912,7 +926,7 @@ export default function NewAgentPage() {
                       })}
                     </div>
                     {selectedTemplate ? (
-                      <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/34">
+                      <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
                         {selectedTemplate.description}
                       </p>
                     ) : null}

@@ -8,10 +8,10 @@
 #   docker build -t octopus-agent .
 #
 # 本地启动（必须显式提供已启用认证的配置）:
-#   docker run --rm -p 127.0.0.1:8000:8000 \
+#   docker run --rm -p 127.0.0.1:8310:8000 \
 #     -v $(pwd)/config.yaml:/etc/octopus/config.yaml:ro octopus-agent
 # 生产部署（持久化 + 配置）:
-#   docker run --rm -p 127.0.0.1:8000:8000 \
+#   docker run --rm -p 127.0.0.1:8310:8000 \
 #     -v $(pwd)/data:/data \
 #     -v octopus-resources:/app/resources \
 #     -v $(pwd)/config.yaml:/etc/octopus/config.yaml:ro \

@@ -6,10 +6,6 @@ import type { Agent, CreateAgentRequest, UpdateAgentRequest } from "./types";
 
 const BACKEND_UNAVAILABLE_STATUSES = new Set([502, 503, 504]);
 const AGENT_LIST_TIMEOUT_MS = 5_000;
-// Only the system-level admin persona is hidden from the agent list;
-// desktop_operator (Raven) is a first-class user-facing CUA persona
-// since #22 (CUA productization).
-const HIDDEN_AGENT_IDS = new Set(["admin"]);
 
 export class AgentNameCheckError extends Error {
   constructor(
@@ -42,7 +38,9 @@ export async function listAgents(opts?: {
     if (!res.ok) throw new Error(`Failed to load agents: ${res.statusText}`);
     const data = (await res.json()) as Agent[] | { agents?: Agent[] };
     const agents = Array.isArray(data) ? data : (data.agents ?? []);
-    return agents.filter((agent) => !HIDDEN_AGENT_IDS.has(agent.name));
+    // Leon (admin) is a visible squad member. Operation permissions are
+    // enforced by the backend for the signed-in user, not by hiding personas.
+    return agents;
   } finally {
     clearTimeout(timeout);
     opts?.signal?.removeEventListener("abort", abortFromCaller);

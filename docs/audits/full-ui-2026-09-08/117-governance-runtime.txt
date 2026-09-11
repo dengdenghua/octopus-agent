@@ -1,0 +1,12 @@
+Browser tab: 4, Title: "自进化 - Echo", URL: "http://localhost:3310/#/workspace/evolution?section=governance".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+~									103 container
++										104 heading 自演化, Value: 2
++											105 text 自演化
++										106 text 后台反思引擎会复盘任务记录、沉淀规则与记忆、评估执行策略，并把可靠改进应用到后续规划中。
++										107 button 刷新
++										108 text 调度器状态 运行中 运行中 间隔 600 s 已运行 11  次
++										109 button (collapsed) 本次调度详情（仅描述学习指标）, Secondary Actions: Expand
++											110 text 本次调度详情（仅描述学习指标）
++										111 text 学习到的规则 扫描 0 条任务记录 · 失败 0  ·  聚类 0  · 产出 0 条规则 ·  上次运行 2026/9/6 11:46:16 没有足够失败数据生成规则 执行策略评分 无数据 GEPA 策略变体 预演 扫了 0 个清单 · 已提升 0  ·  上次运行 2026/9/6 11:46:16 💡 GEPA 处于 dry-run · 设置环境变量 OCTOPUS_GEPA_AUTO_APPLY=1 后才会真改 recipe weights。 提示词进化（模型驱动） 已启用 PromptEvolver 会分析失败样本，并自动提出新的提示词变体。 变体池 1 进化次数 0 汰劣 0 升权 0 baseline 种子 gen= 0  · w= 1.00  · 0 ch
+The focused UI element is 101 tab (selected, settable, boolean) 运行与设置, Value: 1, ID: radix-_r_7_-trigger-runtime

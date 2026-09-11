@@ -1,6 +1,13 @@
 import { CheckIcon, CopyIcon, TriangleAlertIcon } from "lucide-react";
 import DOMPurify from "dompurify";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import { copyTextToClipboard } from "@/core/clipboard";
@@ -76,6 +83,7 @@ export function MermaidBlock({
           securityLevel: "strict",
           theme: "neutral",
           fontFamily: "inherit",
+          htmlLabels: false,
           flowchart: {
             htmlLabels: false,
             useMaxWidth: true,
@@ -83,7 +91,10 @@ export function MermaidBlock({
         });
         const result = await mermaid.render(
           `mermaid-chat-${rootId}`,
-          trimmedCode,
+          trimmedCode.replace(
+            /<\/?(?:b|strong|i|em|span)(?:\s[^<>]*?)?>/gi,
+            "",
+          ),
         );
         if (cancelled) return;
         setSvg(result.svg);

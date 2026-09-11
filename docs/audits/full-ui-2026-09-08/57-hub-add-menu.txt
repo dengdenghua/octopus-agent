@@ -1,0 +1,8 @@
+Browser tab: 4, Title: "HUB - Echo", URL: "http://localhost:3310/#/workspace/agents?surface=chat".
+0 AXWebArea HUB - Echo, URL: localhost:3310/#/workspace/agents?surface=chat
+	1 container
+		2 container Notifications alt+T
+		3 menu 添加, ID: radix-_r_k7_
+			4 创建 AI 成员
+
+The focused UI element is 3 menu 添加, ID: radix-_r_k7_

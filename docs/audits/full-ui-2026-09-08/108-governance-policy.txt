@@ -1,0 +1,31 @@
+Browser tab: 4, Title: "自进化 - Echo", URL: "http://localhost:3310/#/workspace/evolution?section=governance".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+~									103 text 控制面板
++									104 container 控制面板
++										105 checkbox 预算, Value: 1
++										106 checkbox 技能提案, Value: 0
++										107 checkbox 模型, Value: 0
++										108 checkbox MCP, Value: 0
++										109 checkbox 课程, Value: 0
++										110 checkbox 框架, Value: 0
++										111 checkbox 漂移, Value: 0
++										112 checkbox A/B 分发, Value: 0
++									113 container
++										114 text 预算与熔断器 journal · 0 事件
++										115 button 刷新
++										116 text runtime 正常 连续失败 0 次 · 上限 60/小时 每小时 0 / 60
++										117 progress indicator Description: runtime 每小时用量 0/60, Value: 0
++										118 text 24 小时：0✓ · 0✗ 拒绝：0 预算 / 0 熔断 日用量：0/300 成本：0 tokens · $0.0000 reflection 正常 连续失败 0 次 · 上限 60/小时 每小时 0 / 60
++										119 progress indicator Description: reflection 每小时用量 0/60, Value: 0
++										120 text 24 小时：0✓ · 0✗ 拒绝：0 预算 / 0 熔断 日用量：0/300 成本：0 tokens · $0.0000 skill_forge 正常 连续失败 0 次 · 上限 60/小时 每小时 0 / 60
++										121 progress indicator Description: skill_forge 每小时用量 0/60, Value: 0
++										122 text 24 小时：0✓ · 0✗ 拒绝：0 预算 / 0 熔断 日用量：0/300 成本：0 tokens · $0.0000 recipe_forge 正常 连续失败 0 次 · 上限 60/小时 每小时 0 / 60
++										123 progress indicator Description: recipe_forge 每小时用量 0/60, Value: 0
++										124 text 24 小时：0✓ · 0✗ 拒绝：0 预算 / 0 熔断 日用量：0/300 成本：0 tokens · $0.0000 model_benchmark 正常 连续失败 0 次 · 上限 60/小时 每小时 0 / 60
++										125 progress indicator Description: model_benchmark 每小时用量 0/60, Value: 0
++										126 text 24 小时：0✓ · 0✗ 拒绝：0 预算 / 0 熔断 日用量：0/300 成本：0 tokens · $0.0000 mcp_vet 正常 连续失败 0 次 · 上限 60/小时 每小时 0 / 60
++										127 progress indicator Description: mcp_vet 每小时用量 0/60, Value: 0
++										128 text 24 小时：0✓ · 0✗ 拒绝：0 预算 / 0 熔断 日用量：0/300 成本：0 tokens · $0.0000 protocol_repair 正常 连续失败 0 次 · 上限 60/小时 每小时 0 / 60
++										129 progress indicator Description: protocol_repair 每小时用量 0/60, Value: 0
++										130 text 24 小时：0✓ · 0✗ 拒绝：0 预算 / 0 熔断 日用量：0/300 成本：0 tokens · $0.0000
+The focused UI element is 99 tab (selected, settable, boolean) 策略与预算, Value: 1, ID: radix-_r_7_-trigger-control

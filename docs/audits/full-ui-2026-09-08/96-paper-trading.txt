@@ -1,0 +1,19 @@
+Browser tab: 4, Title: "模拟炒股 - Echo", URL: "http://localhost:3310/#/workspace/paper-trading".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+~			40 container 模拟炒股
+~				41 AXWebArea 模拟炒股, URL: localhost:3310/api/workbench-packages/paper-trading/assets/dist/index.html?octopus_host_path=%2Fworkspace%2Fpaper-trading&octopus_host_origin=http%3A%2F%2Flocalhost%3A3310
++					42 container root
++						43 container
++							44 heading 🐟 模拟炒股, Value: 1
++								45 text 🐟 模拟炒股
++							46 button 平台原版
++							47 button 📡 盯盘
++							48 text 平台配资盘 · 原版网页(iframe 内嵌,复刻版已移至插件中心)
++							49 link Description: 新窗口打开, Value: localhost:3310/api/plugins/paper-trading/page
++							50 container 模拟炒股
++								51 AXWebArea 模拟炒股不可用, URL: localhost:3310/api/plugins/paper-trading/page
++									52 container
++										53 heading 模拟炒股在当前部署中不可用, Value: 1
++											54 text 模拟炒股在当前部署中不可用
++										55 text 当前实例已开启身份认证。平台账户和本地交易状态尚未实现逐用户隔离， 因此相关行情、交易、同源代理和实时连接均已安全关闭。 请仅在可信的单用户本地实例中启用此插件。
++						56 container Notifications alt+T

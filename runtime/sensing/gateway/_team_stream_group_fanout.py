@@ -204,7 +204,7 @@ def _select_fanout_members(
         selected = [member for member in available if str(member.get("name") or "") in allowed]
         reason = "explicit_mentions"
     else:
-        selected = available
+        selected = [m for m in available if not str(m.get("name") or "").startswith("a2a_")]
         reason = "group_request_or_mode"
     selected_ids = [str(member.get("name") or "") for member in selected]
     selected_set = set(selected_ids)
@@ -234,7 +234,7 @@ async def _drive_group_fanout(
 ) -> None:
     """蜂群 / 冒泡: fan the message out to every member agent in parallel and
     emit each persona reply as its own group-chat bubble — the "boss speaks,
-    everyone chimes in" experience. Falls back to single-agent ReAct when the
+    everyone chimes in" experience. Falls back to the bound single-agent engine when the
     room has <2 member agents or nobody answers, so the turn never stalls.
     """
     ctx = getattr(intent, "user_context", None) or {}
@@ -292,6 +292,11 @@ async def _drive_group_fanout(
         if isinstance(r, dict) and r.get("agent_id")
     ]
     members, fanout_routing = _select_fanout_members(ctx, members)
+    has_remote_members = any(m["name"].startswith("a2a_") for m in members)
+    if has_remote_members:
+        # Remote accounts receive one explicit task per user message. Automatic
+        # debate/review rounds must not repeat that task or spend extra credits.
+        team_pattern["debate_rounds"] = 1
     from runtime.execution.agents.team_patterns import pattern_member_role
 
     pattern_id = str(team_pattern.get("id") or "parallel_roundtable")
@@ -483,7 +488,7 @@ async def _drive_group_fanout(
         )
         return
 
-    async def _fallback_to_react() -> None:
+    async def _fallback_to_bound_model() -> None:
         loop = asyncio.get_running_loop()
         gateway_provider = GatewayApprovalProvider(
             emitter,
@@ -500,13 +505,26 @@ async def _drive_group_fanout(
             agent = runtime._resolve_agent(
                 TurnParams(threadId=turn.thread_id, input=[]),  # type: ignore[call-arg]
             )
-        await runtime._drive_react(turn, log, emitter, intent, provider, agent)
+        engine = getattr(getattr(turn, "execution", None), "engine", "octopus")
+        if engine == "opencode":
+            from runtime.sensing.gateway.realtime_opencode_backend import drive_opencode
+
+            await drive_opencode(runtime, turn, log, emitter, intent, agent, provider, text=text)
+        elif engine == "codex":
+            await runtime._drive_codex_app_server(
+                turn, log, emitter, intent, agent, provider, text=text
+            )
+        else:
+            await runtime._drive_react(turn, log, emitter, intent, provider, agent)
 
     def _record_fallback_audit(reason: str, exc: BaseException | None = None) -> None:
+        engine = getattr(getattr(turn, "execution", None), "engine", "octopus")
         payload: dict[str, Any] = {
             "schema": "octopus.group_fanout_fallback.v1",
             "reason": reason,
-            "fallback": "react",
+            "fallback": {"opencode": "opencode_server", "codex": "codex_app_server"}.get(
+                engine, "react"
+            ),
         }
         if exc is not None:
             payload.update(
@@ -1153,10 +1171,10 @@ async def _drive_group_fanout(
         }
         return labels.get(action, action.replace("_", " "))
 
-    if len(members) < 2:
+    if len(members) < 2 and not has_remote_members:
         # Not a real group → one agent answers (the normal single-agent path).
         _record_fallback_audit("insufficient_members")
-        await _fallback_to_react()
+        await _fallback_to_bound_model()
         return
 
     try:
@@ -1289,6 +1307,23 @@ async def _drive_group_fanout(
             timeout_s: int = 90,
         ) -> dict[str, Any]:
             """Run every group member through the in-process agent boundary."""
+            if agent_id.startswith("a2a_"):
+                from runtime.sensing.gateway.remote_group_member import call_remote_group_member
+
+                return asyncio.run(
+                    call_remote_group_member(
+                        runtime,
+                        turn,
+                        agent_id,
+                        text,
+                        timeout_s=300,
+                        history=(ctx.get("cowork_member_context_messages") or {}).get(agent_id, []),
+                        authorization=member_authorizations.get(agent_id),
+                        should_cancel=lambda: (
+                            _group_fanout_cancelled() or _group_fanout_member_cancelled(agent_id)
+                        ),
+                    )
+                )
             member_plan = context_plan.for_agent(agent_id) if context_plan is not None else None
             runtime_checkpoint = None
             checkpoint_reader = getattr(_run_store(), "collaboration_member_runtime", None)
@@ -1667,7 +1702,7 @@ async def _drive_group_fanout(
                     for item in collector.get("results") or []
                 )
 
-            debate_rounds = _wants_debate()
+            debate_rounds = 1 if has_remote_members else _wants_debate()
             mentioned = _mentioned_names()
             result = await asyncio.to_thread(
                 run_group_fanout,
@@ -1689,6 +1724,7 @@ async def _drive_group_fanout(
                 semantic_reviewer=(
                     _semantic_reviewer
                     if verifier_agent_id
+                    and not has_remote_members
                     and str(team_pattern.get("id") or "") == "adversarial_review"
                     else None
                 ),
@@ -1762,9 +1798,9 @@ async def _drive_group_fanout(
                 await _emit(summary)
             await _complete_group_trace(result)
 
-        if spoke == 0 and not fanout_cancelled:
+        if spoke == 0 and not fanout_cancelled and not has_remote_members:
             _record_fallback_audit("no_member_response")
-            await _fallback_to_react()
+            await _fallback_to_bound_model()
     except Exception as exc:  # noqa: BLE001 — never break the turn on a fan-out fault
         _logger.warning(
             "group fan-out failed (%s: %s) — falling back to react",
@@ -1772,5 +1808,8 @@ async def _drive_group_fanout(
             exc,
         )
         await _fail_group_trace(exc)
+        if has_remote_members:
+            await _emit("远程成员调用失败，请检查远程角色连接后重试。")
+            return
         _record_fallback_audit("exception", exc)
-        await _fallback_to_react()
+        await _fallback_to_bound_model()

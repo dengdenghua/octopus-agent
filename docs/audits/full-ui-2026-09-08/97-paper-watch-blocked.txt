@@ -1,0 +1,3 @@
+Browser tab: 4, Title: "模拟炒股 - Echo", URL: "http://localhost:3310/#/workspace/paper-trading?tab=watch".
+There has been no change in the accessibility tree.
+The focused UI element is 47 button 📡 盯盘

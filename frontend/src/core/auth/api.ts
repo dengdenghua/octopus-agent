@@ -129,6 +129,7 @@ export interface AuthProviderInfo {
   mock_mode?: boolean;
   allow_any_username?: boolean;
   password_required?: boolean;
+  password_only_username?: string | null;
   endpoint?: string;
   endpoint_send?: string;
   endpoint_verify?: string;

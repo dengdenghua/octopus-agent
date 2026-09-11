@@ -228,20 +228,20 @@ export function ModeSelector({
   // rendering boundary so an old thread never paints a transient third label
   // before hydration migrates it to General.
   const visibleMode = canonicalUserMode(mode);
-  const activeOption =
-    modeOptions.find((option) => option.name === visibleMode) ?? {
-      name: "develop",
-      icon: CodeIcon,
-      tone:
-        "bg-info/15 text-info hover:bg-info/25 dark:bg-info/30 dark:text-info",
-      activeTone:
-        "bg-info/15 text-info dark:bg-info/40 dark:text-info ring-1 ring-info/20",
-      ring: "ring-info/20",
-      label: t.modes.develop,
-      desc: t.modes.developDesc,
-      effect: t.modes.developEffect,
-      tooltip: t.modes.developTooltip,
-    };
+  const activeOption = modeOptions.find(
+    (option) => option.name === visibleMode,
+  ) ?? {
+    name: "develop",
+    icon: CodeIcon,
+    tone: "bg-info/15 text-info hover:bg-info/25 dark:bg-info/30 dark:text-info",
+    activeTone:
+      "bg-info/15 text-info dark:bg-info/40 dark:text-info ring-1 ring-info/20",
+    ring: "ring-info/20",
+    label: t.modes.develop,
+    desc: t.modes.developDesc,
+    effect: t.modes.developEffect,
+    tooltip: t.modes.developTooltip,
+  };
 
   useEffect(() => {
     const workspaceChanged = prevWorkDir.current !== storageKey;
@@ -377,12 +377,12 @@ export function ModeSelector({
       manualOverrideRef.current = true;
       setManualOverride(true);
       onManualOverrideChange?.(true);
-      onModeChange(newMode);
       setExpanded(false);
       triggerRef.current?.focus();
       setSwitching(true);
       try {
         await persistModeSelection(newMode, sessionId, storageKey);
+        onModeChange(newMode);
         onUserModeChange?.(newMode);
       } catch (e) {
         swallow(e);
@@ -513,17 +513,17 @@ export function ModeSelector({
           }
         }}
         className={cn(
-          "group flex items-center gap-1.5 text-xs font-medium text-muted-foreground shadow-none transition-colors duration-base",
+          "group flex items-center gap-1.5 text-ui font-medium text-muted-foreground shadow-none transition-colors duration-base",
           chromeless
             ? "h-8 rounded-lg px-1.5 hover:bg-muted/55 hover:text-foreground"
             : "h-8 rounded-lg border border-transparent bg-transparent px-2 hover:border-border-default hover:bg-muted/55 hover:text-foreground",
         )}
         title={activeOption.tooltip}
       >
-        <ActiveIcon className={cn("size-3", busy && "animate-spin")} />
+        <ActiveIcon className={cn("size-3.5", busy && "animate-spin")} />
         <span className="max-w-[72px] truncate">{activeLabel}</span>
         {!chromeless && detection && isManualOverride && (
-          <span className="text-xs opacity-50">
+          <span className="text-ui opacity-50">
             {t.modes.manualOverrideShort}
           </span>
         )}
@@ -584,7 +584,7 @@ export function ModeSelector({
                         aria-selected={visibleMode === option.name}
                         onClick={() => handleToggle(option.name)}
                         className={cn(
-                          "flex w-full items-center gap-2 rounded-lg py-2 text-xs transition-colors duration-base",
+                          "flex w-full items-center gap-2 rounded-lg py-2 text-ui transition-colors duration-base",
                           "px-3",
                           visibleMode === option.name
                             ? option.activeTone
@@ -598,7 +598,7 @@ export function ModeSelector({
                             {labelOverrides?.[option.name]?.trim() ||
                               option.label}
                           </span>
-                          <span className="truncate text-xs opacity-70">
+                          <span className="truncate text-ui opacity-70">
                             {option.desc}
                           </span>
                         </div>
@@ -608,12 +608,12 @@ export function ModeSelector({
                 </div>
 
                 {modeInfo && (
-                  <div className="border-t px-3 py-2 text-xs text-muted-foreground leading-tight">
+                  <div className="border-t px-3 py-2 text-ui text-muted-foreground leading-tight">
                     {modeInfo.description}
                   </div>
                 )}
                 {workspaceLabel && (
-                  <div className="flex min-w-0 items-center gap-2 border-t px-3 py-2 text-xs text-muted-foreground">
+                  <div className="flex min-w-0 items-center gap-2 border-t px-3 py-2 text-ui text-muted-foreground">
                     <span
                       className="min-w-0 truncate font-mono text-foreground/75"
                       title={workDir}
@@ -621,7 +621,7 @@ export function ModeSelector({
                       {workspaceLabel}
                     </span>
                     {permissionLabel && (
-                      <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                      <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-ui text-muted-foreground">
                         {permissionLabel}
                       </span>
                     )}

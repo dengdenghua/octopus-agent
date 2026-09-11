@@ -1,0 +1,77 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/computer".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 36
++			38 container
++				39 heading 本机助手, Value: 1
++					40 text 本机助手
++				41 text 让 Agent 看见并操作这台电脑。每一步先预演，再由你确认。
++				42 button 刷新状态
++				43 button 观察屏幕
++				44 text 这台电脑  ·  已连接
++				45 text 可以观察当前屏幕，并在确认后执行操作。1920 × 1080
++				46 text 权限护栏 观察 只在你点击后观察屏幕 确认 鼠标键盘不会直接执行 过期 确认令牌短时有效 接管 当前没有项目接管真实鼠标键盘。 当前动作  ·  等待任务
++				47 text 先观察屏幕，或描述你希望 Agent 在电脑上完成什么。
++				48 text 控制会话  ·  空闲 computer 所有者 本地电脑自动化页 目标 local-pc 动作 -
++				49 text 预演、执行、截图会沉淀为控制证据。
++				50 text 运行健康
++				51 text 已就绪
++				52 text 确认方式
++				53 text 先预演再确认
++				54 text 屏幕
++				55 text 1920 × 1080
++				56 text 鼠标位置
++				57 text 0, 0
++				58 text 电脑控制
++				59 text 已就绪
++				60 text 语义定位
++				61 text 已就绪
++				62 text 接管租约
++				63 text 空闲
++				64 text 运行时  ·  已就绪
++				65 text 关键能力已通过运行时检查。1920 × 1080
++				66 text 回放证据
++				67 text computer-activity:64e5861d51578128
++				68 text Screen observation ready
++				69 text pyautogui_screen_info
++				70 text Preview-confirm-execute contract ready
++				71 text token_preview_with_lease
++				72 text Replay evidence and review queue ready
++				73 text activity_replay_case
++				74 heading 屏幕观察, Value: 2
++					75 text 屏幕观察
++				76 button 截图
++				77 button 实时
++				78 text 点击“观察屏幕”获取当前桌面截图
++				79 container
++					80 heading 任务计划, Value: 2
++						81 text 任务计划
++					82 text entry area (settable)
++					83 button (disabled) Agent 循环预演
++					84 button 观察并生成下一步
++				85 container
++					86 heading 视觉输出, Value: 2
++						87 text 视觉输出
++					88 text field (settable)
++					89 button (disabled) 调用模型
++					90 text 暂无标记 supports_vision 的模型，可先在设置里给自定义模型开启视觉能力。
++					91 button 去模型设置
++					92 text 调用模型会把当前屏幕截图发送到所选视觉模型；返回动作仍需确认后才执行。
++					93 text entry area (settable)
++					94 button (disabled) 解析并加入候选
++				95 container
++					96 heading 动作预演, Value: 2
++						97 text 动作预演
++					98 combo box (collapsed) Value: 点击坐标, Secondary Actions: Expand
++						99 text 点击坐标
++					100 text field (settable) 400
++					101 text field (settable) 300
++					102 button 生成确认
++				103 container
++					104 heading 确认队列, Value: 2
++						105 text 确认队列
++					106 text 这里会显示待确认的鼠标、键盘动作。确认前不会操作系统。
++				107 container
++					108 heading 操作记录, Value: 2
++						109 text 操作记录
++					110 text 本机助手已就绪 关键能力已通过运行时检查。1920 × 1080
+The focused UI element is 0 AXWebArea Echo, URL: localhost:3310/#/workspace/computer

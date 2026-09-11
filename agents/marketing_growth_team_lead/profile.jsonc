@@ -1,0 +1,27 @@
+{
+  "id": "marketing_growth_team_lead",
+  "templateId": "marketing-growth-team:marketing-growth-team-lead",
+  "templateVersion": "1.0.0",
+  "source_kind": "agent-pack-import",
+  "managed_by": "agent-pack",
+  "source_pack_root": "C:\\Users\\Administrator\\AppData\\Local\\Temp\\wb-bundle-yjclvp6v\\unpack",
+  "source_plugin": "marketing-growth-team",
+  "source_agent_path": "C:\\Users\\Administrator\\AppData\\Local\\Temp\\wb-bundle-yjclvp6v\\unpack\\agents\\marketing-growth-team-lead.md",
+  "name": "Marketing Growth Team Lead",
+  "icon": "Agent",
+  "description": "Chief Marketing Strategist and team lead. Coordinates the marketing growth team, handles strategy planning, marketing plans, pricing, offers, and routes tasks to specialized team members.",
+  "avatar": "avatar.svg",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "pack:marketing-growth-team",
+  "category": "researcher",
+  "tags": [
+    "finance",
+    "research",
+    "market",
+    "analysis"
+  ]
+}

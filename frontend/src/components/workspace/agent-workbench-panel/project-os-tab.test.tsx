@@ -652,10 +652,9 @@ describe("AgentWorkbenchPanel project tab", () => {
       { locale: "zh-CN" },
     );
 
-    await waitFor(() => {
-      expect(screen.getByRole("tab", { name: "项目" })).toBeInTheDocument();
-    });
-    expect(screen.queryByRole("tab", { name: "设计" })).not.toBeInTheDocument();
+    fireEvent.pointerDown(screen.getByRole("button", { name: "标签页列表" }), { button: 0, ctrlKey: false });
+    expect(await screen.findByRole("menuitem", { name: "项目" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "设计" })).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("embedded-project-design"),
     ).not.toBeInTheDocument();

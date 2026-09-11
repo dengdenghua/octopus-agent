@@ -90,6 +90,7 @@ def create_evolution_ops_router(
     journal: Any = None,
     registry: Any = None,
     planner: Any = None,
+    planner_provider: Any = None,
     thread_store: Any = None,
     forged_skill_dir: Path | str | None = None,
     identity_store: Any = None,
@@ -112,6 +113,10 @@ def create_evolution_ops_router(
     require_fastapi(__name__)
 
     local_suppressed_skill_proposals: dict[str, set[str]] = {}
+
+    def get_planner() -> Any:
+        return planner_provider() if planner_provider is not None else planner
+
     forge_persist_dir = Path(forged_skill_dir) if forged_skill_dir is not None else None
 
     def _require_forge_dependencies() -> Path:
@@ -204,7 +209,7 @@ def create_evolution_ops_router(
             # legacy thread store are not tenant-partitioned.  Do not mix
             # their durable content into a tenant dashboard.
             return None, None, None
-        return registry, planner, thread_store
+        return registry, get_planner(), thread_store
 
     def _journal_write_context(scope: Any) -> AbstractContextManager[Any]:
         from runtime.memory.journal import journal_context
@@ -420,7 +425,11 @@ def create_evolution_ops_router(
     ) -> dict[str, Any]:
         _actor = _require_actor(request)  # noqa: F841 — auth gate only
         scoped, scope = _request_journal(request, cross_tenant=cross_tenant)
-        if scope is not None and not scope.allow_cross_tenant and planner is not None:
+        if (
+            scope is not None
+            and not scope.allow_cross_tenant
+            and (planner is not None or planner_provider is not None)
+        ):
             raise HTTPException(
                 409,
                 "tenant-scoped planner persistence is unavailable; global learning requires "
@@ -428,7 +437,7 @@ def create_evolution_ops_router(
             )
         return _learn_from_intel_result(
             scoped,
-            planner,
+            get_planner(),
             registry,
             suppressed_names=_suppressed_names(scope),
             scope=scope,
@@ -1002,7 +1011,7 @@ def create_evolution_ops_router(
     ) -> dict[str, Any]:
         return _forge_run_optimizer(
             journal=journal,
-            planner=planner,
+            planner=get_planner(),
             n_iter=n_iter,
             eval_tasks=eval_tasks,
             recipe_id=recipe_id,
@@ -1021,7 +1030,7 @@ def create_evolution_ops_router(
     ) -> dict[str, Any]:
         return _forge_auto_propose(
             journal=journal,
-            planner=planner,
+            planner=get_planner(),
             n_iter=n_iter,
             eval_tasks=eval_tasks,
             max_recipes=max_recipes,

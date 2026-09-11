@@ -1,0 +1,7 @@
+Browser tab: 4, Title: "HUB - Echo", URL: "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=remote".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
++						100 container
++							101 text 远程智能体 URL
++							102 text field (settable)
++							103 button (disabled) 连接
+The focused UI element is 102 text field (settable)

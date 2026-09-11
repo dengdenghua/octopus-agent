@@ -20,9 +20,11 @@ from typing import Any
 
 from runtime.platform.models.provider_errors import (
     MODEL_UNAVAILABLE_MESSAGE,
+    OPENCODE_REQUIRED_MESSAGE,
     PROVIDER_HTTP_MESSAGES,
 )
 
+from .tool_limits import TOOL_CATALOG_ERROR, TOOL_CATALOG_MESSAGE
 from .types import JsonObject, Notification
 
 _MAX_PREVIEW_CHARS = 8_000
@@ -31,10 +33,16 @@ _MAX_ERROR_CHARS = 4_000
 
 def _public_error_text(value: Any) -> str:
     detail = _text(value, limit=_MAX_ERROR_CHARS)
+    if TOOL_CATALOG_ERROR in detail or TOOL_CATALOG_MESSAGE in detail:
+        return TOOL_CATALOG_MESSAGE
     # App Server wraps proxy failures in a transport string/JSON object. Only
     # unwrap our bounded messages; arbitrary upstream details stay on the
     # existing diagnostic path.
-    for message in (MODEL_UNAVAILABLE_MESSAGE, *PROVIDER_HTTP_MESSAGES.values()):
+    for message in (
+        MODEL_UNAVAILABLE_MESSAGE,
+        OPENCODE_REQUIRED_MESSAGE,
+        *PROVIDER_HTTP_MESSAGES.values(),
+    ):
         if message in detail:
             return message
     return detail
@@ -238,7 +246,7 @@ def _turn_status(turn: Any) -> tuple[bool, str]:
     return normalized in {"completed", "complete", "success", "succeeded"}, raw
 
 
-def translate_notification(
+def _translate_notification(
     notification: Notification,
     state: CodexEventState,
 ) -> list[dict[str, Any]]:
@@ -449,6 +457,11 @@ def translate_notification(
         ]
 
     return []
+
+
+def translate_notification(notification: Notification, state: CodexEventState) -> list[dict[str, Any]]:
+    from runtime.execution.engine_observations import observe_engine_event
+    return [observe_engine_event(event, "codex") for event in _translate_notification(notification, state)]
 
 
 __all__ = ["CodexEventState", "translate_notification"]

@@ -1,0 +1,22 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/apps/media".
+0 AXWebArea Echo, URL: localhost:3310/#/apps/media
+	1 container
+		2 container root
+			122 container
+				123 button 返回桌面
+				124 heading 视频, Value: 1
+					125 text 视频
+				126 text 0 项 · 关键帧语义与人物检索
+				127 text 本机索引 ·  0  项 ·  0 B
+				128 button 刷新
+				129 button 重建索引
+				130 text field (settable)
+				131 button 管理授权目录
+				132 heading 本机媒体服务暂时不可用, Value: 2
+					133 text 本机媒体服务暂时不可用
+				134 text NAS /v1/files?kind=video&limit=500 failed: 502
+				135 button 重试
+				136 button 打开存储管理
+			121 container Notifications alt+T
+
+The focused UI element is 0 AXWebArea Echo, URL: localhost:3310/#/apps/media

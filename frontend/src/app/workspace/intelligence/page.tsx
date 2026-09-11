@@ -35,7 +35,7 @@ export default function IntelligencePage() {
         <div className="flex h-full min-h-0 w-full flex-col bg-background">
           <header className="flex min-h-12 shrink-0 items-center justify-between gap-2 border-b border-border bg-muted/24 px-3 py-2 sm:h-12 sm:py-0">
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold">自动化</div>
+              <div className="truncate text-sm font-semibold">订阅与自动化</div>
               <div className="hidden truncate text-xs text-muted-foreground sm:block">
                 配置任务、查看执行历史与管理模板
               </div>

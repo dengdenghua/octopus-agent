@@ -363,25 +363,32 @@ export function isPrivateAgentGroundingSource(
 
 /** Host-recorded engine binding, never inferred from a persona or model. */
 export interface ExecutionSnapshot {
-  engine: "octopus" | "codex";
+  engine: "octopus" | "codex" | "opencode";
   driver: string;
   reason: string;
   phase: "primary" | "steering" | "verification" | "repair";
   invocation: number;
 }
 
-export function parseExecutionSnapshot(value: unknown): ExecutionSnapshot | null {
+export function parseExecutionSnapshot(
+  value: unknown,
+): ExecutionSnapshot | null {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
   if (
-    (record.engine !== "octopus" && record.engine !== "codex") ||
+    (record.engine !== "octopus" &&
+      record.engine !== "codex" &&
+      record.engine !== "opencode") ||
     typeof record.driver !== "string" ||
     typeof record.reason !== "string" ||
-    !["primary", "steering", "verification", "repair"].includes(String(record.phase)) ||
+    !["primary", "steering", "verification", "repair"].includes(
+      String(record.phase),
+    ) ||
     typeof record.invocation !== "number" ||
     !Number.isSafeInteger(record.invocation) ||
     record.invocation < 1
-  ) return null;
+  )
+    return null;
   return record as unknown as ExecutionSnapshot;
 }
 
@@ -392,7 +399,10 @@ export function mergeExecutionSnapshot(
 ): ExecutionSnapshot | null | undefined {
   const next = parseExecutionSnapshot(incoming);
   if (!next) return current;
-  if (current && (next.engine !== current.engine || next.invocation <= current.invocation)) {
+  if (
+    current &&
+    (next.engine !== current.engine || next.invocation <= current.invocation)
+  ) {
     return current;
   }
   return next;

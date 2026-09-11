@@ -1,0 +1,12 @@
+Browser tab: 4, Title: "新对话 - Echo", URL: "http://localhost:3310/#/workspace/realtime/new".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 188
+~				155 text OpenCode Zen 免费模型
+~				157 text 1 个连接 · 8 个模型
+~				159 text 已连接
++				213 content list
++					214 container
++						215 button (collapsed) Secondary Actions: Expand
++						216 button (collapsed) Secondary Actions: Expand
++						217 button
+The focused UI element is 76 button 模型

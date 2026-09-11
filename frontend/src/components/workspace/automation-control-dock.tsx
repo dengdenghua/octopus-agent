@@ -6,8 +6,9 @@ import {
   HandIcon,
   HistoryIcon,
   Loader2Icon,
+  PictureInPicture2Icon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { getRelayStatus, type RelayStatus } from "@/core/browser/api";
@@ -24,6 +25,7 @@ import {
 } from "@/core/control-session";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
+import { AutomationPictureInPicture } from "@/components/workspace/automation-picture-in-picture";
 
 type AutomationControlDockProps = {
   threadId: string;
@@ -50,7 +52,9 @@ export function AutomationControlDock({
   const [relay, setRelay] = useState<RelayStatus | null>(null);
   const [replay, setReplay] = useState<ControlSessionReplay | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [changingState, setChangingState] = useState(false);
+  const wasActiveRef = useRef(false);
 
   const refresh = useCallback(async () => {
     const [relayResult, replayResult] = await Promise.allSettled([
@@ -90,6 +94,11 @@ export function AutomationControlDock({
     [replay?.timeline?.items],
   );
   const latest = timeline[0];
+
+  useEffect(() => {
+    if (active && !wasActiveRef.current) setPreviewOpen(true);
+    wasActiveRef.current = active;
+  }, [active]);
 
   const changeState = useCallback(
     async (action: "pause" | "resume" | "takeover") => {
@@ -193,6 +202,19 @@ export function AutomationControlDock({
         ) : null}
         <button
           type="button"
+          onClick={() => setPreviewOpen((value) => !value)}
+          className={cn(
+            "inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground",
+            previewOpen && "bg-background/80 text-foreground",
+          )}
+          title={`${t.common.preview} · ${target.title}`}
+          aria-label={`${t.common.preview} · ${target.title}`}
+          aria-pressed={previewOpen}
+        >
+          <PictureInPicture2Icon className="size-3.5" />
+        </button>
+        <button
+          type="button"
           onClick={() => setExpanded((value) => !value)}
           className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground"
           title={t.chatInputBox.automationEvidence}
@@ -247,6 +269,16 @@ export function AutomationControlDock({
           )}
         </div>
       ) : null}
+      <AutomationPictureInPicture
+        threadId={threadId}
+        target={target}
+        open={previewOpen}
+        active={active}
+        paused={paused}
+        relayConnected={Boolean(relay?.connected)}
+        stateLabel={stateLabel}
+        onOpenChange={setPreviewOpen}
+      />
     </div>
   );
 }

@@ -24,12 +24,16 @@ function WorkspaceRoutePending({ label }: { label: string }) {
  * and the user gets no indication that navigation is in progress.
  */
 export function WorkspaceRouteOutlet() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const freshDesignTask =
+    pathname === "/workspace/design"
+      ? new URLSearchParams(search).get("new_task")
+      : null;
   const { t } = useI18n();
 
   return (
     <Suspense
-      key={pathname}
+      key={freshDesignTask ? `${pathname}:${freshDesignTask}` : pathname}
       fallback={<WorkspaceRoutePending label={t.common.loading} />}
     >
       <ErrorBoundary>

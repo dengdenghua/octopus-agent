@@ -250,6 +250,48 @@ const COMMUNITY_ROUTES: NavRoute[] = moduleNavRoutes("community");
 
 const STORAGE_LIBRARY_ROUTES: NavRoute[] = moduleNavRoutes("storageLibrary");
 
+// These workbench routes are intentionally kept out of the primary module
+// catalog: they are operational surfaces rather than everyday destinations.
+// They still need a stable entry point so deep links do not become orphaned
+// pages for users who did not already know the URL.
+const WORKSPACE_TOOL_ROUTES: NavRoute[] = [
+  {
+    to: "/workspace/computer",
+    labelKey: "navComputer",
+    icon: AppWindowIcon,
+  },
+  {
+    to: "/workspace/desktop-organizer",
+    labelKey: "navDesktopOrganizer",
+    icon: FolderIcon,
+  },
+  {
+    to: "/workspace/architecture",
+    labelKey: "navArchitecture",
+    icon: WorkflowIcon,
+  },
+  {
+    to: "/workspace/channels",
+    labelKey: "channels",
+    icon: RssIcon,
+  },
+  {
+    to: "/workspace/observability",
+    labelKey: "observability",
+    icon: RssIcon,
+  },
+  {
+    to: "/workspace/diagnostics",
+    labelKey: "diagnostics",
+    icon: ListTodoIcon,
+  },
+  {
+    to: "/workspace/reflex",
+    labelKey: "navReflex",
+    icon: DnaIcon,
+  },
+];
+
 type SidebarFileExplorerTarget = {
   project: string;
   title: string;
@@ -454,7 +496,8 @@ export function syncedSidebarPathname(
 }
 
 export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
-  const { pathname, search } = useLocation();
+  const { pathname, search, state: routeState } = useLocation();
+  const navigateSettings = useNavigate();
   const { t } = useI18n();
   const {
     isMobile,
@@ -462,10 +505,13 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     setOpenMobile,
     state: sidebarState,
   } = useSidebar();
+  useEffect(() => {
+    setOpenMobile(false);
+  }, [pathname, search, setOpenMobile]);
   const queryClient = useQueryClient();
   const apiClient = useMemo(() => getAPIClient(), []);
   const electron = inElectron();
-  const { macTrafficLightsWidth } = useElectronTitleBar();
+  const { controlsSide } = useElectronTitleBar();
   // Starting from `/new` swaps in a server thread id before the live page can
   // safely remount. Use its transient route for sidebar selection until the
   // page finishes the Router transition.
@@ -529,6 +575,10 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     () => resolveRoutes(STORAGE_LIBRARY_ROUTES),
     [resolveRoutes],
   );
+  const workspaceToolItems = useMemo(
+    () => resolveRoutes(WORKSPACE_TOOL_ROUTES),
+    [resolveRoutes],
+  );
 
   // Settings dialog state
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -537,11 +587,13 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const [settingsDefaultSection, setSettingsDefaultSection] =
     useState<SettingsSection>("appearance");
   const pendingSettingsOpenRef = useRef<number | null>(null);
+  const projectPickerRequestRef = useRef<AbortController | null>(null);
   const pendingSettingsFocusRef = useRef<number | null>(null);
   const restoreSettingsFocusRef = useRef(false);
 
   const openSettingsSection = useCallback(
     (tab?: string) => {
+      projectPickerRequestRef.current?.abort();
       const next: SettingsSection = normalizeSettingsSection(tab);
 
       const openDialog = () => {
@@ -571,6 +623,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
 
   useEffect(
     () => () => {
+      projectPickerRequestRef.current?.abort();
       if (pendingSettingsOpenRef.current !== null) {
         window.clearTimeout(pendingSettingsOpenRef.current);
       }
@@ -594,6 +647,16 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       if (trigger && trigger.getClientRects().length > 0) trigger.focus();
     }, 0);
   }, []);
+
+  useEffect(() => {
+    if (!routeState || typeof routeState.settingsSection !== "string") return;
+    openSettingsSection(routeState.settingsSection);
+    const { settingsSection: _consumed, ...remainingState } = routeState;
+    navigateSettings(
+      { pathname, search },
+      { replace: true, state: remainingState },
+    );
+  }, [routeState, pathname, search, openSettingsSection, navigateSettings]);
 
   // Listen for open-settings event via EventBus
   useEvent(
@@ -724,16 +787,25 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   // path, which keeps the project label, workspace binding, and permissions in
   // sync instead of creating a name-only project.
   const pickProjectFolder = useCallback(async () => {
+    projectPickerRequestRef.current?.abort();
+    const request = new AbortController();
+    projectPickerRequestRef.current = request;
     try {
-      const selected = await pickLocalDirectory();
-      if (!selected) return;
+      const selected = await pickLocalDirectory("", { signal: request.signal });
+      if (!selected || request.signal.aborted) return;
       saveProjectName(basename(selected) || selected);
       emitWorkDirSelected(selected);
     } catch (error) {
+      if (request.signal.aborted) return;
       swallow(error);
       toast.error(t.sidebar.projectPickerFailed);
     }
   }, [saveProjectName, t.sidebar.projectPickerFailed]);
+
+  useEffect(
+    () => () => projectPickerRequestRef.current?.abort(),
+    [pathname, search],
+  );
 
   // Group code/team threads by project. Team history defaults to its bound
   // workspace folder, so multi-agent work sits with the project instead of
@@ -852,16 +924,21 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   // abnormal stream end) left its light stuck on "running" forever. The
   // TTL below is the safety net - page unmount still clears immediately.
   const [liveThreadRunStatusByHref, setLiveThreadRunStatusByHref] = useState<
-    Map<string, { status: ThreadRunStatus; at: number }>
+    Map<string, { status: ThreadRunStatus | "done"; at: number }>
   >(() => new Map());
   useEvent(
     "thread:run-status",
     ({ href, state, threadId }) => {
-      const status = normalizeThreadRunStatus(state);
+      const status =
+        state === "done" ? "done" : normalizeThreadRunStatus(state);
       const targetHref = href || threadHrefById.get(threadId);
       if (!targetHref) return;
       setLiveThreadRunStatusByHref((prev) => {
-        if (!status && !prev.has(targetHref)) return prev;
+        if (
+          !status &&
+          (!prev.has(targetHref) || prev.get(targetHref)?.status === "done")
+        )
+          return prev;
         const next = new Map(prev);
         if (status) {
           next.set(targetHref, { status, at: Date.now() });
@@ -881,7 +958,10 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
         const next = new Map(prev);
         let changed = false;
         for (const [href, entry] of prev) {
-          if (now - entry.at > LIVE_RUN_STATUS_TTL_MS) {
+          if (
+            entry.status !== "done" &&
+            now - entry.at > LIVE_RUN_STATUS_TTL_MS
+          ) {
             next.delete(href);
             changed = true;
           }
@@ -1047,24 +1127,21 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       <Sidebar
         variant="sidebar"
         collapsible="icon"
-        className={cn("border-r bg-sidebar")}
+        className={cn(
+          "border-r bg-sidebar",
+          controlsSide === "left" &&
+            "top-[var(--window-content-top-inset)] h-[calc(100svh-var(--window-content-top-inset))]",
+        )}
         {...props}
       >
         {/* Implementation note. */}
         <SidebarHeader
           className="h-10 shrink-0 border-b border-white/40 bg-transparent p-0 pr-2 py-0 group-data-[collapsible=icon]:px-0 dark:border-white/10"
           style={
-            electron
-              ? ({
-                  paddingLeft:
-                    macTrafficLightsWidth > 0
-                      ? sidebarState === "collapsed"
-                        ? macTrafficLightsWidth - 8
-                        : macTrafficLightsWidth + 18
-                      : 10,
-                  WebkitAppRegion: "drag",
-                } as React.CSSProperties)
-              : { paddingLeft: 10 }
+            {
+              paddingLeft: sidebarState === "collapsed" ? 0 : 10,
+              WebkitAppRegion: electron ? "drag" : undefined,
+            } as React.CSSProperties
           }
         >
           <div
@@ -1090,7 +1167,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
         {/* Tight body: px-1.5 py-1.5 instead of default p-2/px-2 so groups
           sit closer to the header and we win a few rows of vertical
           space back. */}
-        <SidebarContent className="gap-1.5 px-2.5 py-2 group-data-[collapsible=icon]:px-1 group-data-[collapsible=icon]:py-1.5">
+        <SidebarContent className="gap-1 px-2.5 py-2 group-data-[collapsible=icon]:px-1 group-data-[collapsible=icon]:py-1.5">
           {/* Workspace switcher — sits at the very top so users can flip
               between local folders and registered remote mounts without
               diving into a settings page. Hidden when the sidebar is
@@ -1120,6 +1197,11 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
             items={nasLibraryItems}
             pathname={pathname}
             search={search}
+          />
+          <NavSection
+            items={workspaceToolItems}
+            pathname={pathname}
+            label={resolveLabel("groupTools")}
           />
           <EditModulesButton onOpen={() => setModuleEditorOpen(true)} />
           {fileExplorerTarget ? (
@@ -1182,6 +1264,9 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
 
 type NavItem = NavRoute & { label: string };
 
+const primaryNavClassName =
+  "group/nav relative h-8 w-full text-ui text-foreground/85 transition-colors hover:bg-foreground/[0.035] hover:text-foreground data-[active=true]:bg-foreground/[0.065] data-[active=true]:font-medium data-[active=true]:text-foreground outline-none [&:focus:not(:focus-visible)]:ring-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-foreground/30";
+
 function NavSection({
   items,
   pathname,
@@ -1196,7 +1281,7 @@ function NavSection({
   return (
     <SidebarGroup className="p-0 px-1 group-data-[collapsible=icon]:px-0">
       {label && (
-        <div className="px-2 pb-1 pt-2 text-xs font-medium text-muted-foreground/72 group-data-[collapsible=icon]:sr-only">
+        <div className="px-2 pb-1 pt-2 text-ui-caption font-medium text-muted-foreground group-data-[collapsible=icon]:sr-only">
           {label}
         </div>
       )}
@@ -1222,12 +1307,12 @@ function EditModulesButton({ onOpen }: { onOpen: () => void }) {
       <SidebarMenu>
         <SidebarMenuItem className="justify-center">
           <SidebarMenuButton
-            tooltip={t.sidebar.editModules}
+            tooltip={{ children: t.sidebar.editModules, hidden: false }}
             aria-label={t.sidebar.editModules}
             onClick={onOpen}
             className={cn(
-              "h-7 w-full justify-start border border-transparent text-muted-foreground/55",
-              "transition-[color,background-color,border-color] hover:border-border-subtle hover:bg-muted/45 hover:text-foreground",
+              "h-7 w-full justify-start text-muted-foreground/65",
+              "transition-colors hover:bg-foreground/[0.035] hover:text-foreground",
               "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0",
             )}
           >
@@ -1253,6 +1338,7 @@ function LocalDatabaseSection({
   search: string;
 }) {
   const { t } = useI18n();
+  const { state: sidebarState, setOpen: setSidebarOpen } = useSidebar();
   const [open, setOpen] = useState(false);
   const active = isStorageRouteActive(pathname);
 
@@ -1270,14 +1356,16 @@ function LocalDatabaseSection({
                 ? t.sidebar.ariaCollapseLocalDatabase
                 : t.sidebar.ariaExpandLocalDatabase
             }
-            onClick={() => setOpen((value) => !value)}
+            onClick={() => {
+              if (sidebarState === "collapsed") {
+                setSidebarOpen(true);
+                setOpen(true);
+              } else {
+                setOpen((value) => !value);
+              }
+            }}
             className={cn(
-              "group/nav relative h-9 w-full opacity-76 transition-[opacity,background-color,border-color] text-sm",
-              "border border-transparent hover:border-border-subtle hover:bg-muted/32 hover:opacity-100",
-              "data-[active=true]:opacity-100",
-              "data-[active=true]:border-sidebar-primary/18 data-[active=true]:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_82%,transparent)]",
-              "data-[active=true]:shadow-[var(--shadow-xs)]",
-              "data-[active=true]:before:absolute data-[active=true]:before:left-0 data-[active=true]:before:top-1.5 data-[active=true]:before:bottom-1.5 data-[active=true]:before:w-[2px] data-[active=true]:before:rounded-r data-[active=true]:before:bg-sidebar-primary/85",
+              primaryNavClassName,
               "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0",
             )}
           >
@@ -1285,16 +1373,16 @@ function LocalDatabaseSection({
               className={cn(
                 "flex size-6 shrink-0 items-center justify-center rounded-lg transition-colors",
                 active
-                  ? "bg-sidebar-primary/12 text-sidebar-primary"
-                  : "text-muted-foreground group-hover/nav:text-foreground",
+                  ? "text-foreground"
+                  : "text-muted-foreground/85 group-hover/nav:text-foreground",
               )}
             >
-              <DatabaseIcon className="size-[16px]" />
+              <DatabaseIcon className="size-[16px]" strokeWidth={1.75} />
             </span>
             <span className="min-w-0 flex-1 truncate text-left group-data-[collapsible=icon]:hidden">
               {title}
             </span>
-            <span className="flex size-5 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors group-hover/nav:bg-muted/60 group-hover/nav:text-foreground group-data-[collapsible=icon]:hidden">
+            <span className="flex size-5 shrink-0 items-center justify-center text-muted-foreground/70 transition-colors group-hover/nav:text-foreground group-data-[collapsible=icon]:hidden">
               <ChevronRightIcon
                 className={cn(
                   "size-3.5 transition-transform",
@@ -1305,16 +1393,18 @@ function LocalDatabaseSection({
           </SidebarMenuButton>
         </SidebarMenuItem>
         {open && (
-          <div className="space-y-0.5 pl-4 group-data-[collapsible=icon]:hidden">
-            {items.map((item) => (
-              <StorageLibraryRow
-                key={item.to}
-                item={item}
-                pathname={pathname}
-                search={search}
-              />
-            ))}
-          </div>
+          <SidebarMenuItem className="ml-3 border-l border-border-subtle pl-1 group-data-[collapsible=icon]:hidden">
+            <SidebarMenu className="gap-0.5">
+              {items.map((item) => (
+                <StorageLibraryRow
+                  key={item.to}
+                  item={item}
+                  pathname={pathname}
+                  search={search}
+                />
+              ))}
+            </SidebarMenu>
+          </SidebarMenuItem>
         )}
       </SidebarMenu>
     </SidebarGroup>
@@ -1339,15 +1429,15 @@ function StorageLibraryRow({
         isActive={active}
         tooltip={item.label}
         className={cn(
-          "group/nav relative h-8 w-full opacity-72 transition-[opacity,background-color,border-color] text-xs",
-          "border border-transparent hover:border-border-subtle hover:bg-muted/32 hover:opacity-100",
-          "data-[active=true]:opacity-100 data-[active=true]:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_58%,transparent)]",
+          "group/nav relative h-8 w-full text-ui text-muted-foreground transition-colors hover:bg-foreground/[0.035] hover:text-foreground",
+          "data-[active=true]:bg-foreground/[0.065] data-[active=true]:text-foreground",
         )}
       >
         <Link
           to={item.to}
           onMouseEnter={() => preloadWorkspaceRoute(item.to)}
           onFocus={() => preloadWorkspaceRoute(item.to)}
+          aria-label={item.label}
           aria-current={active ? "page" : undefined}
           className="flex items-center gap-2"
         >
@@ -1355,11 +1445,11 @@ function StorageLibraryRow({
             className={cn(
               "flex size-5 shrink-0 items-center justify-center rounded-lg transition-colors",
               active
-                ? "text-sidebar-primary"
-                : "text-muted-foreground group-hover/nav:text-foreground",
+                ? "text-foreground"
+                : "text-muted-foreground/85 group-hover/nav:text-foreground",
             )}
           >
-            <Icon className="size-[14px]" />
+            <Icon className="size-[14px]" strokeWidth={1.75} />
           </span>
           <span className="truncate">{item.label}</span>
         </Link>
@@ -1474,6 +1564,7 @@ function ProjectFileExplorerView({
 
 export const __testing = {
   SIDEBAR_THREAD_QUERY_PARAMS,
+  WORKSPACE_TOOL_ROUTES,
   buildThreadRunStatusByHref,
   isProjectThreadMode,
   isNavRouteActive,
@@ -1518,7 +1609,7 @@ function SurfaceCreateButton({
           workspacePath: workspacePath || undefined,
         })
       }
-      className="flex h-8 w-full shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border-default bg-background/60 px-3 text-xs font-medium text-muted-foreground transition-[background-color,border-color,color] hover:border-border hover:bg-background hover:text-foreground group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:translate-x-[3px] group-data-[collapsible=icon]:px-0"
+      className="flex h-8 w-full shrink-0 items-center justify-start gap-2 rounded-lg bg-transparent px-3 text-ui font-medium text-foreground transition-colors hover:bg-foreground/[0.045] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:translate-x-[3px] group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
     >
       <PlusIcon className="size-4" />
       <span className="group-data-[collapsible=icon]:sr-only">
@@ -1537,7 +1628,18 @@ function NavRow({
   pathname: string;
   search?: string;
 }) {
-  const active = item.externalUrl
+  const [designCanvasVisible, setDesignCanvasVisible] = useState(false);
+  useEffect(() => {
+    if (pathname !== "/workspace/design" || item.to !== "/workspace/design") return;
+    const onDesignView = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin || event.data?.type !== "echo:design-view") return;
+      const sourceIsDesign = Array.from(document.querySelectorAll<HTMLIFrameElement>("iframe")).some((frame) => frame.contentWindow === event.source && frame.src.includes("/api/workbench-packages/design/assets/"));
+      if (sourceIsDesign && typeof event.data.canvasVisible === "boolean") setDesignCanvasVisible(event.data.canvasVisible);
+    };
+    window.addEventListener("message", onDesignView);
+    return () => window.removeEventListener("message", onDesignView);
+  }, [pathname, item.to]);
+  const active = item.to === "/workspace/design" ? pathname === "/workspace/design" && designCanvasVisible : item.externalUrl
     ? pathname === "/workspace/web-app" &&
       new URLSearchParams(search).get("url") === item.externalUrl
     : isNavRouteActive(pathname, item.to);
@@ -1562,14 +1664,7 @@ function NavRow({
         asChild
         isActive={active}
         tooltip={item.label}
-        className={cn(
-          "group/nav relative h-9 w-full opacity-76 transition-[opacity,background-color,border-color] text-sm",
-          "border border-transparent hover:border-border-subtle hover:bg-muted/32 hover:opacity-100",
-          "data-[active=true]:opacity-100",
-          "data-[active=true]:border-sidebar-primary/18 data-[active=true]:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_82%,transparent)]",
-          "data-[active=true]:shadow-[var(--shadow-xs)]",
-          "data-[active=true]:before:absolute data-[active=true]:before:left-0 data-[active=true]:before:top-1.5 data-[active=true]:before:bottom-1.5 data-[active=true]:before:w-[2px] data-[active=true]:before:rounded-r data-[active=true]:before:bg-sidebar-primary/85",
-        )}
+        className={cn(primaryNavClassName)}
       >
         <Link
           to={item.to}
@@ -1579,6 +1674,7 @@ function NavRow({
           onFocus={() => {
             if (!item.externalUrl) preloadWorkspaceRoute(item.to);
           }}
+          aria-label={item.label}
           aria-current={active ? "page" : undefined}
           className={cn(
             "flex items-center gap-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0",
@@ -1589,8 +1685,8 @@ function NavRow({
             className={cn(
               "flex size-6 shrink-0 items-center justify-center rounded-lg transition-colors",
               active
-                ? "bg-sidebar-primary/12 text-sidebar-primary"
-                : "text-muted-foreground group-hover/nav:text-foreground",
+                ? "text-foreground"
+                : "text-muted-foreground/85 group-hover/nav:text-foreground",
             )}
           >
             {item.iconUrl ? (
@@ -1600,7 +1696,7 @@ function NavRow({
                 className="size-[16px] rounded-sm object-contain"
               />
             ) : (
-              <Icon className="size-[16px]" />
+              <Icon className="size-[16px]" strokeWidth={1.75} />
             )}
           </span>
           <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">
@@ -2192,7 +2288,7 @@ function SectionHeader({
   const hasToggle =
     typeof open === "boolean" && typeof onToggleOpen === "function";
   return (
-    <div className="group/section flex h-9 items-center justify-between gap-2 px-1">
+    <div className="group/section flex h-8 items-center justify-between gap-1">
       {hasToggle ? (
         <button
           type="button"
@@ -2209,7 +2305,7 @@ function SectionHeader({
           }
           aria-expanded={open}
           className={cn(
-            "flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1 text-left text-sm font-medium transition-[background-color,color] outline-none focus-visible:ring-1 focus-visible:ring-ring/45",
+            "flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1 text-left text-ui font-medium transition-colors hover:bg-foreground/[0.035] outline-none focus-visible:ring-2 focus-visible:ring-ring/45",
             open
               ? "text-foreground/80"
               : "text-muted-foreground hover:bg-muted/35 hover:text-foreground",
@@ -2225,7 +2321,7 @@ function SectionHeader({
           <span className="truncate">{label}</span>
         </button>
       ) : (
-        <span className="text-sm font-medium text-muted-foreground">
+        <span className="text-ui font-medium text-muted-foreground">
           {label}
         </span>
       )}
@@ -2234,7 +2330,7 @@ function SectionHeader({
           {actions.map((a) => {
             const Icon = a.icon;
             const cls = cn(
-              "flex size-8 items-center justify-center rounded-lg text-muted-foreground/70 transition-colors hover:bg-muted/45 hover:text-foreground",
+              "flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground/70 transition-colors hover:bg-foreground/[0.035] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45",
               a.active && "text-foreground",
             );
             if (a.menuItems) {
@@ -2530,11 +2626,10 @@ function ChatsSection({
                       aria-current={active ? "page" : undefined}
                       title={t.title}
                       className={cn(
-                        "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-lg py-1 pl-2 pr-2 text-[13px] text-foreground/78 transition-[padding,background-color,color] duration-fast group-hover/thread:pr-8 group-focus-within/thread:pr-8",
-                        "hover:bg-muted/40 hover:text-foreground",
+                        "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-lg py-1 pl-2 pr-2 text-[13px] text-foreground/78 transition-colors duration-fast",
+                        "hover:bg-foreground/[0.035] hover:text-foreground",
                         "outline-none focus-visible:ring-1 focus-visible:ring-ring/45 focus-visible:ring-inset",
-                        active &&
-                          "text-foreground bg-[color:color-mix(in_oklch,var(--sidebar-accent)_42%,transparent)]",
+                        active && "text-foreground bg-foreground/[0.065]",
                       )}
                     >
                       <ThreadRunStatusLight
@@ -2548,7 +2643,7 @@ function ChatsSection({
                       </span>
                       <SidebarTimestamp
                         updatedAt={t.updatedAt}
-                        className="w-10 group-hover/thread:w-0 group-hover/thread:opacity-0 group-focus-within/thread:w-0 group-focus-within/thread:opacity-0"
+                        className="w-10 group-hover/thread:opacity-0 group-focus-within/thread:opacity-0"
                       />
                     </Link>
                     <DropdownMenu>
@@ -2666,7 +2761,7 @@ export function CollapseToggle({ compact = false }: { compact?: boolean }) {
           }
           aria-expanded={open}
           className={cn(
-            "flex shrink-0 items-center justify-center justify-self-center border border-transparent bg-transparent text-muted-foreground shadow-none transition-[background-color,border-color,color] hover:border-border-default hover:bg-muted/55 hover:text-foreground",
+            "flex shrink-0 items-center justify-center justify-self-center bg-transparent text-muted-foreground shadow-none transition-colors hover:bg-foreground/[0.035] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45",
             compact
               ? "size-8 rounded-[var(--appearance-radius-control)]"
               : "size-10 rounded-[var(--appearance-radius-lg)]",

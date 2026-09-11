@@ -1,0 +1,4157 @@
+{
+  "counts": {
+    "captured": 289,
+    "retained": 259,
+    "excluded": 30,
+    "findings": 20,
+    "blockerGroups": 3,
+    "groups": 20,
+    "aliasChecks": 15
+  },
+  "scope": "截图状态的视觉与入口审核；不是端到端功能通过率。",
+  "entries": [
+    {
+      "name": "01-new-task",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 1,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "新任务首屏",
+      "status": "需优化",
+      "issues": [
+        "F19"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "02-insert-menu",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 2,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "insert menu",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "03-insert-files",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 3,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "insert files",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "04-insert-window",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 4,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "insert window",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "05-insert-commands",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "命令使用英文名称，缺少用途说明。",
+      "step": 5,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "insert commands",
+      "status": "需优化",
+      "issues": [
+        "F15"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "06-insert-plugins",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 6,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "insert plugins",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "07-insert-skills",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 7,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "insert skills",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "08-permissions",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 8,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "permissions",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "09-engine",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 9,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "engine",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "10-model-picker",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 10,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "model picker",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "11-model-subscription",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 11,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "model subscription",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "12-task-mode",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 12,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "task mode",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "14-collaboration",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 13,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "collaboration",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "15-right-panel",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 14,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "right panel",
+      "status": "需优化",
+      "issues": [
+        "F12"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "16-automation-workbench",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 15,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "automation workbench",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "18-artifact-panel",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 16,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "artifact panel",
+      "status": "需优化",
+      "issues": [
+        "F12"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "19-panel-list",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 17,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "panel list",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "20-settings-general",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 18,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings general",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "21-settings-general-bottom",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 19,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings general bottom",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "22-settings-account",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 20,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings account",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "24-settings-conversation",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 21,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings conversation",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "13-workspace-selector-ready",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "系统目录选择响应延迟，稍后失败回退弹窗打断了正在查看的设置页。",
+      "step": 22,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "工作区选择失败回退",
+      "status": "需优化",
+      "issues": [
+        "F03"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "23-settings-usage-ready",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 23,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings usage ready",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "26-settings-models",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 24,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings models",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "27-api-connect-dialog",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 25,
+      "group": 2,
+      "groupName": "设置",
+      "title": "模型接入表单",
+      "status": "需优化",
+      "issues": [
+        "F02"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "28-api-connect-form-bottom",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 26,
+      "group": 2,
+      "groupName": "设置",
+      "title": "api connect form bottom",
+      "status": "需优化",
+      "issues": [
+        "F02"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "29-settings-memory",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 27,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings memory",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "30-memory-create",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 28,
+      "group": 2,
+      "groupName": "设置",
+      "title": "memory create",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "31-settings-notifications",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 29,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings notifications",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "32-settings-coding",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 30,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings coding",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "33-settings-tools",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 31,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings tools",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "34-settings-browser-automation",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 32,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings browser automation",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "35-settings-browser-automation-bottom",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 33,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings browser automation bottom",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "36-settings-desktop-automation",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 34,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings desktop automation",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "37-settings-security",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 35,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings security",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "38-settings-security-bottom",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 36,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings security bottom",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "39-settings-personal-space",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 37,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings personal space",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "40-settings-privacy-advanced",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 38,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings privacy advanced",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "42-settings-sandbox",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 39,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings sandbox",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "43-settings-sandbox-bottom",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 40,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings sandbox bottom",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "44-settings-diagnostics",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 41,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings diagnostics",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "45-settings-about",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 42,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings about",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "46-settings-search-empty",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 43,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings search empty",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "47-factory-reset-dialog",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 44,
+      "group": 2,
+      "groupName": "设置",
+      "title": "factory reset dialog",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "48-settings-about-build",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 45,
+      "group": 2,
+      "groupName": "设置",
+      "title": "settings about build",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "49-model-runtime-details",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 46,
+      "group": 2,
+      "groupName": "设置",
+      "title": "model runtime details",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "51-model-advanced",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 47,
+      "group": 2,
+      "groupName": "设置",
+      "title": "model advanced",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "52-model-gateway",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 48,
+      "group": 2,
+      "groupName": "设置",
+      "title": "model gateway",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "53-local-model-recommendations",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 49,
+      "group": 2,
+      "groupName": "设置",
+      "title": "local model recommendations",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "55-provider-matrix",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 50,
+      "group": 2,
+      "groupName": "设置",
+      "title": "provider matrix",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "56-hub-roles",
+      "url": "http://localhost:3310/#/workspace/agents?surface=chat",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 51,
+      "group": 3,
+      "groupName": "HUB 与插件",
+      "title": "hub roles",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "57-hub-add-menu",
+      "url": "http://localhost:3310/#/workspace/agents?surface=chat",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 52,
+      "group": 3,
+      "groupName": "HUB 与插件",
+      "title": "hub add menu",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "58-agent-create",
+      "url": "http://localhost:3310/#/workspace/agents/new",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 53,
+      "group": 3,
+      "groupName": "HUB 与插件",
+      "title": "agent create",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "59-smart-team",
+      "url": "http://localhost:3310/#/workspace/agents?surface=chat",
+      "note": "已打开并检查此页面或窗口的可见状态；此记录不代表提交、执行或连接成功。",
+      "step": 54,
+      "group": 3,
+      "groupName": "HUB 与插件",
+      "title": "smart team",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "60-hub-applications",
+      "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=featured",
+      "note": "应用入口与推荐插件；检查安装状态与管理入口。",
+      "step": 55,
+      "group": 3,
+      "groupName": "HUB 与插件",
+      "title": "hub applications",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "61-workbench-management",
+      "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=featured",
+      "note": "仅展开应用管理菜单，不执行禁用、卸载。",
+      "step": 56,
+      "group": 3,
+      "groupName": "HUB 与插件",
+      "title": "workbench management",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "63-plugins-installed-ready",
+      "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=installed",
+      "note": "已安装视图加载后显示 4 个插件，未确认推荐与已安装数量不一致；不执行启停或卸载。",
+      "step": 57,
+      "group": 3,
+      "groupName": "HUB 与插件",
+      "title": "plugins installed ready",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "64-remote-agent",
+      "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=remote",
+      "note": "空状态英文协议术语，右上两个纯图标按钮缺少可访问名称。",
+      "step": 58,
+      "group": 3,
+      "groupName": "HUB 与插件",
+      "title": "remote agent",
+      "status": "需优化",
+      "issues": [
+        "F14"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "65-remote-agent-register",
+      "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=remote",
+      "note": "仅检查注册表单，不连接外部端点。",
+      "step": 59,
+      "group": 3,
+      "groupName": "HUB 与插件",
+      "title": "remote agent register",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "62-plugins-all-ready",
+      "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=all",
+      "note": "插件目录已加载，分类和已安装状态。",
+      "step": 60,
+      "group": 3,
+      "groupName": "HUB 与插件",
+      "title": "plugins all ready",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "66-hub-skills",
+      "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=skills",
+      "note": "检查技能分类、安装标记与详情入口。",
+      "step": 61,
+      "group": 3,
+      "groupName": "HUB 与插件",
+      "title": "hub skills",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "67-skill-detail",
+      "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=skills",
+      "note": "技能卡片写着打开详情；核对是否有实际详情交互。",
+      "step": 62,
+      "group": 3,
+      "groupName": "HUB 与插件",
+      "title": "skill detail",
+      "status": "需优化",
+      "issues": [
+        "F05"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "68-agent-switcher",
+      "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=skills",
+      "note": "选中行高亮、侧线代替勾；检查角色档案按钮热区与对齐。",
+      "step": 63,
+      "group": 4,
+      "groupName": "角色与 HUD",
+      "title": "角色切换菜单",
+      "status": "需优化",
+      "issues": [
+        "F13"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "69-role-profile",
+      "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+      "note": "角色档案页面信息密集，专业配置与世界观装饰混排；头像资产重新核对。",
+      "step": 64,
+      "group": 4,
+      "groupName": "角色与 HUD",
+      "title": "role profile",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "70-role-growth",
+      "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+      "note": "成长图空数据状态。",
+      "step": 65,
+      "group": 4,
+      "groupName": "角色与 HUD",
+      "title": "role growth",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "71-role-radar",
+      "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+      "note": "能力雷达空数据状态。",
+      "step": 66,
+      "group": 4,
+      "groupName": "角色与 HUD",
+      "title": "role radar",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "72-role-skills",
+      "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+      "note": "技能树空数据状态。",
+      "step": 67,
+      "group": 4,
+      "groupName": "角色与 HUD",
+      "title": "role skills",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "73-role-basic-config",
+      "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+      "note": "打开基础配置，不保存。",
+      "step": 68,
+      "group": 4,
+      "groupName": "角色与 HUD",
+      "title": "role basic config",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "74-role-arms",
+      "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+      "note": "ARM 配置仅查看；无保存。",
+      "step": 69,
+      "group": 4,
+      "groupName": "角色与 HUD",
+      "title": "role arms",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "75-role-skill-allowlist",
+      "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+      "note": "Skill 白名单空状态；无增删。",
+      "step": 70,
+      "group": 4,
+      "groupName": "角色与 HUD",
+      "title": "role skill allowlist",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "76-role-permissions",
+      "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+      "note": "角色权限表单仅查看。",
+      "step": 71,
+      "group": 4,
+      "groupName": "角色与 HUD",
+      "title": "role permissions",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "77-projects",
+      "url": "http://localhost:3310/#/workspace/projects",
+      "note": "项目工作台加载结果。",
+      "step": 72,
+      "group": 5,
+      "groupName": "项目管理",
+      "title": "projects",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "78-project-create",
+      "url": "http://localhost:3310/#/workspace/projects",
+      "note": "项目创建表单，仅打开，不提交。",
+      "step": 73,
+      "group": 5,
+      "groupName": "项目管理",
+      "title": "project create",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "79-project-members",
+      "url": "http://localhost:3310/#/workspace/projects",
+      "note": "高级邀请设置仅展开，无邀请或提交。",
+      "step": 74,
+      "group": 5,
+      "groupName": "项目管理",
+      "title": "project members",
+      "status": "需优化",
+      "issues": [
+        "F16"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "80-design",
+      "url": "http://localhost:3310/#/workspace/design",
+      "note": "设计画布初始状态。",
+      "step": 75,
+      "group": 6,
+      "groupName": "设计画布",
+      "title": "design",
+      "status": "需优化",
+      "issues": [
+        "F19"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "81-design-guide",
+      "url": "http://localhost:3310/#/workspace/design",
+      "note": "创作指南说明。",
+      "step": 76,
+      "group": 6,
+      "groupName": "设计画布",
+      "title": "design guide",
+      "status": "需优化",
+      "issues": [
+        "F17"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "82-design-model-guide",
+      "url": "http://localhost:3310/#/workspace/design",
+      "note": "模型指南入口当前仅短 toast。",
+      "step": 77,
+      "group": 6,
+      "groupName": "设计画布",
+      "title": "design model guide",
+      "status": "需优化",
+      "issues": [
+        "F17"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "83-design-model-picker",
+      "url": "http://localhost:3310/#/workspace/design",
+      "note": "生成模型菜单；不选择模型。",
+      "step": 78,
+      "group": 6,
+      "groupName": "设计画布",
+      "title": "design model picker",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "84-design-canvas",
+      "url": "http://localhost:3310/#/workspace/design",
+      "note": "默认示例节点已出现；未运行、未编辑。",
+      "step": 79,
+      "group": 6,
+      "groupName": "设计画布",
+      "title": "design canvas",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "85-design-node-menu",
+      "url": "http://localhost:3310/#/workspace/design",
+      "note": "添加节点菜单仅展开。",
+      "step": 80,
+      "group": 6,
+      "groupName": "设计画布",
+      "title": "design node menu",
+      "status": "需优化",
+      "issues": [
+        "F09"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "86-design-assets",
+      "url": "http://localhost:3310/#/workspace/design",
+      "note": "资产中心空状态；两个视图按钮没有可访问名称。",
+      "step": 81,
+      "group": 6,
+      "groupName": "设计画布",
+      "title": "design assets",
+      "status": "需优化",
+      "issues": [
+        "F14"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "87-design-add-asset",
+      "url": "http://localhost:3310/#/workspace/design",
+      "note": "新增资产表单仅打开。",
+      "step": 82,
+      "group": 6,
+      "groupName": "设计画布",
+      "title": "design add asset",
+      "status": "需优化",
+      "issues": [
+        "F16"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "88-design-skills",
+      "url": "http://localhost:3310/#/workspace/design",
+      "note": "设计技能列表有中文标题和详情，和 HUB 的 Skills 列表标准不一致。",
+      "step": 83,
+      "group": 6,
+      "groupName": "设计画布",
+      "title": "design skills",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "89-design-skill-detail-ready",
+      "url": "http://localhost:3310/#/workspace/design",
+      "note": "技能正文已加载，纯查看。",
+      "step": 84,
+      "group": 6,
+      "groupName": "设计画布",
+      "title": "design skill detail ready",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "90-comfy-workflows",
+      "url": "http://localhost:3310/#/workspace/design",
+      "note": "ComfyUI 列表可见已内置与需依赖；未运行。",
+      "step": 85,
+      "group": 6,
+      "groupName": "设计画布",
+      "title": "comfy workflows",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "91-comfy-environment",
+      "url": "http://localhost:3310/#/workspace/design",
+      "note": "环境说明只读，不安装或启动。",
+      "step": 86,
+      "group": 6,
+      "groupName": "设计画布",
+      "title": "comfy environment",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "92-comfy-import-menu",
+      "url": "http://localhost:3310/#/workspace/design",
+      "note": "仅展开创建和导入菜单。",
+      "step": 87,
+      "group": 6,
+      "groupName": "设计画布",
+      "title": "comfy import menu",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "93-narrative",
+      "url": "http://localhost:3310/#/workspace/narrative",
+      "note": "叙事工坊主页面。",
+      "step": 88,
+      "group": 7,
+      "groupName": "叙事工坊",
+      "title": "narrative",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "94-narrative-mcp",
+      "url": "http://localhost:3310/#/workspace/narrative",
+      "note": "叙事能力信息面板。",
+      "step": 89,
+      "group": 7,
+      "groupName": "叙事工坊",
+      "title": "narrative mcp",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "95-narrative-create",
+      "url": "http://localhost:3310/#/workspace/narrative",
+      "note": "叙事项目创建表单；不提交。能力弹窗 Escape 未关闭，需点关闭。",
+      "step": 90,
+      "group": 7,
+      "groupName": "叙事工坊",
+      "title": "narrative create",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "96-paper-trading",
+      "url": "http://localhost:3310/#/workspace/paper-trading",
+      "note": "模拟炒股工作台加载结果；不下单、不创建账户。",
+      "step": 91,
+      "group": 8,
+      "groupName": "模拟炒股",
+      "title": "paper trading",
+      "status": "功能阻塞",
+      "issues": [
+        "B03"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "97-paper-watch-blocked",
+      "url": "http://localhost:3310/#/workspace/paper-trading?tab=watch",
+      "note": "当前认证部署按后端限制不可用，未尝试解除限制。",
+      "step": 92,
+      "group": 8,
+      "groupName": "模拟炒股",
+      "title": "paper watch blocked",
+      "status": "功能阻塞",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "98-intelligence",
+      "url": "http://localhost:3310/#/workspace/intelligence?surface=chat",
+      "note": "订阅主页面。",
+      "step": 93,
+      "group": 9,
+      "groupName": "订阅与自动化",
+      "title": "intelligence",
+      "status": "需优化",
+      "issues": [
+        "F19"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "101-subscriptions-dashboard",
+      "url": "http://localhost:3310/#/workspace/intelligence?surface=chat",
+      "note": "面板视图。",
+      "step": 94,
+      "group": 9,
+      "groupName": "订阅与自动化",
+      "title": "subscriptions dashboard",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "102-subscription-create",
+      "url": "http://localhost:3310/#/workspace/intelligence?surface=chat",
+      "note": "手动创建定时任务表单，仅查看。",
+      "step": 95,
+      "group": 9,
+      "groupName": "订阅与自动化",
+      "title": "subscription create",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "99-subscriptions-configured-ready",
+      "url": "http://localhost:3310/#/workspace/intelligence?surface=chat",
+      "note": "空状态已加载。",
+      "step": 96,
+      "group": 9,
+      "groupName": "订阅与自动化",
+      "title": "subscriptions configured ready",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "100-subscriptions-history-ready",
+      "url": "http://localhost:3310/#/workspace/intelligence?surface=chat",
+      "note": "空状态已加载。",
+      "step": 97,
+      "group": 9,
+      "groupName": "订阅与自动化",
+      "title": "subscriptions history ready",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "103-evolution",
+      "url": "http://localhost:3310/#/workspace/evolution",
+      "note": "自进化主工作台。",
+      "step": 98,
+      "group": 10,
+      "groupName": "自进化与治理",
+      "title": "evolution",
+      "status": "需优化",
+      "issues": [
+        "F12"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "104-evolution-experiments",
+      "url": "http://localhost:3310/#/workspace/evolution?section=experiments",
+      "note": "空实验数据明确说明，不运行实验。",
+      "step": 99,
+      "group": 10,
+      "groupName": "自进化与治理",
+      "title": "evolution experiments",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "105-evolution-candidates",
+      "url": "http://localhost:3310/#/workspace/evolution?section=candidates",
+      "note": "候选为空。",
+      "step": 100,
+      "group": 10,
+      "groupName": "自进化与治理",
+      "title": "evolution candidates",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "106-evolution-deployments",
+      "url": "http://localhost:3310/#/workspace/evolution?section=deployments",
+      "note": "无部署候选，不执行灰度或回滚。",
+      "step": 101,
+      "group": 10,
+      "groupName": "自进化与治理",
+      "title": "evolution deployments",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "107-evolution-governance",
+      "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+      "note": "保护开关与摘要仅查看。",
+      "step": 102,
+      "group": 10,
+      "groupName": "自进化与治理",
+      "title": "evolution governance",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "108-governance-policy",
+      "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+      "note": "治理策略数据加载结果。",
+      "step": 103,
+      "group": 10,
+      "groupName": "自进化与治理",
+      "title": "governance policy",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "109-governance-skills",
+      "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+      "note": "技能提案列表，无提案。",
+      "step": 104,
+      "group": 10,
+      "groupName": "自进化与治理",
+      "title": "governance skills",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "110-governance-models",
+      "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+      "note": "模型提案页面；未运行基准。",
+      "step": 105,
+      "group": 10,
+      "groupName": "自进化与治理",
+      "title": "governance models",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "111-governance-mcp",
+      "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+      "note": "无待审核项仍提供审核全部待定按钮。",
+      "step": 106,
+      "group": 10,
+      "groupName": "自进化与治理",
+      "title": "governance mcp",
+      "status": "需优化",
+      "issues": [
+        "F17"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "112-governance-curriculum",
+      "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+      "note": "课程目标为空，不运行周期。",
+      "step": 107,
+      "group": 10,
+      "groupName": "自进化与治理",
+      "title": "governance curriculum",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "113-governance-framework",
+      "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+      "note": "框架基准数据状态。",
+      "step": 108,
+      "group": 10,
+      "groupName": "自进化与治理",
+      "title": "governance framework",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "114-governance-drift",
+      "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+      "note": "漂移页仅查看，无扫描或生成修复。",
+      "step": 109,
+      "group": 10,
+      "groupName": "自进化与治理",
+      "title": "governance drift",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "115-governance-ab",
+      "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+      "note": "A/B 分发只读。",
+      "step": 110,
+      "group": 10,
+      "groupName": "自进化与治理",
+      "title": "governance ab",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "116-governance-reflex",
+      "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+      "note": "规则与响应状态。",
+      "step": 111,
+      "group": 10,
+      "groupName": "自进化与治理",
+      "title": "governance reflex",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "117-governance-runtime",
+      "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+      "note": "进化运行设置只读，未变更开关。",
+      "step": 112,
+      "group": 10,
+      "groupName": "自进化与治理",
+      "title": "governance runtime",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "118-governance-runtime-bottom",
+      "url": "http://localhost:3310/#/workspace/evolution?section=governance",
+      "note": "高级术语和环境变量直接出现在产品页，底部可见。",
+      "step": 113,
+      "group": 10,
+      "groupName": "自进化与治理",
+      "title": "governance runtime bottom",
+      "status": "需优化",
+      "issues": [
+        "F15"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "119-community",
+      "url": "http://localhost:3310/#/workspace/community",
+      "note": "发现社区页面加载结果。",
+      "step": 114,
+      "group": 11,
+      "groupName": "社区与集市",
+      "title": "community",
+      "status": "需优化",
+      "issues": [
+        "F11"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "120-community-feed",
+      "url": "http://localhost:3310/#/workspace/community",
+      "note": "大封面占据首屏，滚动后才看到标题；多张封面加载失败。",
+      "step": 115,
+      "group": 11,
+      "groupName": "社区与集市",
+      "title": "community feed",
+      "status": "需优化",
+      "issues": [
+        "F20"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "121-community-comments",
+      "url": "http://localhost:3310/#/workspace/community",
+      "note": "只查看评论，不发布。",
+      "step": 116,
+      "group": 11,
+      "groupName": "社区与集市",
+      "title": "community comments",
+      "status": "需优化",
+      "issues": [
+        "F11"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "122-community-publish",
+      "url": "http://localhost:3310/#/workspace/community",
+      "note": "发布表单仅打开，不写入。",
+      "step": 117,
+      "group": 11,
+      "groupName": "社区与集市",
+      "title": "community publish",
+      "status": "需优化",
+      "issues": [
+        "F16"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "123-community-market",
+      "url": "http://localhost:3310/#/workspace/community?view=market",
+      "note": "集市入口与积分，未购买。",
+      "step": 118,
+      "group": 11,
+      "groupName": "社区与集市",
+      "title": "community market",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "124-market-detail-ready",
+      "url": "http://localhost:3310/#/workspace/community?view=market",
+      "note": "商品详情封面最终仍空白，内容被推到底部。",
+      "step": 119,
+      "group": 11,
+      "groupName": "社区与集市",
+      "title": "market detail ready",
+      "status": "需优化",
+      "issues": [
+        "F20"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "125-market-create",
+      "url": "http://localhost:3310/#/workspace/community?view=market",
+      "note": "商品上架表单只查看，不发布。",
+      "step": 120,
+      "group": 11,
+      "groupName": "社区与集市",
+      "title": "market create",
+      "status": "需优化",
+      "issues": [
+        "F16"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "126-storage",
+      "url": "http://localhost:3310/#/workspace/storage",
+      "note": "本地数据库主页面。",
+      "step": 121,
+      "group": 12,
+      "groupName": "存储与知识",
+      "title": "storage",
+      "status": "功能阻塞",
+      "issues": [
+        "B02"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "127-knowledge",
+      "url": "http://localhost:3310/#/workspace/knowledge",
+      "note": "知识库页面加载结果。",
+      "step": 122,
+      "group": 12,
+      "groupName": "存储与知识",
+      "title": "knowledge",
+      "status": "功能阻塞",
+      "issues": [
+        "B03"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "128-knowledge-memory",
+      "url": "http://localhost:3310/#/workspace/knowledge",
+      "note": "记忆资产空状态可见，筛选可用。",
+      "step": 123,
+      "group": 12,
+      "groupName": "存储与知识",
+      "title": "knowledge memory",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "129-knowledge-wiki",
+      "url": "http://localhost:3310/#/workspace/knowledge",
+      "note": "Wiki 状态。",
+      "step": 124,
+      "group": 12,
+      "groupName": "存储与知识",
+      "title": "knowledge wiki",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "130-channels",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "渠道配置总览，不连接外部账户。",
+      "step": 125,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "channels",
+      "status": "需优化",
+      "issues": [
+        "F14"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-bot-config",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "Telegram 机器人配置，仅查看。",
+      "step": 126,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 Telegram 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-1",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "渠道配置表单，仅查看，不保存连接。",
+      "step": 127,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 Slack 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-2",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "渠道配置表单，仅查看，不保存连接。",
+      "step": 128,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 Discord 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-3",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "渠道配置表单，仅查看，不保存连接。",
+      "step": 129,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 Signal 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-4",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "渠道配置表单，仅查看，不保存连接。",
+      "step": 130,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 WhatsApp 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-5",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "同一渠道配置组件的独立字段变体，只查看。",
+      "step": 131,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 Mattermost 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-6",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "同一渠道配置组件的独立字段变体，只查看。",
+      "step": 132,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 Matrix 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-7",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "同一渠道配置组件的独立字段变体，只查看。",
+      "step": 133,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 LINE 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-8",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "同一渠道配置组件的独立字段变体，只查看。",
+      "step": 134,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 SimpleX 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-9",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "同一渠道配置组件的独立字段变体，只查看。",
+      "step": 135,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 IRC 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-10",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "同一渠道配置组件的独立字段变体，只查看。",
+      "step": 136,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 Twitch 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-11",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "国内平台配置窗口，仅查看，未授权或连接。",
+      "step": 137,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 微信 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-12",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "国内平台配置窗口，仅查看，未授权或连接。",
+      "step": 138,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 钉钉 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-13",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "国内平台配置窗口，仅查看，未授权或连接。",
+      "step": 139,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 飞书 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-14",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "国内平台配置窗口，仅查看，未授权或连接。",
+      "step": 140,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 企业微信 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-15",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "国内平台配置窗口，仅查看，未授权或连接。",
+      "step": 141,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 QQ 机器人 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-16",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "国内平台配置窗口，仅查看，未授权或连接。",
+      "step": 142,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 腾讯元宝 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-17",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "邮件、短信、智能家居及 Teams 配置，只查看，不保存。",
+      "step": 143,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 Email 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-18",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "邮件、短信、智能家居及 Teams 配置，只查看，不保存。",
+      "step": 144,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 SMS (Twilio) 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-19",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "邮件、短信、智能家居及 Teams 配置，只查看，不保存。",
+      "step": 145,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 Home Assistant 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-20",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "邮件、短信、智能家居及 Teams 配置，只查看，不保存。",
+      "step": 146,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 ntfy 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-21",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "邮件、短信、智能家居及 Teams 配置，只查看，不保存。",
+      "step": 147,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 Microsoft Teams 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-22",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "开发工具渠道的配置字段，仅查看。",
+      "step": 148,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 BlueBubbles (iMessage) 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-23",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "开发工具渠道的配置字段，仅查看。",
+      "step": 149,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 Webhooks 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-24",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "开发工具渠道的配置字段，仅查看。",
+      "step": 150,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 Google Chat 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "131-channel-25",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "开发工具渠道的配置字段，仅查看。",
+      "step": 151,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "设置 Open WebUI 机器人",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "132-channel-routing",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "响应对象选择器，仅展开，不修改绑定。",
+      "step": 152,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "channel routing",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "133-computer",
+      "url": "http://localhost:3310/#/workspace/computer",
+      "note": "设备工作台，无设备连接不触发连接。",
+      "step": 153,
+      "group": 14,
+      "groupName": "本机助手与桌面整理",
+      "title": "computer",
+      "status": "需优化",
+      "issues": [
+        "F15"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "134-computer-controls",
+      "url": "http://localhost:3310/#/workspace/computer",
+      "note": "设备控制工作区：先读长诊断才到主操作；JSON 和坐标框对普通用户负担大。未观察屏幕或执行动作。",
+      "step": 154,
+      "group": 14,
+      "groupName": "本机助手与桌面整理",
+      "title": "computer controls",
+      "status": "需优化",
+      "issues": [
+        "F19"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "135-computer-action-menu",
+      "url": "http://localhost:3310/#/workspace/computer",
+      "note": "动作类型菜单仅查看。",
+      "step": 155,
+      "group": 14,
+      "groupName": "本机助手与桌面整理",
+      "title": "computer action menu",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "136-desktop-organizer",
+      "url": "http://localhost:3310/#/workspace/desktop-organizer",
+      "note": "桌面整理页面，仅检查预览前表单。",
+      "step": 156,
+      "group": 14,
+      "groupName": "本机助手与桌面整理",
+      "title": "desktop organizer",
+      "status": "需优化",
+      "issues": [
+        "F14"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "137-architecture",
+      "url": "http://localhost:3310/#/workspace/architecture",
+      "note": "架构视图。",
+      "step": 157,
+      "group": 15,
+      "groupName": "架构文档",
+      "title": "architecture",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "138-architecture-mermaid",
+      "url": "http://localhost:3310/#/workspace/architecture",
+      "note": "稳定后图形与连线存在、节点文字缺失；DOM 标签为空。",
+      "step": 158,
+      "group": 15,
+      "groupName": "架构文档",
+      "title": "架构 Mermaid 图",
+      "status": "需优化",
+      "issues": [
+        "F06"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "139-architecture-readme",
+      "url": "http://localhost:3310/#/workspace/architecture",
+      "note": "架构文档入口。",
+      "step": 159,
+      "group": 15,
+      "groupName": "架构文档",
+      "title": "architecture readme",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "139-architecture-ascii",
+      "url": "http://localhost:3310/#/workspace/architecture",
+      "note": "架构文档子页，只读渲染检查。",
+      "step": 160,
+      "group": 15,
+      "groupName": "架构文档",
+      "title": "architecture ascii",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "139-architecture-chat",
+      "url": "http://localhost:3310/#/workspace/architecture",
+      "note": "架构文档子页，只读渲染检查。",
+      "step": 161,
+      "group": 15,
+      "groupName": "架构文档",
+      "title": "architecture chat",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "139-architecture-react",
+      "url": "http://localhost:3310/#/workspace/architecture",
+      "note": "架构文档子页，只读渲染检查。",
+      "step": 162,
+      "group": 15,
+      "groupName": "架构文档",
+      "title": "architecture react",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "139-architecture-layers",
+      "url": "http://localhost:3310/#/workspace/architecture",
+      "note": "架构文档子页，只读渲染检查。",
+      "step": 163,
+      "group": 15,
+      "groupName": "架构文档",
+      "title": "architecture layers",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "139-architecture-modules",
+      "url": "http://localhost:3310/#/workspace/architecture",
+      "note": "架构文档子页，只读渲染检查。",
+      "step": 164,
+      "group": 15,
+      "groupName": "架构文档",
+      "title": "architecture modules",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "139-architecture-ganglia",
+      "url": "http://localhost:3310/#/workspace/architecture",
+      "note": "核心器官文档只读检查。",
+      "step": 165,
+      "group": 15,
+      "groupName": "架构文档",
+      "title": "architecture ganglia",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "139-architecture-beak",
+      "url": "http://localhost:3310/#/workspace/architecture",
+      "note": "核心器官文档只读检查。",
+      "step": 166,
+      "group": 15,
+      "groupName": "架构文档",
+      "title": "architecture beak",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "139-architecture-hearts",
+      "url": "http://localhost:3310/#/workspace/architecture",
+      "note": "核心器官文档只读检查。",
+      "step": 167,
+      "group": 15,
+      "groupName": "架构文档",
+      "title": "architecture hearts",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "140-observability-events",
+      "url": "http://localhost:3310/#/workspace/observability",
+      "note": "事件流空态清楚，但夹杂管理员权限错误及内部实现说明。",
+      "step": 168,
+      "group": 16,
+      "groupName": "可观测性与诊断",
+      "title": "observability events",
+      "status": "功能阻塞",
+      "issues": [
+        "B03"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "141-observability-overview",
+      "url": "http://localhost:3310/#/workspace/observability",
+      "note": "总览空数据时仍有完整检查结果入口；需要滚动才能看到状态。",
+      "step": 169,
+      "group": 16,
+      "groupName": "可观测性与诊断",
+      "title": "observability overview",
+      "status": "需优化",
+      "issues": [
+        "F12"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "142-observability-resources",
+      "url": "http://localhost:3310/#/workspace/observability",
+      "note": "资源页可打开，但带有管理员权限错误及内部接口说明；不能验证受限指标。",
+      "step": 170,
+      "group": 16,
+      "groupName": "可观测性与诊断",
+      "title": "observability resources",
+      "status": "功能阻塞",
+      "issues": [
+        "F15",
+        "B03"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "143-observability-system",
+      "url": "http://localhost:3310/#/workspace/observability",
+      "note": "系统页集合多块诊断，功能开关与审计信息面向开发者。",
+      "step": 171,
+      "group": 16,
+      "groupName": "可观测性与诊断",
+      "title": "observability system",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "144-diagnostics-runtime",
+      "url": "http://localhost:3310/#/workspace/observability",
+      "note": "运行态自检详细但长表过密，主要给开发者定位。",
+      "step": 172,
+      "group": 16,
+      "groupName": "可观测性与诊断",
+      "title": "diagnostics runtime",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "145-diagnostics-streaming",
+      "url": "http://localhost:3310/#/workspace/observability",
+      "note": "已有7条历史指标；失败行的结束状态仍为正常，列含义需要解释。",
+      "step": 173,
+      "group": 16,
+      "groupName": "可观测性与诊断",
+      "title": "diagnostics streaming",
+      "status": "需优化",
+      "issues": [
+        "F12"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "146-diagnostics-flags",
+      "url": "http://localhost:3310/#/workspace/observability",
+      "note": "功能开关列表可以加载；页面其他区域存在管理员权限错误，不应把整个开关列表标为读取失败。未修改开关。",
+      "step": 174,
+      "group": 16,
+      "groupName": "可观测性与诊断",
+      "title": "diagnostics flags",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "147-diagnostics-suggestions",
+      "url": "http://localhost:3310/#/workspace/observability",
+      "note": "无活跃项目时说明需先打开项目。",
+      "step": 175,
+      "group": 16,
+      "groupName": "可观测性与诊断",
+      "title": "diagnostics suggestions",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "148-diagnostics-remote",
+      "url": "http://localhost:3310/#/workspace/observability",
+      "note": "远程功能禁用状态，重试与配置入口需解释权限原因。",
+      "step": 176,
+      "group": 16,
+      "groupName": "可观测性与诊断",
+      "title": "diagnostics remote",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "149-diagnostics-invariants",
+      "url": "http://localhost:3310/#/workspace/observability",
+      "note": "规则只读目录；未重建目录。",
+      "step": 177,
+      "group": 16,
+      "groupName": "可观测性与诊断",
+      "title": "diagnostics invariants",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "150-reflex-monitor",
+      "url": "http://localhost:3310/#/workspace/reflex",
+      "note": "反射规则监控只读走查；无触发历史。",
+      "step": 178,
+      "group": 17,
+      "groupName": "反射规则",
+      "title": "reflex monitor",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "151-reflex-editor",
+      "url": "http://localhost:3310/#/workspace/reflex/edit",
+      "note": "规则编辑器只读查看，未保存或试跑。",
+      "step": 179,
+      "group": 17,
+      "groupName": "反射规则",
+      "title": "reflex editor",
+      "status": "功能阻塞",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "152-reflex-source-blocked",
+      "url": "http://localhost:3310/#/workspace/reflex/edit",
+      "note": "监控7规则，编辑器却找不到规则文件；源码模式也被阻塞。",
+      "step": 180,
+      "group": 17,
+      "groupName": "反射规则",
+      "title": "reflex source blocked",
+      "status": "功能阻塞",
+      "issues": [
+        "B03"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "153-desktop",
+      "url": "http://localhost:3310/#/desktop",
+      "note": "浏览器内桌面入口，原生窗口边框不在本轮可控范围。",
+      "step": 181,
+      "group": 18,
+      "groupName": "浏览器与桌面",
+      "title": "desktop",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "155-browser",
+      "url": "http://localhost:3310/#/browser",
+      "note": "独立 AI 浏览器页面。",
+      "step": 182,
+      "group": 18,
+      "groupName": "浏览器与桌面",
+      "title": "browser",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "156-browser-downloads",
+      "url": "http://localhost:3310/#/browser",
+      "note": "下载记录浮层，当前无记录。",
+      "step": 183,
+      "group": 18,
+      "groupName": "浏览器与桌面",
+      "title": "browser downloads",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "157-browser-bookmarks",
+      "url": "http://localhost:3310/#/browser",
+      "note": "书签空态明确。",
+      "step": 184,
+      "group": 18,
+      "groupName": "浏览器与桌面",
+      "title": "browser bookmarks",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "158-browser-history",
+      "url": "http://localhost:3310/#/browser",
+      "note": "历史记录及清空入口可见，未清空。",
+      "step": 185,
+      "group": 18,
+      "groupName": "浏览器与桌面",
+      "title": "browser history",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "159-browser-more",
+      "url": "http://localhost:3310/#/browser",
+      "note": "浏览器更多菜单入口。",
+      "step": 186,
+      "group": 18,
+      "groupName": "浏览器与桌面",
+      "title": "browser more",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "161-browser-ai-ready",
+      "url": "http://localhost:3310/#/browser",
+      "note": "Chrome 应用商店网页最终已加载，AI 侧栏可见。未安装扩展或发送任务；已关闭审计新开的外部标签。",
+      "step": 187,
+      "group": 18,
+      "groupName": "浏览器与桌面",
+      "title": "browser ai ready",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "162-browser-desktop-edit",
+      "url": "http://localhost:3310/#/browser",
+      "note": "桌面编辑态有自动保存说明，未移动任何图标。",
+      "step": 188,
+      "group": 18,
+      "groupName": "浏览器与桌面",
+      "title": "browser desktop edit",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "163-browser-add-icon",
+      "url": "http://localhost:3310/#/browser",
+      "note": "新图标表单，未保存。",
+      "step": 189,
+      "group": 18,
+      "groupName": "浏览器与桌面",
+      "title": "browser add icon",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "164-browser-new-folder",
+      "url": "http://localhost:3310/#/browser",
+      "note": "文件夹名称表单，取消后无新增。",
+      "step": 190,
+      "group": 18,
+      "groupName": "浏览器与桌面",
+      "title": "browser new folder",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "165-browser-widgets",
+      "url": "http://localhost:3310/#/browser",
+      "note": "“添加小组件”直接创建默认小组件，未打开目录；仅审计新增的“新小组件”随后已删除撤回。",
+      "step": 191,
+      "group": 18,
+      "groupName": "浏览器与桌面",
+      "title": "browser widgets",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "166-browser-widget-menu",
+      "url": "http://localhost:3310/#/browser",
+      "note": "添加小组件会直接新建而不是打开目录；已在审计中撤回该临时项。",
+      "step": 192,
+      "group": 18,
+      "groupName": "浏览器与桌面",
+      "title": "browser widget menu",
+      "status": "需优化",
+      "issues": [
+        "F17"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "170-media-ready",
+      "url": "http://localhost:3310/#/apps/media",
+      "note": "视频索引最终状态。",
+      "step": 193,
+      "group": 19,
+      "groupName": "图片与视频",
+      "title": "media ready",
+      "status": "功能阻塞",
+      "issues": [
+        "B02"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "169-photos-ready",
+      "url": "http://localhost:3310/#/apps/photos",
+      "note": "图片索引服务不可用，同存储依赖。",
+      "step": 194,
+      "group": 19,
+      "groupName": "图片与视频",
+      "title": "photos ready",
+      "status": "功能阻塞",
+      "issues": [
+        "B02"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "171-team-join",
+      "url": "http://localhost:3310/#/workspace/team/join",
+      "note": "无邀请参数时团队加入入口；没有创建团队或加入。",
+      "step": 195,
+      "group": 20,
+      "groupName": "公共入口与路由",
+      "title": "team join",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "172-web-app",
+      "url": "http://localhost:3310/#/workspace/web-app",
+      "note": "网页应用未给URL时的空态。",
+      "step": 196,
+      "group": 20,
+      "groupName": "公共入口与路由",
+      "title": "web app",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "173-assistant",
+      "url": "http://localhost:3310/#/workspace/realtime/octopus-assistant?agent=octopus",
+      "note": "助手固定会话入口；未发送请求。",
+      "step": 197,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "assistant",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "174-assistant-settings",
+      "url": "http://localhost:3310/#/workspace/realtime/octopus-assistant?agent=octopus",
+      "note": "助手设置菜单。",
+      "step": 198,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "assistant settings",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "175-existing-thread",
+      "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+      "note": "历史 Eight Sleep 任务能读取；当前角色 Raven 与历史 Kane 混合，未重跑。",
+      "step": 199,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "历史研究任务",
+      "status": "功能阻塞",
+      "issues": [
+        "B01"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "176-thread-replay",
+      "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+      "note": "展开历史过程回放，未重试执行。",
+      "step": 200,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "thread replay",
+      "status": "需优化",
+      "issues": [
+        "F18"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "178-thread-menu",
+      "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+      "note": "任务菜单只读检查，未归档、删除或重命名。",
+      "step": 201,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "thread menu",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "179-preview-final",
+      "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+      "note": "预览最终显示 no_actions_recorded 的关注提示；未进行浏览器操作。",
+      "step": 202,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "preview final",
+      "status": "需优化",
+      "issues": [
+        "F18"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "180-thread-tool-details",
+      "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+      "note": "展开工具详情与耗时信息。",
+      "step": 203,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "thread tool details",
+      "status": "需优化",
+      "issues": [
+        "F18"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "182-panel-list",
+      "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+      "note": "工作台面板管理菜单。",
+      "step": 204,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "panel list",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "183-diff",
+      "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+      "note": "Diff面板空态与受限宽度。",
+      "step": 205,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "diff",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "184-terminal",
+      "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+      "note": "终端显示“终端连接失败。点击重启以重新连接。”；这是受阻状态，不是正常空态。未重启或执行命令。",
+      "step": 206,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "终端连接错误",
+      "status": "功能阻塞",
+      "issues": [
+        "B01"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "185-sidebar-edit",
+      "url": "http://localhost:3310/#/workspace/realtime/tVzjQc51k71eLx8xYMQu1j",
+      "note": "侧栏入口配置窗口；未改动选项。",
+      "step": 207,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "sidebar edit",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "187-public-about",
+      "url": "http://localhost:3310/#/about",
+      "note": "公开介绍页与工作区视觉采用不同风格。",
+      "step": 208,
+      "group": 20,
+      "groupName": "公共入口与路由",
+      "title": "public about",
+      "status": "需优化",
+      "issues": [
+        "F19"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "188-public-terms",
+      "url": "http://localhost:3310/#/terms",
+      "note": "条款文字页的层级与返回入口。",
+      "step": 209,
+      "group": 20,
+      "groupName": "公共入口与路由",
+      "title": "public terms",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "189-public-privacy",
+      "url": "http://localhost:3310/#/privacy",
+      "note": "隐私页只评估可读性，不作法律合规结论。",
+      "step": 210,
+      "group": 20,
+      "groupName": "公共入口与路由",
+      "title": "public privacy",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "190-login-authenticated",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "当前已经登录，访问登录页会返回工作区；未退出账号检查登录表单。",
+      "step": 211,
+      "group": 20,
+      "groupName": "公共入口与路由",
+      "title": "login authenticated",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "191-register",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "当前已经登录，访问注册页会返回工作区；未创建账号，也未验证退出登录后的注册流程。",
+      "step": 212,
+      "group": 20,
+      "groupName": "公共入口与路由",
+      "title": "register",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "192-newtask-800",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "800×700 桌面窄窗口，新任务仍可操作。",
+      "step": 213,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "newtask 800",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "193-newtask-390",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "390×844 触屏窄视口。",
+      "step": 214,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "手机宽度新任务",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "194-mobile-sidebar",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "窄屏侧栏抽屉及背景遮罩。",
+      "step": 215,
+      "group": 1,
+      "groupName": "对话与输入",
+      "title": "mobile sidebar",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "195-mobile-settings",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "手机宽度设置选择导航。",
+      "step": 216,
+      "group": 2,
+      "groupName": "设置",
+      "title": "mobile settings",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "196-mobile-dark-settings",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "深色设置弹窗，测试后恢复跟随系统。",
+      "step": 217,
+      "group": 2,
+      "groupName": "设置",
+      "title": "mobile dark settings",
+      "status": "需优化",
+      "issues": [
+        "F03"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "197-mobile-models",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "窄屏模型设置，卡片逐列排布。",
+      "step": 218,
+      "group": 2,
+      "groupName": "设置",
+      "title": "mobile models",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "198-model-connectors-390",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "Connector 展开实际内容。",
+      "step": 219,
+      "group": 2,
+      "groupName": "设置",
+      "title": "model connectors 390",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "200-multimodel-actual",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "多模型协同实际配置表单，未修改。",
+      "step": 220,
+      "group": 2,
+      "groupName": "设置",
+      "title": "multimodel actual",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "201-hub-dark",
+      "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=featured",
+      "note": "深色 HUB，统一主题已生效。",
+      "step": 221,
+      "group": 3,
+      "groupName": "HUB 与插件",
+      "title": "hub dark",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "202-hub-mobile",
+      "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=featured",
+      "note": "手机 HUB 应用列表。",
+      "step": 222,
+      "group": 3,
+      "groupName": "HUB 与插件",
+      "title": "hub mobile",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "203-skills-mobile",
+      "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=skills",
+      "note": "技能名与说明一行截断，手机上难判断用途；详情入口缺失已由源码确认。",
+      "step": 223,
+      "group": 3,
+      "groupName": "HUB 与插件",
+      "title": "skills mobile",
+      "status": "需优化",
+      "issues": [
+        "F05"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "204-roles-mobile",
+      "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=agents",
+      "note": "手机角色列表，场景卡占据多屏。",
+      "step": 224,
+      "group": 3,
+      "groupName": "HUB 与插件",
+      "title": "roles mobile",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "205-remote-role-detail",
+      "url": "http://localhost:3310/#/workspace/agents?surface=chat&tab=agents",
+      "note": "远端角色详情弹窗；未安装。",
+      "step": 225,
+      "group": 3,
+      "groupName": "HUB 与插件",
+      "title": "remote role detail",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "206-projects-mobile-dark",
+      "url": "http://localhost:3310/#/workspace/projects",
+      "note": "项目应用窄屏深色。",
+      "step": 226,
+      "group": 5,
+      "groupName": "项目管理",
+      "title": "projects mobile dark",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "207-project-create-mobile",
+      "url": "http://localhost:3310/#/workspace/projects",
+      "note": "新建项目窄屏表单。",
+      "step": 227,
+      "group": 5,
+      "groupName": "项目管理",
+      "title": "project create mobile",
+      "status": "需优化",
+      "issues": [
+        "F13"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "208-project-members-bottom",
+      "url": "http://localhost:3310/#/workspace/projects",
+      "note": "成员高级配置有内外滚动；本次截图没有确认手机端创建和取消按钮最终可达，不将它记为通过。",
+      "step": 228,
+      "group": 5,
+      "groupName": "项目管理",
+      "title": "project members bottom",
+      "status": "需优化",
+      "issues": [
+        "F16"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "209-design-mobile-dark",
+      "url": "http://localhost:3310/#/workspace/design",
+      "note": "设计画布首页在390px，检查宿主应用导航与暗色同步。",
+      "step": 229,
+      "group": 6,
+      "groupName": "设计画布",
+      "title": "design mobile dark",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "210-design-template-preview",
+      "url": "http://localhost:3310/#/workspace/design",
+      "note": "模板预览窗口，未应用模板或发起生成。",
+      "step": 230,
+      "group": 6,
+      "groupName": "设计画布",
+      "title": "design template preview",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "211-design-canvas-mobile",
+      "url": "http://localhost:3310/#/workspace/design",
+      "note": "画布在手机宽度的控制栏与画布区域。",
+      "step": 231,
+      "group": 6,
+      "groupName": "设计画布",
+      "title": "design canvas mobile",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "212-canvas-settings-mobile",
+      "url": "http://localhost:3310/#/workspace/design",
+      "note": "画布设置浮层，检查边界和对齐。",
+      "step": 232,
+      "group": 6,
+      "groupName": "设计画布",
+      "title": "canvas settings mobile",
+      "status": "需优化",
+      "issues": [
+        "F09"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "213-canvas-help",
+      "url": "http://localhost:3310/#/workspace/design",
+      "note": "帮助项可见，但打开后画布底部工具栏及页面滚动位置变化，需检查覆盖层布局。",
+      "step": 233,
+      "group": 6,
+      "groupName": "设计画布",
+      "title": "canvas help",
+      "status": "需优化",
+      "issues": [
+        "F09"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "214-canvas-shortcuts",
+      "url": "http://localhost:3310/#/workspace/design",
+      "note": "快捷键帮助的实际反馈。",
+      "step": 234,
+      "group": 6,
+      "groupName": "设计画布",
+      "title": "canvas shortcuts",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "215-free-canvas-mobile",
+      "url": "http://localhost:3310/#/workspace/design",
+      "note": "自由画布窄屏，未添加节点。",
+      "step": 235,
+      "group": 6,
+      "groupName": "设计画布",
+      "title": "free canvas mobile",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "216-narrative-mobile",
+      "url": "http://localhost:3310/#/workspace/narrative",
+      "note": "叙事工坊窄屏布局。",
+      "step": 236,
+      "group": 7,
+      "groupName": "叙事工坊",
+      "title": "narrative mobile",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "217-narrative-create-mobile",
+      "url": "http://localhost:3310/#/workspace/narrative",
+      "note": "窄屏新建叙事项目，未保存。",
+      "step": 237,
+      "group": 7,
+      "groupName": "叙事工坊",
+      "title": "narrative create mobile",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "218-intelligence-mobile",
+      "url": "http://localhost:3310/#/workspace/intelligence",
+      "note": "自动化窄屏列表及说明。",
+      "step": 238,
+      "group": 9,
+      "groupName": "订阅与自动化",
+      "title": "intelligence mobile",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "219-evolution-mobile",
+      "url": "http://localhost:3310/#/workspace/evolution",
+      "note": "自进化窄屏指标和导航。",
+      "step": 239,
+      "group": 10,
+      "groupName": "自进化与治理",
+      "title": "evolution mobile",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "220-community-mobile",
+      "url": "http://localhost:3310/#/workspace/community",
+      "note": "社区窄屏封面版式，内容可读性。",
+      "step": 240,
+      "group": 11,
+      "groupName": "社区与集市",
+      "title": "community mobile",
+      "status": "需优化",
+      "issues": [
+        "F20"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "221-channels-mobile",
+      "url": "http://localhost:3310/#/workspace/channels",
+      "note": "手机渠道页面与返回路径。",
+      "step": 241,
+      "group": 13,
+      "groupName": "渠道配置",
+      "title": "channels mobile",
+      "status": "需优化",
+      "issues": [
+        "F07"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "222-computer-mobile",
+      "url": "http://localhost:3310/#/workspace/computer",
+      "note": "本机助手手机页面缺少工作区导航入口；不执行屏幕或输入操作。",
+      "step": 242,
+      "group": 14,
+      "groupName": "本机助手与桌面整理",
+      "title": "computer mobile",
+      "status": "需优化",
+      "issues": [
+        "F07"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "223-architecture-mobile",
+      "url": "http://localhost:3310/#/workspace/architecture",
+      "note": "架构页面在手机宽度按纵向排布，目录较长；未观察到先前笔记所称的固定侧栏挤压正文。缺少全局导航入口。",
+      "step": 243,
+      "group": 15,
+      "groupName": "架构文档",
+      "title": "architecture mobile",
+      "status": "需优化",
+      "issues": [
+        "F07"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "224-observability-mobile",
+      "url": "http://localhost:3310/#/workspace/observability",
+      "note": "四个页签分成两行，第二行与下方卡片重叠；首屏介绍过长且缺少全局导航。",
+      "step": 244,
+      "group": 16,
+      "groupName": "可观测性与诊断",
+      "title": "手机宽度可观测性",
+      "status": "需优化",
+      "issues": [
+        "F07",
+        "F08"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "225-browser-mobile",
+      "url": "http://localhost:3310/#/browser",
+      "note": "窄屏浏览器顶部与主页；导航仍可用。",
+      "step": 245,
+      "group": 18,
+      "groupName": "浏览器与桌面",
+      "title": "browser mobile",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "226-browser-theme-ready",
+      "url": "http://localhost:3310/#/browser",
+      "note": "主题控制面板可打开；此前无变化的截图不作为死按钮证据。",
+      "step": 246,
+      "group": 18,
+      "groupName": "浏览器与桌面",
+      "title": "browser theme ready",
+      "status": "需优化",
+      "issues": [
+        "F10"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "227-browser-widget-catalog",
+      "url": "http://localhost:3310/#/browser",
+      "note": "小组件目录只读查看，未添加。",
+      "step": 247,
+      "group": 18,
+      "groupName": "浏览器与桌面",
+      "title": "browser widget catalog",
+      "status": "需优化",
+      "issues": [
+        "F10"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "228-browser-wallpaper",
+      "url": "http://localhost:3310/#/browser",
+      "note": "壁纸面板已打开；部分缩略图未确认最终加载状态，不据此报告图片服务故障。",
+      "step": 248,
+      "group": 18,
+      "groupName": "浏览器与桌面",
+      "title": "browser wallpaper",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "229-browser-games",
+      "url": "http://localhost:3310/#/browser",
+      "note": "娱乐目录只读查看，不打开游戏。",
+      "step": 249,
+      "group": 18,
+      "groupName": "浏览器与桌面",
+      "title": "browser games",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "230-browser-app-catalog",
+      "url": "http://localhost:3310/#/browser",
+      "note": "桌面应用目录，未新增快捷方式。",
+      "step": 250,
+      "group": 18,
+      "groupName": "浏览器与桌面",
+      "title": "browser app catalog",
+      "status": "需优化",
+      "issues": [
+        "F10"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "234-browser-settings-pointer",
+      "url": "http://localhost:3310/#/browser",
+      "note": "通过实际可见坐标打开浏览器设置，检验悬停展开后的点击。",
+      "step": 251,
+      "group": 18,
+      "groupName": "浏览器与桌面",
+      "title": "浏览器桌面设置",
+      "status": "需优化",
+      "issues": [
+        "F01"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "235-theme-restored",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "已恢复原来的跟随系统、蔷薇粉、舒适15px设置。",
+      "step": 252,
+      "group": 2,
+      "groupName": "设置",
+      "title": "theme restored",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "236-agent-routing",
+      "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+      "note": "角色路由与预算表单，未修改。",
+      "step": 253,
+      "group": 4,
+      "groupName": "角色与 HUD",
+      "title": "agent routing",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "237-agent-routing-mobile",
+      "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+      "note": "角色高级配置窄屏。",
+      "step": 254,
+      "group": 4,
+      "groupName": "角色与 HUD",
+      "title": "agent routing mobile",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "238-role-hud-mobile",
+      "url": "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator",
+      "note": "角色档案窄屏，头像区与参数区的顺序。",
+      "step": 255,
+      "group": 4,
+      "groupName": "角色与 HUD",
+      "title": "role hud mobile",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "239-diagnostics-route",
+      "url": "http://localhost:3310/#/workspace/diagnostics",
+      "note": "诊断直达路由正确选中系统页。",
+      "step": 256,
+      "group": 16,
+      "groupName": "可观测性与诊断",
+      "title": "diagnostics route",
+      "status": "已查看",
+      "issues": [],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "240-settings-deeplink-settled",
+      "url": "http://localhost:3310/#/workspace/realtime/new",
+      "note": "/settings 已跳转到新任务页，但等待稳定后没有打开设置弹窗；仅作为入口失败证据。",
+      "step": 257,
+      "group": 20,
+      "groupName": "公共入口与路由",
+      "title": "设置深链接最终状态",
+      "status": "需优化",
+      "issues": [
+        "F04"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "241-agent-create-route",
+      "url": "http://localhost:3310/#/workspace/agents/new",
+      "note": "独立角色蓝图页面可达，目标和 Agent ID 均有标签；未生成配置或创建角色。",
+      "step": 258,
+      "group": 3,
+      "groupName": "HUB 与插件",
+      "title": "独立角色创建页",
+      "status": "需优化",
+      "issues": [
+        "F19"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    },
+    {
+      "name": "242-share-invalid",
+      "url": "http://localhost:3310/#/share/audit-invalid-token",
+      "note": "无效分享 token 显示明确错误及重新加载按钮，但原因未中文化，缺少返回工作区入口；未创建或发布分享。",
+      "step": 259,
+      "group": 20,
+      "groupName": "公共入口与路由",
+      "title": "失效分享错误页",
+      "status": "需优化",
+      "issues": [
+        "F15"
+      ],
+      "dimensions": [
+        65536,
+        4292542531
+      ]
+    }
+  ],
+  "exclusions": [
+    {
+      "name": "13-workspace-selector",
+      "reason": "瞬时加载或未完成渲染，不作为目标流程已验证证据；优先使用后续稳定状态。"
+    },
+    {
+      "name": "17-preview-panel",
+      "reason": "瞬时加载或未完成渲染，不作为目标流程已验证证据；优先使用后续稳定状态。"
+    },
+    {
+      "name": "17-preview-panel-ready",
+      "reason": "瞬时加载或未完成渲染，不作为目标流程已验证证据；优先使用后续稳定状态。"
+    },
+    {
+      "name": "23-settings-usage",
+      "reason": "瞬时加载或未完成渲染，不作为目标流程已验证证据；优先使用后续稳定状态。"
+    },
+    {
+      "name": "25-settings-conversation-bottom",
+      "reason": "重复或名称不准确的中间截图，已有其他有效证据。"
+    },
+    {
+      "name": "41-reset-confirmation",
+      "reason": "重复或名称不准确的中间截图，已有其他有效证据。"
+    },
+    {
+      "name": "50-model-connectors",
+      "reason": "目标窗口未真正打开或名称与实际视图不一致；后续已补拍对应实际入口。"
+    },
+    {
+      "name": "54-multi-model",
+      "reason": "目标窗口未真正打开或名称与实际视图不一致；后续已补拍对应实际入口。"
+    },
+    {
+      "name": "54-multi-model-form",
+      "reason": "目标窗口未真正打开或名称与实际视图不一致；后续已补拍对应实际入口。"
+    },
+    {
+      "name": "62-plugins-all",
+      "reason": "瞬时加载或未完成渲染，不作为目标流程已验证证据；优先使用后续稳定状态。"
+    },
+    {
+      "name": "63-plugins-installed",
+      "reason": "瞬时加载或未完成渲染，不作为目标流程已验证证据；优先使用后续稳定状态。"
+    },
+    {
+      "name": "89-design-skill-detail",
+      "reason": "瞬时加载或未完成渲染，不作为目标流程已验证证据；优先使用后续稳定状态。"
+    },
+    {
+      "name": "99-subscriptions-configured",
+      "reason": "瞬时加载或未完成渲染，不作为目标流程已验证证据；优先使用后续稳定状态。"
+    },
+    {
+      "name": "100-subscriptions-history",
+      "reason": "瞬时加载或未完成渲染，不作为目标流程已验证证据；优先使用后续稳定状态。"
+    },
+    {
+      "name": "124-market-detail",
+      "reason": "瞬时加载或未完成渲染，不作为目标流程已验证证据；优先使用后续稳定状态。"
+    },
+    {
+      "name": "139-architecture-cerebrum",
+      "reason": "正文已访问，但截图内代码或图示仍未稳定；不将该两份文档的图示渲染算作通过。"
+    },
+    {
+      "name": "139-architecture-chromatophores",
+      "reason": "正文已访问，但截图内代码或图示仍未稳定；不将该两份文档的图示渲染算作通过。"
+    },
+    {
+      "name": "154-desktop-local-apps",
+      "reason": "瞬时加载或未完成渲染，不作为目标流程已验证证据；优先使用后续稳定状态。"
+    },
+    {
+      "name": "160-browser-extensions",
+      "reason": "瞬时加载或未完成渲染，不作为目标流程已验证证据；优先使用后续稳定状态。"
+    },
+    {
+      "name": "161-browser-ai",
+      "reason": "瞬时加载或未完成渲染，不作为目标流程已验证证据；优先使用后续稳定状态。"
+    },
+    {
+      "name": "167-browser-themes",
+      "reason": "目标窗口未真正打开或名称与实际视图不一致；后续已补拍对应实际入口。"
+    },
+    {
+      "name": "168-browser-home-settings",
+      "reason": "目标窗口未真正打开或名称与实际视图不一致；后续已补拍对应实际入口。"
+    },
+    {
+      "name": "169-photos",
+      "reason": "瞬时加载或未完成渲染，不作为目标流程已验证证据；优先使用后续稳定状态。"
+    },
+    {
+      "name": "177-thread-tools",
+      "reason": "瞬时加载或未完成渲染，不作为目标流程已验证证据；优先使用后续稳定状态。"
+    },
+    {
+      "name": "181-tool-output",
+      "reason": "瞬时加载或未完成渲染，不作为目标流程已验证证据；优先使用后续稳定状态。"
+    },
+    {
+      "name": "186-project-space",
+      "reason": "目标窗口未真正打开或名称与实际视图不一致；后续已补拍对应实际入口。"
+    },
+    {
+      "name": "199-model-connectors-dark",
+      "reason": "目标窗口未真正打开或名称与实际视图不一致；后续已补拍对应实际入口。"
+    },
+    {
+      "name": "231-browser-settings",
+      "reason": "目标窗口未真正打开或名称与实际视图不一致；后续已补拍对应实际入口。"
+    },
+    {
+      "name": "232-browser-settings-desktop",
+      "reason": "目标窗口未真正打开或名称与实际视图不一致；后续已补拍对应实际入口。"
+    },
+    {
+      "name": "233-browser-settings-ready",
+      "reason": "目标窗口未真正打开或名称与实际视图不一致；后续已补拍对应实际入口。"
+    }
+  ]
+}

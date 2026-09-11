@@ -63,9 +63,7 @@ export function ThreadTitle({
       uniqueKey={threadId}
       className={cn(
         "max-w-[min(48vw,38rem)] truncate text-sm font-medium",
-        isPlaceholder
-          ? "text-muted-foreground/70 italic"
-          : "text-foreground/80",
+        isPlaceholder ? "text-foreground/65" : "text-foreground/80",
         className,
       )}
     >

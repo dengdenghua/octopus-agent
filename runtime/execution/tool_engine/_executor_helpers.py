@@ -294,7 +294,7 @@ def _prepare_scoped_args(
                 break
 
     if has_sandbox:
-        if scope.primary_write is None:
+        if _mutates_files and scope.primary_write is None:
             raise PermissionError(
                 f"write skill {sucker_id!r} blocked: "
                 f"thread is in '{scope.mode}' mode "
@@ -303,6 +303,8 @@ def _prepare_scoped_args(
                 "plan summary to transition to chat / "
                 "team / code mode."
             )
+        if not _mutates_files and read_primary is None:
+            raise PermissionError(f"read skill {sucker_id!r} blocked: no readable workspace")
         supplied = args.get("sandbox_dir")
         default_sandbox = scope.primary_write if _mutates_files else read_primary
         # A tool may target any granted root, not only the primary project

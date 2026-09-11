@@ -18,9 +18,9 @@ def test_job_specs_pin_standard_ports_and_restart_policy(tmp_path: Path, monkeyp
     backend = specs["backend"]
     frontend = specs["frontend"]
     assert backend["ProgramArguments"][0] == str(root / ".venv" / "bin" / "python")
-    assert backend["ProgramArguments"][-2:] == ["--port", "8888"]
-    assert frontend["EnvironmentVariables"]["FRONTEND_PORT"] == "3888"
-    assert frontend["EnvironmentVariables"]["GATEWAY_PORT"] == "8888"
+    assert backend["ProgramArguments"][-2:] == ["--port", "8310"]
+    assert frontend["EnvironmentVariables"]["FRONTEND_PORT"] == "3310"
+    assert frontend["EnvironmentVariables"]["GATEWAY_PORT"] == "8310"
     assert backend["KeepAlive"] == {"SuccessfulExit": False}
     assert frontend["KeepAlive"] == {"SuccessfulExit": False}
     assert backend["WorkingDirectory"] == str(root)
@@ -32,6 +32,7 @@ def test_status_requires_launchd_registration_and_open_port(monkeypatch) -> None
         returncode = 0
 
     monkeypatch.setattr(dev_stack, "_run", lambda *args, **kwargs: Result())
-    monkeypatch.setattr(dev_stack, "_port_open", lambda port: port == 3888)
+    monkeypatch.setattr(dev_stack, "_launch_domain", lambda: "gui/501")
+    monkeypatch.setattr(dev_stack, "_port_open", lambda port: port == 3310)
 
     assert dev_stack.status() == 1

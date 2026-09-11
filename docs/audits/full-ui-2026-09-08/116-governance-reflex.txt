@@ -1,0 +1,225 @@
+Browser tab: 4, Title: "自进化 - Echo", URL: "http://localhost:3310/#/workspace/evolution?section=governance".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+~									103 container
++										104 heading SpinalCord 反射, Value: 1
++											105 text SpinalCord 反射
++										106 text 反射规则监控 · 命中率/趋势/A-B 变体/覆盖率 · 实时刷新（2 秒）  · 最后刷新 00:30:24
++										107 button (collapsed) 基因锁 Lv 2 成长期, Help: 基因锁治理状态 · 点击调整, Secondary Actions: Expand
++											108 text 基因锁
++											109 text Lv
++											110 text 2
++											111 text 成长期
++										112 link Description: 编辑规则, Value: localhost:3310/workspace/reflex/edit
++										113 button 重新加载
++										114 button 重新加载 + 重置
++									115 text 尝试
++									116 text 0
++									117 text 命中
++									118 text 0
++									119 text 命中率
++									120 text 0.0%
++									121 text 规则
++									122 text 7
++									123 text 过期（24 小时）
++									124 text 0
++									125 text 上小时命中
++									126 text 0
++									127 text 反射命中 · 最近 60 分钟 · 粒度 1 分钟
++									128 text 最近 60 分钟无反射命中
++									129 text RecipeForge · 提示词进化
++									130 text 第 7 条反射路径
++									131 text 当前已应用的附录
++									132 text 无
++									133 text 迭代次数
++									134 stepper (settable, integer) Description: 迭代次数, Value: 8
++									135 text 评估任务 / 次迭代
++									136 stepper (settable, integer) Description: 评估任务 / 次迭代, Value: 4
++									137 container
++										138 text Optimizer
++										139 pop up button (collapsed, settable) Optimizer, Value: native_gepa, Secondary Actions: Expand
++											140 menu
++												141 (selected) native_gepa
++												142 dspy_gepa
++												143 external_gepa
++									144 button 为失败的配方自动提案, Help: 查找所有失败的配方并为每个配方提出修复方案
++									145 button 运行 Forge
++									146 text Canary / 回滚
++									147 button 刷新
++									148 text 活跃 1 · 已回滚 0 · 总计 1
++									149 text 阶段 shadow
++									150 text forged_list_cwd_then_count_words_d349dc27
++									151 text 命中率 0.000
++									152 text 样本 0 · 成功 0 · 失败 0
++									153 text 2026/9/5 18:08:43
++									154 text 响应层级
++									155 text fuzzy_cache
++									156 text 已启用
++									157 text 大小
++									158 text :
++									159 text 0
++									160 text 命中
++									161 text :
++									162 text 0
++									163 text /
++									164 text 未命中
++									165 text 0
++									166 text 比率
++									167 text :
++									168 text 0
++									169 text %
++									170 text 相似度
++									171 text 0.70
++									172 text slm
++									173 text 已禁用
++									174 text 命中
++									175 text :
++									176 text 0
++									177 text /
++									178 text 未命中
++									179 text 0
++									180 text 比率
++									181 text :
++									182 text 0
++									183 text %
++									184 text 端点
++									185 text :
++									186 text (not configured)
++									187 text 规则
++									188 table
++										189 row
++											190 cell
++												191 text 规则
++											192 cell
++												193 text 类型
++											194 cell
++												195 text 模式 / 类型
++											196 cell
++												197 text 优先级
++											198 cell
++												199 text 尝试
++											200 cell
++												201 text 命中
++											202 cell
++												203 text 比率
++											204 cell
++												205 text 最后
++										206 row
++											207 cell
++												208 text greeting_zh 未调用
++											209 cell
++												210 text regex
++											211 cell
++												212 text ^(你好|您好|嗨|哈喽)[!。?\.\?\!,~\u3002\uff01\uff1f]*$
++											213 cell
++												214 text 20
++											215 cell
++												216 text 0
++											217 cell
++												218 text 0
++											219 cell
++												220 text 0 %
++											221 cell
++												222 text —
++										223 row
++											224 cell
++												225 text greeting_en 未调用
++											226 cell
++												227 text regex
++											228 cell
++												229 text ^(hi|hello|hey|yo)[!\.\?,]*$
++											230 cell
++												231 text 20
++											232 cell
++												233 text 0
++											234 cell
++												235 text 0
++											236 cell
++												237 text 0 %
++											238 cell
++												239 text —
++										240 row
++											241 cell
++												242 text thanks_zh 未调用
++											243 cell
++												244 text regex
++											245 cell
++												246 text ^(谢谢|多谢|感谢)[!。?\.\?\!,~\u3002\uff01\uff1f]*$
++											247 cell
++												248 text 20
++											249 cell
++												250 text 0
++											251 cell
++												252 text 0
++											253 cell
++												254 text 0 %
++											255 cell
++												256 text —
++										257 row
++											258 cell
++												259 text bye 未调用
++											260 cell
++												261 text regex
++											262 cell
++												263 text ^(再见|拜拜|bye|byebye|goodbye)[!\.\?,]*$
++											264 cell
++												265 text 20
++											266 cell
++												267 text 0
++											268 cell
++												269 text 0
++											270 cell
++												271 text 0 %
++											272 cell
++												273 text —
++										274 row
++											275 cell
++												276 text ping_diagnostic 未调用
++											277 cell
++												278 text regex
++											279 cell
++												280 text ^ping$
++											281 cell
++												282 text 20
++											283 cell
++												284 text 0
++											285 cell
++												286 text 0
++											287 cell
++												288 text 0 %
++											289 cell
++												290 text —
++										291 row
++											292 cell
++												293 text chitchat_default 未调用
++											294 cell
++												295 text deterministic
++											296 cell
++												297 text chitchat
++											298 cell
++												299 text 10
++											300 cell
++												301 text 0
++											302 cell
++												303 text 0
++											304 cell
++												305 text 0 %
++											306 cell
++												307 text —
++										308 row
++											309 cell
++												310 text semantic_cache 未调用
++											311 cell
++												312 text cache
++											313 cell
++												314 text 默认 TTL
++											315 cell
++												316 text 5
++											317 cell
++												318 text 0
++											319 cell
++												320 text 0
++											321 cell
++												322 text 0 %
++											323 cell
++												324 text —
+The focused UI element is 100 tab (selected, settable, boolean) 规则与响应, Value: 1, ID: radix-_r_7_-trigger-reflex

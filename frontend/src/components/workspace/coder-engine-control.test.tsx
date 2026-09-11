@@ -89,12 +89,144 @@ afterEach(() => {
 });
 
 describe("CoderEngineControl", () => {
+  it("places custom models before official models in the left tab", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <CoderEngineControl
+        systemModels={[
+          { name: "official/qwen", entry_id: "official", display_name: "极速" },
+          { name: "custom", entry_id: "my-api", display_name: "我的 API" },
+        ]}
+      />,
+      { locale: "zh-CN" },
+    );
+    await user.click(await screen.findByTestId("coder-engine-trigger"));
+    expect(
+      screen
+        .getByRole("button", { name: "我的 API", exact: true })
+        .compareDocumentPosition(
+          screen.getByRole("button", { name: "极速", exact: true }),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Codex", exact: true }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "添加自定义模型", exact: true }),
+    ).toBeVisible();
+  });
+  it("keeps OpenCode models out of custom API and hides the empty custom tab", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <CoderEngineControl
+        systemModels={[{ name: "big-pickle", entry_id: "opencode-zen" }]}
+      />,
+      { locale: "zh-CN" },
+    );
+    await user.click(await screen.findByTestId("coder-engine-trigger"));
+    expect(
+      screen.queryByRole("button", { name: "自定义 API" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "官方模型", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.queryByRole("button", { name: "big-pickle", exact: true }),
+    ).not.toBeInTheDocument();
+  });
+  it("offers recovery when no API models are configured without changing the source", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CoderEngineControl systemModels={[]} />, {
+      locale: "zh-CN",
+    });
+    await user.click(await screen.findByTestId("coder-engine-trigger"));
+    expect(
+      await screen.findByText("暂无可用模型，请在下方添加自定义模型。"),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("当前是编排模型，请在下方选择实际模型"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "添加自定义模型" }),
+    ).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: "Codex", exact: true }),
+    );
+    expect(
+      screen.queryByText("暂无可用模型，请在下方添加自定义模型。"),
+    ).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(
+        ([, init]) => init?.method === "PUT" || init?.method === "POST",
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps authorization separate without a duplicate API entry", async () => {
+    renderWithProviders(<CoderEngineSettings authorizationOnly />, {
+      locale: "zh-CN",
+    });
+    expect(
+      await screen.findByRole("button", { name: "登录 ChatGPT" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /跟随系统模型/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("模型来源")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("OpenAI API Key")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "添加 API 连接" }),
+    ).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(
+        ([, init]) => init?.method === "PUT" || init?.method === "POST",
+      ),
+    ).toBe(false);
+  });
+
+  it("finishes a recovered authorization without switching the model source", async () => {
+    let reads = 0;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = urlOf(input);
+      if (url.includes("/model-profile")) return jsonResponse(systemProfile);
+      if (url.includes("/account")) {
+        reads += 1;
+        return jsonResponse(
+          reads === 1
+            ? { account: null, login_pending: true, login_id: "pending-auth" }
+            : {
+                account: { type: "chatgpt", email: "test@example.test" },
+                login_pending: false,
+              },
+        );
+      }
+      return jsonResponse({});
+    });
+    renderWithProviders(<CoderEngineSettings authorizationOnly />, {
+      locale: "zh-CN",
+    });
+    expect(await screen.findByText("Codex 账号已连接")).toBeVisible();
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          urlOf(input).includes("/model-profile") &&
+          init?.method &&
+          init.method !== "GET",
+      ),
+    ).toBe(false);
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  });
+
   it("uses localized Coder settings copy for Japanese and Korean", async () => {
+    const user = userEvent.setup();
     const japanese = renderWithProviders(<CoderEngineSettings />, {
       locale: "ja-JP",
     });
     expect(await screen.findByText("Coderエンジン")).toBeVisible();
     await screen.findByText("モデルのソース");
+    await user.click(
+      screen.getByRole("button", { name: /ChatGPT \/ Codexを使用/ }),
+    );
     expect(
       screen.getByRole("button", { name: "ChatGPTにログイン" }),
     ).toBeVisible();
@@ -103,6 +235,9 @@ describe("CoderEngineControl", () => {
     renderWithProviders(<CoderEngineSettings />, { locale: "ko-KR" });
     expect(await screen.findByText("Coder 엔진")).toBeVisible();
     await screen.findByText("모델 출처");
+    await user.click(
+      screen.getByRole("button", { name: /ChatGPT \/ Codex 사용/ }),
+    );
     expect(
       screen.getByRole("button", { name: "ChatGPT로 로그인" }),
     ).toBeVisible();
@@ -136,6 +271,7 @@ describe("CoderEngineControl", () => {
         reasoningEffort="high"
         onReasoningEffortChange={onReasoningEffortChange}
         systemModels={[
+          { name: "big-pickle", entry_id: "opencode-zen", is_free: true },
           {
             name: "deepseek",
             display_name: "DeepSeek",
@@ -173,9 +309,9 @@ describe("CoderEngineControl", () => {
       ),
     ).toHaveClass("text-emerald-600");
     expect(
-      screen.getByRole("button", { name: /自动.*按任务智能选择/ }),
-    ).toBeVisible();
-    await user.click(await screen.findByText("ChatGPT 订阅"));
+      screen.queryByRole("button", { name: /自动.*按任务智能选择/ }),
+    ).not.toBeInTheDocument();
+    await user.click(await screen.findByText("Codex", { selector: "button" }));
     await user.click(
       await screen.findByRole("button", { name: "GPT-5.6 Codex" }),
     );
@@ -193,7 +329,7 @@ describe("CoderEngineControl", () => {
       ),
     ).toBe(false);
 
-    await user.click(screen.getByText("系统模型"));
+    await user.click(screen.getByText("官方模型"));
     await user.click(screen.getByRole("button", { name: "DeepSeek" }));
     expect(onChange).toHaveBeenLastCalledWith(
       "octopus-custom-model:v1:deepseek-selection",
@@ -275,10 +411,15 @@ describe("CoderEngineControl", () => {
     });
     fireEvent.click(screen.getByTestId("coder-engine-trigger"));
 
-    expect(await screen.findByText("系统模型")).toBeInTheDocument();
-    expect(screen.getByText("ChatGPT 订阅")).toBeInTheDocument();
+    expect(await screen.findByText("官方模型")).toBeInTheDocument();
+    expect(
+      screen.getByText("Codex", { selector: "button" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "mix" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "big-pickle" }),
     ).not.toBeInTheDocument();
     expect(screen.getAllByText("DeepSeek")).toHaveLength(1);
     await user.click(screen.getByRole("button", { name: "DeepSeek" }));
@@ -361,78 +502,98 @@ describe("CoderEngineControl", () => {
     fireEvent.click(screen.getByTestId("coder-engine-trigger"));
 
     expect(
-      await screen.findByText("当前是编排模型，请在下方选择实际模型"),
-    ).toBeVisible();
+      screen.queryByText("当前是编排模型，请在下方选择实际模型"),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "mix" }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "DeepSeek" })).toBeVisible();
   });
 
-  it("updates the selected model immediately while the save finishes", async () => {
-    const user = userEvent.setup();
-    const onEffectiveModelChange = vi.fn();
-    let finishSave:
-      | ((response: ReturnType<typeof jsonResponse>) => void)
-      | undefined;
-    const pendingSave = new Promise<ReturnType<typeof jsonResponse>>(
-      (resolve) => {
-        finishSave = resolve;
-      },
-    );
-    fetchMock.mockImplementation(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = urlOf(input);
-        if (url.includes("/model-profile") && init?.method === "PUT") {
-          return pendingSave;
-        }
-        if (url.includes("/model-profile")) return jsonResponse(systemProfile);
-        if (url.includes("/account")) {
-          return jsonResponse({
-            account: { type: "chatgpt", email: null, plan_type: "plus" },
-            requires_openai_auth: true,
-            login_pending: false,
-          });
-        }
-        if (url.includes("/models")) return jsonResponse(models);
-        return jsonResponse({});
-      },
-    );
-    const view = renderWithProviders(
-      <CoderEngineControl onEffectiveModelChange={onEffectiveModelChange} />,
-      { locale: "zh-CN" },
-    );
+  it.each([true, false])(
+    "keeps the confirmed model until saving succeeds (success=%s)",
+    async (success) => {
+      const user = userEvent.setup();
+      const onEffectiveModelChange = vi.fn();
+      let finishSave:
+        | ((response: ReturnType<typeof jsonResponse>) => void)
+        | undefined;
+      const pendingSave = new Promise<ReturnType<typeof jsonResponse>>(
+        (resolve) => {
+          finishSave = resolve;
+        },
+      );
+      fetchMock.mockImplementation(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = urlOf(input);
+          if (url.includes("/model-profile") && init?.method === "PUT") {
+            return pendingSave;
+          }
+          if (url.includes("/model-profile"))
+            return jsonResponse(systemProfile);
+          if (url.includes("/account")) {
+            return jsonResponse({
+              account: { type: "chatgpt", email: null, plan_type: "plus" },
+              requires_openai_auth: true,
+              login_pending: false,
+            });
+          }
+          if (url.includes("/models")) return jsonResponse(models);
+          return jsonResponse({});
+        },
+      );
+      const view = renderWithProviders(
+        <CoderEngineControl onEffectiveModelChange={onEffectiveModelChange} />,
+        { locale: "zh-CN" },
+      );
 
-    await screen.findByText("gpt-5.6");
-    fireEvent.pointerDown(screen.getByTestId("coder-engine-trigger"), {
-      button: 0,
-      ctrlKey: false,
-    });
-    fireEvent.click(screen.getByTestId("coder-engine-trigger"));
-    await user.click(await screen.findByText("ChatGPT 订阅"));
-    await user.click(
-      await screen.findByRole("button", { name: "GPT-5.6 Codex" }),
-    );
+      await screen.findByText("gpt-5.6");
+      fireEvent.pointerDown(screen.getByTestId("coder-engine-trigger"), {
+        button: 0,
+        ctrlKey: false,
+      });
+      fireEvent.click(screen.getByTestId("coder-engine-trigger"));
+      await user.click(
+        await screen.findByText("Codex", { selector: "button" }),
+      );
+      await user.click(
+        await screen.findByRole("button", { name: "GPT-5.6 Codex" }),
+      );
 
-    expect(screen.getByTestId("coder-engine-trigger")).toHaveTextContent(
-      "gpt-5.6-codex",
-    );
-    expect(screen.getByTestId("coder-engine-trigger")).toHaveAttribute(
-      "aria-label",
-      "ChatGPT 订阅 · gpt-5.6-codex",
-    );
-    expect(view.container.querySelector(".animate-spin")).toBeNull();
-
-    finishSave?.(jsonResponse(accountProfile));
-    await waitFor(() =>
       expect(screen.getByTestId("coder-engine-trigger")).toHaveTextContent(
+        "gpt-5.6",
+      );
+      expect(screen.getByTestId("coder-engine-trigger")).not.toHaveTextContent(
         "gpt-5.6-codex",
-      ),
-    );
-    expect(onEffectiveModelChange).toHaveBeenCalledWith("gpt-5.6-codex");
-  });
+      );
+      expect(onEffectiveModelChange).not.toHaveBeenCalled();
+      expect(view.container.querySelector(".animate-spin")).toBeNull();
 
-  it("explains when a system model controls reasoning automatically", async () => {
+      finishSave?.(
+        success
+          ? jsonResponse(accountProfile)
+          : jsonResponse({ detail: "Save failed" }, 503),
+      );
+      if (!success) {
+        expect(await screen.findByRole("alert")).toHaveTextContent(
+          "Save failed",
+        );
+        expect(
+          screen.getByTestId("coder-engine-trigger"),
+        ).not.toHaveTextContent("gpt-5.6-codex");
+        expect(onEffectiveModelChange).not.toHaveBeenCalled();
+        return;
+      }
+      await waitFor(() =>
+        expect(screen.getByTestId("coder-engine-trigger")).toHaveTextContent(
+          "gpt-5.6-codex",
+        ),
+      );
+      expect(onEffectiveModelChange).toHaveBeenCalledWith("gpt-5.6-codex");
+    },
+  );
+
+  it("hides reasoning when the model has no supported options", async () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = urlOf(input);
       if (url.includes("/model-profile")) {
@@ -468,11 +629,80 @@ describe("CoderEngineControl", () => {
     });
     fireEvent.click(screen.getByTestId("coder-engine-trigger"));
 
-    expect(await screen.findByText("当前模型自动控制")).toBeInTheDocument();
+    expect(screen.queryByText("推理等级")).not.toBeInTheDocument();
   });
 });
 
 describe("CoderEngineSettings", () => {
+  it("reuses system credentials and keeps independent account setup optional without changing the active source", async () => {
+    const user = userEvent.setup();
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = urlOf(input);
+      if (url.includes("/model-profile")) return jsonResponse(systemProfile);
+      if (url.includes("/account")) {
+        return jsonResponse({
+          account: null,
+          login_pending: false,
+          login_error: "Codex login did not complete",
+        });
+      }
+      return jsonResponse({});
+    });
+    renderWithProviders(<CoderEngineSettings />, { locale: "zh-CN" });
+    expect(await screen.findByText("系统连接")).toBeVisible();
+    expect(
+      screen.getByText(/复用系统模型连接的服务地址与 API Key/),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "登录 ChatGPT" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("OpenAI API Key")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText("未连接")).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: /使用 ChatGPT \/ Codex/ }),
+    );
+    expect(screen.getByRole("button", { name: "登录 ChatGPT" })).toBeVisible();
+    expect(screen.getByText(/当前仍使用系统模型连接/)).toBeVisible();
+    expect(screen.getByText("系统连接")).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /跟随系统模型/ }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByText("高级：使用独立 OpenAI Key"));
+    expect(screen.getByText(/已在系统中配置 Key/)).toBeVisible();
+    await user.type(screen.getByLabelText("OpenAI API Key"), "sk-unsent-draft");
+    await user.click(screen.getByRole("button", { name: /跟随系统模型/ }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("OpenAI API Key")).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: /使用 ChatGPT \/ Codex/ }),
+    );
+    await user.click(screen.getByText("高级：使用独立 OpenAI Key"));
+    expect(screen.getByLabelText("OpenAI API Key")).toHaveValue("");
+    expect(
+      fetchMock.mock.calls.some(([, init]) =>
+        ["PUT", "POST"].includes(init?.method),
+      ),
+    ).toBe(false);
+    expect(localStorage.length).toBe(0);
+  });
+
+  it("keeps system settings usable when the independent account service fails", async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = urlOf(input);
+      if (url.includes("/model-profile")) return jsonResponse(systemProfile);
+      if (url.includes("/account"))
+        return jsonResponse({ detail: "Account service unavailable" }, 503);
+      return jsonResponse({});
+    });
+    renderWithProviders(<CoderEngineSettings />, { locale: "zh-CN" });
+    expect(await screen.findByText("已选模型 · gpt-5.6")).toBeVisible();
+    expect(screen.getByRole("button", { name: /跟随系统模型/ })).toBeEnabled();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("distinguishes a connected account from an unusable model and applies the chat default explicitly", async () => {
     const user = userEvent.setup();
     let profile = {
@@ -522,7 +752,7 @@ describe("CoderEngineSettings", () => {
       <CoderEngineSettings conversationDefaultModel="chatgpt/gpt-5.6-sol" />,
       { locale: "zh-CN" },
     );
-    expect(await screen.findByText("账号已连接")).toBeVisible();
+    expect(await screen.findByText("系统连接")).toBeVisible();
     expect(screen.getByText("待选择可执行模型")).toBeVisible();
     expect(screen.getByText("暂不可执行")).toBeVisible();
     expect(screen.getByText(/后端默认值是自动路由入口/)).toBeVisible();
@@ -599,6 +829,7 @@ describe("CoderEngineSettings", () => {
 
   it("starts and explicitly cancels a device-code login without persisting the auth URL", async () => {
     const user = userEvent.setup();
+    let cancelled = false;
     const openExternal = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(window, "octopus", {
       configurable: true,
@@ -615,6 +846,7 @@ describe("CoderEngineSettings", () => {
             account: null,
             requires_openai_auth: false,
             login_pending: false,
+            login_error: cancelled ? "Codex login did not complete" : null,
           });
         }
         if (url.endsWith("/login") && init?.method === "POST") {
@@ -626,6 +858,7 @@ describe("CoderEngineSettings", () => {
           });
         }
         if (url.endsWith("/device-login-1/cancel")) {
+          cancelled = true;
           return jsonResponse({ cancelled: true });
         }
         return jsonResponse(models);
@@ -633,6 +866,9 @@ describe("CoderEngineSettings", () => {
     );
 
     renderWithProviders(<CoderEngineSettings />, { locale: "zh-CN" });
+    await user.click(
+      await screen.findByRole("button", { name: /使用 ChatGPT \/ Codex/ }),
+    );
     await screen.findByRole("button", { name: "使用设备码" });
     await user.click(screen.getByRole("button", { name: "使用设备码" }));
 
@@ -650,6 +886,8 @@ describe("CoderEngineSettings", () => {
         expect.objectContaining({ method: "POST" }),
       ),
     );
+    expect(await screen.findByText("已取消登录")).toBeVisible();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("preserves an unfinished browser login across unmount and rehydrates it", async () => {
@@ -691,6 +929,9 @@ describe("CoderEngineSettings", () => {
     const view = renderWithProviders(<CoderEngineSettings />, {
       locale: "en-US",
     });
+    await user.click(
+      await screen.findByRole("button", { name: /Use ChatGPT \/ Codex/ }),
+    );
     await screen.findByRole("button", { name: "Sign in with ChatGPT" });
     await user.click(
       screen.getByRole("button", { name: "Sign in with ChatGPT" }),
@@ -757,8 +998,10 @@ describe("CoderEngineSettings", () => {
     const storageWrite = vi.spyOn(Storage.prototype, "setItem");
 
     renderWithProviders(<CoderEngineSettings />, { locale: "en-US" });
-    await screen.findByText("Use API key");
-    await user.click(screen.getByText("Use API key"));
+    await user.click(
+      await screen.findByRole("button", { name: /Use ChatGPT \/ Codex/ }),
+    );
+    await user.click(screen.getByText("Advanced: separate OpenAI key"));
     const keyInput = screen.getByLabelText("OpenAI API key");
     await user.type(keyInput, "sk-only-in-request");
     await user.click(screen.getByRole("button", { name: "Connect API key" }));

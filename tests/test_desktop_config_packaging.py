@@ -24,6 +24,7 @@ MATERIALIZER = ROOT / "frontend/electron/desktop-config.cjs"
 MAIN = ROOT / "frontend/electron/main.cjs"
 DESKTOP_PROTOCOL = ROOT / "frontend/electron/desktop-protocol.cjs"
 BACKEND_RUNTIME = ROOT / "frontend/electron/backend-runtime.cjs"
+OPENCODE_LOCK = ROOT / "frontend/electron/opencode-runtime-lock.json"
 BUILD_CONFIG = ROOT / "packaging/desktop/build.yml"
 WINDOWS_WORKFLOW = ROOT / ".github/workflows/build-win.yml"
 LINUX_WORKFLOW = ROOT / ".github/workflows/build-linux.yml"
@@ -158,6 +159,32 @@ def _materialize_packaged_codex_bundle(resources: Path) -> Path:
     return codex_root / "bin/codex.exe"
 
 
+def _materialize_packaged_opencode_bundle(resources: Path) -> Path:
+    lock = json.loads(OPENCODE_LOCK.read_text(encoding="utf-8"))
+    profile = lock["platforms"]["win32-x64"]
+    root = resources / "opencode"
+    payloads = {
+        "opencode.exe": b"MZfixture",
+        "LICENSE": (ROOT / "extras/desktop/licenses/opencode-1.18.29/LICENSE").read_bytes(),
+    }
+    root.mkdir(parents=True, exist_ok=True)
+    for name, payload in payloads.items():
+        (root / name).write_bytes(payload)
+    manifest = {
+        "schema": "echo.opencode_bundle.v1",
+        "version": lock["version"],
+        "platform": "win32-x64",
+        "asset": profile["asset"],
+        "archiveSha256": profile["sha256"],
+        "executable": profile["executable"],
+        "executableMagic": profile["executableMagic"],
+        "fileHashPhase": profile["fileHashPhase"],
+        "files": {name: _sha256(payload) for name, payload in payloads.items()},
+    }
+    (root / "opencode-bundle.json").write_text(json.dumps(manifest), encoding="utf-8")
+    return root / "opencode.exe"
+
+
 def _materialize(target: Path) -> dict[str, object]:
     node = shutil.which("node")
     if node is None:
@@ -210,6 +237,8 @@ def test_electron_materialized_desktop_config_loads_in_python(tmp_path: Path) ->
 
     assert first == {"path": str(target), "changed": True}
     assert config.planner.model == "octopus-agent"
+    assert config.execution.member_engine == "opencode"
+    assert config.execution.background_model_calls is None
     assert config.oct.enabled is True
     assert config.oct.jwt_secret == first_secret
     assert config.local_auth.enabled is True
@@ -341,6 +370,9 @@ def test_desktop_backend_routes_mutable_state_to_user_data() -> None:
     for removed in ("runtime", "octopus_runtime", "tools", "pyproject.toml", "uv"):
         assert all(item["to"] != removed for item in build["extraResources"])
     assert build["appId"] == "ai.octopus.desktop"
+    assert build["compression"] == "maximum"
+    assert build["electronLanguages"] == ["en-US", "zh-CN", "ja", "ko"]
+    assert "!node_modules/**/*" in build["files"]
     assert build["win"]["signExts"] == [".exe"]
     assert build["win"]["extraResources"] == [
         {
@@ -352,6 +384,11 @@ def test_desktop_backend_routes_mutable_state_to_user_data() -> None:
             "to": "codex",
             "filter": ["**/*"],
         },
+        {
+            "from": "../extras/desktop/build/opencode",
+            "to": "opencode",
+            "filter": ["**/*"],
+        },
     ]
     agents = next(item for item in build["extraResources"] if item["to"] == "agents")
     for excluded in (
@@ -359,6 +396,13 @@ def test_desktop_backend_routes_mutable_state_to_user_data() -> None:
         "!**/workspace/**",
         "!**/*.jsonl",
         "!**/visuals/backups/**",
+        "!**/visuals/source_turnaround.*",
+        "!**/visuals/source-turnaround.*",
+        "!**/visuals/source_portrait.*",
+        "!**/visuals/source-portrait.*",
+        "!**/visuals/originals/**",
+        "!**/visuals/*-before-padding.*",
+        "!**/visuals/*-restored-256-upscaled.*",
     ):
         assert excluded in agents["filter"]
 
@@ -404,6 +448,7 @@ def test_packaged_desktop_backend_has_no_uv_python_or_network_fallback() -> None
     assert "required.expectedSha256 || sourceHash" in source
     assert "refusing PATH/network fallback" in source
     assert "env.OCTOPUS_CODEX_EXECUTABLE = requirePackagedCodexExecutable();" in spawn
+    assert "env.OCTOPUS_OPENCODE_BIN = requirePackagedOpenCode(resourcesPath());" in spawn
 
 
 def test_packaged_runtime_rejects_missing_backend_before_any_spawn(
@@ -637,6 +682,7 @@ def test_packaged_runtime_overrides_host_codex_with_bundled_absolute_path(
     resources = tmp_path / "packaged-resources"
     user_data = tmp_path / "user-data"
     bundled_codex = _materialize_packaged_codex_bundle(resources)
+    bundled_opencode = _materialize_packaged_opencode_bundle(resources)
     backend_name = "octopus-backend.exe" if os.name == "nt" else "octopus-backend"
     backend = resources / "backend" / backend_name
     backend.parent.mkdir(parents=True)
@@ -651,7 +697,8 @@ Module._load = function(request, parent, isMain) {
   }
   if (request === "child_process") {
     return { spawn: (command, args, options) => {
-      captured = { command, args, codex: options.env.OCTOPUS_CODEX_EXECUTABLE };
+      captured = { command, args, codex: options.env.OCTOPUS_CODEX_EXECUTABLE,
+        opencode: options.env.OCTOPUS_OPENCODE_BIN };
       return { on: () => {} };
     } };
   }
@@ -659,6 +706,7 @@ Module._load = function(request, parent, isMain) {
 };
 Object.defineProperty(process, "resourcesPath", { value: process.argv[2] });
 process.env.OCTOPUS_CODEX_EXECUTABLE = "host-path-codex";
+process.env.OCTOPUS_OPENCODE_BIN = "host-path-opencode";
 const runtime = require(process.argv[1]);
 (async () => {
   await runtime.spawnBackend("fixed-config.yaml");
@@ -681,6 +729,9 @@ const runtime = require(process.argv[1]);
     assert payload["codex"] == str(bundled_codex)
     assert Path(payload["codex"]).is_absolute()
     assert payload["codex"] != "host-path-codex"
+    assert payload["opencode"] == str(bundled_opencode)
+    assert Path(payload["opencode"]).is_absolute()
+    assert payload["opencode"] != "host-path-opencode"
 
 
 def test_windows_workflow_builds_and_smokes_canonical_offline_shell() -> None:
@@ -715,6 +766,9 @@ def test_windows_workflow_builds_and_smokes_canonical_offline_shell() -> None:
     codex_prepare = steps["Prepare pinned Codex Windows runtime"]
     assert codex_prepare["working-directory"] == "frontend"
     assert codex_prepare["run"] == "pnpm codex:prepare:win"
+    opencode_prepare = steps["Prepare pinned OpenCode Windows runtime"]
+    assert opencode_prepare["working-directory"] == "frontend"
+    assert opencode_prepare["run"] == "pnpm opencode:prepare:win"
     codex_preflight = steps["Verify pinned Codex before packaging"]["run"]
     assert "extras/desktop/build/codex" in codex_preflight
     assert 'Join-Path $codexRoot "bin/codex.exe"' in codex_preflight
@@ -737,7 +791,7 @@ def test_windows_workflow_builds_and_smokes_canonical_offline_shell() -> None:
     electron = steps["Build canonical Electron EXE"]
     assert electron["working-directory"] == "frontend"
     assert electron["run"] == "pnpm electron:build:win"
-    smoke = steps["Verify packaged backend and Codex are present and runnable"]["run"]
+    smoke = steps["Verify packaged backend and engines are present and runnable"]["run"]
     assert "frontend/release/win-unpacked/resources/backend/octopus-backend.exe" in smoke
     assert '"frontend/release/win-unpacked/resources/codex"' in smoke
     assert 'Join-Path $codexRoot "bin/codex.exe"' in smoke
@@ -745,6 +799,9 @@ def test_windows_workflow_builds_and_smokes_canonical_offline_shell() -> None:
         assert f'"{relative}"' in smoke
     assert "codex-native-notices.v1" in smoke
     assert "OCTOPUS_CODEX_EXECUTABLE" in smoke
+    assert "OCTOPUS_OPENCODE_BIN" in smoke
+    assert "opencode.exe" in smoke
+    assert "1\\.18\\.29" in smoke
     assert "app-server --help" in smoke
     assert "ensureDesktopConfigFile" in smoke
     assert "ensureDesktopResources" in smoke
@@ -756,6 +813,7 @@ def test_windows_workflow_builds_and_smokes_canonical_offline_shell() -> None:
     signing_proof = steps["Verify Authenticode signatures and create commit-bound checksums"]["run"]
     for relative in CODEX_BUNDLE_EXECUTABLES:
         assert f'"win-unpacked/resources/codex/{relative}"' in signing_proof
+    assert '"win-unpacked/resources/opencode/opencode.exe"' in signing_proof
     assert "OCTOPUS_WINDOWS_SIGNER_THUMBPRINT" in signing_proof
     assert "OCTOPUS_WINDOWS_SIGNER_SUBJECT_BASE64" in signing_proof
     assert "publisher = $publisher" in signing_proof
@@ -773,6 +831,9 @@ def test_windows_workflow_builds_and_smokes_canonical_offline_shell() -> None:
     assert step_names.index("Prepare pinned Codex Windows runtime") < step_names.index(
         "Build canonical Electron EXE"
     )
+    assert step_names.index("Prepare pinned OpenCode Windows runtime") < step_names.index(
+        "Build canonical Electron EXE"
+    )
     assert step_names.index("Build backend (PyInstaller)") < step_names.index(
         "Sync locked desktop test dependencies"
     )
@@ -780,10 +841,10 @@ def test_windows_workflow_builds_and_smokes_canonical_offline_shell() -> None:
         "Verify desktop first-launch and packaging contracts"
     )
     assert step_names.index("Build canonical Electron EXE") < step_names.index(
-        "Verify packaged backend and Codex are present and runnable"
+        "Verify packaged backend and engines are present and runnable"
     )
     assert step_names.index(
-        "Verify packaged backend and Codex are present and runnable"
+        "Verify packaged backend and engines are present and runnable"
     ) < step_names.index("Upload EXE installer")
 
 
@@ -940,18 +1001,21 @@ def test_legacy_desktop_package_delegates_and_cannot_publish_old_shell() -> None
     frontend_scripts = json.loads(FRONTEND_PACKAGE.read_text(encoding="utf-8"))["scripts"]
     assert frontend_scripts["codex:prepare:win"] == ("node ../extras/desktop/prepare-codex-win.cjs")
     assert frontend_scripts["electron:build:win"].startswith(
-        "pnpm build && pnpm codex:prepare:win && electron-builder"
+        "pnpm build && pnpm codex:prepare:win && pnpm opencode:prepare:win && electron-builder"
     )
     assert "--win --x64 --publish never" in frontend_scripts["electron:build:win"]
     assert "electron-builder" in frontend_scripts["electron:build:win"]
+    assert "opencode:prepare:win" in frontend_scripts["electron:build:win"]
     assert frontend_scripts["codex:prepare:mac"] == ("node ../extras/desktop/prepare-codex-mac.cjs")
     assert "codex:prepare:mac" in frontend_scripts["electron:build:mac"]
+    assert "opencode:prepare:mac" in frontend_scripts["electron:build:mac"]
     assert "--mac --arm64 --publish never" in frontend_scripts["electron:build:mac"]
     assert "electron-builder" in frontend_scripts["electron:build:mac"]
     assert frontend_scripts["codex:prepare:linux"] == (
         "node ../extras/desktop/prepare-codex-linux.cjs"
     )
     assert "codex:prepare:linux" in frontend_scripts["electron:build:linux"]
+    assert "opencode:prepare:linux" in frontend_scripts["electron:build:linux"]
     assert "--linux --x64 --publish never" in frontend_scripts["electron:build:linux"]
     assert "electron-builder" in frontend_scripts["electron:build:linux"]
 
@@ -991,6 +1055,9 @@ def test_linux_workflow_builds_and_smokes_canonical_linux_shell() -> None:
     codex_prepare = steps["Prepare pinned Codex Linux runtime"]
     assert codex_prepare["working-directory"] == "frontend"
     assert codex_prepare["run"] == "pnpm codex:prepare:linux"
+    opencode_prepare = steps["Prepare pinned OpenCode Linux runtime"]
+    assert opencode_prepare["working-directory"] == "frontend"
+    assert opencode_prepare["run"] == "pnpm opencode:prepare:linux"
 
     codex_preflight = steps["Verify pinned Codex before packaging"]["run"]
     assert "extras/desktop/build/codex" in codex_preflight
@@ -1019,11 +1086,14 @@ def test_linux_workflow_builds_and_smokes_canonical_linux_shell() -> None:
     assert electron["working-directory"] == "frontend"
     assert electron["run"] == "pnpm electron:build:linux"
 
-    smoke = steps["Verify packaged backend and Codex are present and runnable"]["run"]
+    smoke = steps["Verify packaged backend and engines are present and runnable"]["run"]
     assert "EchoAI-Setup-Linux-*.AppImage" in smoke
     assert "frontend/release" in smoke
     assert "app-server --help" in smoke
     assert "octopus-codex-bundle.json" in smoke
+    assert "OCTOPUS_OPENCODE_BIN" in smoke
+    assert "opencode-runtime.cjs" in smoke
+    assert "1.18.29" in smoke
     assert '/readyz"' in smoke or "/readyz" in smoke
     assert "uv" not in smoke.lower()
     assert "python3 -c" in smoke
@@ -1045,11 +1115,14 @@ def test_linux_workflow_builds_and_smokes_canonical_linux_shell() -> None:
     assert step_names.index("Prepare pinned Codex Linux runtime") < step_names.index(
         "Build canonical Electron AppImage"
     )
+    assert step_names.index("Prepare pinned OpenCode Linux runtime") < step_names.index(
+        "Build canonical Electron AppImage"
+    )
     assert step_names.index("Build canonical Electron AppImage") < step_names.index(
-        "Verify packaged backend and Codex are present and runnable"
+        "Verify packaged backend and engines are present and runnable"
     )
     assert step_names.index(
-        "Verify packaged backend and Codex are present and runnable"
+        "Verify packaged backend and engines are present and runnable"
     ) < step_names.index("Create commit-bound checksum")
 
 

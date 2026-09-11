@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import os
 import shutil
@@ -811,8 +812,10 @@ async def test_real_codex_does_not_retry_unavailable_model(tmp_path: Path) -> No
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+@pytest.mark.parametrize("extra_tool_count", [0, 127])
 async def test_real_codex_app_server_completes_scoped_text_and_tool_loop(
     tmp_path: Path,
+    extra_tool_count: int,
 ) -> None:
     """Exercise the locally installed App Server, skipping hosts without Codex."""
 
@@ -870,6 +873,19 @@ async def test_real_codex_app_server_completes_scoped_text_and_tool_loop(
                 },
             ),
             dynamic_tool_handler=_dynamic_tool,
+        )
+        request = dataclasses.replace(
+            request,
+            dynamic_tools=request.dynamic_tools
+            + tuple(
+                {
+                    "type": "function",
+                    "name": f"extra_{index}",
+                    "description": "Unused tool for catalog capacity verification.",
+                    "inputSchema": {"type": "object", "properties": {}},
+                }
+                for index in range(extra_tool_count)
+            ),
         )
         security = CodexSidecarSecurity(
             CodexSecurityPolicy(

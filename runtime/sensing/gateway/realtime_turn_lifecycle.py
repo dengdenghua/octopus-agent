@@ -51,6 +51,9 @@ __all__ = [
     "_record_pending_resume_intent",
 ]
 from runtime.execution.engines import EngineSelectionError, ExecutionPhase
+from runtime.sensing.gateway._realtime_react_stream_helpers import (
+    _should_use_direct_text_path,
+)
 from runtime.sensing.gateway.realtime_approval import GatewayApprovalProvider
 from runtime.sensing.gateway.realtime_execution import (
     TurnExecutionRequest,
@@ -71,6 +74,7 @@ from runtime.sensing.gateway.realtime_turn_input import (
     _should_default_planning_mode,
     _should_default_topology,
     _turn_mode,
+    external_model_owner,
 )
 from runtime.sensing.gateway.realtime_turn_outcome import (
     _code_change_paths,
@@ -557,6 +561,10 @@ async def _start_turn(
             _auto_topology,
         )
 
+    # Retain the caller's choice: team routing is resolved after context
+    # composition and may later select an external coordinator.
+    requested_model_before_routing = validated.model
+
     # Smart model routing — auto-route trivial / simple turns to
     # the cheap tier. Complex / research / topology / code-mode
     # turns stay on the user's primary. Explicit ``model`` pins
@@ -587,15 +595,7 @@ async def _start_turn(
             if isinstance(_user_ctx_for_complexity, dict)
             else None
         ) or ""
-        _external_model_owner = validated.execution_engine == "codex" or (
-            validated.execution_engine == "auto"
-            and (
-                str(_user_ctx_for_complexity.get("execution_engine") or "").strip().lower()
-                if isinstance(_user_ctx_for_complexity, dict)
-                else ""
-            )
-            == "codex"
-        )
+        _external_model_owner = external_model_owner(validated)
         _is_code_mode_for_routing = bool(_mode_str == "code" or _capability_mode_str)
         _verdict = estimate_turn_complexity(
             text,
@@ -624,11 +624,10 @@ async def _start_turn(
         except ImportError:  # noqa: BLE001 — ai mode is optional
             pass
         if _external_model_owner:
-            # Codex owns its effective model through the principal-scoped
-            # model profile. Realtime still estimates complexity for its own
+            # External engines own their effective models. Realtime still estimates complexity for its own
             # lifecycle policy, but must not overwrite or report a model that
             # will never execute.
-            _routed_model, _route_reason = None, "external_engine:codex"
+            _routed_model, _route_reason = None, f"external_engine:{_external_model_owner}"
         else:
             _routed_model, _route_reason = select_model_for_complexity(
                 _verdict,
@@ -1153,7 +1152,7 @@ async def _start_turn(
             )
             reflection = (
                 not orchestrated
-                and (not codex_partner or validated.execution_engine == "octopus")
+                and (not codex_partner or validated.execution_engine in {"octopus", "opencode"})
                 and runtime._should_use_reflection_fast_path(
                     text,
                     validated,
@@ -1175,6 +1174,33 @@ async def _start_turn(
                 reflection_fast_path=reflection,
                 coordinated=coordinated,
             )
+            if route.engine == "opencode" and not orchestrated and not reflection:
+                # The selected role may advertise Codex as its default backend
+                # even when the user explicitly chose OpenCode. Re-evaluate the
+                # cheap host predicate after final engine selection so safe
+                # text-only turns still skip the per-turn tool bridge.
+                reflection = _should_use_direct_text_path(
+                    text,
+                    validated,
+                    conversation_messages=cast(
+                        "list[dict[str, object]] | None", conversation_messages
+                    ),
+                    thread_id=thread_id,
+                )
+            if route.engine in {"opencode", "codex"}:
+                validated = validated.model_copy(update={"model": requested_model_before_routing})
+                turn.params = validated
+                external_context = {
+                    **(intent.user_context or {}),
+                    "model_name": requested_model_before_routing,
+                }
+                # Preserve the host's existing no-tool classification for
+                # OpenCode.  Without this handoff, greetings and explicit
+                # discussion-only turns still built and connected the full
+                # per-turn MCP bridge before asking the model for text.
+                if route.engine == "opencode":
+                    external_context["direct_conversation_reply"] = reflection
+                intent = intent.model_copy(update={"user_context": external_context})
             # The explicit model still governs every member of an orchestrated
             # topology. Engine selection does not change model ownership.
             if route.driver == "swarm_mesh":
@@ -1214,7 +1240,14 @@ async def _start_turn(
                 turn_driver = "engine_selection"
             else:
                 selection_error = False
-                turn.execution_engine = "codex" if turn_driver == "codex_app_server" else "octopus"
+                turn.execution_engine = (
+                    turn.execution.engine
+                    if turn.execution is not None
+                    else {
+                        "codex_app_server": "codex",
+                        "opencode_server": "opencode",
+                    }.get(turn_driver, "octopus")
+                )
             context = intent.user_context if isinstance(intent.user_context, dict) else {}
             event_backpressure = isinstance(exc, BackpressureError)
             public_error_message = (

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Coins, Gift, Sparkles } from "lucide-react";
+import { Coins, Gift, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -100,10 +100,10 @@ export function CreditsCenterDialog({
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            aria-label="Close"
+            aria-label={t.common.close}
             className="flex size-7 items-center justify-center rounded-md bg-white/15 text-white transition hover:bg-white/25"
           >
-            <Sparkles className="size-4" />
+            <X className="size-4" />
           </button>
         </div>
 

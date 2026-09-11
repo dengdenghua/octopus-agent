@@ -188,7 +188,17 @@ export async function fetchCloudPlugins(
 
 /** 云商城技能目录(我们发布到 GitHub Pages 的 skill-registry.json)。 */
 export interface CloudSkillItem {
+  original_name?: string;
+  catalog_only?: boolean;
+  external?: boolean;
+  repository?: string;
+  source_url?: string;
+  license?: string;
+  compatibility?: string;
+  search_match?: string;
   name: string;
+  display_name?: string;
+  aliases?: string[];
   version?: string;
   author?: string;
   description: string;
@@ -200,31 +210,75 @@ export interface CloudSkillItem {
 export interface CloudSkillsResponse {
   items: CloudSkillItem[];
   total: number;
-  meta?: { count?: number; workbuddy_skills?: number; octopus_skills?: number };
+  meta?: {
+    count?: number;
+    workbuddy_skills?: number;
+    octopus_skills?: number;
+    sources?: Array<{ source: string; state: string; count: number }>;
+  };
 }
 
 export async function fetchCloudSkills(
   opts: {
     search?: string;
     limit?: number;
+    source?: "external";
+    signal?: AbortSignal;
   } = {},
 ): Promise<CloudSkillsResponse> {
   const qs = new URLSearchParams();
   if (opts.search) qs.set("search", opts.search);
+  if (opts.source) qs.set("source", opts.source);
   qs.set("limit", String(opts.limit ?? 500));
-  const res = await fetch(
-    `${getBackendBaseURL()}${AGENT_MARKET_API}/cloud/skills?${qs.toString()}`,
-    { headers: authHeaders() },
-  );
-  if (!res.ok) throw new Error(`Cloud skills failed: HTTP ${res.status}`);
-  return res.json() as Promise<CloudSkillsResponse>;
+  const items: CloudSkillItem[] = [];
+  let page: CloudSkillsResponse;
+  do {
+    qs.set("offset", String(items.length));
+    const res = await fetch(
+      `${getBackendBaseURL()}${AGENT_MARKET_API}/cloud/skills?${qs.toString()}`,
+      { headers: authHeaders(), signal: opts.signal },
+    );
+    if (!res.ok) throw new Error(`Cloud skills failed: HTTP ${res.status}`);
+    page = (await res.json()) as CloudSkillsResponse;
+    if (!page.items.length) break;
+    items.push(...page.items);
+  } while (items.length < page.total);
+  return { ...page, items };
 }
 
 /** 云端已安装状态(本地已落地的技能/插件)。 */
 export interface CloudInstalledStatus {
   skills: string[];
+  skill_users?: Record<
+    string,
+    Array<{ id: string; name: string; avatar_url?: string; icon?: string }>
+  >;
+  local_skills?: UnifiedAsset[];
+  skill_states?: Record<
+    string,
+    { enabled: boolean; can_toggle: boolean; can_uninstall: boolean }
+  >;
   plugins: string[];
   plugin_states?: Record<string, RuntimePluginStatus>;
+}
+
+export async function manageCloudSkill(
+  name: string,
+  action: "enable" | "disable" | "uninstall",
+) {
+  const res = await fetch(
+    `${getBackendBaseURL()}${AGENT_MARKET_API}/cloud/skills/${encodeURIComponent(name)}/manage`,
+    {
+      method: "POST",
+      headers: { ...authHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    },
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `技能管理失败：HTTP ${res.status}`);
+  }
+  return res.json();
 }
 
 export async function fetchCloudInstalled(): Promise<CloudInstalledStatus> {

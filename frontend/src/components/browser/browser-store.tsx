@@ -147,6 +147,12 @@ export interface BrowserTab {
   favicon?: string;
   isLoading: boolean;
   device: DevicePreset;
+  taskPreview?: {
+    threadId: string;
+    workspacePath?: string | null;
+    sessionId: string;
+    returnRoute?: string;
+  };
   crash?: {
     reason: string;
     exitCode: number;
@@ -167,6 +173,7 @@ export interface BrowserOpenUrlRequest {
   device?: DevicePreset;
   source?: string;
   sessionId?: string;
+  taskPreview?: BrowserTab["taskPreview"];
 }
 
 export interface BrowserOpenUrlAck {
@@ -211,6 +218,13 @@ function freshTab(url?: string, homepage?: string): BrowserTab {
 function reducer(state: BrowserState, action: Action): BrowserState {
   switch (action.type) {
     case "OPEN_TAB": {
+      const sessionId = action.patch?.taskPreview?.sessionId;
+      const existing = sessionId
+        ? state.tabs.find((tab) => tab.taskPreview?.sessionId === sessionId)
+        : undefined;
+      if (existing) {
+        return { ...state, activeId: existing.id };
+      }
       // Implementation note.
       // Implementation note.
       // Implementation note.

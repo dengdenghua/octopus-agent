@@ -5,28 +5,38 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import {
+  desktopWindowChrome,
+  DESKTOP_TITLE_BAR_HEIGHT,
+} from "@/core/workspace/window-chrome";
 
-const ELECTRON_TITLE_BAR_HEIGHT = 36;
-// macOS hiddenInset traffic lights: three 12px buttons with 8px gaps = ~52px wide,
-// positioned at x:12, y:10 by default. Leave 60px to comfortably avoid overlap.
-const MAC_TRAFFIC_LIGHTS_WIDTH_WINDOWED = 60;
-// Fullscreen: traffic lights are hidden until top-of-screen hover — no left padding needed.
-const MAC_TRAFFIC_LIGHTS_WIDTH_FULLSCREEN = 0;
+const ELECTRON_TITLE_BAR_HEIGHT = DESKTOP_TITLE_BAR_HEIGHT;
+// Native macOS controls occupy the left side of the separate title-bar row.
+const MAC_TRAFFIC_LIGHTS_WIDTH_WINDOWED = 80;
 
 const inElectron = (): boolean =>
   typeof window !== "undefined" && !!window.octopus?.isElectron;
 
 const isMac = (): boolean =>
-  typeof navigator !== "undefined" &&
-  (/Mac|iPod|iPhone|iPad/.test(navigator.platform) ||
-    navigator.userAgent.includes("Mac"));
+  inElectron()
+    ? window.octopus?.platform === "darwin"
+    : typeof navigator !== "undefined" &&
+      /Mac/.test(navigator.platform) &&
+      navigator.maxTouchPoints < 2;
 
 const isWindows = (): boolean =>
-  typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
+  inElectron()
+    ? window.octopus?.platform === "win32"
+    : typeof navigator !== "undefined" &&
+      navigator.userAgent.includes("Windows");
 
 function useTitleBarThemeSync() {
   useEffect(() => {
-    if (!isWindows() || !window.octopus) {
+    if (
+      !isWindows() ||
+      !window.octopus ||
+      window.octopus.windowControlsOverlay === false
+    ) {
       return;
     }
     const apply = () => {
@@ -60,12 +70,15 @@ function useTitleBarThemeSync() {
 interface ElectronTitleBarContextValue {
   fullScreen: boolean;
   macTrafficLightsWidth: number;
+  titleBarHeight: number;
+  titleBarInset: string;
+  contentTopInset: string;
+  controlsSafeInset: string;
+  controlsSide: "none" | "left" | "right" | "system";
 }
 
-const ElectronTitleBarContext = createContext<ElectronTitleBarContextValue>({
-  fullScreen: false,
-  macTrafficLightsWidth: 0,
-});
+const ElectronTitleBarContext =
+  createContext<ElectronTitleBarContextValue | null>(null);
 
 export function ElectronTitleBarProvider({
   children,
@@ -96,37 +109,41 @@ export function ElectronTitleBarProvider({
     return off;
   }, []);
 
-  const macTrafficLightsWidth =
-    isMac() && inElectron() && !fullScreen
-      ? MAC_TRAFFIC_LIGHTS_WIDTH_WINDOWED
-      : MAC_TRAFFIC_LIGHTS_WIDTH_FULLSCREEN;
-
   return (
-    <ElectronTitleBarContext.Provider
-      value={{ fullScreen, macTrafficLightsWidth }}
-    >
+    <ElectronTitleBarContext.Provider value={desktopWindowChrome(fullScreen)}>
       {children}
     </ElectronTitleBarContext.Provider>
   );
 }
 
 export function useElectronTitleBar() {
-  return useContext(ElectronTitleBarContext);
+  return useContext(ElectronTitleBarContext) ?? desktopWindowChrome();
 }
 
 export function ElectronTitleBar() {
-  const electron = inElectron();
+  const { titleBarHeight, titleBarInset, controlsSide } = useElectronTitleBar();
   useTitleBarThemeSync();
 
-  if (!electron) return null;
+  if (!titleBarHeight) return null;
 
   return (
     <>
-      {/* Global drag region - covers full width of the window top */}
+      {/* Native controls remain owned by the OS. Reserve one separate row so
+          collapsing a sidebar or opening a dialog cannot overlap them. */}
       <div
         aria-hidden
-        className="pointer-events-none fixed left-0 right-0 top-0 z-[60] h-9"
-        style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+        data-window-titlebar={controlsSide}
+        className={
+          controlsSide === "right"
+            ? "pointer-events-none fixed inset-x-0 top-0 z-[60] bg-transparent"
+            : "pointer-events-none fixed inset-x-0 top-0 z-[60] border-b border-border bg-background"
+        }
+        style={
+          {
+            height: titleBarInset,
+            WebkitAppRegion: "drag",
+          } as React.CSSProperties
+        }
       />
     </>
   );

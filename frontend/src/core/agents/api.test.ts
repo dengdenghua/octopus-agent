@@ -18,26 +18,35 @@ describe("listAgents", () => {
     vi.unstubAllGlobals();
   });
 
-  it("uses the compact roster endpoint and hides system personas", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify([
-          { name: "general", display_name: "Echo" },
-          { name: "admin", display_name: "Admin" },
-        ]),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    );
-    vi.stubGlobal("fetch", fetchMock);
+  it.each(["array", "envelope"])(
+    "preserves Leon in the authorized compact roster (%s)",
+    async (shape) => {
+      const roster = [
+        { name: "general", display_name: "Eve" },
+        { name: "admin", display_name: "Leon" },
+      ];
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            JSON.stringify(shape === "array" ? roster : { agents: roster }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      vi.stubGlobal("fetch", fetchMock);
 
-    const agents = await listAgents();
+      const agents = await listAgents();
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://backend.example.test/api/agents?include_visuals=false",
-      expect.objectContaining({ cache: "no-store" }),
-    );
-    expect(agents.map((agent) => agent.name)).toEqual(["general"]);
-  });
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://backend.example.test/api/agents?include_visuals=false",
+        expect.objectContaining({
+          cache: "no-store",
+          headers: { Authorization: "Bearer test" },
+        }),
+      );
+      expect(agents).toEqual(roster);
+    },
+  );
 
   it("aborts a roster request that stalls for five seconds", async () => {
     vi.useFakeTimers();

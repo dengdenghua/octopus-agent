@@ -104,7 +104,13 @@ def _build_parser() -> argparse.ArgumentParser:
     codep.add_argument(
         "--cwd", type=Path, default=None, help="workspace root (default: current directory)"
     )
-    codep.add_argument("--model", default=None, help="model name for the ReAct planner")
+    codep.add_argument("--model", default=None, help="model for the selected execution engine")
+    codep.add_argument(
+        "--engine",
+        choices=["auto", "opencode", "codex", "octopus"],
+        default="auto",
+        help="execution engine (new sessions default to OpenCode)",
+    )
     codep.add_argument(
         "--permission-mode",
         choices=["default", "acceptEdits", "bypassPermissions", "plan"],
@@ -132,7 +138,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--worktree", action="store_true", help="run with Octopus sandbox isolation metadata"
     )
     codep.add_argument("--list-sessions", action="store_true", help="list saved coding sessions")
-    codep.add_argument("--max-iterations", type=int, default=30)
+    codep.add_argument(
+        "--max-iterations", type=int, default=30, help="native engine iteration limit"
+    )
+    codep.add_argument(
+        "--timeout", type=float, default=900, help="external engine task deadline in seconds"
+    )
     codep.add_argument("--max-tokens", type=int, default=50_000)
     codep.add_argument("--max-usd", type=float, default=0.50)
     codep.add_argument("--mock-response", default=None, help=argparse.SUPPRESS)
@@ -368,7 +379,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="overwrite the config file instead of reusing it",
     )
     quickstartp.add_argument("--host", default="127.0.0.1")
-    quickstartp.add_argument("--port", type=int, default=8000)
+    quickstartp.add_argument("--port", type=int, default=8310)
     quickstartp.add_argument(
         "--serve",
         action="store_true",
@@ -408,7 +419,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     uip = sub.add_parser("ui", help=_("cli.help.ui"))
     uip.add_argument("--host", default="127.0.0.1")
-    uip.add_argument("--port", type=int, default=8000)
+    uip.add_argument("--port", type=int, default=8310)
     uip.add_argument(
         "--uds",
         type=str,
@@ -520,7 +531,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="YAML config (defines planner/journal/intel_sources)",
     )
     servep.add_argument("--host", default="127.0.0.1")
-    servep.add_argument("--port", type=int, default=8000)
+    servep.add_argument("--port", type=int, default=8310)
     servep.add_argument(
         "--uds",
         type=str,

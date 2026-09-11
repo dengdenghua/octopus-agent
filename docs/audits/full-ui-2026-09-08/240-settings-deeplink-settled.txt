@@ -1,0 +1,7 @@
+Browser tab: 4, Title: "新对话 - Echo", URL: "http://localhost:3310/#/workspace/realtime/new".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 83, 87
+~0 AXWebArea 新对话 - Echo, URL: localhost:3310/#/workspace/realtime/new
++						98 container 对话消息
+~							94 button (disabled) 发送
+The focused UI element is 88 text entry area (settable) 描述任务，@ 引用文件，/ 调用技能...

@@ -1,0 +1,23 @@
+{
+  "binary": "D:\\echo agent\\.codex-run\\tools\\opencode\\1.18.29\\opencode.exe",
+  "runs": [
+    {
+      "ready_seconds": 2.983,
+      "healthy": true,
+      "version": "1.18.29",
+      "pid": 13036,
+      "unauthenticated_status": 401,
+      "session_restored": null,
+      "exit_code": 1
+    },
+    {
+      "ready_seconds": 2.638,
+      "healthy": true,
+      "version": "1.18.29",
+      "pid": 20116,
+      "unauthenticated_status": 401,
+      "session_restored": true,
+      "exit_code": 1
+    }
+  ]
+}

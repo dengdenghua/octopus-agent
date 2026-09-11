@@ -1,0 +1,9 @@
+Browser tab: 4, Title: "订阅 - Echo", URL: "http://localhost:3310/#/workspace/intelligence?surface=chat".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 53-59
+~								49 tab (selectable, settable, boolean) 已配置, Value: 0, ID: radix-_r_0_-trigger-configured
+~								50 tab (selected, settable, boolean) 执行历史, Value: 1, ID: radix-_r_0_-trigger-history
++							61 container Description: 执行历史, ID: radix-_r_0_-content-history
++								62 text 暂无执行记录
++								63 text 任务运行后，执行结果会展示在这里。
+The focused UI element is 50 tab (selected, settable, boolean) 执行历史, Value: 1, ID: radix-_r_0_-trigger-history

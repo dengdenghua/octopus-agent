@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import threading
+import pytest
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -12,6 +13,22 @@ from runtime.adapters.integrations.local_auth import router as local_auth_router
 from runtime.adapters.integrations.local_auth.config import LocalAuthConfig
 
 _TEST_BCRYPT_HASH = "bcrypt:$2b$04$mB5pmRT25Iva1xCEXLZNTuwD4q56bnOQkCMBglAl2p5XPHWNTgxci"
+
+
+@pytest.fixture(autouse=True)
+def development_environment(monkeypatch):
+    monkeypatch.setenv("ECHO_ENV", "development")
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "local")
+
+
+@pytest.mark.parametrize("environment,deployment", [("", "local"), ("production", "local"), ("development", "server")])
+def test_local_login_rejected_outside_development(monkeypatch, environment, deployment):
+    monkeypatch.setenv("ECHO_ENV", environment)
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", deployment)
+    client, _ = _client(_Clock(), allow_any_username=True)
+    with client:
+        response = client.post("/api/auth/local/login", json={"username": "guest"})
+        assert response.status_code == 503
 
 
 class _Clock:

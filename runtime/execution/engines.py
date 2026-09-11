@@ -18,6 +18,7 @@ from typing import Generic, Protocol, TypeVar
 class EngineId(StrEnum):
     OCTOPUS = "octopus"
     CODEX = "codex"
+    OPENCODE = "opencode"
 
 
 class ExecutionPhase(StrEnum):
@@ -43,8 +44,18 @@ class ExecutionRoute:
     reason: str
 
     def driver_for(self, phase: ExecutionPhase) -> str:
+        if self.reason == "remote_group_member":
+            return self.driver
+        if phase is ExecutionPhase.PRIMARY and self.driver in {
+            "project_os",
+            "group_fanout",
+            "swarm_mesh",
+        }:
+            return self.driver
         if self.engine is EngineId.CODEX:
             return "codex_app_server"
+        if self.engine is EngineId.OPENCODE:
+            return "opencode_server"
         return self.driver if phase is ExecutionPhase.PRIMARY else "react"
 
 
@@ -58,36 +69,43 @@ def select_execution_route(
     requested_engine: EngineId | None = None,
     coding_task: bool = False,
     coordinated: bool = False,
+    coordinator_engine: EngineId | None = None,
+    default_engine: EngineId | None = None,
 ) -> ExecutionRoute:
     """Resolve host-validated signals without an additional model call.
 
     Project/team orchestration takes precedence over a roster member's engine.
     Individual members retain their own engine binding when dispatched.
     """
-    if requested_engine is EngineId.CODEX and (
-        project_command or group_fanout or topology_id or coordinated
-    ):
-        raise EngineSelectionError(
-            "Codex cannot own project or team orchestration. Select Auto or Octopus; "
-            "individual coding tasks can use Codex.",
-            engine=EngineId.CODEX,
-            reason="orchestration_required",
-        )
+    # These schedulers run on the host regardless of the selected model
+    # engine. External adapters dispatch them before model continuations.
+    orchestration_engine = requested_engine or coordinator_engine or EngineId.OCTOPUS
     if project_command:
-        return ExecutionRoute(EngineId.OCTOPUS, "project_os", "explicit_project")
+        return ExecutionRoute(orchestration_engine, "project_os", "explicit_project")
     if group_fanout:
-        return ExecutionRoute(EngineId.OCTOPUS, "group_fanout", "explicit_group")
+        return ExecutionRoute(orchestration_engine, "group_fanout", "explicit_group")
     if topology_id:
-        return ExecutionRoute(EngineId.OCTOPUS, "swarm_mesh", "explicit_topology")
+        return ExecutionRoute(orchestration_engine, "swarm_mesh", "explicit_topology")
     if coordinated:
+        selected = requested_engine or coordinator_engine
+        if selected is EngineId.OPENCODE:
+            return ExecutionRoute(EngineId.OPENCODE, "opencode_server", "team_coordinator")
+        if selected is EngineId.CODEX:
+            return ExecutionRoute(EngineId.CODEX, "codex_app_server", "team_coordinator")
         return ExecutionRoute(EngineId.OCTOPUS, "react", "team_coordinator")
     if requested_engine is EngineId.CODEX:
         return ExecutionRoute(EngineId.CODEX, "codex_app_server", "explicit_engine")
+    if requested_engine is EngineId.OPENCODE:
+        return ExecutionRoute(EngineId.OPENCODE, "opencode_server", "explicit_engine")
     if requested_engine is EngineId.OCTOPUS:
         driver = "reflection_fast_path" if reflection_fast_path and not coding_task else "react"
         return ExecutionRoute(EngineId.OCTOPUS, driver, "explicit_engine")
     if codex_partner:
         return ExecutionRoute(EngineId.CODEX, "codex_app_server", "role_backend")
+    if default_engine is EngineId.OPENCODE:
+        return ExecutionRoute(EngineId.OPENCODE, "opencode_server", "host_default")
+    if default_engine is EngineId.CODEX:
+        return ExecutionRoute(EngineId.CODEX, "codex_app_server", "host_default")
     if coding_task:
         return ExecutionRoute(EngineId.CODEX, "codex_app_server", "coding_task")
     if reflection_fast_path:

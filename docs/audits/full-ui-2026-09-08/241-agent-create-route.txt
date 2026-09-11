@@ -1,0 +1,48 @@
+Browser tab: 4, Title: "HUB - Echo", URL: "http://localhost:3310/#/workspace/agents/new".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 44, 74-82, 84-86, 88-98
+~0 AXWebArea HUB - Echo, URL: localhost:3310/#/workspace/agents/new
++					74 tab (selected, settable, boolean) Description: Echo, Value: 1
++				75 container
++					76 container
++						77 button 返回
++						78 text 角色蓝图 新建角色
++						79 heading 新建 Agent, Value: 1
++							80 text 新建 Agent
++						81 text 一句话描述目标，Agent Generator 自动补全配置
++						82 text 角色目标 CTRL/⌘ + ENTER
++						83 text entry area (settable) 角色目标
++						84 text AGENT ID
++						85 text field (settable) Agent ID
++						86 button 生成 Agent
++						87 button 返回
++						88 container
++							89 text 能力配置
++							90 heading 一键配置生成, Value: 2
++								91 text 一键配置生成
++							92 text 角色定位
++							93 button 工作流执行者
++							94 button 分析顾问
++							95 button 内容创作
++							96 button 个人助理
++							97 text 使用场景
++							98 button 工作区协作
++							99 button 深度调研
++							100 button 自动化执行
++							101 button 对话陪伴
++							102 text 能力组合
++							103 button 知识库
++							104 button 网页调研
++							105 button 工作区工具
++							106 button 本机操作
++							107 text ARM: knowledge, files Skill: agent-generator, read_knowledge, summarize_docs, cite_sources 权限 : 读取工作区资料 / 写入草案和任务 / 高风险外部动作需确认
++							108 button 生成配置描述
++							109 text 参考模板
++							110 button 团队聊天问答
++							111 button 晨间计划
++							112 button 缺陷分诊
++							113 button 数据分析
++							114 button 执行助理
++							115 button 知识搜索
++							116 text 基于团队资料、群消息和共享文档回答问题。
+The focused UI element is 83 text entry area (settable) 角色目标

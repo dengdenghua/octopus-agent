@@ -1,12 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const frontendPort = process.env.FRONTEND_PORT || "3000";
+const frontendPort = process.env.FRONTEND_PORT || "3310";
 
 /**
  * Playwright E2E configuration for octopus-frontend.
  *
- * Expects the backend (FastAPI) on port 8000 and the frontend (Vite) on
- * port 3000. In CI, start both services before running `npx playwright test`.
+ * Expects the backend (FastAPI) on port 8310 and the frontend (Vite) on
+ * port 3310. In CI, start both services before running `npx playwright test`.
  * Locally, you can let the `webServer` block below start the frontend for you.
  *
  * Usage:
@@ -21,7 +21,7 @@ export default defineConfig({
   // both lanes compare against the same committed PNGs.
   snapshotPathTemplate:
     "{testDir}/__screenshots__/{testFilePath}/{arg}{ext}",
-  // The default suite reuses a developer backend on :8000 and exercises
+  // The default suite reuses a developer backend on :8310 and exercises
   // browser/UI contracts only. Specs that own isolated :13000/:18000 servers
   // belong to playwright.full.config.ts and must never leak into this lane.
   testMatch: [

@@ -1,0 +1,36 @@
+Browser tab: 4, Title: "项目管理 - Echo", URL: "http://localhost:3310/#/workspace/projects".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 43-52
+~					41 container
+~						42 container Notifications alt+T
++						43 container 创建项目, ID: radix-_r_0_
++							44 heading 创建项目, Value: 2, ID: radix-_r_1_
++								45 text 创建项目
++							46 text 工作群、项目能力和右侧工作台会一次创建并自动绑定。
++							47 container
++								48 text 项目名称
++								49 text field (settable) 项目名称, ID: create-project-name
++							50 text 快速选择分类
++							51 button 📈 投资
++								52 text 📈
++								53 text 投资
++							54 button 📝 作业
++								55 text 📝
++								56 text 作业
++							57 button ✍️ 写作
++								58 text ✍️
++								59 text 写作
++							60 button ✈️ 旅行
++								61 text ✈️
++								62 text 旅行
++							63 button (collapsed) 成员与邀请设置, Secondary Actions: Expand
++							64 container 默认协作助手, ID: create-project-members
++								65 heading 默认协作助手, Value: 3, ID: create-project-ai-members
++									66 text 默认协作助手
++								67 text 创建后可随时添加成员或邀请他人。
++								68 text 已选 1 位
++								69 checkbox (disabled) Description: Raven, Value: 1, Help: Raven · desktop_operator · Raven · 现实职业是企业流程自动化专家，通过视觉理解操作 ERP、CRM、表格、浏览器和遗留系统；在 ECHO 世界中是远程接管手 Night Crow。两种身份共享屏幕观察、设备控制与精细操作能力。
++							70 button 取消
++							71 button (disabled) 创建项目
++							72 button 关闭
+The focused UI element is 49 text field (settable) 项目名称, ID: create-project-name

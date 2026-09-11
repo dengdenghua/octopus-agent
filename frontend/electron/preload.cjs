@@ -28,6 +28,7 @@ const EVENT_CHANNELS = [
 const api = {
   isElectron: true,
   platform: process.platform,
+  windowControlsOverlay: process.argv.includes("--octopus-titlebar-overlay"),
   backendBaseURL: ipcRenderer.sendSync("backend:getBaseURLSync"),
 
   browser: {
@@ -96,6 +97,7 @@ const api = {
     moveItemsBatch: invoke("desktop:moveItemsBatch"),
     undoMoves: invoke("desktop:undoMoves"),
     getSystemInfo: invoke("desktop:getSystemInfo"),
+    captureAutomationPreview: invoke("desktop:captureAutomationPreview"),
   },
 
   backend: {

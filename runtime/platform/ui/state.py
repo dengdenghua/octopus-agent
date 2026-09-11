@@ -35,10 +35,13 @@ class AppState:
             self.registry = registry
         else:
             self.registry = SkillRegistry()
-            self.registry.set_state_file(Path("data/skill_state.json"))
             from runtime.execution.suckers.builtins import register_all
 
             register_all(self.registry)
+        from runtime.platform.process.paths import app_paths
+
+        if getattr(self.registry, "_state_file", None) is None:
+            self.registry.set_state_file(app_paths().data_dir / "skill_state.json")
         try:
             from runtime.execution.suckers import load_forged_skills_from_dir
             from runtime.platform.process.paths import app_paths

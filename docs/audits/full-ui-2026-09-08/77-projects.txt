@@ -1,0 +1,18 @@
+Browser tab: 4, Title: "项目管理 - Echo", URL: "http://localhost:3310/#/workspace/projects".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 36-37
++			39 container 项目管理
++				40 AXWebArea 项目管理, URL: localhost:3310/api/workbench-packages/projects/assets/dist/index.html?octopus_host_path=%2Fworkspace%2Fprojects&octopus_host_origin=http%3A%2F%2Flocalhost%3A3310
++					41 container root
++						42 container
++							43 heading 项目管理, Value: 1
++								44 text 项目管理
++							45 text 规划里程碑，跟进风险与团队进度
++							46 button 新建项目
++							47 button 刷新
++							48 heading 把目标变成一个项目, Value: 2
++								49 text 把目标变成一个项目
++							50 text 为项目起个名字，和助手一起拆解里程碑、安排任务并跟进进度。成员和协作设置可以稍后调整。
++							51 button 创建第一个项目
++						52 container Notifications alt+T
+The focused UI element is 0 AXWebArea 项目管理 - Echo, URL: localhost:3310/#/workspace/projects

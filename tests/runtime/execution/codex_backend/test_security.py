@@ -58,6 +58,7 @@ def _prepare(
     thread_id: str = "thread-a",
     task_id: str = "task-a",
     sandbox_mode: str = "workspace-write",
+    approval_reviewer: str = "user",
     selected_app_ids: tuple[str, ...] = (),
     outer_hard_sandbox_active: bool = False,
     host_env: dict[str, str] | None = None,
@@ -69,6 +70,7 @@ def _prepare(
         task_id=task_id,
         workspace=workspace,
         sandbox_mode=sandbox_mode,  # type: ignore[arg-type]
+        approval_reviewer=approval_reviewer,  # type: ignore[arg-type]
         selected_app_ids=selected_app_ids,
         outer_hard_sandbox_active=outer_hard_sandbox_active,
         host_env=host_env,
@@ -312,6 +314,24 @@ def test_generated_workspace_write_config_is_locked_and_self_validating(tmp_path
 
     context.validate_effective_config({"config": config})
     assert APPROVAL_FAILURE_DECISION == "decline"
+
+
+def test_auto_review_is_locked_across_config_thread_turn_and_apps(tmp_path: Path) -> None:
+    manager, workspace, _state_root = _manager(tmp_path)
+    context = _prepare(
+        manager,
+        workspace,
+        approval_reviewer="auto_review",
+        selected_app_ids=("google_drive",),
+    )
+    config = _config(context)
+
+    assert config["approvals_reviewer"] == "auto_review"
+    assert context.thread_start_security_overrides()["approvalsReviewer"] == "auto_review"
+    assert context.turn_start_security_overrides()["approvalsReviewer"] == "auto_review"
+    assert config["apps"]["_default"]["approvals_reviewer"] == "auto_review"  # type: ignore[index]
+    assert config["apps"]["google_drive"]["approvals_reviewer"] == "auto_review"  # type: ignore[index]
+    context.validate_effective_config({"config": config})
 
 
 def test_selected_apps_are_exact_and_keep_high_risk_tools_prompted(tmp_path: Path) -> None:

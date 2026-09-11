@@ -1,12 +1,12 @@
+import { AgentAvatar } from "./agent-avatar";
+export { AgentAvatar } from "./agent-avatar";
 import {
   AlertCircleIcon,
-  CheckIcon,
   CoinsIcon,
   LoaderCircleIcon,
   LogOutIcon,
   RefreshCwIcon,
   SettingsIcon,
-  UsersRoundIcon,
   UserCircleIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -22,15 +22,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useAgents, dedupePersonaAgentsByDisplayName } from "@/core/agents";
-import type { Agent } from "@/core/agents";
+import { useAgents, type Agent } from "@/core/agents";
+import { primaryPersonaRoster } from "@/core/agents/agent-list";
 import {
   DEFAULT_PRIMARY_AGENT_ID,
   isPrimaryPersonaAgentId,
 } from "@/core/agents/persona-policy";
-import { withAgentAvatarVersion } from "@/core/agents/avatar";
-import { LOCAL_AGENT_RANK } from "@/components/workspace/agents/agent-world-data";
-import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
 import { agentHudHref } from "@/core/workspace/sidebar-routing";
@@ -79,76 +76,6 @@ function getAccountDisplayName(user: {
   );
 }
 
-function sortHubDefaultAgents(left: Agent, right: Agent): number {
-  return (
-    (LOCAL_AGENT_RANK.get(left.name) ?? Number.MAX_SAFE_INTEGER) -
-    (LOCAL_AGENT_RANK.get(right.name) ?? Number.MAX_SAFE_INTEGER)
-  );
-}
-
-/** Resolve ``Agent.avatar_url`` to an absolute URL the browser can load. */
-function resolveAvatarUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  if (
-    url.startsWith("http://") ||
-    url.startsWith("https://") ||
-    url.startsWith("data:") ||
-    url.startsWith("blob:")
-  ) {
-    return withAgentAvatarVersion(url);
-  }
-  // API avatars belong to the Python gateway. Imported Vite assets must stay
-  // on the frontend origin (and may be relative in the packaged Electron app).
-  if (url.startsWith("/api/") || url.startsWith("api/")) {
-    const path = url.startsWith("/") ? url : `/${url}`;
-    return withAgentAvatarVersion(`${getBackendBaseURL()}${path}`);
-  }
-  return withAgentAvatarVersion(url);
-}
-
-// ─── Avatar components ───────────────────────────────────────────
-
-export function AgentAvatar({
-  agent,
-  className,
-}: {
-  agent: Agent | undefined;
-  className?: string;
-}) {
-  const avatar = resolveAvatarUrl(agent?.avatar_url);
-  const [failedAvatar, setFailedAvatar] = useState<string | null>(null);
-  const showAvatar = Boolean(avatar && failedAvatar !== avatar);
-  const emoji = agent?.icon?.trim() || "";
-  const initial = (agent?.display_name || agent?.name || "?")
-    .trim()
-    .charAt(0)
-    .toUpperCase();
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border-default bg-muted text-sm leading-none",
-        !emoji && !avatar && "font-semibold text-muted-foreground text-xs",
-        className,
-      )}
-    >
-      {showAvatar ? (
-        <img
-          src={avatar ?? undefined}
-          alt=""
-          className="size-full object-cover"
-          loading="lazy"
-          onError={() => setFailedAvatar(avatar)}
-        />
-      ) : emoji ? (
-        emoji
-      ) : (
-        initial
-      )}
-    </span>
-  );
-}
-
 // ─── AgentFooter ─────────────────────────────────────────────────
 
 export function AgentFooter() {
@@ -166,6 +93,7 @@ export function AgentFooter() {
   const { t } = useI18n();
   const credits = octLink.data?.credits?.surplusCredits;
   const [creditsOpen, setCreditsOpen] = useState(false);
+  const [agentMenuOpen, setAgentMenuOpen] = useState(false);
   const [activeName, setActiveName] = useState<string | null>(() =>
     readActiveAgentName(),
   );
@@ -202,16 +130,7 @@ export function AgentFooter() {
   const agentLibrarySurface = surfaceParam === "company" ? "company" : "chat";
   const agentLibraryHref = (tab?: string, agentName?: string) =>
     agentHudHref({ surface: agentLibrarySurface, tab, agentName });
-  const personaAgents = useMemo(() => {
-    // Only the fixed White Ghost squad owns personal conversation identities.
-    // Installed experts and digital twins are selected in
-    // the task's member control and join that task on demand.
-    return dedupePersonaAgentsByDisplayName(
-      agents
-        .filter((agent) => isPrimaryPersonaAgentId(agent.name))
-        .sort(sortHubDefaultAgents),
-    );
-  }, [agents]);
+  const personaAgents = useMemo(() => primaryPersonaRoster(agents), [agents]);
   // 解析优先级与 page.tsx activeAgentId 保持一致：
   // 1) route lock（如 /workspace/agents/:id/chats 锁定到该 agent）
   // 2) URL ?agent= 参数 — 但 "octopus" 是全局助理入口，位于角色选择器
@@ -253,27 +172,52 @@ export function AgentFooter() {
     _navigate(taskWorkspaceRoute({ agentId: name }));
   };
 
-  // Per-row HUD shortcut. Rendered inside a DropdownMenuItem, so it has to stop
-  // both the pointer event and Radix's own `select` from bubbling — otherwise
-  // clicking it would also fire the row's `onSelect` and switch agents.
-  const renderHudButton = (agentName: string) => (
+  // Keep pointer-up inside the profile action too: otherwise Radix synthesizes
+  // a click on the parent item after its pointer-down was stopped.
+  const renderHudButton = (agent: Agent) => (
     <button
       type="button"
-      title={t.sidebar.openAgentHud}
-      aria-label={t.sidebar.openAgentHudFor(agentName)}
+      title={t.sidebar.openAgentHudFor(agent.display_name || agent.name)}
+      aria-label={t.sidebar.openAgentHudFor(agent.display_name || agent.name)}
       onPointerDown={(event) => event.stopPropagation()}
+      onPointerUp={(event) => event.stopPropagation()}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+        if (event.key === "ArrowLeft") {
+          event.preventDefault();
+          event.stopPropagation();
+          event.currentTarget
+            .closest<HTMLElement>('[role="menuitem"]')
+            ?.focus();
+        }
+      }}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        _navigate(agentLibraryHref(undefined, agentName));
+        setAgentMenuOpen(false);
+        _navigate(agentLibraryHref(undefined, agent.name));
       }}
       className={cn(
-        "flex size-6 shrink-0 items-center justify-center rounded-md",
-        "text-muted-foreground/50 transition-colors",
-        "hover:bg-muted hover:text-foreground",
+        "flex min-h-[36px] min-w-[56px] shrink-0 cursor-pointer items-center justify-center gap-1 rounded-md px-1 text-xs font-normal text-muted-foreground/80 transition-colors",
+        "hover:bg-foreground/[0.05] hover:text-foreground",
+        "focus-visible:bg-foreground/[0.05] focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 [@media(pointer:coarse)]:min-h-[44px]",
       )}
     >
-      <UsersRoundIcon className="size-3.5" />
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="size-3.5"
+      >
+        <rect x="2" y="3" width="20" height="18" rx="2.5" />
+        <circle cx="16.5" cy="8" r="1.5" />
+        <path d="M14 12a2.5 2.5 0 0 1 5 0M6 10h3M6 13h4M6 16h7" />
+      </svg>
+      <span>{t.sidebar.agentProfileAction}</span>
     </button>
   );
 
@@ -282,30 +226,37 @@ export function AgentFooter() {
     return (
       <DropdownMenuItem
         key={a.name}
+        aria-current={isActive ? "true" : undefined}
         onSelect={() => selectAgent(a.name)}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowRight") {
+            event.preventDefault();
+            event.currentTarget
+              .querySelector<HTMLButtonElement>("button")
+              ?.focus();
+          }
+        }}
         className={cn(
-          "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs",
-          "opacity-85 transition-colors focus:bg-muted/60 focus:text-foreground focus:opacity-100",
-          isActive && "bg-muted/35 opacity-100",
+          "grid min-h-[44px] grid-cols-[28px_minmax(0,1fr)_56px] items-center gap-2 rounded-lg px-2 py-1 text-xs",
+          "transition-colors focus:bg-foreground/[0.035] focus:text-foreground",
+          isActive && "bg-foreground/[0.065] focus:bg-foreground/[0.08]",
         )}
       >
-        <AgentAvatar agent={a} className="size-8 rounded-lg text-xs" />
+        <AgentAvatar agent={a} className="size-[28px] rounded-md text-xs" />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="truncate font-medium leading-none">
             {a.display_name || a.name}
+            {isActive && (
+              <span className="sr-only"> · {t.sidebar.currentAgent}</span>
+            )}
           </span>
           <span className="truncate text-xs font-normal leading-tight text-muted-foreground">
-            {isActive
-              ? t.sidebar.currentAgent
-              : a.description || t.sidebar.soloChat}
+            {t.sidebar.agentRoleSummary[a.name] ||
+              a.description ||
+              t.sidebar.soloChat}
           </span>
         </span>
-        {renderHudButton(a.name)}
-        {isActive && (
-          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <CheckIcon className="size-3" />
-          </span>
-        )}
+        {renderHudButton(a)}
       </DropdownMenuItem>
     );
   };
@@ -334,7 +285,7 @@ export function AgentFooter() {
 
   return (
     <div className="flex items-center gap-1">
-      <DropdownMenu>
+      <DropdownMenu open={agentMenuOpen} onOpenChange={setAgentMenuOpen}>
         <DropdownMenuTrigger asChild disabled={Boolean(lock)}>
           <button
             type="button"
@@ -350,7 +301,7 @@ export function AgentFooter() {
             className={cn(
               "group/agent flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left",
               "opacity-85 transition-[opacity,background-color] duration-fast",
-              "hover:opacity-100 hover:bg-muted/50 outline-none",
+              "hover:opacity-100 hover:bg-muted/50 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45",
               "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0",
             )}
           >
@@ -415,9 +366,9 @@ export function AgentFooter() {
           side="top"
           align="start"
           sideOffset={6}
-          className="max-h-[calc(100vh-1rem)] w-72 overflow-y-auto overscroll-contain rounded-lg border-border-default p-1.5 shadow-xl shadow-black/10"
+          className="max-h-[calc(100vh-1rem)] w-[288px] max-w-[calc(100vw-1rem)] overflow-y-auto overscroll-contain rounded-lg border-border-default p-1.5 shadow-[var(--shadow-floating)]"
         >
-          <DropdownMenuLabel className="px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
+          <DropdownMenuLabel className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
             {t.sidebar.switchAgentMenuTitle}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
@@ -448,35 +399,26 @@ export function AgentFooter() {
             </div>
           )}
           <DropdownMenuSeparator />
-          {displayAgent ? (
-            <>
-              <DropdownMenuItem
-                onSelect={() => _navigate(agentLibraryHref())}
-                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-muted-foreground focus:bg-muted/60 focus:text-foreground"
-              >
-                <UsersRoundIcon className="size-4 shrink-0" />
-                <span>{t.sidebar.openAgentHud}</span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-            </>
-          ) : null}
           <DropdownMenuItem
             onSelect={() => setCreditsOpen(true)}
-            className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs focus:bg-muted/60"
+            className="flex min-h-8 items-center gap-2 rounded-lg px-2 py-1.5 text-xs focus:bg-foreground/[0.035]"
           >
             <UserCircleIcon className="size-4 shrink-0 opacity-70" />
             <span className="min-w-0 flex-1 truncate text-muted-foreground">
               {accountName}
             </span>
-            <CoinsIcon className="size-3.5 shrink-0 opacity-70" />
-            <span className="shrink-0 text-xs font-mono text-foreground/80">
-              {typeof credits === "number" ? credits.toLocaleString() : "—"}
-            </span>
+            {typeof credits === "number" && Number.isFinite(credits) && (
+              <>
+                <CoinsIcon className="size-3.5 shrink-0 opacity-70" />
+                <span className="shrink-0 text-xs tabular-nums text-foreground/80">
+                  {credits.toLocaleString()}
+                </span>
+              </>
+            )}
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
           <DropdownMenuItem
             onSelect={() => void logout()}
-            className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs focus:bg-muted/60"
+            className="flex min-h-8 items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-muted-foreground focus:bg-foreground/[0.035] focus:text-foreground"
           >
             <LogOutIcon className="size-4 shrink-0 opacity-70" />
             <span>{t.sidebar.logout}</span>

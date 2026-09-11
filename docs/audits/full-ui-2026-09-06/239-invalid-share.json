@@ -1,0 +1,1 @@
+"- main:\n  - alert:\n    - heading \"无法打开分享内容\" [level=1]\n    - paragraph: shared task not found, expired, or revoked\n    - button \"重新加载\":\n      - text: 重新加载\n- region \"Notifications alt+T\""

@@ -18,6 +18,8 @@ export interface GroupHumanInviteButtonProps extends Omit<
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   iconOnly?: boolean;
+  /** Use a persistent parent dialog when this trigger lives in a popover. */
+  renderDialog?: boolean;
 }
 
 /** A reusable, non-floating trigger for headers and project sidebars. */
@@ -29,6 +31,7 @@ export function GroupHumanInviteButton({
   open: controlledOpen,
   onOpenChange,
   iconOnly = false,
+  renderDialog = true,
   disabled,
   variant = "ghost",
   size = "sm",
@@ -37,6 +40,7 @@ export function GroupHumanInviteButton({
   const { t } = useI18n();
   const [internalOpen, setInternalOpen] = useState(false);
   const [resolving, setResolving] = useState(false);
+  const [prepareError, setPrepareError] = useState<string | null>(null);
   const [resolvedRoomId, setResolvedRoomId] = useState(roomId?.trim() ?? "");
 
   useEffect(() => {
@@ -57,9 +61,21 @@ export function GroupHumanInviteButton({
     if (!onEnsureRoom) return;
 
     setResolving(true);
+    setPrepareError(null);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
-      const ensuredRoomId = (await onEnsureRoom())?.trim() ?? "";
+      const prepared = await Promise.race([
+        onEnsureRoom(),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(
+            () => reject(new Error("邀请准备超时，请重试。")),
+            15_000,
+          );
+        }),
+      ]);
+      const ensuredRoomId = prepared?.trim() ?? "";
       if (!ensuredRoomId) {
+        setPrepareError(t.collab.humanInvite.roomRequired);
         toast.error(t.collab.humanInvite.roomRequired);
         return;
       }
@@ -67,12 +83,18 @@ export function GroupHumanInviteButton({
       onRoomResolved?.(ensuredRoomId);
       setOpen(true);
     } catch (error) {
+      setPrepareError(
+        error instanceof Error
+          ? error.message
+          : t.collab.humanInvite.roomRequired,
+      );
       toast.error(
         error instanceof Error
           ? error.message
           : t.collab.humanInvite.roomRequired,
       );
     } finally {
+      clearTimeout(timeout);
       setResolving(false);
     }
   };
@@ -97,8 +119,13 @@ export function GroupHumanInviteButton({
           {t.collab.humanInvite.trigger}
         </span>
       </Button>
+      {prepareError && (
+        <p role="alert" className="px-2 text-xs text-destructive">
+          {prepareError}
+        </p>
+      )}
 
-      {resolvedRoomId ? (
+      {renderDialog && resolvedRoomId ? (
         <InviteDialog
           open={open}
           onOpenChange={setOpen}

@@ -270,7 +270,7 @@ export function addUserComment(
 
 /** 合并默认评论 + 用户评论，按时间倒序（最新在前）。 */
 export function mergeComments(post: CommunityPost): CommunityComment[] {
-  const defaults = post.comments ?? defaultComments(post.id);
+  const defaults = post.comments ?? [];
   const users = readUserComments()[post.id] ?? [];
   return [...defaults, ...users].sort((a, b) => b.createdAt - a.createdAt);
 }
@@ -1000,7 +1000,7 @@ const REGISTRY: CommunityPost[] = [
 ];
 
 /** 内置种子：无远端/缓存时使用全量帖子库（支持分页与分类）。 */
-const SEED: CommunityPost[] = [...REGISTRY];
+// REGISTRY is available to explicit examples; the live feed never seeds activity.
 
 function feedFromDto(payload: unknown): CommunityPost[] {
   const dto = payload as CommunityFeedDto;
@@ -1070,7 +1070,7 @@ function buildPool(base: CommunityPost[]): CommunityPost[] {
 
 /**
  * 拉取社区 feed，支持分类 / 排序 / 分页。
- * 优先远端 `/square/feed`（可选），失败回退缓存，再回退内置种子。
+ * 优先远端 `/square/feed`（可选），失败回退缓存，无缓存时显示空列表。
  */
 export async function fetchCommunityFeed(
   topic = "recommend",
@@ -1088,6 +1088,7 @@ export async function fetchCommunityFeed(
   }
 
   let base: CommunityPost[] = [];
+  let remoteLoaded = false;
   if (remoteBase.trim()) {
     try {
       const params = [`sort=${sort}`];
@@ -1097,17 +1098,18 @@ export async function fetchCommunityFeed(
       );
       if (res.ok) {
         const posts = feedFromDto(await res.json());
+        remoteLoaded = true;
+        writeCache(posts);
         if (posts.length > 0) {
-          writeCache(posts);
           base = posts;
         }
       }
     } catch {
-      /* 网络失败 → 回退缓存/种子 */
+      /* 网络失败 → 回退已缓存内容 */
     }
   }
 
-  if (base.length === 0) base = cached.length > 0 ? cached : SEED;
+  if (base.length === 0 && !remoteLoaded) base = cached;
 
   const pool = buildPool(base);
   const filtered = filterByTopic(pool, topic);

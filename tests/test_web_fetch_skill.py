@@ -149,6 +149,46 @@ class TestWebFetchValidation:
 
 @pytest.mark.skipif(not HTTPX_AVAILABLE, reason="httpx not installed")
 class TestWebFetchHappyPath:
+    @pytest.mark.parametrize("engine", ["opencode", "codex"])
+    def test_external_engine_gets_bounded_source_without_auxiliary_model(self, tmp_path, engine):
+        from runtime.execution.request import (
+            ExecutionRequest,
+            ExecutionResources,
+            ExecutionTask,
+            execution_request_scope,
+        )
+        from runtime.platform.process.scope import ExecutionScope
+
+        task = ExecutionTask(
+            task_id="task",
+            thread_id="thread",
+            actor_id=None,
+            tenant_id=None,
+            goal="Read rate limits",
+            execution_engine=engine,
+            permissions=ExecutionScope(
+                "code", "code", (tmp_path,), (tmp_path,), shell_policy="ask"
+            ),
+            resources=ExecutionResources(1000, 0.2, None),
+        )
+        stub = _StubLLMCaller(raise_exc=AssertionError("no extra model call"))
+        client = _MockClient(get_response=_MockResponse(text=_SAMPLE_HTML))
+        with execution_request_scope(ExecutionRequest(task, task.goal)):
+            result = _web_fetch(
+                url="https://example.com/limits",
+                prompt="What is the rate limit?",
+                max_chars=80,
+                client=client,
+                _llm_caller=stub,
+                _trafilatura_override="Rate limit: 1000 requests per minute. " * 10,
+            )
+        assert result["ok"] is True
+        assert "1000 requests" in result["content"]
+        assert len(result["content"]) == 80
+        assert result["model"] is None
+        assert result["answer_pending"] is True
+        assert stub.last_user is None
+
     def test_returns_just_the_answer(self) -> None:
         client = _MockClient(
             get_response=_MockResponse(

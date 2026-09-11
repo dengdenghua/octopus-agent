@@ -687,10 +687,17 @@ def create_agent_world_router(
     @router.get("/api/agent-market/cloud/skills")
     def api_agent_market_cloud_skills(
         search: str | None = None,
+        source: str | None = None,
         offset: int = Query(default=0, ge=0),
         limit: int = Query(default=300, ge=1, le=500),
         refresh: int = Query(default=0, ge=0, le=1),
     ) -> dict[str, Any]:
+        if source == "external":
+            from runtime.platform.plugins.external_skills import list_external_skills
+
+            out = list_external_skills((search or "")[:200])
+            out["items"] = out["items"][offset:offset + limit]
+            return out
         cat = _cloud_catalog("skills")
         if refresh:
             cat.refresh()
@@ -701,13 +708,35 @@ def create_agent_world_router(
     # ── 云商城已安装状态(本地已落地哪些技能/插件) ─────────────
     @router.get("/api/agent-market/cloud/installed")
     def api_agent_market_cloud_installed() -> dict[str, Any]:
+        from runtime.platform.assets.skill_inventory import public_skill_inventory
+
         cat = _cloud_catalog("skills")
         plugins = _cloud_catalog("plugins")
+        local_skills = public_skill_inventory()
+        from runtime.platform.assets.skill_lifecycle import skill_management_states
+        from runtime.platform.assets.skill_users import build_skill_users
         return {
-            "skills": cat.installed_skills(),
+            "skills": sorted(set(cat.installed_skills()) | {item["name"] for item in local_skills}),
+            "local_skills": local_skills,
+            "skill_states": skill_management_states(skill_registry),
+            "skill_users": build_skill_users(_list_local_agents(), skill_registry),
             "plugins": plugins.installed_plugins(),
             "plugin_states": plugins.plugin_statuses(),
         }
+
+    @router.post("/api/agent-market/cloud/skills/{name}/manage", dependencies=[Depends(_admin_dep)])
+    def api_agent_market_skill_manage(name: str, body: dict[str, Any]) -> dict[str, Any]:
+        from runtime.platform.assets.skill_lifecycle import manage_skill
+        from runtime.execution.suckers.market_skills import immutable_prompt_catalog_required
+
+        if immutable_prompt_catalog_required():
+            raise HTTPException(403, "skill management is restricted in shared/commercial deployments")
+        try:
+            return manage_skill(name, str(body.get("action", "")), skill_registry)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     # ── 云商城安装(下载内容包 → 解包落地) ─────────────────────
     @router.post(
@@ -725,7 +754,16 @@ def create_agent_world_router(
             )
         cat = _cloud_catalog("skills")
         try:
-            return cat.install_skill(name)
+            if name.startswith("external-"):
+                from runtime.platform.plugins.external_skills import install_external_skill
+
+                result = install_external_skill(name)
+            else:
+                result = cat.install_skill(name)
+            result["registered_now"] = _register_public_prompt_skills(
+                skill_registry, app_paths().data_dir / "skills"
+            )
+            return result
         except KeyError as exc:
             raise HTTPException(404, str(exc)) from exc
         except ValueError as exc:
@@ -754,7 +792,12 @@ def create_agent_world_router(
             await asyncio.sleep(0)
             yield line({"phase": "installing", "progress": 45, "message": "正在下载并校验内容包"})
             try:
-                result = await asyncio.to_thread(_cloud_catalog("skills").install_skill, name)
+                if name.startswith("external-"):
+                    from runtime.platform.plugins.external_skills import install_external_skill
+
+                    result = await asyncio.to_thread(install_external_skill, name)
+                else:
+                    result = await asyncio.to_thread(_cloud_catalog("skills").install_skill, name)
             except (KeyError, ValueError) as exc:
                 yield line({"phase": "failed", "progress": 100, "message": str(exc)})
                 return
@@ -762,6 +805,9 @@ def create_agent_world_router(
                 yield line({"phase": "failed", "progress": 100, "message": str(exc)})
                 return
             yield line({"phase": "indexing", "progress": 85, "message": "正在写入本地技能目录"})
+            result["registered_now"] = await asyncio.to_thread(
+                _register_public_prompt_skills, skill_registry, app_paths().data_dir / "skills"
+            )
             await asyncio.sleep(0)
             yield line(
                 {

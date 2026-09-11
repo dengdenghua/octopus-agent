@@ -555,7 +555,7 @@ describe("<ChatInputBox /> cowork materials", () => {
 
     expect(screen.getByTestId("chat-status-strip")).toBeInTheDocument();
     expect(screen.getByTestId("permission-mode-trigger")).toHaveAccessibleName(
-      "Permissions: Default",
+      "Permissions: Ask for approval",
     );
     expect(
       screen.getByRole("button", { name: "Insert into input" }),
@@ -901,6 +901,12 @@ describe("<ChatInputBox /> cowork materials", () => {
 
     fireEvent.keyDown(screen.getByTestId("chat-composer-input"), {
       key: "Backspace",
+      isComposing: true,
+    });
+    expect(screen.getByTestId("composer-command-prefix")).toBeInTheDocument();
+
+    fireEvent.keyDown(screen.getByTestId("chat-composer-input"), {
+      key: "Backspace",
     });
 
     expect(
@@ -1116,7 +1122,7 @@ describe("<ChatInputBox /> cowork materials", () => {
     expect(onModeChange).toHaveBeenCalledWith("deep");
   });
 
-  it("can expose Inspiration as a right-side toggle without an Agent menu", async () => {
+  it("keeps permissions separate from conversation mode", async () => {
     const onModeChange = vi.fn();
     renderWithProviders(
       <ChatInputBox
@@ -1143,22 +1149,20 @@ describe("<ChatInputBox /> cowork materials", () => {
     expect(screen.queryByText("Add Research Material")).toBeNull();
     expect(screen.queryByTestId("reasoning-mode-trigger")).toBeNull();
 
-    const inspiration = screen.getByRole("button", {
-      name: "Discuss ideas without running tools",
+    expect(screen.queryByTestId("chat-mode-toggle")).toBeNull();
+    const executionMode = screen.getByRole("button", {
+      name: /Ask for approval/,
     });
-    expect(inspiration).toHaveAttribute("aria-pressed", "false");
-    expect(inspiration).toHaveAttribute(
-      "title",
-      "Discuss ideas without running tools",
-    );
-    expect(inspiration).not.toHaveTextContent("Inspiration");
+    fireEvent.pointerDown(executionMode, { button: 0, ctrlKey: false });
+    fireEvent.click(executionMode);
 
-    fireEvent.click(inspiration);
-
-    expect(onModeChange).toHaveBeenCalledWith("chat", "NAS market research");
+    await screen.findByTestId("permission-mode-option-default");
+    expect(screen.queryByTestId("execution-mode-option-discussion")).toBeNull();
+    expect(screen.getAllByRole("menuitemradio")).toHaveLength(3);
+    expect(onModeChange).not.toHaveBeenCalled();
   });
 
-  it("marks the Inspiration toggle active in discussion-only mode", () => {
+  it("shows permissions independently of a legacy chat mode", async () => {
     renderWithProviders(
       <ChatInputBox
         mode="chat"
@@ -1167,20 +1171,27 @@ describe("<ChatInputBox /> cowork materials", () => {
         onModeChange={vi.fn()}
       />,
     );
-
+    const trigger = screen.getByTestId("permission-mode-trigger");
+    expect(trigger).toHaveTextContent("Ask for approval");
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    fireEvent.click(trigger);
     expect(
-      screen.getByRole("button", {
-        name: "Discuss ideas without running tools",
-      }),
-    ).toHaveAttribute("aria-pressed", "true");
+      await screen.findByTestId("permission-mode-option-default"),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByTestId("execution-mode-option-discussion")).toBeNull();
   });
 
   it("lets users select the reasoning effort", async () => {
+    modelCatalog.current = modelCatalog.current.map((model) => ({
+      ...model,
+      reasoning_efforts: ["medium", "high", "xhigh"],
+    }));
     const onReasoningEffortChange = vi.fn();
     renderWithProviders(
       <ChatInputBox
         mode="react"
         threadId="thread-1"
+        modelName="test-model"
         reasoningEffort="medium"
         onReasoningEffortChange={onReasoningEffortChange}
       />,
@@ -1662,6 +1673,81 @@ describe("<ChatInputBox /> connection recovery", () => {
 });
 
 describe("<ChatInputBox /> thread-scoped composer state", () => {
+  it("restores an unsent new-task draft after its provisional ID changes", () => {
+    const first = renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="provisional-a"
+        draftStorageKey="__new__"
+      />,
+    );
+    fireEvent.change(textarea(), { target: { value: "new task draft" } });
+    first.unmount();
+    const second = renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="provisional-b"
+        draftStorageKey="__new__"
+      />,
+    );
+    expect(textarea()).toHaveValue("new task draft");
+    second.rerender(
+      <ChatInputBox mode="react" threadId="existing-conversation" />,
+    );
+    expect(textarea()).toHaveValue("");
+  });
+
+  it("flushes the final keystrokes on pagehide and unmount", () => {
+    const { unmount } = renderWithProviders(
+      <ChatInputBox mode="react" threadId="draft-fast-exit" />,
+    );
+    fireEvent.change(textarea(), { target: { value: "before hiding" } });
+    fireEvent(window, new Event("pagehide"));
+    expect(
+      localStorage.getItem("octopus:composer-draft:draft-fast-exit"),
+    ).toContain("before hiding");
+    fireEvent.change(textarea(), { target: { value: "before leaving" } });
+    unmount();
+    renderWithProviders(
+      <ChatInputBox mode="react" threadId="draft-fast-exit" />,
+    );
+    expect(textarea()).toHaveValue("before leaving");
+  });
+
+  it("does not resurrect a sent draft on immediate unmount", () => {
+    const onSubmit = vi.fn();
+    const { unmount } = renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="draft-sent-exit"
+        onSubmit={onSubmit}
+      />,
+    );
+    fireEvent.change(textarea(), { target: { value: "send once" } });
+    fireEvent(window, new Event("pagehide"));
+    fireEvent.keyDown(textarea(), { key: "Enter" });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    unmount();
+    renderWithProviders(
+      <ChatInputBox mode="react" threadId="draft-sent-exit" />,
+    );
+    expect(textarea()).toHaveValue("");
+  });
+
+  it("leaves IME confirmation to the input method", () => {
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <ChatInputBox mode="react" threadId="ime-confirm" onSubmit={onSubmit} />,
+    );
+    fireEvent.change(textarea(), { target: { value: "中文" } });
+    fireEvent.keyDown(textarea(), { key: "Enter", isComposing: true });
+    fireEvent.keyDown(textarea(), { key: "Enter", keyCode: 229 });
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(textarea()).toHaveValue("中文");
+    fireEvent.keyDown(textarea(), { key: "Enter" });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it("flushes the previous draft before a sub-300ms thread switch", async () => {
     const { rerender } = renderWithProviders(
       <ChatInputBox mode="react" threadId="draft-thread-a" />,

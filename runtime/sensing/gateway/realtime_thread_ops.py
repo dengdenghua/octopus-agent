@@ -28,6 +28,15 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 
+def _engine_owns_summary(turns: list[Any]) -> bool:
+    """Use the last actual execution receipt, never a UI engine preference."""
+    for turn in reversed(turns):
+        engine = getattr(turn, "execution_engine", None)
+        if engine:
+            return engine in {"codex", "opencode"}
+    return False
+
+
 async def _maybe_compact(
     runtime: CerebrumRuntime,
     thread_id: str,
@@ -74,7 +83,11 @@ async def _maybe_compact_locked(
         # Bind LLM summariser at call time so a freshly-swapped
         # router is picked up without rebuilding the runtime.
         effective = policy
-        if runtime._summary_router is not None and policy.custom_summariser is None:
+        if (
+            runtime._summary_router is not None
+            and policy.custom_summariser is None
+            and not _engine_owns_summary(turns)
+        ):
             from runtime.memory.threads.compaction import _default_summariser
             from runtime.memory.threads.llm_summariser import (
                 make_llm_summariser,
@@ -164,7 +177,11 @@ async def compact_thread(
             }
 
         effective = replace(policy, trigger_at=policy.keep_recent + 1)
-        if runtime._summary_router is not None and effective.custom_summariser is None:
+        if (
+            runtime._summary_router is not None
+            and effective.custom_summariser is None
+            and not _engine_owns_summary(turns)
+        ):
             from runtime.memory.threads.compaction import _default_summariser
             from runtime.memory.threads.llm_summariser import make_llm_summariser
 
@@ -218,6 +235,19 @@ async def _handle_hunk_decide(
     params: dict[str, Any],
     emitter: EventEmitter,
 ) -> dict[str, Any]:
+    thread_id = params.get("threadId")
+    if isinstance(thread_id, str):
+        thread_id = runtime._require_thread_id(thread_id)
+        async with runtime._compaction_locks.hold(thread_id):
+            return await _handle_hunk_decide_locked(runtime, params, emitter)
+    return await _handle_hunk_decide_locked(runtime, params, emitter)
+
+
+async def _handle_hunk_decide_locked(
+    runtime: CerebrumRuntime,
+    params: dict[str, Any],
+    emitter: EventEmitter,
+) -> dict[str, Any]:
     """Reject (revert) or accept a single hunk after a FileChange item.
 
     ``rejected`` reverse-applies just that hunk's diff against the
@@ -256,12 +286,105 @@ async def _handle_hunk_decide(
 
         file_path = Path(path_value)
     reverted_bytes = 0
+    if decision == "accepted" and thread_id is not None:
+        from runtime.protocol.items import FileChangeItem
+
+        log = runtime._log_for(thread_id)
+        recorded = next(
+            (
+                item
+                for turn in log.replay()
+                if turn.id == turn_id
+                for item in turn.items
+                if item.id == item_id and isinstance(item, FileChangeItem)
+            ),
+            None,
+        )
+        hunk = (
+            next(
+                (
+                    hunk
+                    for change in recorded.changes
+                    if runtime._resolve_hunk_path(thread_id, change.path) == file_path
+                    for hunk in change.hunks
+                    if hunk.id == hunk_id
+                ),
+                None,
+            )
+            if recorded
+            else None
+        )
+        if hunk is None:
+            raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "recorded hunk is required")
+        if hunk.decision == "rejected":
+            raise _RpcError(
+                JsonRpcErrorCode.INVALID_PARAMS,
+                "a reverted hunk cannot be accepted without a new edit",
+            )
+        hunk.decision = "accepted"
+        log.item_completed(thread_id, turn_id, recorded, durable=True)
     if decision == "rejected":
         if not isinstance(diff_text, str) or not diff_text.strip():
             raise _RpcError(
                 JsonRpcErrorCode.INVALID_PARAMS,
                 "diff is required to reject a hunk",
             )
+        from runtime.protocol.items import FileChangeItem, diff_is_truncated
+
+        log = runtime._log_for(thread_id)
+        captured = log.snapshot()
+        if any(
+            event.event == "thread_started" and turn_id in event.payload.get("forkedTurnIds", [])
+            for _, event in captured.events
+        ):
+            raise _RpcError(
+                JsonRpcErrorCode.INVALID_PARAMS,
+                "inherited changes must be reverted in the original thread",
+            )
+        recorded = next(
+            (
+                item
+                for turn in captured.replay()
+                if turn.id == turn_id
+                for item in turn.items
+                if item.id == item_id and isinstance(item, FileChangeItem)
+            ),
+            None,
+        )
+        change = (
+            next(
+                (
+                    change
+                    for change in recorded.changes
+                    if runtime._resolve_hunk_path(thread_id, change.path) == file_path
+                ),
+                None,
+            )
+            if recorded is not None
+            else None
+        )
+        hunk = next((h for h in change.hunks if h.id == hunk_id), None) if change else None
+        if change is not None and change.hunks and hunk is None:
+            raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, "recorded hunk is required")
+        if change is None or change.diff_truncated or diff_is_truncated(change.diff):
+            raise _RpcError(
+                JsonRpcErrorCode.INVALID_PARAMS,
+                "verified complete file-change evidence is required",
+            )
+        expected = change.diff
+        if hunk is not None:
+            # File headers do not affect application, but the hunk coordinates
+            # and body must come from recorded execution, not client input.
+            expected = f"@@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@\n{hunk.body}"
+            supplied = diff_text[diff_text.find("@@ ") :] if "@@ " in diff_text else ""
+        else:
+            supplied = diff_text
+        if not expected or supplied.strip() != expected.strip():
+            raise _RpcError(
+                JsonRpcErrorCode.INVALID_PARAMS, "diff does not match recorded execution"
+            )
+        if hunk is not None and hunk.decision == "rejected":
+            return {"decision": "rejected", "path": str(file_path), "bytes": 0}
         from runtime.sensing.gateway.fs_router import (
             _DiffApplyConflict,
             _DiffFormatError,
@@ -269,11 +392,7 @@ async def _handle_hunk_decide(
         )
 
         try:
-            current = (
-                file_path.read_text(encoding="utf-8", errors="replace")
-                if file_path.exists()
-                else ""
-            )
+            current = file_path.read_text(encoding="utf-8") if file_path.exists() else ""
             reverted = _reverse_unified_diff(current, diff_text)
         except _DiffFormatError as exc:
             raise _RpcError(JsonRpcErrorCode.INVALID_PARAMS, str(exc)) from exc
@@ -290,6 +409,9 @@ async def _handle_hunk_decide(
             reverted_bytes = len(reverted.encode("utf-8"))
         except OSError as exc:
             raise _RpcError(JsonRpcErrorCode.INTERNAL_ERROR, f"write failed: {exc}") from exc
+        if hunk is not None:
+            hunk.decision = "rejected"
+            log.item_completed(thread_id, turn_id, recorded, durable=True)
 
     await emitter.notify(
         ServerMethod.ITEM_FILE_CHANGE_HUNK_DECISION,

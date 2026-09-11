@@ -1,0 +1,3 @@
+Browser tab: 4, Title: "HUB - Echo", URL: "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=remote".
+There has been no change in the accessibility tree.
+The focused UI element is 92 tab (selected, settable, boolean) 远程 Agent, Value: 1

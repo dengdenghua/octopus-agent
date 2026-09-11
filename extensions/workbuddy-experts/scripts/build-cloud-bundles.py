@@ -56,11 +56,7 @@ REPO_CODEX_PLUGINS = REPO / "extensions" / "codex-plugins"
 REPO_OCTOPUS_PLUGINS = REPO / ".octopus" / "plugins" / "codex"
 CONNECTOR_ROOT = REPO / "extensions" / "workbuddy-connectors" / "connectors"
 CONNECTOR_CATALOG = (
-    REPO
-    / "extensions"
-    / "workbuddy-connectors"
-    / ".codebuddy-connector"
-    / "connectors.json"
+    REPO / "extensions" / "workbuddy-connectors" / ".codebuddy-connector" / "connectors.json"
 )
 WORKBENCH_ROOT = REPO / "extensions" / "workbench-apps"
 
@@ -177,10 +173,10 @@ def _tar_add(
     return n
 
 
-def build_skills(out: Path) -> int:
+def build_skills(out: Path, catalog_path: Path | None = None) -> int:
     """Pack exactly the skills advertised by the generated release index."""
 
-    catalog_path = STORE_DATA / "skill-registry.json"
+    catalog_path = catalog_path or STORE_DATA / "skill-registry.json"
     try:
         catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -237,6 +233,48 @@ def build_skills(out: Path) -> int:
                 raise RuntimeError(f"skill registry source is unavailable: {name}")
             seen.add(name)
             count += _tar_add(tf, root, f"skills/{name}")
+            # A signed catalog pins each independently downloadable skill.
+            import hashlib
+
+            if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+                raise RuntimeError(f"unsafe skill package name: {name}")
+            package = out / f"skill-{name}.tar.gz"
+            import gzip
+
+            with (
+                package.open("wb") as raw,
+                gzip.GzipFile(filename="", fileobj=raw, mode="wb", mtime=0) as compressed,
+                tarfile.open(fileobj=compressed, mode="w") as single,
+            ):
+
+                def stable_metadata(info):
+                    info.uid = info.gid = 0
+                    info.uname = info.gname = ""
+                    info.mtime = 0
+                    return info
+
+                for file in sorted(root.rglob("*")):
+                    if any(part in _CODEX_SKIP_DIRS for part in file.relative_to(root).parts):
+                        continue
+                    if file.is_symlink():
+                        raise RuntimeError(f"skill package contains symlink: {file}")
+                    if file.is_file():
+                        single.add(
+                            file,
+                            arcname=f"skills/{name}/{file.relative_to(root).as_posix()}",
+                            recursive=False,
+                            filter=stable_metadata,
+                        )
+            digest = hashlib.sha256(package.read_bytes()).hexdigest()
+            pinned = out / f"skill-{name}-{digest[:16]}.tar.gz"
+            package.replace(pinned)
+            base_url = str(row.get("download_url") or "").rsplit("/", 1)[0]
+            row["package_url"] = f"{base_url}/{pinned.name}"
+            row["package_sha256"] = digest
+            row["package_bytes"] = pinned.stat().st_size
+    catalog_path.write_text(
+        json.dumps(catalog, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     return count
 
 
@@ -325,9 +363,7 @@ def build_plugins(out: Path) -> int:
                         connector_rows.get(source.name, {}),
                         package_dir=stage,
                     )
-                    version = str(
-                        (connector_rows.get(source.name) or {}).get("version") or "1.0.0"
-                    )
+                    version = str((connector_rows.get(source.name) or {}).get("version") or "1.0.0")
                     release_summary = (
                         CONNECTOR_RELEASE_SUMMARY
                         if version == "1.0.0"
@@ -399,11 +435,12 @@ def main() -> None:
         default="all",
         help="只构建指定内容包(默认 all)",
     )
+    ap.add_argument("--skill-catalog", type=Path, help="技能目录文件；可用于隔离的发布预演")
     args = ap.parse_args()
     out = args.out or REPO / "extensions" / "workbuddy-experts" / "remote" / "bundles"
     out.mkdir(parents=True, exist_ok=True)
 
-    n_skills = build_skills(out) if args.kind in {"all", "skills"} else 0
+    n_skills = build_skills(out, args.skill_catalog) if args.kind in {"all", "skills"} else 0
     n_plugins = build_plugins(out) if args.kind in {"all", "plugins"} else 0
     files = []
     if args.kind in {"all", "skills"}:

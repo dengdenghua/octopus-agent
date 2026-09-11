@@ -15,6 +15,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { app } = require("electron");
+const { requirePackagedOpenCode } = require("./opencode-runtime.cjs");
 
 const PACKAGED_CODEX_VERSION = "0.149.0";
 const IS_WINDOWS = process.platform === "win32";
@@ -247,7 +248,7 @@ const resourcesPath = () => process.resourcesPath;
 // OCTOPUS_BACKEND_URL; derive it from that same env when present.
 function backendPort() {
   const m = (process.env.OCTOPUS_BACKEND_URL || "").match(/:(\d+)$/);
-  return m ? m[1] : "8000";
+  return m ? m[1] : "8310";
 }
 
 function pythonExe() {
@@ -638,6 +639,7 @@ async function spawnBackend(configPath, onProgress) {
     // This absolute, verified resource path is the only Codex executable the
     // packaged backend may resolve. Never inherit a host PATH installation.
     env.OCTOPUS_CODEX_EXECUTABLE = requirePackagedCodexExecutable();
+    env.OCTOPUS_OPENCODE_BIN = requirePackagedOpenCode(resourcesPath());
   }
   const args = packaged
     ? [

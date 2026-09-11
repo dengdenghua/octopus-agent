@@ -1,0 +1,16 @@
+Browser tab: 4, Title: "新对话 - Echo", URL: "http://localhost:3310/#/workspace/realtime/new".
+0 AXWebArea 新对话 - Echo, URL: localhost:3310/#/workspace/realtime/new
+	1 container
+		2 container root
+			60 container 对话工作区
+			59 container Notifications alt+T
+		61 menu 执行引擎: 自动, ID: radix-_r_2b_
+			62 text 运行设置 · 执行引擎
+			63 自动 ✓ 代码优先 Codex，办公与流程优先 Echo
+				64 text 自动
+				65 text  ✓
+				66 text 代码优先 Codex，办公与流程优先 Echo
+			67 Echo 使用原生工具与任务流程
+			68 Codex 使用 Codex 执行当前角色的任务
+
+The focused UI element is 61 menu 执行引擎: 自动, ID: radix-_r_2b_

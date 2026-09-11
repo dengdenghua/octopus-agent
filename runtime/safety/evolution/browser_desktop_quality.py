@@ -150,7 +150,7 @@ CHECKS: tuple[BrowserDesktopCheck, ...] = (
             "chrome.sidepanel",
             "openpanelonactionclick",
             "connect-src",
-            "ws://127.0.0.1:8000",
+            "ws://127.0.0.1:8310",
             "echoai browser relay",
             "turn/start",
             "item/agentmessage/delta",

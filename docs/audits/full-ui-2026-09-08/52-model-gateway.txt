@@ -1,0 +1,3 @@
+Browser tab: 4, Title: "新对话 - Echo", URL: "http://localhost:3310/#/workspace/realtime/new".
+There has been no change in the accessibility tree.
+The focused UI element is 213 button (expanded) Description: 连接与网关诊断, Help: 连接与网关诊断 检查网关状态和已接入连接的兼容处理。, Secondary Actions: Collapse

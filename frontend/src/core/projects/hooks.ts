@@ -260,9 +260,10 @@ export async function ensureProjectHome(
   }
 }
 
-export function useProjects() {
+export function useProjects(enabled = true) {
   return useQuery<Project[]>({
     queryKey: ["projects"],
+    enabled,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
     queryFn: async () => {

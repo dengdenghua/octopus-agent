@@ -536,7 +536,7 @@ def _register_groups(registry: SkillRegistry, groups: set[str] | frozenset[str])
             )
 
 
-def register_all(registry: SkillRegistry) -> None:
+def register_all(registry: SkillRegistry, *, refresh_prompt_catalog: bool = True) -> None:
     # Native registrars win name collisions with prompt packs.  The external
     # registry catalog is then bootstrapped/loaded (or falls back to packaged
     # skills), and the legacy market group finally fills non-colliding offline
@@ -545,7 +545,10 @@ def register_all(registry: SkillRegistry) -> None:
     groups = set(_GROUP_REGISTRARS)
     groups.remove("market")
     _register_groups(registry, groups)
-    _register_prompt_market(registry)
+    if refresh_prompt_catalog:
+        _register_prompt_market(registry)
+    else:
+        _register_prompt_market(registry, refresh_deadline_s=0)
     _register_groups(registry, {"market"})
 
 

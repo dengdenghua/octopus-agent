@@ -47,6 +47,16 @@ describe("openTarget", () => {
     ).toMatchObject({ url: "https://example.com/docs", source: "message" });
   });
 
+  it("uses the local URL preference independently", async () => {
+    setLinkOpenTarget("in_app");
+    setLinkOpenTarget("external", true);
+    const openExternal = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window, "octopus", { configurable: true, value: { app: { openExternal } } });
+    await expect(openTarget("http://localhost:3310")).resolves.toBe("external");
+    await expect(openTarget("http://[::1]:3310")).resolves.toBe("external");
+    expect(openExternal).toHaveBeenCalledTimes(2);
+  });
+
   it("honors an explicit external target", async () => {
     const openExternal = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(window, "octopus", {

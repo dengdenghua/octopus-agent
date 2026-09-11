@@ -1,0 +1,25 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/channels".
+0 AXWebArea Echo, URL: localhost:3310/#/workspace/channels
+	1 container
+		2 container Notifications alt+T
+		3 container 设置 LINE 机器人, ID: radix-_r_p6_
+			4 heading 设置 LINE 机器人, Value: 2, ID: radix-_r_p7_
+				5 text 设置 LINE 机器人
+			6 container radix-_r_p8_
+				7 text 凭证会保存到本地 channel_credentials.json (不上云)。
+				8 link Description: 如何接入?, Value: docs.octopus.ai/channels/line
+			9 container
+				10 text Channel Access Token *
+			11 container
+				12 text field (settable) Channel Access Token*
+				13 button 显示
+			14 container
+				15 text Channel Secret *
+			16 container
+				17 text field (settable) Channel Secret*
+				18 button 显示
+			19 button 取消
+			20 button 保存并连接
+			21 button 关闭
+
+The focused UI element is 12 text field (settable) Channel Access Token*

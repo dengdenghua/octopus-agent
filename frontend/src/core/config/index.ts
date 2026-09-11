@@ -3,7 +3,7 @@ function getBaseOrigin() {
   if (typeof window !== "undefined") {
     return window.location.origin;
   }
-  return "http://localhost:3000";
+  return "http://localhost:3310";
 }
 
 const RUNTIME_BACKEND_PARAM = "octopusBackend";
@@ -116,7 +116,7 @@ export function getBackendBaseURL() {
 
   // Last-resort Electron fallback for old desktop shells that do not inject a runtime URL.
   if (typeof window !== "undefined" && window.location.protocol === "file:") {
-    return "http://127.0.0.1:8000";
+    return "http://127.0.0.1:8310";
   }
 
   return "";

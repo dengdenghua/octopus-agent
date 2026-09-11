@@ -202,6 +202,9 @@ export function BrowserAutomationSettingsPage() {
   const [linkTarget, setTarget] = useState<LinkOpenTarget>(() =>
     getLinkOpenTarget(),
   );
+  const [localTarget, setLocalTarget] = useState<LinkOpenTarget>(() =>
+    getLinkOpenTarget(true),
+  );
   const policy = useQuery({
     queryKey: BROWSER_POLICY_QUERY_KEY,
     queryFn: getBrowserConfig,
@@ -317,21 +320,23 @@ export function BrowserAutomationSettingsPage() {
                 : "Refreshes every 2 seconds and turns offline within 10 seconds of disconnecting."}
             </p>
           </div>
-          {relayState !== "online" ? <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={relay.isFetching}
-            onClick={() => void relay.refetch()}
-          >
-            <RefreshCwIcon
-              className={cn(
-                "mr-1.5 size-3.5",
-                relay.isFetching && "animate-spin",
-              )}
-            />
-            {zh ? "重新连接浏览器扩展" : "Reconnect browser extension"}
-          </Button> : null}
+          {relayState !== "online" ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={relay.isFetching}
+              onClick={() => void relay.refetch()}
+            >
+              <RefreshCwIcon
+                className={cn(
+                  "mr-1.5 size-3.5",
+                  relay.isFetching && "animate-spin",
+                )}
+              />
+              {zh ? "重新连接浏览器扩展" : "Reconnect browser extension"}
+            </Button>
+          ) : null}
         </div>
         <StatusRow
           label={zh ? "Relay" : "Relay"}
@@ -458,6 +463,36 @@ export function BrowserAutomationSettingsPage() {
             </SelectItem>
           </SelectContent>
         </Select>
+        <h3 className="text-sm font-semibold">
+          {zh ? "本地网址打开方式" : "Local URL target"}
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          {zh
+            ? "适用于 localhost、127.0.0.1 和 IPv6 回环地址。"
+            : "Applies to localhost and loopback addresses."}
+        </p>
+        <Select
+          value={localTarget}
+          onValueChange={(value: LinkOpenTarget) => {
+            setLinkOpenTarget(value, true);
+            setLocalTarget(value);
+          }}
+        >
+          <SelectTrigger
+            className="w-full sm:w-64"
+            aria-label={zh ? "本地网址打开方式" : "Local URL target"}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="external">
+              {zh ? "外部浏览器" : "External browser"}
+            </SelectItem>
+            <SelectItem value="in_app">
+              {zh ? "Echo 应用内" : "Inside Echo"}
+            </SelectItem>
+          </SelectContent>
+        </Select>
       </section>
     </div>
   );
@@ -472,6 +507,7 @@ export function DesktopAutomationSettingsPage() {
     refetchInterval: 4_000,
   });
   const data = permissions.data;
+  const isMacHost = data?.platform === "darwin" || data?.platform === "macos";
 
   const toggle = async (enabled: boolean) => {
     try {
@@ -525,8 +561,8 @@ export function DesktopAutomationSettingsPage() {
         title={zh ? "桌面自动化" : "Desktop automation"}
         description={
           zh
-            ? "让 Echo 读取屏幕并操作本机应用。Web 端只展示能力状态，macOS 桌面端负责真实权限探测。"
-            : "Let Echo read the screen and operate local apps. The macOS desktop app performs the real permission checks."
+            ? "让 Echo 读取屏幕并操作本机应用。网页展示连接状态；操作由已连接的桌面执行端完成。"
+            : "Let Echo read the screen and operate local apps. The connected desktop executor performs native permission checks."
         }
       />
       <CapabilitySwitchCard
@@ -544,7 +580,13 @@ export function DesktopAutomationSettingsPage() {
       <section className="space-y-3">
         <div>
           <h3 className="text-sm font-semibold">
-            {zh ? "macOS 系统权限" : "macOS permissions"}
+            {isMacHost
+              ? zh
+                ? "macOS 系统权限"
+                : "macOS permissions"
+              : zh
+                ? "桌面执行端权限"
+                : "Desktop executor permissions"}
           </h3>
           <p className="mt-1 text-xs text-muted-foreground">
             {data?.supported
@@ -552,8 +594,8 @@ export function DesktopAutomationSettingsPage() {
                 ? "权限改变后会自动刷新。"
                 : "Permission changes refresh automatically."
               : zh
-                ? "请在 Echo macOS 桌面端查看并授权。"
-                : "Open the Echo macOS desktop app to inspect and grant permissions."}
+                ? "当前页面无法检测系统权限。请先连接当前机器的桌面执行端，再按该执行端的系统指引授权。"
+                : "Connect this machine’s desktop executor to inspect its native permissions."}
           </p>
         </div>
         <StatusRow

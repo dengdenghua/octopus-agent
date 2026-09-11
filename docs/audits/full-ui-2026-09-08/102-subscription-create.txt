@@ -1,0 +1,32 @@
+Browser tab: 4, Title: "订阅 - Echo", URL: "http://localhost:3310/#/workspace/intelligence?surface=chat".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 44-52, 90-96
+~					42 container
+~						43 container Notifications alt+T
++						44 container 新建自动化任务, ID: radix-_r_5_
++							45 heading 新建自动化任务, Value: 2, ID: radix-_r_6_
++								46 text 新建自动化任务
++							47 text 配置任务名称、追踪主题和执行频率。
++							48 container
++								49 text 任务名称
++								50 text field (settable) 任务名称
++							51 text 追踪主题
++							52 text entry area (settable) 追踪主题
++							53 text 执行频率
++							54 combo box (collapsed) Description: 执行频率, Value: 每天, Secondary Actions: Expand
++								55 text 每天
++							56 container
++								57 text 执行时间
++								58 time field (settable) Description: 执行时间, Value: 09:00
++									59 container
++										60 stepper
++										61 stepper
++									62 pop up button 显示时间选择器
++							63 text 补充说明
++							64 text entry area (settable) 补充说明
++							65 container
++								66 text 执行时区： Asia/Shanghai 首次最早检查： 2026/9/8 09:00:00 （实际运行以服务调度为准） 执行位置：当前部署的订阅服务；结果保存在“订阅 → 执行历史”。 关闭网页不影响已运行的服务；服务停止期间不会执行，恢复后会重新检查到期任务。
++							67 button 取消
++							68 button (disabled) 创建任务
++							69 button 关闭
+The focused UI element is 50 text field (settable) 任务名称

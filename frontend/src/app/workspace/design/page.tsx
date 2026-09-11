@@ -1,4 +1,11 @@
 "use client";
+import { ChatInputBox } from "@/components/workspace/chat-input-box";
+import { useThreadSettings } from "@/core/settings";
+import { useHubPlugins } from "@/core/plugins/hooks";
+import { designMediaPlugins } from "./media-plugins";
+import { TemplateCover } from "./template-cover";
+import { normalizePermissionMode } from "@/core/permissions";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 import {
   useCallback,
@@ -17,7 +24,6 @@ import {
   ArrowRightIcon,
   AudioLinesIcon,
   BookOpenIcon,
-  BotIcon,
   CheckIcon,
   ChevronDownIcon,
   CircleHelpIcon,
@@ -78,7 +84,6 @@ import { useActiveAgentId } from "@/core/agents/active";
 import { DEFAULT_PRIMARY_AGENT_ID } from "@/core/agents/persona-policy";
 import { authHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
-import { useModels } from "@/core/models/hooks";
 import { useStreamdownPlugins } from "@/core/streamdown";
 import {
   CREATIVE_PROJECTS_CHANGED_EVENT,
@@ -97,12 +102,6 @@ import {
   type DesignCanvasAgentContext,
   type DesignResultMessage,
 } from "@/core/design/mode-bridge";
-import {
-  useEnableMarketSkill,
-  useEnableSkill,
-  useSkills,
-} from "@/core/skills/hooks";
-import type { SkillInfo } from "@/core/skills/types";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/AuthProvider";
 
@@ -139,7 +138,6 @@ import {
 } from "./canvas-model";
 import {
   COMFY_WORKFLOWS,
-  CREATIVE_SKILL_COLLECTION,
   NATIVE_NODE_TEMPLATES,
   type DesignSection,
   type WorkspaceLayout,
@@ -153,50 +151,6 @@ type EmbeddedSurface = "director" | "editor" | "comfyui" | null;
 type DesignModelTab = "agent" | "image" | "video" | "audio";
 
 const DESIGN_MODEL_SELECTION_KEY = "octopus-design-enabled-models-v1";
-const DESIGN_MEDIA_CAPABILITIES: Array<{
-  id: string;
-  tab: Exclude<DesignModelTab, "agent">;
-  name: string;
-  detail: string;
-  badge: string;
-}> = [
-  {
-    id: "image-generation",
-    tab: "image",
-    name: "图像生成",
-    detail: "跟随当前环境配置",
-    badge: "基座",
-  },
-  {
-    id: "comfyui-image",
-    tab: "image",
-    name: "ComfyUI 图像工作流",
-    detail: "调用本地已安装模型",
-    badge: "本地",
-  },
-  {
-    id: "comfyui-video",
-    tab: "video",
-    name: "ComfyUI 视频工作流",
-    detail: "调用本地视频节点与模型",
-    badge: "本地",
-  },
-  {
-    id: "clip-studio",
-    tab: "video",
-    name: "AI 剪辑工坊",
-    detail: "剪辑、转场与特效包装",
-    badge: "内置",
-  },
-  {
-    id: "comfyui-audio",
-    tab: "audio",
-    name: "ComfyUI 音频工作流",
-    detail: "调用本地音频节点与模型",
-    badge: "本地",
-  },
-];
-
 const CREATIVE_SKILL_COVERS = [
   "/community/game-guide(1).jpg",
   "/community/weekly-highlights.jpg",
@@ -872,6 +826,7 @@ function ChatPanel({
   onClose,
   surface,
   side = "right",
+  fullWidth = false,
 }: {
   chatUrl: string | null;
   canvasContext: DesignCanvasAgentContext;
@@ -882,6 +837,7 @@ function ChatPanel({
   onClose: () => void;
   surface?: EmbeddedSurface;
   side?: "left" | "right";
+  fullWidth?: boolean;
 }) {
   const [prompt, setPrompt] = useState("");
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -928,10 +884,11 @@ function ChatPanel({
     return (
       <aside
         className={cn(
-          "h-full w-[clamp(380px,32vw,440px)] min-w-[380px] shrink-0 bg-background",
-          side === "left"
+          "h-full min-w-0 bg-background",
+          fullWidth ? "w-full flex-1" : "w-full md:w-[clamp(380px,32vw,440px)] md:min-w-[380px] shrink-0",
+          !fullWidth && (side === "left"
             ? "border-r border-border-subtle"
-            : "border-l border-border-subtle",
+            : "border-l border-border-subtle"),
         )}
       >
         <iframe
@@ -952,10 +909,11 @@ function ChatPanel({
   return (
     <aside
       className={cn(
-        "flex h-full w-[clamp(380px,32vw,420px)] min-w-[380px] shrink-0 flex-col bg-background",
-        side === "left"
+        "flex h-full flex-col bg-background",
+        fullWidth ? "w-full min-w-0 flex-1" : "w-[clamp(380px,32vw,420px)] min-w-[380px] shrink-0",
+        !fullWidth && (side === "left"
           ? "border-r border-border-subtle"
-          : "border-l border-border-subtle",
+          : "border-l border-border-subtle"),
       )}
     >
       <div className="flex h-12 items-center gap-2 border-b border-border-subtle px-3.5">
@@ -998,27 +956,23 @@ function ChatPanel({
       <div className="p-3">
         <div className="rounded-[16px] border border-border-default bg-background p-2 shadow-[0_12px_32px_-24px_rgba(0,0,0,.45)]">
           <Textarea
+            aria-label="创作需求"
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
             placeholder="描述你想创作的内容…"
             className="min-h-20 resize-none border-0 bg-transparent px-2 py-1 text-xs shadow-none focus-visible:ring-0"
           />
           <div className="flex items-center gap-1 pt-1">
-            <Button variant="ghost" size="icon" className="size-8 rounded-full">
-              <PlusIcon className="size-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 gap-1.5 rounded-lg text-[11px]"
-            >
+            <span className="inline-flex h-8 items-center gap-1.5 px-2 text-[11px] text-muted-foreground">
               <PuzzleIcon className="size-3.5" /> {profile.skill}
-            </Button>
+            </span>
             <span className="flex-1" />
             <Button
               size="icon"
               className="size-8 rounded-full"
-              onClick={() => onRun(prompt)}
+              aria-label="发送创作需求"
+              disabled={!prompt.trim()}
+              onClick={() => onRun(prompt.trim())}
             >
               <SendIcon className="size-3.5" />
             </Button>
@@ -1106,12 +1060,16 @@ function CreativeProjectSelector({
   currentProjectId,
   onSelect,
   className,
+  compact = false,
+  brand = false,
 }: {
   personaId: string;
   projects: LocalCreativeProject[];
   currentProjectId: string | null;
   onSelect: (projectId: string | null) => void;
   className?: string;
+  compact?: boolean;
+  brand?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -1139,22 +1097,32 @@ function CreativeProjectSelector({
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
-          className="flex h-9 w-full min-w-0 items-center gap-2 rounded-lg px-2.5 text-left text-[11px] font-medium text-foreground hover:bg-muted/55"
-          aria-label="选择本地创作项目"
+          className={cn(
+            "flex w-full min-w-0 items-center gap-2 rounded-md text-left text-xs font-normal text-muted-foreground hover:bg-muted/55 hover:text-foreground",
+            compact ? "h-7 px-1.5" : "h-9 px-2.5",
+          )}
+          aria-label={brand ? "Echo Design · 选择创作空间" : "选择本地创作项目"}
+          title={brand ? current?.name || "创作空间" : undefined}
           aria-expanded={open}
         >
-          {current ? (
+          {brand ? (
+            <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-violet-100 text-violet-600">
+              <WandSparklesIcon className="size-3.5" />
+            </span>
+          ) : current ? (
             <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" />
           ) : (
-            <SparklesIcon className="size-3.5 shrink-0 text-violet-500" />
+            <span className="grid size-5 shrink-0 place-items-center rounded-md bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400" aria-hidden="true">
+                <SparklesIcon className="size-3.5" strokeWidth={1.75} />
+              </span>
           )}
-          <span className="min-w-0 flex-1 truncate">
-            {current?.name || "创作空间"}
+          <span className={cn("min-w-0 flex-1 truncate", brand && "text-[13px] font-semibold")}>
+            {brand ? "Echo Design" : current?.name || "创作空间"}
           </span>
           <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground" />
         </button>
         {open ? (
-          <div className="absolute left-0 top-10 z-50 w-72 overflow-hidden rounded-xl border border-border-default bg-background p-1.5 shadow-xl">
+          <div className="absolute left-0 top-full mt-1 z-50 w-64 overflow-hidden rounded-lg border border-border-default bg-background p-1.5 shadow-xl">
             <button
               type="button"
               onClick={() => {
@@ -1201,11 +1169,13 @@ function CreativeProjectSelector({
               }}
               className="flex h-10 w-full items-center gap-2 rounded-lg px-2.5 text-left text-[11px] hover:bg-muted"
             >
-              <SparklesIcon className="size-3.5 shrink-0 text-violet-500" />
+              <span className="grid size-5 shrink-0 place-items-center rounded-md bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400" aria-hidden="true">
+                <SparklesIcon className="size-3.5" strokeWidth={1.75} />
+              </span>
               <span className="min-w-0 flex-1">
                 <span className="block font-medium">创作空间</span>
                 <span className="block truncate text-[9px] text-muted-foreground">
-                  当前角色的独立创作房间
+                  未选择项目
                 </span>
               </span>
               {!currentProjectId ? <CheckIcon className="size-3.5" /> : null}
@@ -1256,29 +1226,26 @@ function CreativeProjectSelector({
 }
 
 function DesignHomeView({
+  spaceSelector,
   onStart,
+  threadId,
   onUseTemplate,
   onOpenSkills,
-  onAddFiles,
-  personaId,
-  projects,
-  currentProjectId,
-  onSelectProject,
 }: {
-  onStart: (prompt: string, enabledModels: string[]) => void;
+  spaceSelector: React.ReactNode;
+  threadId?: string;
+  onStart: (prompt: string, enabledModels: string[], files?: File[]) => void | Promise<void>;
   onUseTemplate: (templateId: "ai-drama-series") => void;
   onOpenSkills: () => void;
-  onAddFiles: (files: FileList) => void;
-  personaId: string;
-  projects: LocalCreativeProject[];
-  currentProjectId: string | null;
-  onSelectProject: (projectId: string | null) => void;
 }) {
-  const { models, isLoading: modelsLoading } = useModels();
+  const [settings, setSetting] = useThreadSettings(threadId ?? "");
+  const { plugins, isLoading: modelsLoading, error: pluginsError, refetch: refetchPlugins } = useHubPlugins();
   const { agents, isLoading: agentsLoading } = useAgents();
   const [prompt, setPrompt] = useState("");
-  const [category, setCategory] = useState("精选");
+  const [submitting, setSubmitting] = useState(false);
+  const [category, setCategory] = useState("全部");
   const [modelOpen, setModelOpen] = useState(false);
+  const [guide, setGuide] = useState<"design" | "models" | null>(null);
   const [modelTab, setModelTab] = useState<DesignModelTab>("agent");
   const [enabledModels, setEnabledModels] = useState<Set<string>>(() => {
     try {
@@ -1293,7 +1260,6 @@ function DesignHomeView({
       window.localStorage.getItem(DESIGN_MODEL_SELECTION_KEY) !== null,
   );
   const [previewTitle, setPreviewTitle] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const modelItems = useMemo(
     () => [
       ...agents.map((agent) => ({
@@ -1303,25 +1269,9 @@ function DesignHomeView({
         detail: agent.description || "Echo Agent",
         badge: "Agent",
       })),
-      ...models.map((model) => ({
-        id: `agent:${model.selection_id || model.entry_id || model.name}`,
-        tab: "agent" as const,
-        name: model.display_name || model.name,
-        detail:
-          [
-            model.supports_vision ? "视觉" : null,
-            model.supports_tool_use ? "工具调用" : null,
-            model.context_window
-              ? `${Math.round(model.context_window / 1000)}K 上下文`
-              : null,
-          ]
-            .filter(Boolean)
-            .join(" · ") || "Echo 模型路由",
-        badge: model.provider || "Agent",
-      })),
-      ...DESIGN_MEDIA_CAPABILITIES,
+      ...designMediaPlugins(plugins),
     ],
-    [agents, models],
+    [agents, plugins],
   );
   const visibleModelItems = modelItems.filter((item) => item.tab === modelTab);
   const allModelIds = modelItems.map((item) => item.id);
@@ -1352,283 +1302,178 @@ function DesignHomeView({
     title: string;
     description: string;
     duration: string;
-    cover: string;
     prompt: string;
     templateId?: "ai-drama-series";
   }> = [
     {
-      category: "短剧漫剧",
+      category: "漫剧短片",
       title: "AI 漫剧分阶段制作",
       description:
         "从剧本、锚点和分镜到镜头与成片，支持逐阶段审核、续跑和局部重试。",
       duration: "工作流",
-      cover: "/community/gacha.jpg",
       prompt:
         "创建一套 AI 漫剧制作流程，先确认目标集数、单集时长、画幅和视觉风格。",
       templateId: "ai-drama-series",
     },
     {
-      category: "官方 Skill",
+      category: "品牌视觉",
       title: "产品发布视觉套件",
       description: "从卖点、主视觉到横竖版短片，完成一套统一的发布内容。",
       duration: "0:18",
-      cover: "/community/weekly-highlights.jpg",
       prompt:
         "为一款新产品制作完整发布视觉套件，包括主视觉、分镜、短片和发布清单。",
     },
     {
-      category: "特效包装",
+      category: "品牌视觉",
       title: "手绘实拍融合短片",
       description: "让实拍空间与手绘线条发生接触、变形和节奏化响应。",
       duration: "0:16",
-      cover: "/community/memory-video(1).jpg",
       prompt:
         "制作一条实拍与手绘线条融合的16秒创意短片，先给出视觉锚点和镜头方案。",
     },
     {
-      category: "MV",
+      category: "音乐视频",
       title: "复古拼贴音乐 MV",
       description: "用纸张纹理、海报墙与卡点剪辑建立完整的音乐视觉系统。",
       duration: "0:24",
-      cover: "/community/daily-album.jpg",
       prompt:
         "根据音乐结构制作复古拼贴MV，保持角色一致，并输出镜头、字幕和剪辑节奏。",
     },
     {
-      category: "UI动效",
+      category: "UI 动效",
       title: "数字产品电影感演示",
       description: "把真实界面、交互路径和动效参考组织成可审片的产品宣传片。",
       duration: "0:20",
-      cover: "/community/web-summary.jpg",
       prompt:
         "把数字产品界面制作成电影感宣传片，准确展示交互、运镜、节奏和声音。",
     },
     {
-      category: "红人带货",
+      category: "产品广告",
       title: "美妆达人种草短片",
       description: "围绕真实使用过程组织口播、产品特写、字幕与转化节奏。",
       duration: "0:15",
-      cover: "/community/food-delivery(1).jpg",
       prompt:
         "制作一条15秒美妆达人种草短片，强调真实体验、产品细节与行动引导。",
     },
     {
-      category: "影视片头",
+      category: "漫剧短片",
       title: "未来档案电影片头",
       description: "以档案排版、扫描纹理和空间镜头建立克制的悬疑开场。",
       duration: "0:22",
-      cover: "/community/study-paper(1).jpg",
       prompt: "制作一段未来档案风格电影片头，输出字体、镜头、转场和声音设计。",
     },
     {
-      category: "二次元PV",
+      category: "漫剧短片",
       title: "角色觉醒动画 PV",
       description: "围绕角色能力与情绪转折建立统一的分镜、色彩和音乐动机。",
       duration: "0:18",
-      cover: "/community/game-guide(1).jpg",
       prompt: "为原创动画角色制作18秒觉醒PV，保持角色一致并给出完整镜头节奏。",
     },
     {
-      category: "品牌广告",
+      category: "产品广告",
       title: "便携科技产品短广告",
       description: "用极简空间、结构拆解和生活场景呈现产品的核心卖点。",
       duration: "0:16",
-      cover: "/community/smart-home.jpg",
       prompt:
         "制作一条便携科技产品短广告，包含主视觉、结构特写、使用场景和收尾。",
     },
     {
-      category: "官方 Skill",
+      category: "漫剧短片",
       title: "角色一致性分镜",
       description: "锁定人物外观、服装与空间关系，生成可继续制作的连续镜头。",
       duration: "0:20",
-      cover: "/community/mock-interview.jpg",
       prompt: "根据角色设定生成一组角色外观和空间关系一致的连续电影分镜。",
     },
     {
-      category: "特效包装",
+      category: "品牌视觉",
       title: "舞者轨迹视觉包装",
       description: "让几何框线、粒子与排版跟随舞者动作和节拍响应。",
       duration: "0:19",
-      cover: "/community/voice-reply.jpg",
       prompt:
         "为一段舞蹈视频设计动作追踪视觉包装，包括轨迹、排版、粒子与节奏。",
     },
     {
-      category: "品牌广告",
+      category: "品牌视觉",
       title: "城市旅行品牌短片",
       description: "把地点、人物和路线组织成具有品牌识别度的旅行叙事。",
       duration: "0:24",
-      cover: "/community/travel-plan(1).jpg",
       prompt: "制作一条城市旅行品牌短片，规划地点、人物、路线、镜头和声音。",
     },
     {
-      category: "UI动效",
+      category: "UI 动效",
       title: "智能工作台交互演示",
       description: "准确展示拖拽、编排、协作和结果预览的完整界面路径。",
       duration: "0:17",
-      cover: "/community/todo.jpg",
       prompt: "将智能工作台的拖拽、编排、协作和结果预览制作成17秒UI动效演示。",
     },
   ];
-  const categories = [
-    "精选",
-    "官方 Skill",
-    "特效包装",
-    "红人带货",
-    "影视片头",
-    "MV",
-    "二次元PV",
-    "品牌广告",
-    "UI动效",
-    "短剧漫剧",
-  ];
-  const visible =
-    category === "精选"
-      ? showcases
-      : showcases.filter((item) => item.category === category);
+  const categories = ["全部", "漫剧短片", "产品广告", "品牌视觉", "UI 动效", "音乐视频"];
+  const visible = category === "全部" ? showcases : showcases.filter((item) => item.category === category);
   const preview = previewTitle
     ? (showcases.find((item) => item.title === previewTitle) ?? null)
     : null;
 
-  const submit = () => {
-    const value = prompt.trim();
-    if (value) {
-      const labels = modelItems
-        .filter((item) => enabledModels.has(item.id))
-        .map((item) => item.name);
-      onStart(value, labels);
-    }
-  };
-
   return (
-    <div className="relative h-full overflow-y-auto bg-[#fafafa] dark:bg-[#0a0a0a]">
+    <div className="relative h-full overflow-y-auto bg-background">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-45"
+        className="pointer-events-none absolute inset-0 opacity-10"
         style={{
           backgroundImage:
             "radial-gradient(circle, color-mix(in oklch, var(--foreground) 14%, transparent) 1px, transparent 1px)",
           backgroundSize: "24px 24px",
         }}
       />
-      <div className="relative mx-auto w-full max-w-[920px] px-8 pb-14 pt-16">
+      <div className="relative mx-auto w-full max-w-[1120px] px-4 pb-8 pt-5 sm:px-6 sm:pt-6">
         <div className="text-center">
-          <button
-            type="button"
-            className="mb-7 inline-flex h-8 items-center gap-2 rounded-full border border-black/[0.07] bg-background/90 px-3 text-[10px] text-muted-foreground shadow-sm backdrop-blur-sm hover:text-foreground"
-            onClick={() =>
-              setPrompt("体验 Echo 多模态创作基座，生成一套完整作品。")
-            }
-          >
-            <SparklesIcon className="size-3 text-violet-500" />
-            Echo 创作基座已就绪
-            <ArrowRightIcon className="size-3" />
-          </button>
-          <br />
-          <div className="inline-flex items-center gap-2.5">
-            <span className="grid size-11 place-items-center rounded-[13px] bg-[#111] text-white shadow-sm dark:bg-white dark:text-black">
+          <div className="inline-flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-xl bg-[#111] text-white shadow-sm dark:bg-white dark:text-black">
               <WandSparklesIcon className="size-5" />
             </span>
-            <h1 className="text-[34px] font-semibold tracking-[-0.045em]">
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">
               Echo Design
             </h1>
           </div>
-          <p className="mt-2 text-[15px] text-muted-foreground">
-            属于你的多模态 Agent 团队
+          <p className="mt-2 text-sm text-muted-foreground">
+            描述想法，开始创作
           </p>
         </div>
 
-        <div className="relative mx-auto mt-10 max-w-[760px] rounded-[24px] border border-black/[0.08] bg-background shadow-[0_12px_34px_rgba(0,0,0,.08)] dark:border-white/10">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            hidden
-            onChange={(event) => {
-              if (event.target.files?.length) onAddFiles(event.target.files);
-              event.target.value = "";
+        <div className="relative mx-auto mt-4 max-w-[760px]">
+          <ChatInputBox
+            key={prompt}
+            disabled={submitting}
+            defaultValue={prompt}
+            draftStorageKey="echo:design-home"
+            threadId={threadId}
+            modelName={settings.context.model_name}
+            permissionMode={normalizePermissionMode(settings.context.permission_mode)}
+            onPermissionModeChange={(permission_mode) => setSetting("context", { permission_mode })}
+            onModelChange={(model_name) => setSetting("context", { model_name })}
+            reasoningEffort={settings.context.reasoning_effort}
+            onReasoningEffortChange={(reasoning_effort) => setSetting("context", { reasoning_effort })}
+            placeholder="描述创作需求，@ 引用文件，/ 调用技能…"
+            onSubmit={({ text, images, files }) => {
+              const attached = [...(images ?? []), ...(files ?? [])];
+              const labels = modelItems.filter((item) => enabledModels.has(item.id)).map((item) => item.id.startsWith("plugin:") ? `${item.name} (${item.id})` : item.name);
+              setSubmitting(true);
+              void Promise.resolve(onStart(text, labels, attached)).finally(() => setSubmitting(false));
+              return false;
             }}
           />
-          <div className="flex items-center gap-1 px-5 pt-4 text-[10px] text-muted-foreground">
-            <span>描述你要生成的内容，或查看</span>
-            <button
-              type="button"
-              className="border-b border-muted-foreground/40 hover:text-foreground"
-              onClick={() =>
-                toast.info("从目标、素材、风格和交付规格开始描述即可")
-              }
-            >
-              Design 使用指南
-            </button>
-            <span>·</span>
-            <button
-              type="button"
-              className="border-b border-muted-foreground/40 hover:text-foreground"
-              onClick={() =>
-                toast.info("可在模型设置中配置图像、视频和语音模型")
-              }
-            >
-              模型使用指南
-            </button>
-          </div>
-          <Textarea
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                event.preventDefault();
-                submit();
-              }
-            }}
-            className="min-h-[82px] resize-none border-0 bg-transparent px-5 pt-3 text-[14px] shadow-none focus-visible:ring-0"
-            placeholder=""
-          />
-          <div className="flex h-[52px] items-center gap-1.5 px-3 pb-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 rounded-full"
-              onClick={() => fileInputRef.current?.click()}
-              aria-label="添加文件"
-            >
-              <PlusIcon className="size-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 gap-1.5 rounded-lg text-[11px]"
-              onClick={() => {
-                setModelOpen((value) => !value);
-              }}
-              aria-expanded={modelOpen}
-            >
-              <BotIcon className="size-3.5" /> 模型
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 gap-1.5 rounded-lg text-[11px]"
-              onClick={onOpenSkills}
-            >
-              <PuzzleIcon className="size-3.5" /> Skill
-            </Button>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 py-2 text-xs text-muted-foreground">
+            {spaceSelector}
+            <span className="h-3 w-px bg-border/35" aria-hidden="true" />
+
+
+            <button type="button" className="h-8 rounded-md px-2 hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => { setModelOpen((value) => !value); void refetchPlugins(); }} aria-expanded={modelOpen}>创作插件</button>
+            <button type="button" className="h-8 rounded-md px-2 hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={onOpenSkills}>技能库</button>
             <span className="flex-1" />
-            <Button
-              size="icon"
-              className="size-9 rounded-full"
-              disabled={!prompt.trim()}
-              onClick={submit}
-              aria-label="开始制作"
-              title="开始制作"
-            >
-              <SendIcon className="size-4" />
-            </Button>
           </div>
           {modelOpen ? (
             <div className="absolute left-0 top-[calc(100%+8px)] z-50 w-[330px] overflow-hidden rounded-[16px] border border-border-default bg-background text-left shadow-[0_16px_40px_rgba(0,0,0,.16)]">
               <div className="flex h-10 items-center gap-1 px-3">
-                <span className="text-[11px] font-semibold">模型</span>
+                <span className="text-[11px] font-semibold">创作插件</span>
                 <CircleHelpIcon
                   className="size-3 text-muted-foreground"
                   aria-label="勾选后，Agent 可在任务中调用这些能力"
@@ -1681,7 +1526,7 @@ function DesignHomeView({
                 ))}
               </div>
               <div className="max-h-[300px] overflow-y-auto p-2">
-                {(modelsLoading || agentsLoading) && modelTab === "agent" ? (
+                {(modelsLoading || agentsLoading) ? (
                   <div className="grid h-24 place-items-center">
                     <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
                   </div>
@@ -1726,37 +1571,29 @@ function DesignHomeView({
                   })
                 ) : (
                   <div className="p-8 text-center text-[10px] text-muted-foreground">
-                    当前没有可用能力
+                    {pluginsError && modelTab !== "agent" ? "插件加载失败，请重新打开重试" : "暂无已启用的插件，请前往插件管理安装或启用"}
                   </div>
                 )}
               </div>
               <p className="border-t border-border-subtle px-3 py-2 text-[9px] leading-4 text-muted-foreground">
-                勾选后，Agent 可在任务中调用这些模型与本地能力。
+                按需选择已启用的创作插件，语言模型在输入框中选择。
+                <button type="button" className="ml-2 underline" onClick={() => { window.top!.location.href = `${workspaceShellBase()}#/workspace/agents?tab=plugins`; }}>管理插件</button>
               </p>
             </div>
           ) : null}
         </div>
 
-        <div className="relative mx-auto mt-2 flex w-full max-w-[730px] items-center rounded-b-[15px] bg-black/[0.035] px-3 dark:bg-white/[0.05]">
-          <CreativeProjectSelector
-            personaId={personaId}
-            projects={projects}
-            currentProjectId={currentProjectId}
-            onSelect={onSelectProject}
-            className="w-full"
-          />
-        </div>
-
-        <div className="mt-7 flex flex-wrap items-center justify-center gap-2">
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
           {categories.map((item) => (
             <button
               key={item}
               type="button"
               onClick={() => setCategory(item)}
+              aria-pressed={category === item}
               className={cn(
-                "h-8 rounded-full border border-black/[0.07] bg-background px-4 text-[11px] text-muted-foreground transition",
+                "h-8 rounded-md px-3 text-xs text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 category === item &&
-                  "border-foreground bg-foreground font-medium text-background",
+                  "bg-accent font-medium text-accent-foreground",
               )}
             >
               {item}
@@ -1764,59 +1601,63 @@ function DesignHomeView({
           ))}
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+          <span>选择模板开始 · 封面为流程示意</span>
+          <span>{visible.length} 个模板</span>
+        </div>
+        <div className="mt-3 grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))" }}>
           {visible.map((item) => (
-            <article
-              key={item.title}
-              className="group overflow-hidden rounded-[14px] border border-black/[0.07] bg-background text-left shadow-[0_2px_5px_rgba(0,0,0,.04)] transition hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,.10)] dark:border-white/10"
-            >
-              <div className="relative h-[148px] overflow-hidden bg-muted">
-                <img
-                  src={item.cover}
-                  alt=""
-                  className="size-full object-cover transition duration-300 group-hover:scale-[1.025]"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
-                <span className="absolute bottom-2 left-2 rounded bg-black/65 px-1.5 py-0.5 text-[9px] text-white">
-                  {item.duration}
-                </span>
-                <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      item.templateId
-                        ? onUseTemplate(item.templateId)
-                        : setPrompt(item.prompt)
-                    }
-                    className="rounded-md bg-black/65 px-2 py-1 text-[8px] text-white backdrop-blur-sm"
-                  >
+            <article key={item.title} className="overflow-hidden rounded-lg border border-border bg-card text-left transition-colors hover:border-primary/40">
+              <button type="button" onClick={() => setPreviewTitle(item.title)} aria-label={`预览 ${item.title}`} className="block h-32 w-full overflow-hidden border-b border-border/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+                <TemplateCover category={item.category} title={item.title} />
+              </button>
+              <div className="p-3">
+                <h2 className="truncate text-sm font-medium">{item.title}</h2>
+                <p className="mt-1 line-clamp-2 min-h-10 text-xs leading-5 text-muted-foreground">{item.description}</p>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">{item.templateId ? "分阶段工作流" : item.category}</span>
+                  <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => item.templateId ? onUseTemplate(item.templateId) : setPrompt(item.prompt)}>
                     {item.templateId ? "使用模板" : "使用提示词"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPreviewTitle(item.title)}
-                    aria-label={`预览 ${item.title}`}
-                    className="grid size-6 place-items-center rounded-md bg-black/65 text-white backdrop-blur-sm"
-                  >
-                    <Maximize2Icon className="size-3" />
-                  </button>
-                </div>
-              </div>
-              <div className="p-3.5">
-                <div className="truncate text-[12px] font-semibold">
-                  {item.title}
-                </div>
-                <p className="mt-1.5 line-clamp-2 text-[10px] leading-[16px] text-muted-foreground">
-                  {item.description}
-                </p>
-                <div className="mt-3 text-[9px] text-muted-foreground">
-                  Echo Design
+                  </Button>
                 </div>
               </div>
             </article>
           ))}
         </div>
       </div>
+      <Dialog
+        open={Boolean(guide)}
+        onOpenChange={(open) => !open && setGuide(null)}
+      >
+        <DialogContent>
+          <DialogHeader className="pr-8 text-left">
+            <DialogTitle>
+              {guide === "models" ? "模型使用指南" : "Design 使用指南"}
+            </DialogTitle>
+            <DialogDescription>
+              {guide === "models"
+                ? "先确认模型可用，再选择合适的生成能力。"
+                : "把需求、素材和交付规格整理为可以执行的创作任务。"}
+            </DialogDescription>
+          </DialogHeader>
+          <ol className="list-decimal space-y-3 pl-5 text-sm leading-6">
+            {(guide === "models"
+              ? [
+                  "在设置的模型分区接入服务，确认连接及模型名称。",
+                  "回到创作首页，选择任务需要的图像、视频或语音模型。模型是否支持所选任务以服务能力为准。",
+                  "先生成少量内容检查风格与质量，再扩展工作流。ComfyUI 工作流需要本机环境可用。",
+                ]
+              : [
+                  "说明要做什么、给谁看、最终交付什么，例如一张海报或一段短片。",
+                  "添加参考素材，描述风格、尺寸、时长及需要保留的内容。",
+                  "在画布中检查各节点与连线，确认后开始生成；结果可在项目资产中继续使用。",
+                ]
+            ).map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ol>
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={Boolean(preview)}
         onOpenChange={(open) => {
@@ -1826,29 +1667,26 @@ function DesignHomeView({
         <DialogContent className="overflow-hidden p-0 sm:max-w-[820px]">
           {preview ? (
             <>
-              <div className="aspect-video bg-black">
-                <img
-                  src={preview.cover}
-                  alt={preview.title}
-                  className="size-full object-contain"
-                />
+              <div className="h-56 border-b">
+                <TemplateCover category={preview.category} title={preview.title} />
               </div>
               <div className="px-5 py-4 pr-12">
                 <DialogTitle className="text-[15px]">
                   {preview.title}
                 </DialogTitle>
                 <DialogDescription className="mt-1 text-[11px] leading-5">
-                  {preview.description}
+                  {preview.description} 封面为流程示意，实际成果根据你的素材与需求制作。
                 </DialogDescription>
                 <Button
                   className="mt-4 rounded-lg"
                   size="sm"
                   onClick={() => {
-                    setPrompt(preview.prompt);
+                    if (preview.templateId) onUseTemplate(preview.templateId);
+                    else setPrompt(preview.prompt);
                     setPreviewTitle(null);
                   }}
                 >
-                  使用提示词
+                  {preview.templateId ? "使用模板" : "使用提示词"}
                 </Button>
               </div>
             </>
@@ -2124,6 +1962,8 @@ function AssetsView({
               variant="ghost"
               size="icon"
               onClick={() => setGrid(true)}
+              aria-label="网格视图"
+              aria-pressed={grid}
               className={cn("ml-2 size-8", grid && "bg-muted")}
             >
               <Grid2X2Icon className="size-4" />
@@ -2132,6 +1972,8 @@ function AssetsView({
               variant="ghost"
               size="icon"
               onClick={() => setGrid(false)}
+              aria-label="列表视图"
+              aria-pressed={!grid}
               className={cn("size-8", !grid && "bg-muted")}
             >
               <ListIcon className="size-4" />
@@ -2276,43 +2118,52 @@ function AssetsView({
         </div>
       </div>
       <Dialog open={assetDialogOpen} onOpenChange={setAssetDialogOpen}>
-        <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-[500px]">
-          <DialogHeader className="border-b border-border-subtle px-5 py-4 pr-12">
+        <DialogContent className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-[500px]">
+          <DialogHeader className="shrink-0 border-b border-border-subtle px-5 py-4 pr-12">
             <DialogTitle className="text-[15px]">添加资产</DialogTitle>
             <DialogDescription className="text-[11px] leading-5">
               填写清晰的名称、描述和标签，让 Agent 能搜索并在不同项目中复用。
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 px-5 py-4">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4">
             <div className="grid grid-cols-[1fr_120px] gap-2">
-              <Input
-                value={assetName}
-                onChange={(event) => setAssetName(event.target.value)}
-                placeholder="资产名称"
-                className="h-9 rounded-lg text-xs"
-                maxLength={120}
-              />
-              <select
-                value={assetCategory}
-                onChange={(event) =>
-                  setAssetCategory(
-                    event.target.value as DesignLibraryAsset["category"],
-                  )
-                }
-                className="h-9 rounded-lg border border-border-default bg-background px-3 text-xs outline-none focus:ring-2 focus:ring-ring"
-              >
-                {["角色", "场景", "风格包", "道具", "自定义"].map((item) => (
-                  <option key={item}>{item}</option>
-                ))}
-              </select>
+              <label className="space-y-1.5 text-xs font-medium">
+                <span>资产名称</span>
+                <Input
+                  value={assetName}
+                  onChange={(event) => setAssetName(event.target.value)}
+                  placeholder="资产名称"
+                  className="h-9 rounded-lg text-xs"
+                  maxLength={120}
+                />
+              </label>
+              <label className="space-y-1.5 text-xs font-medium">
+                <span>分类</span>
+                <select
+                  value={assetCategory}
+                  onChange={(event) =>
+                    setAssetCategory(
+                      event.target.value as DesignLibraryAsset["category"],
+                    )
+                  }
+                  className="block h-9 w-full rounded-lg border border-border-default bg-background px-3 text-xs outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {["角色", "场景", "风格包", "道具", "自定义"].map((item) => (
+                    <option key={item}>{item}</option>
+                  ))}
+                </select>
+              </label>
             </div>
-            <Textarea
-              value={assetDescription}
-              onChange={(event) => setAssetDescription(event.target.value)}
-              placeholder="输入清晰的描述，帮助 Agent 更好地搜索和复用…"
-              className="min-h-20 resize-none rounded-lg text-xs leading-5"
-              maxLength={1200}
-            />
+            <label className="block space-y-1.5 text-xs font-medium">
+              <span>描述（可选）</span>
+              <Textarea
+                value={assetDescription}
+                onChange={(event) => setAssetDescription(event.target.value)}
+                placeholder="输入清晰的描述，帮助 Agent 更好地搜索和复用…"
+                className="min-h-20 resize-none rounded-lg text-xs leading-5"
+                maxLength={1200}
+              />
+            </label>
             <input
               ref={assetInputRef}
               type="file"
@@ -2349,15 +2200,18 @@ function AssetsView({
                 </span>
               </span>
             </button>
-            <Input
-              value={assetTags}
-              onChange={(event) => setAssetTags(event.target.value)}
-              placeholder="添加标签（可选），用逗号分隔"
-              className="h-9 rounded-lg text-xs"
-              maxLength={600}
-            />
+            <label className="block space-y-1.5 text-xs font-medium">
+              <span>标签（可选）</span>
+              <Input
+                value={assetTags}
+                onChange={(event) => setAssetTags(event.target.value)}
+                placeholder="添加标签（可选），用逗号分隔"
+                className="h-9 rounded-lg text-xs"
+                maxLength={600}
+              />
+            </label>
           </div>
-          <DialogFooter className="border-t border-border-subtle px-5 py-3">
+          <DialogFooter className="shrink-0 border-t border-border-subtle px-5 py-3">
             <Button
               size="sm"
               disabled={!assetFile || !assetName.trim() || assetSaving}
@@ -2497,7 +2351,7 @@ function CanvasAssetsPanel({
     }
   };
   return (
-    <aside className="flex w-[280px] shrink-0 flex-col border-l border-border-subtle bg-background">
+    <aside className="flex h-full w-full md:w-[280px] shrink-0 flex-col border-l border-border-subtle bg-background">
       <div className="flex h-11 items-center border-b border-border-subtle px-2">
         <div className="grid flex-1 grid-cols-2 rounded-lg bg-muted/60 p-0.5 text-[11px]">
           {(["canvas", "assets"] as const).map((item) => (
@@ -2662,581 +2516,6 @@ function CanvasAssetsPanel({
         </div>
       ) : null}
     </aside>
-  );
-}
-
-function SkillsView({
-  onUse,
-  installedSkills,
-  loading,
-}: {
-  onUse: (id: string) => void;
-  installedSkills: SkillInfo[];
-  loading: boolean;
-}) {
-  const navigate = useNavigate();
-  const enableSkill = useEnableSkill();
-  const enableMarketSkill = useEnableMarketSkill();
-  const streamdownPlugins = useStreamdownPlugins();
-  const [category, setCategory] = useState("全部");
-  const [query, setQuery] = useState("");
-  const [tab, setTab] = useState<"market" | "mine">("market");
-  const [onlyUninstalled, setOnlyUninstalled] = useState(false);
-  const [skillSort, setSkillSort] = useState<"recent" | "popular">("recent");
-  const [detailSkillId, setDetailSkillId] = useState<string | null>(null);
-  const [detailFiles, setDetailFiles] = useState<
-    Array<{ path: string; content: string }>
-  >([]);
-  const [detailFilePath, setDetailFilePath] = useState("SKILL.md");
-  const [expandedSkillDirs, setExpandedSkillDirs] = useState(
-    () => new Set(["references"]),
-  );
-  const [detailLoading, setDetailLoading] = useState(false);
-  const categories = [
-    "全部",
-    "精选",
-    "短剧漫剧",
-    "专业影视",
-    "动画",
-    "商业广告",
-    "电商",
-    "教育",
-    "创意实验",
-    "音频音乐",
-    "平台工具",
-  ];
-  const needle = query.trim().toLowerCase();
-  const installedByName = new Map(
-    installedSkills.map((skill) => [skill.name, skill]),
-  );
-  const featuredSkillIds = new Set(
-    CREATIVE_SKILL_COLLECTION.slice(0, 30).map((item) => item.id),
-  );
-  const downloadScore = (value: string) => {
-    if (value === "内置") return Number.MAX_SAFE_INTEGER;
-    const score = Number.parseFloat(value);
-    return Number.isFinite(score) ? score : 0;
-  };
-  const items = CREATIVE_SKILL_COLLECTION.filter((item) => {
-    const installed = installedByName.get(item.id);
-    return (
-      (tab === "market" || Boolean(installed)) &&
-      (!onlyUninstalled || !installed) &&
-      (category === "全部" ||
-        (category === "精选" && featuredSkillIds.has(item.id)) ||
-        item.category === category) &&
-      (!needle ||
-        `${item.title} ${item.description} ${item.category}`
-          .toLowerCase()
-          .includes(needle))
-    );
-  }).sort((left, right) =>
-    skillSort === "popular"
-      ? downloadScore(right.downloads) - downloadScore(left.downloads)
-      : 0,
-  );
-  const tieredMarket =
-    tab === "market" &&
-    category === "全部" &&
-    !needle &&
-    !onlyUninstalled &&
-    skillSort === "recent";
-  const detailSkill = detailSkillId
-    ? (CREATIVE_SKILL_COLLECTION.find((item) => item.id === detailSkillId) ??
-      null)
-    : null;
-  const detailDirectories = Array.from(
-    new Set(
-      detailFiles
-        .map((file) => file.path.split("/")[0])
-        .filter(
-          (part): part is string =>
-            Boolean(part) &&
-            detailFiles.some((file) => file.path.startsWith(`${part}/`)),
-        ),
-    ),
-  );
-  const detailRootFiles = detailFiles.filter(
-    (file) => !file.path.includes("/"),
-  );
-  const selectedDetailContent =
-    detailFiles.find((file) => file.path === detailFilePath)?.content ?? "";
-  const renderedDetailContent = (() => {
-    if (
-      detailFilePath !== "SKILL.md" ||
-      !selectedDetailContent.startsWith("---")
-    )
-      return selectedDetailContent;
-    const match = selectedDetailContent.match(
-      /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/,
-    );
-    if (!match) return selectedDetailContent;
-    return `\`\`\`yaml\n${match[1]}\n\`\`\`\n\n${selectedDetailContent.slice(match[0].length)}`;
-  })();
-  useEffect(() => {
-    if (!detailSkillId) {
-      setDetailFiles([]);
-      return;
-    }
-    const controller = new AbortController();
-    setDetailLoading(true);
-    void fetch(
-      `${getBackendBaseURL()}/api/design/skills/${encodeURIComponent(detailSkillId)}/files`,
-      { headers: authHeaders(), signal: controller.signal },
-    )
-      .then(async (response) => {
-        if (!response.ok)
-          throw new Error(`skill preview failed: ${response.status}`);
-        return (await response.json()) as {
-          items?: Array<{ path: string; content: string }>;
-        };
-      })
-      .then((payload) => {
-        const files = payload.items ?? [];
-        setDetailFiles(files);
-        setDetailFilePath(
-          files.some((item) => item.path === "SKILL.md")
-            ? "SKILL.md"
-            : files[0]?.path || "",
-        );
-      })
-      .catch((error: unknown) => {
-        if ((error as { name?: string }).name !== "AbortError") {
-          setDetailFiles([]);
-          toast.error("Skill 文件读取失败");
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setDetailLoading(false);
-      });
-    return () => controller.abort();
-  }, [detailSkillId]);
-  const ensureSkillEnabled = async (id: string) => {
-    const installed = installedByName.get(id);
-    if (!installed) {
-      try {
-        await enableMarketSkill.mutateAsync(id);
-        toast.success("Skill 已安装并启用");
-      } catch {
-        toast.error("Skill 安装失败");
-        return false;
-      }
-    }
-    if (installed && !installed.enabled) {
-      try {
-        await enableSkill.mutateAsync({ skillName: id, enabled: true });
-        toast.success("Skill 已启用");
-      } catch {
-        toast.error("Skill 启用失败");
-        return false;
-      }
-    }
-    return true;
-  };
-  const handleInstallSkill = async (id: string) => {
-    await ensureSkillEnabled(id);
-  };
-  const handleUseSkill = async (id: string) => {
-    if (!(await ensureSkillEnabled(id))) return;
-    onUse(id);
-  };
-
-  return (
-    <>
-      <div className="h-full overflow-y-auto bg-background px-10 py-8">
-        <div className="mx-auto max-w-[1120px]">
-          <h1 className="text-[24px] font-semibold tracking-tight">Skill</h1>
-          <p className="mt-1 text-[12px] text-muted-foreground">
-            发现、安装并管理 Skill，扩展 Echo Design 的创作能力
-          </p>
-          <div className="mt-7 flex gap-2">
-            <Button
-              className="h-9 rounded-[10px] bg-foreground px-4 text-[11px] text-background"
-              onClick={() =>
-                toast.info("可在对话中让 Agent 为当前流程创建 Skill")
-              }
-            >
-              <WandSparklesIcon className="mr-1.5 size-3.5" />
-              通过 Echo Design 创建
-            </Button>
-            <Button
-              variant="outline"
-              className="h-9 rounded-[10px] px-4 text-[11px]"
-              onClick={() => navigate("/workspace/skills")}
-            >
-              <PlusIcon className="mr-1.5 size-3.5" />
-              安装 Skill
-            </Button>
-          </div>
-
-          <div className="mt-7 border-t border-border-subtle pt-3">
-            <div className="flex items-center gap-5">
-              <button
-                onClick={() => setTab("market")}
-                className={cn(
-                  "relative h-9 text-[12px] font-medium",
-                  tab === "market"
-                    ? "text-foreground after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-foreground"
-                    : "text-muted-foreground",
-                )}
-              >
-                Skill
-              </button>
-              <button
-                onClick={() => setTab("mine")}
-                className={cn(
-                  "relative h-9 text-[12px] font-medium",
-                  tab === "mine"
-                    ? "text-foreground after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-foreground"
-                    : "text-muted-foreground",
-                )}
-              >
-                我的 Skill
-              </button>
-              <span className="flex-1" />
-              <div className="relative w-60 shrink-0">
-                <SearchIcon className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  className="h-9 rounded-[10px] pl-9 text-[11px]"
-                  placeholder="搜索 Skill..."
-                />
-              </div>
-            </div>
-            <div className="mt-2 flex min-w-0 gap-1 overflow-x-auto text-[11px]">
-              {categories.map((item) => (
-                <button
-                  key={item}
-                  onClick={() => setCategory(item)}
-                  className={cn(
-                    "shrink-0 rounded-md px-3 py-2",
-                    category === item
-                      ? "bg-muted font-medium text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {item}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-6 flex items-center">
-            <h2 className="text-[15px] font-semibold">
-              {tieredMarket
-                ? "官方精选"
-                : tab === "market"
-                  ? category === "精选"
-                    ? "官方精选"
-                    : "创作 Skill"
-                  : "已安装 Skill"}
-            </h2>
-            <span className="ml-2 text-[10px] text-muted-foreground">
-              {loading ? "…" : tieredMarket ? 30 : items.length}
-            </span>
-            {tab === "market" ? (
-              <>
-                <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-[10px] text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={onlyUninstalled}
-                    onChange={(event) =>
-                      setOnlyUninstalled(event.target.checked)
-                    }
-                    className="size-3 rounded border-border-default"
-                  />
-                  仅显示未安装
-                </label>
-                <select
-                  value={skillSort}
-                  onChange={(event) =>
-                    setSkillSort(event.target.value as "recent" | "popular")
-                  }
-                  className="ml-3 h-7 rounded-lg border border-border-default bg-background px-2 text-[10px] text-muted-foreground outline-none"
-                  aria-label="Skill 排序"
-                >
-                  <option value="recent">最近</option>
-                  <option value="popular">最热门</option>
-                </select>
-              </>
-            ) : null}
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
-            {items.map((item, itemIndex) => {
-              const Icon = item.icon;
-              const installed = installedByName.get(item.id);
-              const catalogIndex = CREATIVE_SKILL_COLLECTION.findIndex(
-                (skill) => skill.id === item.id,
-              );
-              const cover =
-                CREATIVE_SKILL_COVERS[
-                  Math.max(0, catalogIndex) % CREATIVE_SKILL_COVERS.length
-                ];
-              return (
-                <div key={item.id} className="contents">
-                  {tieredMarket && itemIndex === 30 ? (
-                    <div className="col-span-full mt-5 flex items-end border-t border-border-subtle pt-6">
-                      <div>
-                        <h2 className="text-[15px] font-semibold">用户精选</h2>
-                        <p className="mt-1 text-[10px] text-muted-foreground">
-                          社区创作范式与实验方向的原创等价能力
-                        </p>
-                      </div>
-                      <span className="ml-2 text-[10px] text-muted-foreground">
-                        5
-                      </span>
-                    </div>
-                  ) : null}
-                  {tieredMarket && itemIndex === 35 ? (
-                    <div className="col-span-full mt-5 flex items-center border-t border-border-subtle pt-6">
-                      <h2 className="text-[15px] font-semibold">
-                        其他 Skill · {Math.max(0, items.length - 35)}
-                      </h2>
-                      <span className="ml-auto text-[10px] text-muted-foreground">
-                        按需安装
-                      </span>
-                    </div>
-                  ) : null}
-                  <article className="group overflow-hidden rounded-[12px] border border-border-default bg-background transition hover:-translate-y-0.5 hover:shadow-[0_14px_35px_-18px_rgba(0,0,0,.35)]">
-                    <div
-                      className={cn(
-                        "relative h-28 overflow-hidden bg-gradient-to-br",
-                        item.tone,
-                      )}
-                    >
-                      <img
-                        src={cover}
-                        alt=""
-                        className="absolute inset-0 size-full object-cover transition duration-300 group-hover:scale-[1.03]"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-white/5" />
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_15%,rgba(255,255,255,.65),transparent_34%)]" />
-                      <Icon className="absolute bottom-3 right-4 size-8 text-white/75 drop-shadow" />
-                      <span className="absolute left-0 top-0 size-8 bg-violet-600 [clip-path:polygon(0_0,100%_0,0_100%)]">
-                        <SparklesIcon className="ml-1 mt-1 size-2.5 text-white" />
-                      </span>
-                      {installed ? (
-                        <span className="absolute right-2.5 top-2.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[8px] font-medium text-white backdrop-blur-sm">
-                          {installed.enabled ? "已启用" : "已安装"}
-                        </span>
-                      ) : null}
-                      <div className="absolute inset-0 flex items-center justify-center gap-1.5 bg-black/40 opacity-0 backdrop-blur-[1px] transition-opacity group-hover:opacity-100">
-                        <button
-                          onClick={() => setDetailSkillId(item.id)}
-                          className="rounded-lg bg-white/92 px-2.5 py-1.5 text-[9px] font-medium text-zinc-900"
-                        >
-                          查看详情
-                        </button>
-                        <button
-                          onClick={() =>
-                            installed?.enabled
-                              ? void handleUseSkill(item.id)
-                              : void handleInstallSkill(item.id)
-                          }
-                          disabled={
-                            enableSkill.isPending || enableMarketSkill.isPending
-                          }
-                          className="rounded-lg bg-zinc-950/90 px-2.5 py-1.5 text-[9px] font-medium text-white"
-                        >
-                          {installed?.enabled
-                            ? "加入画布"
-                            : installed
-                              ? "启用 Skill"
-                              : "安装 Skill"}
-                        </button>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setDetailSkillId(item.id)}
-                      className="block w-full p-3 text-left"
-                    >
-                      <div className="truncate text-[13px] font-semibold">
-                        {item.title}
-                      </div>
-                      <p className="mt-1 line-clamp-2 min-h-8 text-[10px] leading-4 text-muted-foreground">
-                        {item.description}
-                      </p>
-                      <div className="mt-3 flex items-center gap-1 text-[9px] text-muted-foreground">
-                        <span>Echo Design</span>
-                        {installed ? (
-                          <CheckIcon
-                            className={cn(
-                              "size-3",
-                              installed.enabled
-                                ? "text-emerald-500"
-                                : "text-amber-500",
-                            )}
-                          />
-                        ) : null}
-                        <span className="ml-auto inline-flex items-center gap-1">
-                          <ArchiveIcon className="size-2.5" />
-                          {item.downloads}
-                        </span>
-                      </div>
-                    </button>
-                  </article>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-      <Dialog
-        open={Boolean(detailSkill)}
-        onOpenChange={(open) => {
-          if (!open) setDetailSkillId(null);
-        }}
-      >
-        <DialogContent className="flex h-[78vh] max-h-[760px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[920px]">
-          {detailSkill ? (
-            <>
-              <DialogHeader className="shrink-0 border-b border-border-subtle px-6 py-4 pr-12">
-                <div className="flex items-center gap-2">
-                  <DialogTitle className="text-[15px]">
-                    {detailSkill.title}
-                  </DialogTitle>
-                  <span className="rounded-md bg-muted px-2 py-1 text-[9px] text-muted-foreground">
-                    {detailSkill.category}
-                  </span>
-                </div>
-                <DialogDescription className="max-w-3xl text-[11px] leading-5">
-                  {detailSkill.description}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex min-h-0 flex-1">
-                <aside className="w-[230px] shrink-0 overflow-y-auto border-r border-border-subtle bg-muted/20 p-2">
-                  {detailLoading ? (
-                    <div className="grid h-32 place-items-center">
-                      <Loader2Icon className="size-4 animate-spin" />
-                    </div>
-                  ) : (
-                    <>
-                      {detailDirectories.map((directory) => (
-                        <div key={directory}>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setExpandedSkillDirs((current) => {
-                                const next = new Set(current);
-                                if (next.has(directory)) next.delete(directory);
-                                else next.add(directory);
-                                return next;
-                              })
-                            }
-                            className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 text-left text-[10px] hover:bg-muted"
-                          >
-                            <ChevronDownIcon
-                              className={cn(
-                                "size-3 shrink-0 transition-transform",
-                                !expandedSkillDirs.has(directory) &&
-                                  "-rotate-90",
-                              )}
-                            />
-                            <FolderIcon className="size-3 shrink-0" />
-                            <span className="truncate">{directory}</span>
-                          </button>
-                          {expandedSkillDirs.has(directory)
-                            ? detailFiles
-                                .filter((file) =>
-                                  file.path.startsWith(`${directory}/`),
-                                )
-                                .map((file) => (
-                                  <button
-                                    key={file.path}
-                                    onClick={() => setDetailFilePath(file.path)}
-                                    className={cn(
-                                      "flex w-full items-center gap-2 rounded-md py-2 pl-8 pr-2 text-left text-[10px] hover:bg-muted",
-                                      detailFilePath === file.path &&
-                                        "bg-muted font-medium",
-                                    )}
-                                  >
-                                    <BookOpenIcon className="size-3 shrink-0" />
-                                    <span className="truncate">
-                                      {file.path.slice(directory.length + 1)}
-                                    </span>
-                                  </button>
-                                ))
-                            : null}
-                        </div>
-                      ))}
-                      {detailRootFiles.map((file) => (
-                        <button
-                          key={file.path}
-                          onClick={() => setDetailFilePath(file.path)}
-                          className={cn(
-                            "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-[10px] hover:bg-muted",
-                            detailFilePath === file.path &&
-                              "bg-muted font-medium",
-                          )}
-                        >
-                          <ArchiveIcon className="size-3 shrink-0" />
-                          <span className="truncate">{file.path}</span>
-                        </button>
-                      ))}
-                    </>
-                  )}
-                </aside>
-                <section className="flex min-w-0 flex-1 flex-col">
-                  <div className="flex h-10 shrink-0 items-center border-b border-border-subtle px-4 text-[10px] font-medium">
-                    {detailFilePath || "Skill 文件"}
-                    <span className="ml-auto rounded bg-muted px-1.5 py-0.5 text-[8px] text-muted-foreground">
-                      {detailFilePath.endsWith(".json") ? "JSON" : "Markdown"}
-                    </span>
-                  </div>
-                  <div className="chat-markdown min-h-0 flex-1 overflow-auto px-7 py-5">
-                    {detailLoading ? (
-                      <div className="text-[11px] text-muted-foreground">
-                        正在读取…
-                      </div>
-                    ) : renderedDetailContent ? (
-                      <MarkdownContent
-                        content={renderedDetailContent}
-                        isLoading={false}
-                        remarkPlugins={streamdownPlugins.remarkPlugins}
-                        rehypePlugins={streamdownPlugins.rehypePlugins}
-                        chatFontSize="small"
-                        className="text-[11px] leading-6"
-                      />
-                    ) : (
-                      <div className="text-[11px] text-muted-foreground">
-                        没有可预览的文本文件
-                      </div>
-                    )}
-                  </div>
-                </section>
-              </div>
-              <DialogFooter className="shrink-0 border-t border-border-subtle px-5 py-3">
-                <span className="mr-auto self-center text-[9px] text-muted-foreground">
-                  Echo 原创 · Apache-2.0
-                </span>
-                <Button
-                  size="sm"
-                  className="rounded-lg"
-                  disabled={
-                    enableSkill.isPending || enableMarketSkill.isPending
-                  }
-                  onClick={() => {
-                    if (installedByName.get(detailSkill.id)?.enabled) {
-                      void handleUseSkill(detailSkill.id);
-                      setDetailSkillId(null);
-                    } else {
-                      void handleInstallSkill(detailSkill.id);
-                    }
-                  }}
-                >
-                  {installedByName.get(detailSkill.id)?.enabled
-                    ? "加入画布"
-                    : installedByName.get(detailSkill.id)
-                      ? "启用 Skill"
-                      : "安装 Skill"}
-                </Button>
-              </DialogFooter>
-            </>
-          ) : null}
-        </DialogContent>
-      </Dialog>
-    </>
   );
 }
 
@@ -4580,7 +3859,7 @@ function ComfyUIView({
           ) : null}
         </div>
         {selectedWorkflow ? (
-          <div className="mt-6 grid min-h-[520px] grid-cols-[minmax(0,1fr)_240px] gap-8">
+          <div className="mt-6 grid min-h-[520px] grid-cols-1 md:grid-cols-[minmax(0,1fr)_240px] gap-8">
             <section className="min-w-0">
               <h2 className="text-[20px] font-semibold leading-7">
                 {selectedWorkflow.title}
@@ -4688,7 +3967,8 @@ function ComfyUIView({
                   <div className="flex items-center gap-2">
                     <h3 className="text-[12px] font-semibold">兼容性诊断</h3>
                     <span className="text-[9px] text-muted-foreground">
-                      {selectedWorkflowDiagnostics.compatible
+                      {selectedWorkflowDiagnostics.compatible &&
+                      selectedWorkflowDiagnostics.fullyChecked
                         ? "本机可运行"
                         : selectedWorkflowDiagnostics.fullyChecked
                           ? `${selectedWorkflowDiagnostics.counts.errors} 个错误 · ${selectedWorkflowDiagnostics.counts.warnings} 个警告`
@@ -4696,7 +3976,10 @@ function ComfyUIView({
                     </span>
                   </div>
                   <p className="mt-1 text-[9px] leading-4 text-muted-foreground">
-                    已核对节点类型、必填输入、枚举值和本地模型文件；不会自动安装或下载。
+                    {selectedWorkflowDiagnostics.fullyChecked
+                      ? "已核对节点类型、输入与本地模型文件。"
+                      : "尚未完成本机依赖检查，请先连接 ComfyUI 后重新检测。"}{" "}
+                    不会自动安装或下载。
                   </p>
                   {selectedWorkflowDiagnostics.issues.length ? (
                     <div className="mt-3 space-y-1.5">
@@ -4925,6 +4208,8 @@ export default function DesignPage({
     embeddedProject?.name || searchParams.get("name")?.trim() || null;
   const sourceThreadId = searchParams.get("thread")?.trim() || null;
   const newTaskNonce = searchParams.get("new_task")?.trim() || null;
+  // The sidebar opens the canvas itself; task deep links keep their chat layout.
+  const canvasOnly = !sourceThreadId && !newTaskNonce && !embeddedProject;
   const creativeProjectId = embeddedProject
     ? null
     : searchParams.get("creative_project")?.trim() || null;
@@ -4933,20 +4218,24 @@ export default function DesignPage({
   );
   const canvasScopeName =
     projectName || currentCreativeProject?.name || "创作空间";
+  const canvasTaskId = newTaskNonce || sourceThreadId;
+  const canvasProjectId = canvasTaskId ? null : projectId;
   const storageKey = projectId
-    ? `${DESIGN_CANVAS_STORAGE_KEY}:project:${projectId}`
+    ? `${DESIGN_CANVAS_STORAGE_KEY}:project:${projectId}${canvasTaskId ? `:task:${encodeURIComponent(canvasTaskId)}` : ""}`
     : creativeCanvasStorageKey(
         DESIGN_CANVAS_STORAGE_KEY,
         personaId,
         creativeProjectId,
+        newTaskNonce || sourceThreadId,
       );
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasFileInputRef = useRef<HTMLInputElement>(null);
   const [section, setSection] = useState<DesignSection>(
-    projectId || creativeProjectId ? "canvas" : "home",
+    canvasOnly || projectId || creativeProjectId ? "canvas" : "home",
   );
   const [layout, setLayout] = useState<WorkspaceLayout>(() => {
-    if (sourceThreadId) return "chat-left";
+    if (canvasOnly) return "canvas";
+    if (sourceThreadId || newTaskNonce) return "chat";
     if (embeddedProject) return "canvas";
     if (typeof window === "undefined") return "chat-left";
     const saved = window.localStorage.getItem(WORKSPACE_LAYOUT_STORAGE_KEY);
@@ -4958,6 +4247,19 @@ export default function DesignPage({
       : "chat-left";
   });
   const [layoutOpen, setLayoutOpen] = useState(false);
+  const isMobile = useIsMobile();
+  const [mobileView, setMobileView] = useState<"chat" | "canvas">("canvas");
+  const displayLayout = isMobile ? mobileView : layout;
+  const activeDesignSection = section === "canvas" && displayLayout === "chat" ? "home" : section;
+  useEffect(() => {
+    window.parent.postMessage({ type: "echo:design-view", canvasVisible: section === "canvas" && displayLayout !== "chat" }, workspaceHostOrigin());
+  }, [section, displayLayout]);
+  useEffect(() => {
+    if (!canvasOnly) return;
+    setSection("canvas");
+    setLayout("canvas");
+    setMobileView("canvas");
+  }, [canvasOnly]);
   const handleCreativeProjectChange = useCallback(
     (nextProjectId: string | null) => {
       const next = new URLSearchParams(searchParams);
@@ -4997,10 +4299,35 @@ export default function DesignPage({
         : window.localStorage.getItem(storageKey);
     const initial = parseDesignCanvas(raw);
     return canvasScopeName && !raw
-      ? { ...initial, title: `${canvasScopeName} · 创作画布` }
+      ? {
+          ...initial,
+          title: `${canvasScopeName} · 创作画布`,
+          nodes: [],
+          edges: [],
+        }
       : initial;
   });
   const undoHistoryRef = useRef<DesignCanvasDocument[]>([]);
+  const previousCanvasContentRef = useRef({
+    key: storageKey,
+    count: document.nodes.length,
+  });
+  useEffect(() => {
+    const previous = previousCanvasContentRef.current;
+    previousCanvasContentRef.current = {
+      key: storageKey,
+      count: document.nodes.length,
+    };
+    if (
+      previous.key === storageKey &&
+      previous.count === 0 &&
+      document.nodes.length > 0
+    ) {
+      setSection("canvas");
+      setLayout("chat-left");
+      setMobileView("canvas");
+    }
+  }, [document.nodes.length, storageKey]);
   const redoHistoryRef = useRef<DesignCanvasDocument[]>([]);
   const dragHistorySnapshotRef = useRef<DesignCanvasDocument | null>(null);
   const [, setHistoryVersion] = useState(0);
@@ -5209,10 +4536,12 @@ export default function DesignPage({
       return;
     handledNewTaskNonceRef.current = newTaskNonce;
     setDesignThreadId(null);
+    designChatWindowRef.current = null;
     setEmbeddedChatUrl(null);
     setEmbeddedSurface(null);
     setSection("home");
-    if (layout === "canvas") setLayout("chat-left");
+    setLayout("chat");
+    setMobileView("chat");
   }, [layout, newTaskNonce]);
   useEffect(() => {
     if (!sourceThreadId) return;
@@ -5226,9 +4555,13 @@ export default function DesignPage({
     setDesignThreadId(sourceThreadId);
     setEmbeddedChatUrl(`${workspaceShellBase()}#${route}`);
     setSection("canvas");
-    setLayout("chat-left");
-  }, [creativeProjectId, personaId, projectId, sourceThreadId]);
-  const { skills, isLoading: skillsLoading } = useSkills();
+    const saved = parseDesignCanvas(window.localStorage.getItem(storageKey));
+    setLayout(
+      window.localStorage.getItem(storageKey) && saved.nodes.length
+        ? "chat-left"
+        : "chat",
+    );
+  }, [creativeProjectId, personaId, projectId, sourceThreadId, storageKey]);
   useEffect(() => {
     window.localStorage.setItem(
       CANVAS_VIEW_STORAGE_KEY,
@@ -5287,7 +4620,7 @@ export default function DesignPage({
   }, [redoCanvas, undoCanvas]);
   const reconcileRemoteCanvas = useCallback(
     (payload: CanvasServerPayload) => {
-      if (!projectId || !payload.document) return;
+      if (!canvasProjectId || !payload.document) return;
       const revision = payload.revision ?? 0;
       if (revision <= serverRevisionRef.current) return;
       const remote = parseDesignCanvas(JSON.stringify(payload.document));
@@ -5328,34 +4661,34 @@ export default function DesignPage({
       setCanvasSyncState("conflict");
       toast.warning("同一画布内容被多人修改，请确认保留方式");
     },
-    [projectId, setDocument],
+    [canvasProjectId, setDocument],
   );
 
   const pullRemoteCanvas = useCallback(async () => {
-    if (!projectId || pendingCanvasConflict) return;
+    if (!canvasProjectId || pendingCanvasConflict) return;
     const response = await fetch(
-      `${getBackendBaseURL()}/api/design/projects/${encodeURIComponent(projectId)}/canvas`,
+      `${getBackendBaseURL()}/api/design/projects/${encodeURIComponent(canvasProjectId)}/canvas`,
       { headers: authHeaders() },
     );
     if (!response.ok)
       throw new Error(`canvas refresh failed: ${response.status}`);
     reconcileRemoteCanvas((await response.json()) as CanvasServerPayload);
-  }, [pendingCanvasConflict, projectId, reconcileRemoteCanvas]);
+  }, [pendingCanvasConflict, canvasProjectId, reconcileRemoteCanvas]);
 
   useEffect(() => {
-    activeServerProjectRef.current = projectId;
+    activeServerProjectRef.current = canvasProjectId;
     serverReadyRef.current = false;
     serverRevisionRef.current = 0;
     lastSyncedDocumentRef.current = "";
     setPendingCanvasConflict(null);
-    if (!projectId) {
+    if (!canvasProjectId) {
       setCanvasSyncState("local");
       return;
     }
     const controller = new AbortController();
     setCanvasSyncState("loading");
     void fetch(
-      `${getBackendBaseURL()}/api/design/projects/${encodeURIComponent(projectId)}/canvas`,
+      `${getBackendBaseURL()}/api/design/projects/${encodeURIComponent(canvasProjectId)}/canvas`,
       { headers: authHeaders(), signal: controller.signal },
     )
       .then(async (response) => {
@@ -5384,11 +4717,11 @@ export default function DesignPage({
         setCanvasSyncState("error");
       });
     return () => controller.abort();
-  }, [projectId, setDocument]);
+  }, [canvasProjectId, setDocument]);
 
   useEffect(() => {
-    if (!projectId || typeof BroadcastChannel === "undefined") return;
-    const channel = new BroadcastChannel(`octopus:design:${projectId}`);
+    if (!canvasProjectId || typeof BroadcastChannel === "undefined") return;
+    const channel = new BroadcastChannel(`octopus:design:${canvasProjectId}`);
     canvasChannelRef.current = channel;
     channel.onmessage = (event: MessageEvent<CanvasServerPayload>) => {
       reconcileRemoteCanvas(event.data);
@@ -5397,19 +4730,19 @@ export default function DesignPage({
       canvasChannelRef.current = null;
       channel.close();
     };
-  }, [projectId, reconcileRemoteCanvas]);
+  }, [canvasProjectId, reconcileRemoteCanvas]);
 
   const presenceDisplayName =
     user?.username?.trim() || user?.actor_id?.trim() || "本地成员";
   useEffect(() => {
-    if (!projectId) {
+    if (!canvasProjectId) {
       setPresenceMembers([]);
       return;
     }
     let stopped = false;
     let failureReported = false;
     const clientId = presenceClientIdRef.current;
-    const endpoint = `${getBackendBaseURL()}/api/design/projects/${encodeURIComponent(projectId)}/presence`;
+    const endpoint = `${getBackendBaseURL()}/api/design/projects/${encodeURIComponent(canvasProjectId)}/presence`;
     const heartbeat = async () => {
       if (window.document.visibilityState === "hidden") return;
       const pointer = section === "canvas" ? presencePointerRef.current : null;
@@ -5457,17 +4790,17 @@ export default function DesignPage({
         keepalive: true,
       }).catch(() => undefined);
     };
-  }, [presenceDisplayName, projectId, section]);
+  }, [presenceDisplayName, canvasProjectId, section]);
 
   useEffect(() => {
-    if (!projectId || pendingCanvasConflict) return;
+    if (!canvasProjectId || pendingCanvasConflict) return;
     const timer = window.setInterval(() => {
       void pullRemoteCanvas().catch((error: unknown) => {
         console.warn("Failed to refresh project canvas", error);
       });
     }, 2500);
     return () => window.clearInterval(timer);
-  }, [pendingCanvasConflict, projectId, pullRemoteCanvas]);
+  }, [pendingCanvasConflict, canvasProjectId, pullRemoteCanvas]);
 
   useEffect(() => {
     if (activeStorageKeyRef.current !== storageKey) {
@@ -5476,10 +4809,18 @@ export default function DesignPage({
       const next = parseDesignCanvas(raw);
       undoHistoryRef.current = [];
       redoHistoryRef.current = [];
+      setSelectedId(null);
+      setSelectedIds([]);
+      setCanvasClipboard(null);
       setHistoryVersion((value) => value + 1);
       setDocumentState(
         canvasScopeName && !raw
-          ? { ...next, title: `${canvasScopeName} · 创作画布` }
+          ? {
+              ...next,
+              title: `${canvasScopeName} · 创作画布`,
+              nodes: [],
+              edges: [],
+            }
           : next,
       );
       return;
@@ -5487,20 +4828,20 @@ export default function DesignPage({
     window.localStorage.setItem(storageKey, JSON.stringify(document));
   }, [canvasScopeName, document, storageKey]);
   useEffect(() => {
-    if (!projectId || !serverReadyRef.current) return;
+    if (!canvasProjectId || !serverReadyRef.current) return;
     const serialized = JSON.stringify(document);
     if (serialized === lastSyncedDocumentRef.current) return;
     const timer = window.setTimeout(() => {
       serverSaveChainRef.current = serverSaveChainRef.current.then(async () => {
         if (
           !serverReadyRef.current ||
-          activeServerProjectRef.current !== projectId
+          activeServerProjectRef.current !== canvasProjectId
         )
           return;
         setCanvasSyncState("saving");
         try {
           const response = await fetch(
-            `${getBackendBaseURL()}/api/design/projects/${encodeURIComponent(projectId)}/canvas`,
+            `${getBackendBaseURL()}/api/design/projects/${encodeURIComponent(canvasProjectId)}/canvas`,
             {
               method: "PUT",
               headers: {
@@ -5520,7 +4861,7 @@ export default function DesignPage({
           if (!response.ok)
             throw new Error(`canvas save failed: ${response.status}`);
           const payload = (await response.json()) as { revision?: number };
-          if (activeServerProjectRef.current !== projectId) return;
+          if (activeServerProjectRef.current !== canvasProjectId) return;
           serverRevisionRef.current =
             payload.revision ?? serverRevisionRef.current + 1;
           lastSyncedDocumentRef.current = serialized;
@@ -5536,7 +4877,7 @@ export default function DesignPage({
       });
     }, 650);
     return () => window.clearTimeout(timer);
-  }, [document, projectId, pullRemoteCanvas]);
+  }, [document, canvasProjectId, pullRemoteCanvas]);
 
   const resolveCanvasConflict = useCallback(
     (choice: "merge" | "remote") => {
@@ -5607,6 +4948,18 @@ export default function DesignPage({
         if (nextThreadId && nextThreadId !== "new") {
           setDesignThreadId(nextThreadId);
           if (searchParams.get("thread") !== nextThreadId) {
+            const threadCanvasKey = projectId
+              ? `${DESIGN_CANVAS_STORAGE_KEY}:project:${projectId}:task:${encodeURIComponent(nextThreadId)}`
+              : creativeCanvasStorageKey(
+                  DESIGN_CANVAS_STORAGE_KEY,
+                  personaId,
+                  creativeProjectId,
+                  nextThreadId,
+                );
+            window.localStorage.setItem(
+              threadCanvasKey,
+              JSON.stringify(documentRef.current),
+            );
             const next = new URLSearchParams(searchParams);
             next.set("thread", nextThreadId);
             next.delete("new_task");
@@ -6116,7 +5469,7 @@ export default function DesignPage({
     [addNode, document.nodes, projectId, zoom],
   );
   const uploadHomeFiles = useCallback(
-    async (files: FileList) => {
+    async (files: FileList | File[]) => {
       if (!projectId) {
         toast.info("请先从输入框下方选择一个项目");
         return;
@@ -6138,6 +5491,7 @@ export default function DesignPage({
         for (const artifact of payload.items) placeOrLocateArtifact(artifact);
         setSection("canvas");
         toast.success(`已把 ${payload.items.length} 个文件加入画布`);
+        return payload.items;
       } catch {
         toast.error("项目文件上传失败");
       }
@@ -6748,7 +6102,7 @@ export default function DesignPage({
       }}
       onWheel={handleWheel}
       className={cn(
-        "relative min-w-0 flex-1 touch-none overflow-hidden transition-colors dark:bg-[#0a0a0a]",
+        "relative min-h-0 min-w-0 flex-1 touch-none overflow-clip transition-colors dark:bg-[#0a0a0a]",
         (toolMode === "hand" || spacePanning) &&
           "cursor-grab active:cursor-grabbing",
       )}
@@ -7029,7 +6383,12 @@ export default function DesignPage({
                 className="flex h-9 w-full items-center justify-between rounded-md px-2 text-left text-sm hover:bg-muted disabled:opacity-35"
               >
                 <span>撤销</span>
-                <kbd className="text-[10px] text-muted-foreground">⌘Z</kbd>
+                <kbd className="text-[10px] text-muted-foreground">
+                  {typeof navigator !== "undefined" &&
+                  /Mac/.test(navigator.userAgent)
+                    ? "⌘Z"
+                    : "Ctrl+Z"}
+                </kbd>
               </button>
               <button
                 type="button"
@@ -7042,7 +6401,12 @@ export default function DesignPage({
                 className="flex h-9 w-full items-center justify-between rounded-md px-2 text-left text-sm hover:bg-muted disabled:opacity-35"
               >
                 <span>重做</span>
-                <kbd className="text-[10px] text-muted-foreground">⇧⌘Z</kbd>
+                <kbd className="text-[10px] text-muted-foreground">
+                  {typeof navigator !== "undefined" &&
+                  /Mac/.test(navigator.userAgent)
+                    ? "⇧⌘Z"
+                    : "Shift+Ctrl+Z"}
+                </kbd>
               </button>
               <div className="my-1 h-px bg-border-subtle" />
               <button
@@ -7058,7 +6422,12 @@ export default function DesignPage({
                 className="flex h-9 w-full items-center justify-between rounded-md px-2 text-left text-sm hover:bg-muted disabled:opacity-35"
               >
                 <span className="flex-1">粘贴</span>
-                <kbd className="text-[10px] text-muted-foreground">⌘V</kbd>
+                <kbd className="text-[10px] text-muted-foreground">
+                  {typeof navigator !== "undefined" &&
+                  /Mac/.test(navigator.userAgent)
+                    ? "⌘V"
+                    : "Ctrl+V"}
+                </kbd>
               </button>
             </>
           ) : (
@@ -7438,7 +6807,7 @@ export default function DesignPage({
         </div>
       ) : null}
       {canvasSettingsOpen ? (
-        <div className="absolute left-1/2 top-14 z-40 w-64 translate-x-[-12px] rounded-[14px] border border-black/[0.08] bg-white/95 p-3 shadow-[0_16px_40px_-20px_rgba(0,0,0,.38)] backdrop-blur dark:border-white/10 dark:bg-[#181818]/95">
+        <div className="absolute right-3 top-14 z-40 w-64 max-w-[calc(100%-1.5rem)] max-h-[calc(100%-5rem)] overflow-y-auto rounded-[14px] border border-black/[0.08] bg-white/95 p-3 shadow-[0_16px_40px_-20px_rgba(0,0,0,.38)] backdrop-blur dark:border-white/10 dark:bg-[#181818]/95">
           <div className="text-[10px] font-semibold">画布设置</div>
           <div className="mt-3 text-[9px] text-muted-foreground">背景样式</div>
           <div className="mt-1.5 grid grid-cols-3 gap-1 rounded-lg bg-muted/60 p-1">
@@ -7865,9 +7234,9 @@ export default function DesignPage({
               {[
                 ["移动工具", "V"],
                 ["小手工具", "H / Space"],
-                ["撤销 / 重做", "⌘Z / ⇧⌘Z"],
-                ["复制 / 粘贴", "⌘C / ⌘V"],
-                ["复制节点", "⌘D"],
+                ["撤销 / 重做", "Ctrl/⌘+Z / Shift+Ctrl/⌘+Z"],
+                ["复制 / 粘贴", "Ctrl/⌘+C / Ctrl/⌘+V"],
+                ["复制节点", "Ctrl/⌘+D"],
                 ["删除节点", "Delete"],
                 ["取消操作", "Esc"],
               ].map(([label, shortcut]) => (
@@ -8313,14 +7682,25 @@ export default function DesignPage({
 
   return (
     <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-background">
-      <header className="flex h-12 shrink-0 items-center border-b border-border-subtle bg-background px-2.5">
-        <div className="ml-1 flex min-w-0 items-center gap-2">
-          <span className="grid size-7 place-items-center rounded-lg bg-violet-100 text-violet-600">
-            <WandSparklesIcon className="size-3.5" />
-          </span>
-          {section === "home" ? (
-            <span className="text-[13px] font-semibold">Echo Design</span>
-          ) : (
+      <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-y-1 border-b border-border-subtle bg-background px-2.5 py-1 md:h-12 md:flex-nowrap md:py-0">
+        <div className="ml-1 flex min-w-0 max-w-full items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSection("home")}
+            aria-current={activeDesignSection === "home" ? "page" : undefined}
+            className={cn(
+              "relative flex h-10 shrink-0 items-center gap-2 px-1.5 text-[13px] font-semibold transition-colors hover:text-foreground",
+              activeDesignSection === "home"
+                ? "text-foreground after:absolute after:bottom-0 after:left-1.5 after:right-1.5 after:h-0.5 after:rounded-full after:bg-foreground"
+                : "text-muted-foreground",
+            )}
+          >
+            <span className="grid size-7 place-items-center rounded-lg bg-violet-100 text-violet-600">
+              <WandSparklesIcon className="size-3.5" />
+            </span>
+            Echo Design
+          </button>
+          {activeDesignSection !== "home" && (
             <>
               {projectId ? (
                 <span className="flex h-8 max-w-44 items-center gap-1.5 px-2 text-[11px] font-medium">
@@ -8333,7 +7713,7 @@ export default function DesignPage({
                   projects={creativeProjects}
                   currentProjectId={creativeProjectId}
                   onSelect={handleCreativeProjectChange}
-                  className="w-44"
+                  className="w-28 md:w-44"
                 />
               )}
               <span className="text-muted-foreground/50">/</span>
@@ -8347,7 +7727,7 @@ export default function DesignPage({
                     title: event.target.value,
                   }))
                 }
-                className="w-40 truncate bg-transparent text-[13px] font-semibold outline-none"
+                className="w-28 md:w-40 truncate bg-transparent text-[13px] font-semibold outline-none"
                 aria-label="画布名称"
               />
             </>
@@ -8418,34 +7798,32 @@ export default function DesignPage({
             </span>
           ) : null}
         </div>
-        <nav
+        {!canvasOnly && <nav
           className={cn(
-            "ml-5 h-full items-center gap-1 text-[11px]",
-            projectId ? "hidden xl:flex" : "flex",
+            "order-last flex h-9 w-full shrink-0 items-center gap-1 overflow-x-auto whitespace-nowrap text-[13px] md:order-none md:ml-3 md:h-full md:w-auto",
+            projectId ? "md:hidden xl:flex" : "",
           )}
         >
           {(
             [
-              ["home", "创作首页"],
               ["canvas", "创作画布"],
               ["assets", "资产中心"],
-              ["skills", "Skill"],
-              ["comfyui", "ComfyUI"],
+              ["comfyui", "高级工作流"],
             ] as const
           ).map(([id, label]) => (
             <button
               key={id}
-              onClick={() => setSection(id)}
+              onClick={() => { setSection(id); if (id === "canvas" && displayLayout === "chat") { setLayout("canvas"); setMobileView("canvas"); } }}
               className={cn(
                 "relative h-full px-2.5 text-muted-foreground",
-                section === id &&
+                activeDesignSection === id &&
                   "font-medium text-foreground after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:rounded-full after:bg-foreground",
               )}
             >
               {label}
             </button>
           ))}
-        </nav>
+        </nav>}
         <span className="flex-1" />
         {section === "canvas" ? (
           <>
@@ -8479,7 +7857,7 @@ export default function DesignPage({
                 工作流
               </button>
             </div>
-            <div className="relative">
+            <div className="relative hidden md:block">
               <Button
                 variant="ghost"
                 size="icon"
@@ -8524,17 +7902,48 @@ export default function DesignPage({
           </>
         ) : null}
       </header>
+      {section === "canvas" && isMobile && (
+        <div
+          className="flex shrink-0 gap-2 border-b bg-background p-2"
+          aria-label="画布视图"
+        >
+          {(["canvas", "chat"] as const).map((view) => (
+            <Button
+              key={view}
+              size="sm"
+              variant={mobileView === view ? "secondary" : "ghost"}
+              aria-pressed={mobileView === view}
+              onClick={() => setMobileView(view)}
+            >
+              {view === "canvas" ? "画布" : "对话"}
+            </Button>
+          ))}
+        </div>
+      )}
       <div className="min-h-0 flex-1">
         {section === "home" ? (
           <DesignHomeView
+            spaceSelector={
+              <CreativeProjectSelector
+                personaId={personaId}
+                projects={creativeProjects}
+                currentProjectId={creativeProjectId}
+                onSelect={handleCreativeProjectChange}
+                compact
+              />
+            }
             key={newTaskNonce || "current-design-task"}
-            onStart={(prompt, enabledModels) => {
+            threadId={designThreadId ?? undefined}
+            onStart={async (prompt, enabledModels, files) => {
+              const artifacts = files?.length ? await uploadHomeFiles(files) : [];
+              if (files?.length && !artifacts?.length) return;
+              const attachmentNote = artifacts?.length ? `\n\n参考附件：${artifacts.map((item) => item.url).join("\n")}` : "";
               const capabilityNote = enabledModels.length
                 ? `\n\n可调用创作能力：${enabledModels.join("、")}`
                 : "";
               addNode("brief", "创作需求", `${prompt}${capabilityNote}`);
               setSection("canvas");
-              runCanvas(`${prompt}${capabilityNote}`);
+              runCanvas(`${prompt}${capabilityNote}${attachmentNote}`);
             }}
             onUseTemplate={() => {
               const template = createDramaSeriesCanvas();
@@ -8545,12 +7954,17 @@ export default function DesignPage({
               if (layout === "canvas") setLayout("chat-left");
               toast.success("AI 漫剧工作流已创建，可从第一阶段开始");
             }}
-            onOpenSkills={() => setSection("skills")}
-            onAddFiles={(files) => void uploadHomeFiles(files)}
-            personaId={personaId}
-            projects={creativeProjects}
-            currentProjectId={creativeProjectId}
-            onSelectProject={handleCreativeProjectChange}
+            onOpenSkills={() => {
+              const href = "/workspace/agents?tab=skills";
+              if (window.parent !== window) {
+                window.parent.postMessage(
+                  { type: "octopus.workbench.navigate", href },
+                  workspaceHostOrigin(),
+                );
+              } else {
+                navigate(href);
+              }
+            }}
           />
         ) : null}
         {section === "assets" ? (
@@ -8560,25 +7974,6 @@ export default function DesignPage({
             onUseArtifact={(artifact) => {
               placeOrLocateArtifact(artifact);
               setSection("canvas");
-            }}
-          />
-        ) : null}
-        {section === "skills" ? (
-          <SkillsView
-            installedSkills={skills}
-            loading={skillsLoading}
-            onUse={(id) => {
-              const skill = CREATIVE_SKILL_COLLECTION.find(
-                (item) => item.id === id,
-              );
-              if (skill) {
-                addNode("skill", skill.title, skill.description, {
-                  type: "skill",
-                  id,
-                });
-                setSection("canvas");
-                toast.success("Skill 已加入画布");
-              }
             }}
           />
         ) : null}
@@ -8597,8 +7992,8 @@ export default function DesignPage({
           />
         ) : null}
         {section === "canvas" ? (
-          <div className="flex h-full min-h-0">
-            {layout === "chat-left" || layout === "chat" ? (
+          <div className="relative flex h-full min-h-0">
+            {displayLayout === "chat-left" || displayLayout === "chat" ? (
               <ChatPanel
                 chatUrl={embeddedChatUrl}
                 canvasContext={canvasAgentContext}
@@ -8606,22 +8001,28 @@ export default function DesignPage({
                 onFrameWindowChange={handleDesignFrameWindowChange}
                 onRun={runCanvas}
                 onNew={() => setEmbeddedChatUrl(null)}
-                onClose={() => setLayout("canvas")}
+                onClose={() => {
+                  setLayout("canvas");
+                  setMobileView("canvas");
+                }}
                 surface={embeddedSurface}
                 side="left"
+                fullWidth={displayLayout === "chat"}
               />
             ) : null}
-            {layout !== "chat" ? canvasSurface : null}
-            {layout !== "chat" && assetsOpen ? (
-              <CanvasAssetsPanel
-                personaId={personaId}
-                projectId={projectId}
-                document={document}
-                onClose={() => setAssetsOpen(false)}
-                onPick={placeOrLocateArtifact}
-              />
+            {displayLayout !== "chat" ? canvasSurface : null}
+            {displayLayout !== "chat" && assetsOpen ? (
+              <div className="absolute inset-0 z-30 bg-background md:contents">
+                <CanvasAssetsPanel
+                  personaId={personaId}
+                  projectId={projectId}
+                  document={document}
+                  onClose={() => setAssetsOpen(false)}
+                  onPick={placeOrLocateArtifact}
+                />
+              </div>
             ) : null}
-            {layout === "split" ? (
+            {displayLayout === "split" ? (
               <ChatPanel
                 chatUrl={embeddedChatUrl}
                 canvasContext={canvasAgentContext}
@@ -8629,7 +8030,10 @@ export default function DesignPage({
                 onFrameWindowChange={handleDesignFrameWindowChange}
                 onRun={runCanvas}
                 onNew={() => setEmbeddedChatUrl(null)}
-                onClose={() => setLayout("canvas")}
+                onClose={() => {
+                  setLayout("canvas");
+                  setMobileView("canvas");
+                }}
                 surface={embeddedSurface}
               />
             ) : null}

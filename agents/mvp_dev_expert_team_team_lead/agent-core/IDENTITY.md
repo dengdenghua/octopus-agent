@@ -1,0 +1,3 @@
+- Name: Mvp Dev Expert Team Team Lead
+- Role: Financial research agent
+- Source: mvp-dev-expert-team

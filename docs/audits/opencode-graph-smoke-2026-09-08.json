@@ -1,0 +1,689 @@
+{
+  "engine": "opencode",
+  "anonymous": true,
+  "model_receipt": {
+    "engine": "opencode",
+    "model": "big-pickle",
+    "cost": 0,
+    "tokens": {
+      "total": 2505,
+      "input": 540,
+      "output": 173,
+      "reasoning": 0,
+      "cache": {
+        "write": 0,
+        "read": 1792
+      }
+    }
+  },
+  "graph": {
+    "task_id": "cfe51126-3aa0-4c0b-ad49-c126524f4048",
+    "nodes": [
+      {
+        "node_id": "n0",
+        "kind": "sucker",
+        "skill_ref": "read_file",
+        "args_template": {
+          "path": "a.txt"
+        },
+        "input_schema": null,
+        "output_schema": null,
+        "failure_retry": 0,
+        "continue_on_failure": false,
+        "timeout_ms": 30000
+      },
+      {
+        "node_id": "n1",
+        "kind": "sucker",
+        "skill_ref": "read_file",
+        "args_template": {
+          "path": "b.txt"
+        },
+        "input_schema": null,
+        "output_schema": null,
+        "failure_retry": 0,
+        "continue_on_failure": false,
+        "timeout_ms": 30000
+      },
+      {
+        "node_id": "n2",
+        "kind": "sucker",
+        "skill_ref": "read_file",
+        "args_template": {
+          "path": "c.txt"
+        },
+        "input_schema": null,
+        "output_schema": null,
+        "failure_retry": 0,
+        "continue_on_failure": false,
+        "timeout_ms": 30000
+      }
+    ],
+    "edges": [],
+    "budget": {
+      "tokens": 10000,
+      "usd": 1.0,
+      "latency_ms": 600000
+    },
+    "strategy": "opencode_planner",
+    "task_type": "general",
+    "recipe_hash": null,
+    "planner_usage": {},
+    "ts": "2026-09-08T14:16:28.070729Z"
+  },
+  "result": {
+    "task_id": "cfe51126-3aa0-4c0b-ad49-c126524f4048",
+    "arm_results": [
+      {
+        "arm_id": "generic_arm",
+        "task_id": "af05926c-2015-4834-92bf-96790a90f480",
+        "status": "success",
+        "outputs": {
+          "n0": {
+            "path": "D:\\echo agent\\.codex-run\\graph-smoke-gdq7hbkv\\workspace\\a.txt",
+            "size": 19,
+            "truncated": false,
+            "content": "ECHO_a.txt_VERIFIED"
+          }
+        },
+        "trajectory_id": "335165e6-7017-4365-8a20-122a7d6fcfc3",
+        "cost": {
+          "tokens_in": 100,
+          "tokens_out": 100,
+          "usd": 0.001,
+          "latency_ms": 31.999999991967343
+        },
+        "reason": "",
+        "steps": [
+          {
+            "step_id": 0,
+            "node_id": "n0",
+            "action": {
+              "call_id": "d112f7b0-32a6-47fe-ab0c-d6b396779250",
+              "caller": "arms/generic_arm",
+              "sucker_id": "read_file",
+              "args": {
+                "path": "a.txt"
+              },
+              "predicted_cost": null,
+              "ts": "2026-09-08T14:16:28.234602Z"
+            },
+            "result": {
+              "call_id": "d112f7b0-32a6-47fe-ab0c-d6b396779250",
+              "status": "success",
+              "output": {
+                "path": "D:\\echo agent\\.codex-run\\graph-smoke-gdq7hbkv\\workspace\\a.txt",
+                "size": 19,
+                "truncated": false,
+                "content": "ECHO_a.txt_VERIFIED"
+              },
+              "output_hash": "8f04040c79321712",
+              "error_type": null,
+              "stderr_tags": [],
+              "exit_code": null,
+              "cost": {
+                "tokens_in": 100,
+                "tokens_out": 100,
+                "usd": 0.001,
+                "latency_ms": 31.999999991967343
+              },
+              "files_modified": [],
+              "network_egress_bytes": 0,
+              "trusted_execution": false,
+              "execution_source": "registered_noncanonical",
+              "effect_receipt": {
+                "schema": "octopus.tool.effect_receipt.v1",
+                "sealed": true,
+                "emitted_by": "tool_executor",
+                "tool_name": "read_file",
+                "call_id": "d112f7b0-32a6-47fe-ab0c-d6b396779250",
+                "effect_class": "read_only",
+                "state": "committed",
+                "handler_entered": true,
+                "retry_safe": false
+              },
+              "ts": "2026-09-08T14:16:28.290191Z"
+            },
+            "context_hash": null,
+            "immune_verdict": "allow",
+            "ts": "2026-09-08T14:16:28.290191Z",
+            "args_template": {
+              "path": "a.txt"
+            }
+          }
+        ]
+      },
+      {
+        "arm_id": "generic_arm",
+        "task_id": "bef209e3-fd80-47e5-9b9e-03db1d5d766e",
+        "status": "success",
+        "outputs": {
+          "n1": {
+            "path": "D:\\echo agent\\.codex-run\\graph-smoke-gdq7hbkv\\workspace\\b.txt",
+            "size": 19,
+            "truncated": false,
+            "content": "ECHO_b.txt_VERIFIED"
+          }
+        },
+        "trajectory_id": "2a5d85b2-3d7c-47f5-8ee1-e6c8cdc35572",
+        "cost": {
+          "tokens_in": 100,
+          "tokens_out": 100,
+          "usd": 0.001,
+          "latency_ms": 16.00000000325963
+        },
+        "reason": "",
+        "steps": [
+          {
+            "step_id": 0,
+            "node_id": "n1",
+            "action": {
+              "call_id": "525189f9-a478-45c7-b8a6-3940e9a54971",
+              "caller": "arms/generic_arm",
+              "sucker_id": "read_file",
+              "args": {
+                "path": "b.txt"
+              },
+              "predicted_cost": null,
+              "ts": "2026-09-08T14:16:28.234602Z"
+            },
+            "result": {
+              "call_id": "525189f9-a478-45c7-b8a6-3940e9a54971",
+              "status": "success",
+              "output": {
+                "path": "D:\\echo agent\\.codex-run\\graph-smoke-gdq7hbkv\\workspace\\b.txt",
+                "size": 19,
+                "truncated": false,
+                "content": "ECHO_b.txt_VERIFIED"
+              },
+              "output_hash": "3c5aed545850d1cd",
+              "error_type": null,
+              "stderr_tags": [],
+              "exit_code": null,
+              "cost": {
+                "tokens_in": 100,
+                "tokens_out": 100,
+                "usd": 0.001,
+                "latency_ms": 16.00000000325963
+              },
+              "files_modified": [],
+              "network_egress_bytes": 0,
+              "trusted_execution": false,
+              "execution_source": "registered_noncanonical",
+              "effect_receipt": {
+                "schema": "octopus.tool.effect_receipt.v1",
+                "sealed": true,
+                "emitted_by": "tool_executor",
+                "tool_name": "read_file",
+                "call_id": "525189f9-a478-45c7-b8a6-3940e9a54971",
+                "effect_class": "read_only",
+                "state": "committed",
+                "handler_entered": true,
+                "retry_safe": false
+              },
+              "ts": "2026-09-08T14:16:29.282962Z"
+            },
+            "context_hash": null,
+            "immune_verdict": "allow",
+            "ts": "2026-09-08T14:16:29.282962Z",
+            "args_template": {
+              "path": "b.txt"
+            }
+          }
+        ]
+      },
+      {
+        "arm_id": "generic_arm",
+        "task_id": "802c285f-2a62-4401-8523-ac6731fc510b",
+        "status": "success",
+        "outputs": {
+          "n2": {
+            "path": "D:\\echo agent\\.codex-run\\graph-smoke-gdq7hbkv\\workspace\\c.txt",
+            "size": 19,
+            "truncated": false,
+            "content": "ECHO_c.txt_VERIFIED"
+          }
+        },
+        "trajectory_id": "eaf5b3ec-b27f-4a50-8296-be81c8e012ce",
+        "cost": {
+          "tokens_in": 100,
+          "tokens_out": 100,
+          "usd": 0.001,
+          "latency_ms": 16.00000000325963
+        },
+        "reason": "",
+        "steps": [
+          {
+            "step_id": 0,
+            "node_id": "n2",
+            "action": {
+              "call_id": "79d6cb7d-a983-47bf-93d3-d930323cf3d2",
+              "caller": "arms/generic_arm",
+              "sucker_id": "read_file",
+              "args": {
+                "path": "c.txt"
+              },
+              "predicted_cost": null,
+              "ts": "2026-09-08T14:16:28.235605Z"
+            },
+            "result": {
+              "call_id": "79d6cb7d-a983-47bf-93d3-d930323cf3d2",
+              "status": "success",
+              "output": {
+                "path": "D:\\echo agent\\.codex-run\\graph-smoke-gdq7hbkv\\workspace\\c.txt",
+                "size": 19,
+                "truncated": false,
+                "content": "ECHO_c.txt_VERIFIED"
+              },
+              "output_hash": "407887dc29065412",
+              "error_type": null,
+              "stderr_tags": [],
+              "exit_code": null,
+              "cost": {
+                "tokens_in": 100,
+                "tokens_out": 100,
+                "usd": 0.001,
+                "latency_ms": 16.00000000325963
+              },
+              "files_modified": [],
+              "network_egress_bytes": 0,
+              "trusted_execution": false,
+              "execution_source": "registered_noncanonical",
+              "effect_receipt": {
+                "schema": "octopus.tool.effect_receipt.v1",
+                "sealed": true,
+                "emitted_by": "tool_executor",
+                "tool_name": "read_file",
+                "call_id": "79d6cb7d-a983-47bf-93d3-d930323cf3d2",
+                "effect_class": "read_only",
+                "state": "committed",
+                "handler_entered": true,
+                "retry_safe": false
+              },
+              "ts": "2026-09-08T14:16:29.282962Z"
+            },
+            "context_hash": null,
+            "immune_verdict": "allow",
+            "ts": "2026-09-08T14:16:29.282962Z",
+            "args_template": {
+              "path": "c.txt"
+            }
+          }
+        ]
+      }
+    ],
+    "parallelism_achieved": 3,
+    "total_wall_ms": 1050.1799000048777,
+    "total_cost_usd": 0.003,
+    "all_successful": true,
+    "plan": {
+      "task_id": "cfe51126-3aa0-4c0b-ad49-c126524f4048",
+      "strategy": "per_node",
+      "max_workers": 4,
+      "phases": [
+        {
+          "phase_index": 0,
+          "assignment_ids": [
+            "p0:a0",
+            "p0:a1",
+            "p0:a2"
+          ],
+          "node_ids": [
+            "n0",
+            "n1",
+            "n2"
+          ],
+          "parallel": true
+        }
+      ],
+      "contracts": [
+        {
+          "contract_id": "p0:a0",
+          "agent_id": "generic_arm",
+          "role": "read_file",
+          "node_ids": [
+            "n0"
+          ],
+          "depends_on": [],
+          "owned_scope": [
+            "node:n0"
+          ],
+          "forbidden_scope": [
+            "node:n1",
+            "node:n2"
+          ],
+          "success_criteria": [
+            "Complete node n0",
+            "Return an ArmResult with status=success"
+          ]
+        },
+        {
+          "contract_id": "p0:a1",
+          "agent_id": "generic_arm",
+          "role": "read_file",
+          "node_ids": [
+            "n1"
+          ],
+          "depends_on": [],
+          "owned_scope": [
+            "node:n1"
+          ],
+          "forbidden_scope": [
+            "node:n0",
+            "node:n2"
+          ],
+          "success_criteria": [
+            "Complete node n1",
+            "Return an ArmResult with status=success"
+          ]
+        },
+        {
+          "contract_id": "p0:a2",
+          "agent_id": "generic_arm",
+          "role": "read_file",
+          "node_ids": [
+            "n2"
+          ],
+          "depends_on": [],
+          "owned_scope": [
+            "node:n2"
+          ],
+          "forbidden_scope": [
+            "node:n0",
+            "node:n1"
+          ],
+          "success_criteria": [
+            "Complete node n2",
+            "Return an ArmResult with status=success"
+          ]
+        }
+      ],
+      "validation_issues": [],
+      "validation_warnings": []
+    },
+    "events": [
+      {
+        "type": "plan_created",
+        "lane": "workflow",
+        "task_id": "cfe51126-3aa0-4c0b-ad49-c126524f4048",
+        "phase_index": null,
+        "agent_id": null,
+        "node_ids": [],
+        "payload": {
+          "strategy": "per_node",
+          "phase_count": 1,
+          "contract_count": 3
+        },
+        "ts": "2026-09-08T14:16:28.233099Z"
+      },
+      {
+        "type": "phase_started",
+        "lane": "workflow",
+        "task_id": "cfe51126-3aa0-4c0b-ad49-c126524f4048",
+        "phase_index": 0,
+        "agent_id": null,
+        "node_ids": [
+          "n0",
+          "n1",
+          "n2"
+        ],
+        "payload": {
+          "phase_index": 0,
+          "parallel": true
+        },
+        "ts": "2026-09-08T14:16:28.233099Z"
+      },
+      {
+        "type": "agent_assigned",
+        "lane": "agent",
+        "task_id": "cfe51126-3aa0-4c0b-ad49-c126524f4048",
+        "phase_index": 0,
+        "agent_id": "generic_arm",
+        "node_ids": [
+          "n0"
+        ],
+        "payload": {
+          "role": "read_file"
+        },
+        "ts": "2026-09-08T14:16:28.233099Z"
+      },
+      {
+        "type": "agent_assigned",
+        "lane": "agent",
+        "task_id": "cfe51126-3aa0-4c0b-ad49-c126524f4048",
+        "phase_index": 0,
+        "agent_id": "generic_arm",
+        "node_ids": [
+          "n1"
+        ],
+        "payload": {
+          "role": "read_file"
+        },
+        "ts": "2026-09-08T14:16:28.233099Z"
+      },
+      {
+        "type": "agent_assigned",
+        "lane": "agent",
+        "task_id": "cfe51126-3aa0-4c0b-ad49-c126524f4048",
+        "phase_index": 0,
+        "agent_id": "generic_arm",
+        "node_ids": [
+          "n2"
+        ],
+        "payload": {
+          "role": "read_file"
+        },
+        "ts": "2026-09-08T14:16:28.233099Z"
+      },
+      {
+        "type": "agent_started",
+        "lane": "timeline",
+        "task_id": "cfe51126-3aa0-4c0b-ad49-c126524f4048",
+        "phase_index": 0,
+        "agent_id": "generic_arm",
+        "node_ids": [
+          "n0"
+        ],
+        "payload": {
+          "role": "read_file"
+        },
+        "ts": "2026-09-08T14:16:28.233099Z"
+      },
+      {
+        "type": "agent_started",
+        "lane": "timeline",
+        "task_id": "cfe51126-3aa0-4c0b-ad49-c126524f4048",
+        "phase_index": 0,
+        "agent_id": "generic_arm",
+        "node_ids": [
+          "n1"
+        ],
+        "payload": {
+          "role": "read_file"
+        },
+        "ts": "2026-09-08T14:16:28.233099Z"
+      },
+      {
+        "type": "agent_started",
+        "lane": "timeline",
+        "task_id": "cfe51126-3aa0-4c0b-ad49-c126524f4048",
+        "phase_index": 0,
+        "agent_id": "generic_arm",
+        "node_ids": [
+          "n2"
+        ],
+        "payload": {
+          "role": "read_file"
+        },
+        "ts": "2026-09-08T14:16:28.233099Z"
+      },
+      {
+        "type": "agent_finished",
+        "lane": "timeline",
+        "task_id": "cfe51126-3aa0-4c0b-ad49-c126524f4048",
+        "phase_index": 0,
+        "agent_id": "generic_arm",
+        "node_ids": [],
+        "payload": {
+          "arm_task_id": "af05926c-2015-4834-92bf-96790a90f480",
+          "status": "success",
+          "reason": "",
+          "cost_usd": 0.001
+        },
+        "ts": "2026-09-08T14:16:29.282962Z"
+      },
+      {
+        "type": "agent_finished",
+        "lane": "timeline",
+        "task_id": "cfe51126-3aa0-4c0b-ad49-c126524f4048",
+        "phase_index": 0,
+        "agent_id": "generic_arm",
+        "node_ids": [],
+        "payload": {
+          "arm_task_id": "bef209e3-fd80-47e5-9b9e-03db1d5d766e",
+          "status": "success",
+          "reason": "",
+          "cost_usd": 0.001
+        },
+        "ts": "2026-09-08T14:16:29.282962Z"
+      },
+      {
+        "type": "agent_finished",
+        "lane": "timeline",
+        "task_id": "cfe51126-3aa0-4c0b-ad49-c126524f4048",
+        "phase_index": 0,
+        "agent_id": "generic_arm",
+        "node_ids": [],
+        "payload": {
+          "arm_task_id": "802c285f-2a62-4401-8523-ac6731fc510b",
+          "status": "success",
+          "reason": "",
+          "cost_usd": 0.001
+        },
+        "ts": "2026-09-08T14:16:29.282962Z"
+      },
+      {
+        "type": "phase_finished",
+        "lane": "workflow",
+        "task_id": "cfe51126-3aa0-4c0b-ad49-c126524f4048",
+        "phase_index": 0,
+        "agent_id": null,
+        "node_ids": [
+          "n0",
+          "n1",
+          "n2"
+        ],
+        "payload": {
+          "phase_index": 0,
+          "result_count": 3,
+          "succeeded": 3,
+          "failed": 0,
+          "handoff_count": 3,
+          "cost_usd": 0.003,
+          "wall_ms": 1050.1588999904925
+        },
+        "ts": "2026-09-08T14:16:29.282962Z"
+      },
+      {
+        "type": "swarm_finished",
+        "lane": "timeline",
+        "task_id": "cfe51126-3aa0-4c0b-ad49-c126524f4048",
+        "phase_index": null,
+        "agent_id": null,
+        "node_ids": [],
+        "payload": {
+          "all_successful": true,
+          "total_cost_usd": 0.003,
+          "total_wall_ms": 1050.1799000048777,
+          "parallelism_achieved": 3,
+          "handoff_count": 3,
+          "phase_report_count": 1
+        },
+        "ts": "2026-09-08T14:16:29.282962Z"
+      }
+    ],
+    "handoffs": [
+      {
+        "agent_id": "generic_arm",
+        "task_id": "cfe51126-3aa0-4c0b-ad49-c126524f4048",
+        "phase_index": 0,
+        "node_ids": [
+          "n0"
+        ],
+        "status": "success",
+        "summary": "completed",
+        "artifacts": [],
+        "cost_usd": 0.001,
+        "reason": ""
+      },
+      {
+        "agent_id": "generic_arm",
+        "task_id": "cfe51126-3aa0-4c0b-ad49-c126524f4048",
+        "phase_index": 0,
+        "node_ids": [
+          "n1"
+        ],
+        "status": "success",
+        "summary": "completed",
+        "artifacts": [],
+        "cost_usd": 0.001,
+        "reason": ""
+      },
+      {
+        "agent_id": "generic_arm",
+        "task_id": "cfe51126-3aa0-4c0b-ad49-c126524f4048",
+        "phase_index": 0,
+        "node_ids": [
+          "n2"
+        ],
+        "status": "success",
+        "summary": "completed",
+        "artifacts": [],
+        "cost_usd": 0.001,
+        "reason": ""
+      }
+    ],
+    "phase_reports": [
+      {
+        "phase_index": 0,
+        "node_ids": [
+          "n0",
+          "n1",
+          "n2"
+        ],
+        "assignment_count": 3,
+        "handoff_count": 3,
+        "succeeded": 3,
+        "failed": 0,
+        "status": "success",
+        "wall_ms": 1050.1588999904925,
+        "cost_usd": 0.003
+      }
+    ],
+    "contract_validation_issues": [],
+    "contract_validation_warnings": [],
+    "completion_receipt": {
+      "ready": true,
+      "state": {
+        "state": "completed",
+        "total": 3,
+        "completed": 3,
+        "failed": 0,
+        "cancelled": 0,
+        "running": 0,
+        "unknown": 0,
+        "terminal": true,
+        "reasons": []
+      },
+      "issues": [],
+      "warnings": [],
+      "artifact_count": 0,
+      "output_present": true
+    }
+  },
+  "all_successful": true,
+  "files_unchanged": true,
+  "content_verified": true,
+  "verified": true,
+  "seconds": 10.657
+}

@@ -15,5 +15,36 @@ export async function loadModels(): Promise<Model[]> {
   if (!res.ok)
     throw new Error(`Failed to load models: ${res.status} ${res.statusText}`);
   const { models } = (await res.json()) as { models: Model[] };
-  return models ?? [];
+  const officialResponse = await fetch(
+    `${getBackendBaseURL()}/api/oct/openai/v1/models`,
+    { headers: authHeaders() },
+  ).catch(() => null);
+  const official = officialResponse?.ok ? await officialResponse.json() : null;
+  const officialRows: Model[] = Array.isArray(official?.data)
+    ? official.data
+        .filter(
+          (row: { id: string }) => row.id && row.id.toLowerCase() !== "auto",
+        )
+        .map(
+          (row: {
+            id: string;
+            display_name?: string;
+            multiplier?: string;
+            recommended?: boolean;
+          }) => ({
+            id: `official/${row.id}`,
+            name: `official/${row.id}`,
+            model: `official/${row.id}`,
+            selection_id: `official/${row.id}`,
+            entry_id: "official",
+            provider: "oct",
+            display_name: row.display_name || row.id,
+            source_display_name: "官方模型",
+            official: true,
+            multiplier: row.multiplier,
+            recommended: row.recommended,
+          }),
+        )
+    : [];
+  return [...(models ?? []), ...officialRows];
 }

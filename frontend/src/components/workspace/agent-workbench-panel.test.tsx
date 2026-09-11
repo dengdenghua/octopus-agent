@@ -125,7 +125,7 @@ describe("<AgentWorkbenchPanel />", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "主电脑 · 等待中" }),
+      screen.getByRole("button", { name: "当前对话 · 等待中" }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /Diff/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /终端/ })).not.toBeInTheDocument();
@@ -408,7 +408,7 @@ describe("<AgentWorkbenchPanel />", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "主电脑 · 已完成" }),
+      screen.getByRole("button", { name: "当前对话 · 已完成" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("工位")).not.toBeInTheDocument();
   });
@@ -434,7 +434,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("thread-internal-1")).not.toBeInTheDocument();
     const workbenchHeader = screen.getByRole("banner");
     expect(
-      within(workbenchHeader).getByTitle("主电脑 · 已完成"),
+      within(workbenchHeader).getByTitle("当前对话 · 已完成"),
     ).toBeInTheDocument();
   });
 
@@ -453,9 +453,30 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
     expect(
-      screen.getByRole("button", { name: "主电脑 · 已完成" }),
+      screen.getByRole("button", { name: "当前对话 · 已完成" }),
     ).toBeInTheDocument();
   });
+
+  test.each(["new", "allocated-thread-before-first-send"])(
+    "an empty task %s does not inherit a completed badge",
+    (threadId) => {
+      renderWorkbench(
+        <AgentWorkbenchPanel
+          activeTab="agent"
+          events={[]}
+          threadId={threadId}
+          runSettled
+          hasAnswer={false}
+        />,
+      );
+      expect(
+        screen.getByRole("button", { name: "当前对话 · 等待中" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "当前对话 · 已完成" }),
+      ).not.toBeInTheDocument();
+    },
+  );
 
   test("shows an interrupted turn honestly instead of claiming completion", () => {
     renderWorkbench(
@@ -479,7 +500,7 @@ describe("<AgentWorkbenchPanel />", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "主电脑 · 已中断" }),
+      screen.getByRole("button", { name: "当前对话 · 已中断" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", {
@@ -493,7 +514,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(interruptedTodos[1]).toHaveAttribute("data-task-status", "warning");
     expect(interruptedTodos[1]).toHaveTextContent("已中断");
     expect(
-      screen.queryByRole("button", { name: "主电脑 · 已完成" }),
+      screen.queryByRole("button", { name: "当前对话 · 已完成" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("最新一轮")).not.toBeInTheDocument();
   });
@@ -533,7 +554,7 @@ describe("<AgentWorkbenchPanel />", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "主电脑 · 已完成" }),
+      screen.getByRole("button", { name: "当前对话 · 已完成" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /进展/ })).toBeInTheDocument();
     expect(screen.getByText("T1")).toBeInTheDocument();
@@ -602,9 +623,10 @@ describe("<AgentWorkbenchPanel />", () => {
     ).not.toBeInTheDocument();
 
     const mainComputerButton = screen.getByRole("button", {
-      name: "主电脑 · 等待中",
+      name: "当前对话 · 等待中",
     });
-    expect(mainComputerButton).toHaveClass("border-warning/40");
+    expect(mainComputerButton).toHaveClass("text-muted-foreground");
+    expect(mainComputerButton.querySelector(".bg-warning")).toBeInTheDocument();
 
     fireEvent.click(mainComputerButton);
 
@@ -1024,8 +1046,8 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    expect(screen.getByTitle("主电脑 · 待确认")).toBeInTheDocument();
-    expect(screen.queryByTitle("主电脑 · 遇到问题")).not.toBeInTheDocument();
+    expect(screen.getByTitle("当前对话 · 待确认")).toBeInTheDocument();
+    expect(screen.queryByTitle("当前对话 · 遇到问题")).not.toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", { name: "查看 Review-03 独立进程" }),
     );
@@ -1142,7 +1164,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expandSummarySection(/(?:待办事项|进展)/);
     expect(screen.getAllByText("处理线索").length).toBeGreaterThan(0);
     expect(screen.queryByText("电脑视图")).not.toBeInTheDocument();
-    expect(screen.getByTitle("主电脑 · 执行任务中...")).toBeInTheDocument();
+    expect(screen.getByTitle("当前对话 · 执行任务中...")).toBeInTheDocument();
 
     expect(screen.queryByText("活动轨迹")).not.toBeInTheDocument();
   });
@@ -1283,8 +1305,8 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.getByTestId("workbench-task-plan")).toHaveTextContent(
       /收拢答案/,
     );
-    expect(screen.getByTitle("主电脑 · 待确认")).toBeInTheDocument();
-    expect(screen.queryByTitle("主电脑 · 遇到问题")).not.toBeInTheDocument();
+    expect(screen.getByTitle("当前对话 · 待确认")).toBeInTheDocument();
+    expect(screen.queryByTitle("当前对话 · 遇到问题")).not.toBeInTheDocument();
 
     expect(screen.queryByText("电脑视图")).not.toBeInTheDocument();
   });
@@ -1395,8 +1417,8 @@ describe("<AgentWorkbenchPanel />", () => {
     expandSummarySection(/(?:待办事项|进展)/);
 
     expect(screen.getByText(/补齐上下文/)).toBeInTheDocument();
-    expect(screen.getByTitle("主电脑 · 已完成")).toBeInTheDocument();
-    expect(screen.queryByTitle("主电脑 · 遇到问题")).not.toBeInTheDocument();
+    expect(screen.getByTitle("当前对话 · 已完成")).toBeInTheDocument();
+    expect(screen.queryByTitle("当前对话 · 遇到问题")).not.toBeInTheDocument();
 
     expect(screen.queryByText("电脑视图")).not.toBeInTheDocument();
   });
@@ -2782,7 +2804,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(
       screen.queryByRole("tab", { name: "\u5b50\u667a\u80fd\u4f53" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByTitle("主电脑 · 执行任务中...")).toBeInTheDocument();
+    expect(screen.getByTitle("当前对话 · 执行任务中...")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "查看主电脑" }),
     ).toBeInTheDocument();
@@ -3155,7 +3177,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expandSummarySection(/(?:待办事项|进展)/);
 
     expect(screen.getAllByText(/收拢答案/).length).toBeGreaterThan(0);
-    expect(screen.getByTitle("主电脑 · 已完成")).toBeInTheDocument();
+    expect(screen.getByTitle("当前对话 · 已完成")).toBeInTheDocument();
     // Summary page shows phases with StatusGlyph icons instead of text
   });
 

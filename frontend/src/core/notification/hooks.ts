@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocalSettings } from "../settings";
 
 interface NotificationOptions {
+  test?: boolean;
   body?: string;
   icon?: string;
   badge?: string;
@@ -64,6 +65,14 @@ export function useNotification(): UseNotificationReturn {
         return false;
       }
 
+      if (
+        !options?.test &&
+        settings.notification.only_when_unfocused &&
+        document.hasFocus() &&
+        document.visibilityState === "visible"
+      )
+        return false;
+
       if (Date.now() - lastNotificationTime.current < 1000) {
         console.warn("Notification sent too soon");
         return false;
@@ -76,7 +85,8 @@ export function useNotification(): UseNotificationReturn {
       }
 
       try {
-        const notification = new Notification(title, options);
+        const { test: _test, ...nativeOptions } = options ?? {};
+        const notification = new Notification(title, nativeOptions);
         notification.onclick = () => {
           window.focus();
           notification.close();
@@ -90,7 +100,12 @@ export function useNotification(): UseNotificationReturn {
         return false;
       }
     },
-    [isSupported, settings.notification.enabled, permission],
+    [
+      isSupported,
+      settings.notification.enabled,
+      settings.notification.only_when_unfocused,
+      permission,
+    ],
   );
 
   return {

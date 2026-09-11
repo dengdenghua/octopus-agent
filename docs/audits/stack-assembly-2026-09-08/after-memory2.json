@@ -1,0 +1,13 @@
+{
+  "sample": "after-memory2",
+  "import_seconds": 0.8389869999955408,
+  "assembly_seconds": 0.8975492000026861,
+  "total_seconds": 1.736536199998227,
+  "rss_mib": 98.203125,
+  "scratch_directory": "D:\\echo agent\\.codex-run\\stack-profile-o_fb5jwt",
+  "module_count": 1129,
+  "skill_count": 329,
+  "member_engine": "opencode",
+  "native_planner_created": true,
+  "scope": "complete library stack assembly, not web app lifespan or desktop launch"
+}

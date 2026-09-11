@@ -18,10 +18,7 @@ function sourceBetween(start: string, end: string): string {
 
 describe("realtime unified right panel contract", () => {
   it("routes utility views and the workbench through one secondary surface", () => {
-    const layout = sourceBetween(
-      "<ChatPageLayout",
-      "</ChatBox>",
-    );
+    const layout = sourceBetween("<ChatPageLayout", "</ChatBox>");
 
     expect(layout.match(/secondaryPanel=\{/g)).toHaveLength(1);
     expect(layout).not.toContain("sidebar={");
@@ -99,10 +96,9 @@ describe("realtime unified right panel contract", () => {
     expect(pageSource).toContain("openTeachRepeatPanel();");
   });
 
-  it("keeps team avatars beside the composer without reviving the legacy rail", () => {
-    expect(pageSource).toContain("<ConversationRosterStrip");
-    expect(pageSource).toContain("seats={collaborationRosterSeats}");
-    expect(pageSource).toContain("onOpenMemberProcess={openAgentPanel}");
+  it("keeps members in the compact header control without duplicating avatars beside the composer", () => {
+    expect(pageSource).toContain("<TaskCollaboratorControl");
+    expect(pageSource).not.toContain("<ConversationRosterStrip");
 
     const workbench = sourceBetween(
       "<AgentWorkbenchPanel",

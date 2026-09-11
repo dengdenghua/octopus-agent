@@ -85,10 +85,12 @@ function jsonOk(body: unknown) {
 
 function mockModelSettingsFetch({
   models,
+  catalog = [],
   diagnostics = [],
   profileCatalog = [],
 }: {
   models: unknown[];
+  catalog?: unknown[];
   diagnostics?: unknown[];
   profileCatalog?: unknown[];
 }) {
@@ -115,12 +117,169 @@ function mockModelSettingsFetch({
     if (url.includes("/api/config/custom-models")) {
       return jsonOk({ models });
     }
+    if (url.includes("/api/llm-models")) return jsonOk({ models: catalog });
     return jsonOk({ default: "", models: [] });
   });
 }
 
+describe("ModelSettingsPage · everyday model selection", () => {
+  it("renders official models from the same merged catalog used by the composer", async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/oct/openai/v1/models"))
+        return jsonOk({
+          data: [{ id: "qwen", display_name: "极速", multiplier: "1x" }],
+        });
+      return jsonOk({ models: [], default: "" });
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
+    await user.click(
+      await screen.findByText("官方模型", { selector: "summary *" }),
+    );
+    expect(await screen.findByText("极速")).toBeVisible();
+    expect(screen.getByText("qwen")).toBeVisible();
+    expect(
+      fetchMock.mock.calls.filter(([url]) =>
+        String(url).includes("/api/oct/openai/v1/models"),
+      ),
+    ).toHaveLength(1);
+  });
+  it("persists the exact model route without changing connections or a conversation override", async () => {
+    const user = userEvent.setup();
+    const settings = getLocalSettings();
+    saveLocalSettings({
+      ...settings,
+      context: { ...settings.context, model_name: "selection-a" },
+    });
+    saveThreadModelName("existing-chat", "conversation-model");
+    mockModelSettingsFetch({
+      models: [
+        {
+          id: "service-a",
+          name: "service-a",
+          models: ["shared"],
+          selection_ids: ["selection-a"],
+        },
+        {
+          id: "service-b",
+          name: "service-b",
+          models: ["shared"],
+          selection_ids: ["selection-b"],
+        },
+      ],
+      catalog: [
+        {
+          name: "shared",
+          model: "shared",
+          entry_id: "service-a",
+          selection_id: "selection-a",
+          display_name: "Shared A",
+        },
+        {
+          name: "shared",
+          model: "shared",
+          entry_id: "service-b",
+          selection_id: "selection-b",
+          display_name: "Shared B",
+        },
+      ],
+    });
+    const view = renderWithProviders(<ModelSettingsPage />, {
+      locale: "zh-CN",
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "对话默认模型" }),
+      ).toHaveTextContent("Shared A"),
+    );
+    await user.click(screen.getByRole("button", { name: "对话默认模型" }));
+    expect(
+      screen.queryByRole("button", { name: "添加模型", exact: true }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Shared B", exact: true }),
+    );
+    expect(getLocalSettings().context.model_name).toBe("selection-b");
+    expect(getThreadModelName("existing-chat")).toBe("conversation-model");
+    expect(
+      fetchMock.mock.calls.some(
+        ([, init]) => init?.method && init.method !== "GET",
+      ),
+    ).toBe(false);
+    view.unmount();
+    renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "对话默认模型" }),
+      ).toHaveTextContent("Shared B"),
+    );
+    await user.click(screen.getByRole("button", { name: "对话默认模型" }));
+    await user.click(screen.getByRole("button", { name: /^Auto/ }));
+    expect(getLocalSettings().context.model_name).toBe("auto");
+    expect(
+      screen.getByRole("button", { name: "对话默认模型" }),
+    ).toHaveTextContent("Auto");
+  });
+
+  it("loads optional services on demand and opens Codex account setup from Add connection", async () => {
+    const user = userEvent.setup();
+    const initialFetch = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/model-profile"))
+        return jsonOk({
+          mode: "follow_system",
+          effective_model: "configured-model",
+          compatible: true,
+        });
+      if (url.includes("/account"))
+        return jsonOk({
+          account: null,
+          requires_openai_auth: false,
+          login_pending: false,
+        });
+      return initialFetch(input);
+    });
+    renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
+    await screen.findByRole("list");
+    const initialUrls = fetchMock.mock.calls.map(([url]) => String(url));
+    expect(
+      initialUrls.some((url) =>
+        /\/coder\/|compat-diagnostics|openai-compat-profiles|\/storage\/start|local-models\/scan/.test(
+          url,
+        ),
+      ),
+    ).toBe(false);
+    await user.click(screen.getByRole("button", { name: "添加连接" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "ChatGPT / Codex", exact: true }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "登录 ChatGPT" }),
+    ).toBeVisible();
+    expect(
+      fetchMock.mock.calls.some(
+        ([, init]) => init?.method && init.method !== "GET",
+      ),
+    ).toBe(false);
+    expect(
+      screen.queryByRole("button", { name: /跟随系统模型/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("OpenAI API Key")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "添加连接" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "ChatGPT / Codex", exact: true }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "登录 ChatGPT" }),
+    ).toBeVisible();
+  });
+});
+
 describe("ModelSettingsPage · optional local vision service", () => {
   it("does not request models when octopus-storage is not installed", async () => {
+    const user = userEvent.setup();
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
       if (url.includes("/api/local-brain/storage/start")) {
@@ -147,6 +306,14 @@ describe("ModelSettingsPage · optional local vision service", () => {
     });
 
     renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
+
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("/api/local-brain/storage/start"),
+      ),
+    ).toBe(false);
+    await user.click(screen.getByText("高级设置"));
+    await user.click(screen.getByText("本地图片理解", { selector: "div" }));
 
     expect(
       await screen.findByText(/本地图片理解服务尚未安装/),
@@ -238,15 +405,11 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
     expect(screen.getByText("备用")).toBeInTheDocument();
     expect(screen.getByText("高性能档")).toBeInTheDocument();
     expect(screen.getByText("1 个连接 · 3 个模型")).toBeInTheDocument();
+    expect(screen.getByText(/新对话默认使用/)).toBeInTheDocument();
     expect(
-      screen.getByText(/新的服务可通过 API 连接或本地扫描接入/),
+      screen.getByRole("heading", { name: "已连接的服务", level: 3 }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "API 模型连接", level: 3 }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getAllByRole("button", { name: "接入 API 模型" }),
-    ).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "添加连接" })).toHaveLength(1);
   });
 
   it("does not repeat an entry name and explains a single model's two roles", async () => {
@@ -519,10 +682,10 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
       expect(screen.getByText("Kimi Code")).toBeInTheDocument();
     });
 
-    const advancedTitle = screen.getByText("高级能力与兼容诊断");
-    expect(screen.getByText("兼容诊断")).not.toBeVisible();
+    const advancedTitle = screen.getByText("高级设置");
+    expect(screen.queryByText("兼容诊断")).not.toBeInTheDocument();
     await user.click(advancedTitle);
-    expect(screen.getByText("兼容诊断")).not.toBeVisible();
+    expect(screen.queryByText("兼容诊断")).not.toBeInTheDocument();
     await user.click(screen.getByText("连接与网关诊断"));
 
     await waitFor(() => {
@@ -595,14 +758,15 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
 
     renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
 
-    const compatMatrix = await screen.findByText("OpenAI 兼容配置矩阵");
-    expect(compatMatrix).not.toBeVisible();
-    await user.click(screen.getByText("高级能力与兼容诊断"));
-    expect(compatMatrix).not.toBeVisible();
+    expect(screen.queryByText("OpenAI 兼容配置矩阵")).not.toBeInTheDocument();
+    await user.click(screen.getByText("高级设置"));
+    expect(screen.queryByText("OpenAI 兼容配置矩阵")).not.toBeInTheDocument();
     await user.click(screen.getByText("提供方兼容矩阵"));
-    expect(compatMatrix).toBeVisible();
+    expect(await screen.findByText("OpenAI 兼容配置矩阵")).toBeVisible();
     expect(await screen.findByText("2 个配置")).toBeInTheDocument();
-    expect(screen.getByText("高级")).toBeInTheDocument();
+    expect(screen.getByText("高级设置")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("同源代理")).not.toBeInTheDocument();
+    await user.click(screen.getByText("连接与网关诊断"));
     expect(screen.getByDisplayValue("同源代理")).toBeInTheDocument();
     expect(screen.queryByText("Advanced")).not.toBeInTheDocument();
     expect(await screen.findByText(/无需配置 API Key/)).toBeInTheDocument();
@@ -973,13 +1137,8 @@ describe("ModelSettingsPage · add-model form · open-ended list", () => {
     const user = userEvent.setup();
     renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
 
-    // Wait for the settings page to mount + the initial list call to resolve.
-    await waitFor(() => {
-      expect(screen.getByText("接入 API 模型")).toBeInTheDocument();
-    });
-
-    // Open the add-model form
-    await user.click(screen.getByRole("button", { name: "接入 API 模型" }));
+    await user.click(await screen.findByRole("button", { name: "添加连接" }));
+    await user.click(screen.getByRole("menuitem", { name: "接入 API 模型" }));
 
     // Label and hint are both visible, anchoring the new shape.
     expect(screen.getByText("模型列表")).toBeInTheDocument();
@@ -989,7 +1148,17 @@ describe("ModelSettingsPage · add-model form · open-ended list", () => {
     expect(apiKeyInput).toHaveAttribute("type", "password");
     expect(apiKeyInput).toHaveAttribute("autocomplete", "new-password");
     expect(apiKeyInput).toHaveAttribute("data-1p-ignore", "true");
-    expect(screen.getByPlaceholderText("例如：我的模型")).toHaveValue("");
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText(/提供方/, { selector: "select" }),
+      ).toHaveFocus(),
+    );
+    expect(
+      screen.queryByPlaceholderText("例如：我的模型"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("switch", { name: "思考" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "显示 API Key" }),
     ).toBeInTheDocument();
@@ -1002,8 +1171,22 @@ describe("ModelSettingsPage · add-model form · open-ended list", () => {
     expect(
       within(addForm as HTMLFormElement).getByRole("status"),
     ).toHaveTextContent("尚未测试连接");
+    await user.click(screen.getByText("高级选项"));
+    expect(screen.getByPlaceholderText("例如：我的模型")).toHaveValue("");
     expect(screen.getByRole("switch", { name: "思考" })).not.toBeChecked();
     expect(screen.getByRole("switch", { name: "视觉" })).not.toBeChecked();
+
+    await user.type(apiKeyInput, "draft-only-test-key");
+    await user.type(
+      screen.getByPlaceholderText("例如：我的模型"),
+      "My connection",
+    );
+    await user.click(screen.getByText("高级选项"));
+    await user.click(screen.getByText("高级选项"));
+    expect(apiKeyInput).toHaveValue("draft-only-test-key");
+    expect(screen.getByPlaceholderText("例如：我的模型")).toHaveValue(
+      "My connection",
+    );
 
     // The initial row + the "add model id" button are present.
     expect(
@@ -1017,6 +1200,15 @@ describe("ModelSettingsPage · add-model form · open-ended list", () => {
       name: "删除该模型 ID",
     });
     expect(removeButtons.length).toBeGreaterThanOrEqual(2);
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(
+      screen.queryByPlaceholderText("请输入 API Key"),
+    ).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(
+        ([, init]) => init?.method && init.method !== "GET",
+      ),
+    ).toBe(false);
   });
 });
 
@@ -1057,10 +1249,8 @@ describe("ModelSettingsPage · local-model one-click import", () => {
     // The scan button starts in idle state — clicking it dispatches
     // the GET /scan request, then the section re-renders with the
     // discovered service list and its import buttons.
-    const scanButton = screen.getByRole("button", {
-      name: /扫描本地服务/,
-    });
-    await user.click(scanButton);
+    await user.click(screen.getByRole("button", { name: "添加连接" }));
+    await user.click(screen.getByRole("menuitem", { name: "扫描本地模型" }));
 
     // The scan response surfaces the base_url and the model-count
     // subtitle for the discovered service.
@@ -1088,7 +1278,8 @@ describe("ModelSettingsPage · local-model one-click import", () => {
       expect(screen.getByText("本地模型")).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole("button", { name: /扫描本地服务/ }));
+    await user.click(screen.getByRole("button", { name: "添加连接" }));
+    await user.click(screen.getByRole("menuitem", { name: "扫描本地模型" }));
 
     // Empty-state hint guides the operator toward starting a service.
     await waitFor(() => {

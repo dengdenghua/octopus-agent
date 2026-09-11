@@ -33,8 +33,8 @@ export interface ChannelStatus {
 }
 
 export interface ChannelsStatusResponse {
-  service_running: boolean;
-  channels: Record<ChannelName, ChannelStatus>;
+  service_running?: boolean;
+  channels: Record<string, ChannelStatus>;
 }
 
 export interface ChannelStats {
@@ -232,12 +232,48 @@ export interface PairingRequestsResponse {
 // ---------------------------------------------------------------------------
 
 export async function getChannelsStatus(): Promise<ChannelsStatusResponse> {
-  const res = await fetch(`${getBackendBaseURL()}/api/channels/`, {
+  const res = await fetch(`${getBackendBaseURL()}/api/channels`, {
     headers: authHeaders(),
   });
   if (!res.ok)
-    throw new Error(`Failed to load channels status: ${res.statusText}`);
-  return (await res.json()) as ChannelsStatusResponse;
+    throw new Error(`Failed to load channels status: HTTP ${res.status}`);
+  const data: unknown = await res.json();
+  const invalid = () =>
+    new Error("渠道状态：服务返回的数据格式不完整，请重试。");
+  if (Array.isArray(data)) {
+    const channels: Record<string, ChannelStatus> = {};
+    for (const row of data) {
+      if (
+        !row ||
+        typeof row.platform !== "string" ||
+        typeof row.connected !== "boolean"
+      )
+        throw invalid();
+      // The registry marks active adapters as connected and includes inactive
+      // platform placeholders. Multiple adapters can share one platform.
+      const connected =
+        row.connected || channels[row.platform]?.running === true;
+      channels[row.platform] = { enabled: connected, running: connected };
+    }
+    return { channels };
+  }
+  if (data && typeof data === "object" && "channels" in data) {
+    const channels = data.channels;
+    if (
+      channels &&
+      typeof channels === "object" &&
+      !Array.isArray(channels) &&
+      Object.values(channels).every(
+        (status) =>
+          status &&
+          typeof status.enabled === "boolean" &&
+          typeof status.running === "boolean",
+      )
+    ) {
+      return data as ChannelsStatusResponse;
+    }
+  }
+  throw invalid();
 }
 
 export async function restartChannel(

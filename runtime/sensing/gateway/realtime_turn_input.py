@@ -334,6 +334,19 @@ def _input_metadata(params: TurnParams) -> dict[str, Any]:
     return {}
 
 
+def external_model_owner(params: TurnParams) -> str | None:
+    """Identify model ownership for shaping input, not execution admission."""
+    if params.execution_engine in {"codex", "opencode"}:
+        return params.execution_engine
+    if params.execution_engine != "auto":
+        return None
+    metadata = _input_metadata(params)
+    context = metadata.get("context")
+    context = context if isinstance(context, dict) else metadata
+    preview = str(context.get("execution_engine") or "").strip().lower()
+    return preview if preview in {"codex", "opencode"} else None
+
+
 def _agent_id_from_params(params: TurnParams) -> str | None:
     metadata = _input_metadata(params)
     candidates: list[Any] = [
@@ -804,7 +817,13 @@ def _build_intent(
     authenticated_principal = bool(owner_actor_id or tenant_id)
     if authenticated_principal and (not owner_actor_id or not tenant_id):
         raise RuntimeError("authenticated realtime principal is incomplete")
-    authenticated_workspace = authenticated_principal and not allow_local_workspace_access
+    from runtime.sensing.gateway._realtime_cerebrum_project_os import _is_project_os_command
+
+    # Project workers must inherit the same managed root as their parent turn.
+    # Allocate it before the host creates the execution permission ceiling.
+    authenticated_workspace = authenticated_principal and (
+        not allow_local_workspace_access or _is_project_os_command(text)
+    )
 
     managed_layout: Any = None
     cwd: str | None
@@ -847,6 +866,15 @@ def _build_intent(
     if thread_store is not None:
         from runtime.sensing.gateway.turn_session import build_turn_metadata
 
+        # These are per-turn execution choices, not persisted persona/mode
+        # defaults. The merge intentionally omits them; retain them here for
+        # the operator-gated canonicalization below. Otherwise a stored thread
+        # silently turns complete access into the default sandbox.
+        execution_choices = {
+            key: context_payload[key]
+            for key in ("permission_mode", "execution_environment", "network_access")
+            if key in context_payload
+        }
         context_payload = build_turn_metadata(
             thread_id=params.thread_id,
             body={"context": context_payload},
@@ -855,6 +883,7 @@ def _build_intent(
             owner_actor_id=owner_actor_id or None,
             tenant_id=tenant_id or None,
         )
+        context_payload.update(execution_choices)
     context_payload = dict(context_payload)
     # This private marker is consumed by memory/context readers.  It must
     # never survive from client metadata; authenticated TurnParams are the
@@ -919,10 +948,9 @@ def _build_intent(
         context_payload["workspace_path"] = str(managed_layout.root)
         context_payload["workspace_scope"] = "project"
         context_payload["_artifact_output_root"] = str(managed_layout.final)
-    if conversation_messages and not isinstance(
-        context_payload.get("conversation_messages"),
-        list,
-    ):
+    if conversation_messages is not None:
+        # The authenticated Echo journal supersedes browser-supplied history,
+        # including an empty journal. Older direct embeddings may omit it.
         context_payload["conversation_messages"] = conversation_messages
     if _context_requests_code_workspace(context_payload):
         if (
@@ -951,7 +979,41 @@ def _build_intent(
     approval_policy = params.approval_policy
     if approval_policy == "never" and not allow_client_auto_approve:
         approval_policy = "on-request"
-    permission_mode = str(context_payload.get("permission_mode") or "").strip().lower()
+    from runtime.safety.approval.permission_modes import (
+        approval_reviewer_for_mode,
+        canonical_permission_mode,
+    )
+
+    declared_permission_mode = context_payload.get("permission_mode")
+    explicit_permission_mode = isinstance(declared_permission_mode, str) and bool(
+        declared_permission_mode.strip()
+    )
+    canonical_mode = canonical_permission_mode(declared_permission_mode)
+    if canonical_mode == "bypassPermissions" and approval_policy != "never":
+        # A client cannot regain the operator-disabled bypass via mode metadata.
+        canonical_mode = "default"
+    bounded_mode_explicit = explicit_permission_mode and canonical_mode != "bypassPermissions"
+    if bounded_mode_explicit:
+        # The two bounded modes share one workspace sandbox. The selected
+        # mode changes only who reviews a boundary crossing; stale or custom
+        # clients cannot silently combine them with local/full execution.
+        approval_policy = "on-request"
+    context_payload = {
+        **context_payload,
+        "permission_mode": canonical_mode,
+        # Server-derived: a hand-crafted approvals_reviewer field cannot
+        # silently switch who handles an escalation.
+        "approvals_reviewer": approval_reviewer_for_mode(canonical_mode),
+        **(
+            {
+                "execution_environment": "sandbox",
+                "sandbox_mode": "sandbox",
+            }
+            if bounded_mode_explicit
+            else {}
+        ),
+    }
+    permission_mode = canonical_mode.lower()
     full_access_requested = permission_mode in {
         "bypasspermissions",
         "bypass-permissions",
@@ -1005,6 +1067,8 @@ def _build_intent(
         }
         sb_policy.pop("egressAllowCommon", None)
         sb_policy.pop("egress_allow_common", None)
+    elif bounded_mode_explicit and isinstance(sb_policy, dict):
+        sb_policy = {**sb_policy, "type": "workspaceWrite"}
     if isinstance(sb_policy, dict) and sb_policy:
         context_payload = {
             **context_payload,

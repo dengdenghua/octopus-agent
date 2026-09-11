@@ -283,7 +283,7 @@ def build_runtime_self_check(
         or os.environ.get("GATEWAY_PORT")
         or os.environ.get("PORT")
     )
-    observed_port = request_port or _coerce_port(server_port) or env_port or 8000
+    observed_port = request_port or _coerce_port(server_port) or env_port or 8310
     observed_host = _clean_host(server_host or request_host or "127.0.0.1")
     canonical_host = _canonical_backend_host(observed_host)
     canonical_base_url = f"{request_scheme}://{canonical_host}:{observed_port}"

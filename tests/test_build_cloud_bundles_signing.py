@@ -29,6 +29,48 @@ def _load_builder():
     return module
 
 
+def test_single_skill_packages_round_trip_without_full_catalog_download(tmp_path, monkeypatch):
+    from runtime.platform.plugins import cloud_catalog
+
+    builder = _load_builder()
+    source = tmp_path / "source"
+    store = tmp_path / "store"
+    out = tmp_path / "out"
+    store.mkdir()
+    out.mkdir()
+    rows = []
+    for name in ("alpha", "beta"):
+        skill = source / name
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text(f"---\nname: {name}\n---\n{name}", encoding="utf-8")
+        rows.append({"name": name, "download_url": "https://example.com/releases/all.tar.gz"})
+    (store / "skill-registry.json").write_text(json.dumps({"skills": rows}), encoding="utf-8")
+    monkeypatch.setattr(builder, "STORE_DATA", store)
+    monkeypatch.setattr(builder, "BUILTIN_SKILLS", source)
+    monkeypatch.setattr(builder, "REPOSITORY_SKILL_TREES", ())
+    monkeypatch.setenv("CI", "true")
+    builder.build_skills(out)
+    catalog = CloudCatalog("skills", use_remote=False, use_cache=False)
+    catalog._store = json.loads((store / "skill-registry.json").read_text())
+    monkeypatch.setattr(cloud_catalog, "CACHE_DIR", tmp_path / "cache")
+    monkeypatch.setattr(
+        cloud_catalog,
+        "fetch_public_https_bytes",
+        lambda url, **kw: (out / url.rsplit("/", 1)[1]).read_bytes(),
+    )
+    catalog.install_skill("alpha", skills_dir=tmp_path / "installed")
+    assert (tmp_path / "installed/alpha/SKILL.md").is_file()
+    assert not (tmp_path / "installed/beta").exists()
+    assert len(list((tmp_path / "cache/skills").glob("*.tar.gz"))) == 1
+    first_hashes = [row["package_sha256"] for row in catalog._store["skills"]]
+    import os
+
+    os.utime(source / "alpha/SKILL.md", (1, 1))
+    builder.build_skills(out)
+    rebuilt = json.loads((store / "skill-registry.json").read_text())
+    assert [row["package_sha256"] for row in rebuilt["skills"]] == first_hashes
+
+
 def test_plugin_content_builder_signs_codex_and_connector_packages(
     tmp_path: Path, monkeypatch
 ) -> None:

@@ -22,12 +22,11 @@ describe("SandboxSettingsPage", () => {
     expect(screen.getByRole("button", { name: /^Local/ })).toBeInTheDocument();
 
     // Permission level axis.
-    expect(screen.getByRole("button", { name: /^Default/ })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
     expect(
-      screen.getByRole("button", { name: /^Accept edits/ }),
+      screen.getByRole("button", { name: /^Ask for approval/ }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: /^Approve for me/ }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /^Full access/ }),
@@ -74,6 +73,7 @@ describe("SandboxSettingsPage", () => {
     const persisted = getLocalSettings();
     expect(persisted.context.permission_mode).toBe("bypassPermissions");
     expect(persisted.context.approval_policy).toBe("never");
+    expect(persisted.context.approvals_reviewer).toBe("user");
     expect(persisted.context.execution_environment).toBe("local");
     expect(persisted.context.sandbox_mode).toBe("full");
     expect(persisted.context.network_access).toBe("full");
@@ -94,6 +94,19 @@ describe("SandboxSettingsPage", () => {
     expect(
       screen.getByRole("button", { name: /^Common domains/ }),
     ).toBeDisabled();
+  });
+
+  it("routes Approve for me through automatic review in the workspace sandbox", () => {
+    renderWithProviders(<SandboxSettingsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Approve for me/ }));
+
+    const persisted = getLocalSettings();
+    expect(persisted.context.permission_mode).toBe("acceptEdits");
+    expect(persisted.context.approval_policy).toBe("on-request");
+    expect(persisted.context.approvals_reviewer).toBe("auto_review");
+    expect(persisted.context.execution_environment).toBe("sandbox");
+    expect(persisted.context.sandbox_mode).toBe("sandbox");
   });
 
   it("switches network access to the common-domains tier without touching the other axes", () => {
@@ -125,7 +138,7 @@ describe("SandboxSettingsPage", () => {
     );
   });
 
-  it("keeps all three axes independent when re-rendering an existing combination", () => {
+  it("restores the official sandbox boundary when selecting an approval mode", () => {
     window.localStorage.setItem(
       "octopus.local-settings",
       JSON.stringify({
@@ -146,19 +159,21 @@ describe("SandboxSettingsPage", () => {
       "true",
     );
     expect(
-      screen.getByRole("button", { name: /^Accept edits/ }),
+      screen.getByRole("button", { name: /^Approve for me/ }),
     ).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: /^Allowed/ })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
 
-    // Change only the permission axis; environment and network stay.
-    fireEvent.click(screen.getByRole("button", { name: /^Default/ }));
+    // Selecting an approval mode restores its official workspace sandbox.
+    fireEvent.click(screen.getByRole("button", { name: /^Ask for approval/ }));
 
     const persisted = getLocalSettings();
     expect(persisted.context.permission_mode).toBe("default");
-    expect(persisted.context.execution_environment).toBe("local");
+    expect(persisted.context.approvals_reviewer).toBe("user");
+    expect(persisted.context.execution_environment).toBe("sandbox");
+    expect(persisted.context.sandbox_mode).toBe("sandbox");
     // Unchanged axes keep their raw stored value (legacy true).
     expect(persisted.context.network_access).toBe(true);
   });

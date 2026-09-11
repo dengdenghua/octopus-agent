@@ -27,7 +27,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -194,9 +194,18 @@ function getAccountDisplayName(
 
 export function SettingsDialog(props: SettingsDialogProps) {
   const { defaultSection = "appearance", ...dialogProps } = props;
+  const { open: settingsOpen, onOpenChange: onSettingsOpenChange } = props;
   const { t, locale } = useI18n();
   const settingsUxCopy = getSettingsUxCopy(locale);
   const navigate = useNavigate();
+  const location = useLocation();
+  const openedRoute = useRef(location.pathname + location.search);
+  useEffect(() => {
+    const route = location.pathname + location.search;
+    if (settingsOpen && openedRoute.current !== route)
+      onSettingsOpenChange?.(false);
+    openedRoute.current = route;
+  }, [location.pathname, location.search, settingsOpen, onSettingsOpenChange]);
   const { user, logout, authStatus, isLoading } = useAuth();
   const accountName = getAccountDisplayName(user);
   const queryClient = useQueryClient();
@@ -217,6 +226,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
   } | null>(null);
   const contentScrollRootRef = useRef<HTMLDivElement>(null);
   const sectionScrollRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const [sectionScrollEdges, setSectionScrollEdges] = useState({
     before: false,
     after: false,
@@ -630,19 +640,42 @@ export function SettingsDialog(props: SettingsDialogProps) {
 
   useEffect(() => {
     if (!dialogProps.open) return;
-    const frame = window.requestAnimationFrame(updateSectionScrollEdges);
-    window.addEventListener("resize", updateSectionScrollEdges);
+    const updateSectionView = () => {
+      const viewport = sectionScrollRef.current;
+      const active = viewport?.querySelector<HTMLElement>(
+        '[aria-current="page"]',
+      );
+      if (viewport && active && viewport.scrollWidth > viewport.clientWidth) {
+        const bounds = viewport.getBoundingClientRect();
+        const selected = active.getBoundingClientRect();
+        const delta =
+          selected.left < bounds.left + 12
+            ? selected.left - bounds.left - 12
+            : selected.right > bounds.right - 12
+              ? selected.right - bounds.right + 12
+              : 0;
+        if (delta) viewport.scrollTo({ left: viewport.scrollLeft + delta });
+      }
+      updateSectionScrollEdges();
+    };
+    const frame = window.requestAnimationFrame(updateSectionView);
+    window.addEventListener("resize", updateSectionView);
     const observer =
       typeof ResizeObserver === "undefined"
         ? null
-        : new ResizeObserver(updateSectionScrollEdges);
+        : new ResizeObserver(updateSectionView);
     if (sectionScrollRef.current) observer?.observe(sectionScrollRef.current);
     return () => {
       window.cancelAnimationFrame(frame);
-      window.removeEventListener("resize", updateSectionScrollEdges);
+      window.removeEventListener("resize", updateSectionView);
       observer?.disconnect();
     };
-  }, [dialogProps.open, updateSectionScrollEdges, visibleSections.length]);
+  }, [
+    dialogProps.open,
+    activeSection,
+    updateSectionScrollEdges,
+    visibleSections.length,
+  ]);
 
   const sectionGroupLabels = useMemo(() => {
     const isZh = locale.toLowerCase().startsWith("zh");
@@ -704,7 +737,11 @@ export function SettingsDialog(props: SettingsDialogProps) {
     >
       <DialogContent
         closeLabel={t.common.close}
-        className="flex h-[min(760px,calc(100vh-2rem))] max-h-[calc(100vh-2rem)] flex-col sm:max-w-5xl md:max-w-6xl"
+        className="flex h-[min(760px,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden overflow-y-clip p-0 sm:max-w-5xl md:max-w-6xl"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          titleRef.current?.focus();
+        }}
         style={
           size
             ? {
@@ -717,22 +754,23 @@ export function SettingsDialog(props: SettingsDialogProps) {
         }
         aria-describedby={undefined}
       >
-        <DialogHeader className="gap-0">
-          {/* Inline the title and description so the header is one row instead
-              of two. The description is redundant context once the dialog is
-              open — we keep a muted copy for screen readers / first-time users. */}
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-            <DialogTitle className="leading-none">
+        <DialogHeader className="shrink-0 gap-0 border-b border-border/60 px-5 pb-4 pt-5 text-left sm:px-6">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 pr-12">
+            <DialogTitle
+              ref={titleRef}
+              tabIndex={-1}
+              className="text-ui-title outline-none"
+            >
               {t.settings.title}
             </DialogTitle>
-            <p className="text-muted-foreground text-xs leading-none">
+            <p className="text-ui text-muted-foreground">
               {t.settings.description}
             </p>
           </div>
           {!isLoading && (user || authStatus?.enabled) ? (
-            <div className="mt-2 flex items-center justify-between rounded-lg border bg-muted/30 px-2.5 py-1.5">
+            <div className="mt-4 flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2.5">
-                <div className="relative flex size-7 items-center justify-center border border-border-default bg-background text-muted-foreground shadow-[var(--shadow-xs)]">
+                <div className="relative flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
                   <UserIcon className="size-3.5" />
                   <span className="absolute -right-0.5 -bottom-0.5 size-2 rounded-full border border-background bg-success" />
                 </div>
@@ -740,7 +778,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                   <p className="text-sm font-medium">
                     {accountName ?? t.auth.notLoggedIn}
                   </p>
-                  <p className="text-muted-foreground truncate text-xs">
+                  <p className="text-ui-caption truncate text-muted-foreground">
                     {user?.email && user.email !== accountName
                       ? user.email
                       : t.auth.currentAccount}
@@ -752,7 +790,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-7 px-2.5 text-xs"
+                  className="h-8 px-2.5 text-ui shadow-none"
                   onClick={handleLogout}
                 >
                   <LogOutIcon className="mr-1 size-3.5" />
@@ -763,7 +801,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-7 px-2.5 text-xs"
+                  className="h-8 px-2.5 text-ui shadow-none"
                   onClick={() => {
                     dialogProps.onOpenChange?.(false);
                     navigate("/login");
@@ -776,8 +814,8 @@ export function SettingsDialog(props: SettingsDialogProps) {
             </div>
           ) : null}
         </DialogHeader>
-        <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-2 md:grid-cols-[196px_1fr] md:grid-rows-[1fr]">
-          <nav className="bg-sidebar flex min-h-0 flex-col overflow-hidden rounded-lg border p-1 md:max-h-none md:p-1.5">
+        <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[216px_minmax(0,1fr)] md:grid-rows-[1fr]">
+          <nav className="flex min-h-0 flex-col overflow-hidden border-b border-border/60 bg-sidebar/60 p-2 md:max-h-none md:border-b-0 md:border-r md:p-3">
             <div className="relative mb-2 hidden md:block">
               <SearchIcon className="text-muted-foreground pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2" />
               <Input
@@ -785,7 +823,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                 onChange={(event) => setSettingsQuery(event.target.value)}
                 placeholder={t.settings.dialog.searchPlaceholder}
                 aria-label={t.settings.dialog.searchPlaceholder}
-                className="h-7 rounded-md pl-8 pr-8 text-xs"
+                className="h-9 rounded-lg bg-background pl-8 pr-8 text-ui shadow-none"
               />
               {settingsQuery ? (
                 <Button
@@ -800,7 +838,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                 </Button>
               ) : null}
             </div>
-            <div className="text-muted-foreground mb-0.5 hidden items-center justify-between px-1.5 text-[11px] font-medium uppercase md:flex">
+            <div className="mb-1 hidden items-center justify-between px-2 text-ui-caption font-medium text-muted-foreground md:flex">
               <span>{t.settings.dialog.sectionsLabel}</span>
               {normalizedSettingsQuery ? (
                 <span>
@@ -835,11 +873,9 @@ export function SettingsDialog(props: SettingsDialogProps) {
                           visibleSections[index - 1]?.group !== group ? (
                             <li
                               aria-hidden="true"
-                              className="hidden items-center gap-2 px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80 first:pt-0 md:flex"
+                              className="hidden items-center px-2 pb-1.5 pt-4 text-ui-caption font-medium text-muted-foreground first:pt-1 md:flex"
                             >
-                              <span className="h-px flex-1 bg-border-subtle" />
                               <span>{sectionGroupLabels[group]}</span>
-                              <span className="h-px flex-1 bg-border-subtle" />
                             </li>
                           ) : null}
                           <li className="shrink-0 md:w-full">
@@ -856,12 +892,12 @@ export function SettingsDialog(props: SettingsDialogProps) {
                               className={cn(
                                 // Keep the nav quiet: one active tint and a
                                 // slim leading accent are enough for hierarchy.
-                                "group/sec relative flex h-12 w-auto min-w-max items-center gap-1.5 rounded-md px-2.5 text-xs transition-[opacity,background-color] md:h-auto md:min-h-0 md:w-full md:gap-2 md:py-1.5 md:text-sm",
+                                "group/sec relative flex h-12 w-auto min-w-max items-center gap-2 rounded-lg px-2.5 text-ui transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 md:h-9 md:w-full",
                                 disabled
                                   ? "cursor-not-allowed opacity-40"
-                                  : "opacity-75 hover:opacity-100 hover:bg-muted/50",
+                                  : "cursor-pointer text-muted-foreground hover:bg-muted/70 hover:text-foreground",
                                 active &&
-                                  "bg-primary/10 text-primary opacity-100 after:absolute after:bottom-0 after:left-2.5 after:right-2.5 after:h-[2px] after:rounded-t after:bg-primary/75 md:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_70%,transparent)] md:text-foreground md:after:hidden md:before:absolute md:before:bottom-1.5 md:before:left-0 md:before:top-1.5 md:before:w-[2px] md:before:rounded-r md:before:bg-primary/70",
+                                  "bg-primary/8 font-medium text-foreground after:absolute after:bottom-0 after:left-2.5 after:right-2.5 after:h-[2px] after:rounded-t after:bg-primary/75 md:after:hidden md:before:absolute md:before:bottom-2 md:before:left-0 md:before:top-2 md:before:w-[2px] md:before:rounded-r md:before:bg-primary/70",
                               )}
                             >
                               <Icon className="size-4" />
@@ -902,9 +938,9 @@ export function SettingsDialog(props: SettingsDialogProps) {
           </nav>
           <ScrollArea
             ref={contentScrollRootRef}
-            className="h-full min-h-0 min-w-0 rounded-lg border after:pointer-events-none after:absolute after:inset-x-1 after:bottom-1 after:z-10 after:h-5 after:rounded-b-md after:bg-gradient-to-t after:from-background/85 after:to-transparent [&_[data-slot=scroll-area-viewport]>div]:!block [&_[data-slot=scroll-area-viewport]>div]:!w-full [&_[data-slot=scroll-area-viewport]>div]:!min-w-0"
+            className="h-full min-h-0 min-w-0 [&_[data-slot=scroll-area-viewport]>div]:!block [&_[data-slot=scroll-area-viewport]>div]:!w-full [&_[data-slot=scroll-area-viewport]>div]:!min-w-0"
           >
-            <div className="w-full min-w-0 max-w-full space-y-4 overflow-x-hidden p-3 sm:p-4">
+            <div className="mx-auto w-full min-w-0 max-w-4xl space-y-6 overflow-x-hidden p-5 sm:p-6 lg:p-8">
               {/* Each tab gets its own Suspense boundary so switching
                   to an uncached tab doesn't blank out the currently
                   mounted one. Combined with preloadSettingsPages() this

@@ -1,0 +1,25 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/desktop-organizer".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 36
++			38 container
++				39 heading 桌面助手, Value: 1
++					40 text 桌面助手
++				41 text 默认启动进入工作区；需要处理系统桌面文件时，再开启透明桌面助手。 未开启
++				42 switch 0
++				43 heading 不接管系统桌面, Value: 2
++					44 text 不接管系统桌面
++				45 text 透明层只在你打开时出现，关闭后鼠标与窗口控制权还给 Windows。
++				46 heading 右键唤起助手, Value: 2
++					47 text 右键唤起助手
++				48 text 在整理层内右键可打开按类型归档的桌面文件抽屉。
++				49 heading 安全预览优先, Value: 2
++					50 text 安全预览优先
++				51 text 当前只做视图收纳，不自动移动文件；移动整理会单独加确认与撤销。 当前打开的是网页环境，所以右键菜单安装/移除会保持禁用。切到桌面版后，这两项才会真正生效。
++				52 heading 系统右键菜单, Value: 2
++					53 text 系统右键菜单
++				54 text 在 Windows 桌面空白处右键显示 "Echo 一键整理桌面"。
++				55 button (disabled) 安装右键命令
++				56 button (disabled) 移除
++				57 button (disabled) 打开桌面助手
++				58 link Description: 回到工作区, Value: localhost:3310/#/workspace/realtime/new
+The focused UI element is 0 AXWebArea Echo, URL: localhost:3310/#/workspace/desktop-organizer

@@ -13,6 +13,7 @@ const getAuthProvidersMock = vi.fn();
 const allowRegistrationMock = vi.fn();
 const authUnavailableMock = vi.fn();
 const retryAuthMock = vi.fn();
+const localLoginMock = vi.fn();
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<
@@ -42,7 +43,7 @@ vi.mock("@/providers/AuthProvider", () => ({
       : null,
     isLoading: false,
     isAuthenticated: false,
-    login: vi.fn(),
+    login: localLoginMock,
     register: vi.fn(),
     logout: vi.fn(),
     refresh: vi.fn(),
@@ -109,6 +110,7 @@ describe("LoginPage", () => {
     allowRegistrationMock.mockReset();
     authUnavailableMock.mockReset();
     retryAuthMock.mockReset();
+    localLoginMock.mockReset();
     getAuthProvidersMock.mockResolvedValue([{ id: "oct" }]);
     allowRegistrationMock.mockReturnValue(false);
     authUnavailableMock.mockReturnValue(false);
@@ -118,9 +120,35 @@ describe("LoginPage", () => {
     vi.useRealTimers();
   });
 
+  it("uses the configured local account with only a password field", async () => {
+    getAuthProvidersMock.mockResolvedValue([
+      { id: "oct" },
+      {
+        id: "local",
+        password_required: true,
+        password_only_username: "owner",
+      },
+    ]);
+    localLoginMock.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderPage();
+    const password = await screen.findByLabelText("密码", { selector: "input" });
+    expect(screen.queryByLabelText("用户名")).not.toBeInTheDocument();
+    await user.type(password, "12345678{Enter}");
+    await waitFor(() =>
+      expect(localLoginMock).toHaveBeenCalledWith({
+        username: "owner",
+        password: "12345678",
+      }),
+    );
+    expect(navigateMock).toHaveBeenCalled();
+  });
+
   it("defaults to the email form with email + code fields visible", async () => {
     await renderPageAtLoginForm();
     expect(screen.getByRole("textbox", { name: "邮箱" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Google/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /GitHub/ })).toBeDisabled();
     expect(screen.getByRole("textbox", { name: "验证码" })).toBeInTheDocument();
     // Legacy password tab was removed upstream · nothing here asks
     // for a password.
@@ -146,14 +174,14 @@ describe("LoginPage", () => {
     expect(remainingCooldownSeconds(160_000, 200_000)).toBe(0);
   });
 
-  it("uses email-specific copy when Oct email auth is available", async () => {
+  it("prioritizes Google and GitHub while retaining email login", async () => {
     getAuthProvidersMock.mockResolvedValue([{ id: "oct" }]);
 
     renderPage();
 
-    // Redesigned login surface: email-first copy, no phone form at all.
+    // Social providers lead; email remains available below.
     expect(
-      await screen.findByText("用一封验证码，唤醒你的 ECHO 身份"),
+      await screen.findByText("选择一种方式，登录你的 ECHO 账号"),
     ).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "邮箱" })).toBeInTheDocument();
     expect(screen.queryByText("登录你的 Octopus 账户")).not.toBeInTheDocument();

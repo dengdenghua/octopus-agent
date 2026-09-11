@@ -722,33 +722,78 @@ export function ChannelCredentialDialog({
                 const shown = showSecret[f.key];
                 return (
                   <div key={f.key} className="space-y-1">
-                    <label className="text-xs font-medium">
+                    <label
+                      htmlFor={`channel-${platform}-${f.key}`}
+                      className="text-xs font-medium"
+                    >
                       {f.label}
                       {f.required && (
                         <span className="ml-1 text-destructive">*</span>
                       )}
                     </label>
                     <div className="relative">
-                      <input
-                        type={isSecret && !shown ? "password" : "text"}
-                        value={values[f.key] ?? ""}
-                        onChange={(e) =>
-                          setValues((v) => ({
-                            ...v,
-                            [f.key]: e.target.value,
-                          }))
-                        }
-                        placeholder={f.placeholder}
-                        autoComplete="off"
-                        spellCheck={false}
-                        className={cn(
-                          "w-full rounded-md border border-border-default bg-background/70",
-                          "px-2.5 py-1.5 text-xs font-mono outline-none",
-                          "placeholder:text-muted-foreground/40",
-                          "focus:border-primary/50 focus:ring-2 focus:ring-primary/10",
-                          isSecret && "pr-9",
-                        )}
-                      />
+                      {f.key === "use_tls" ? (
+                        <select
+                          id={`channel-${platform}-${f.key}`}
+                          aria-label={f.label}
+                          className="w-full rounded-md border bg-background p-2 text-sm"
+                          value={values[f.key] || "true"}
+                          onChange={(e) =>
+                            setValues((v) => ({
+                              ...v,
+                              [f.key]: e.target.value,
+                            }))
+                          }
+                        >
+                          <option value="true">启用 TLS</option>
+                          <option value="false">关闭 TLS</option>
+                        </select>
+                      ) : /json|credentials|service_account/i.test(f.key) &&
+                        !isSecret ? (
+                        <textarea
+                          id={`channel-${platform}-${f.key}`}
+                          aria-label={f.label}
+                          aria-describedby={
+                            f.hint ? `channel-hint-${f.key}` : undefined
+                          }
+                          rows={6}
+                          className="w-full resize-y rounded-md border bg-background p-2 font-mono text-xs"
+                          value={values[f.key] || ""}
+                          onChange={(e) =>
+                            setValues((v) => ({
+                              ...v,
+                              [f.key]: e.target.value,
+                            }))
+                          }
+                          spellCheck={false}
+                        />
+                      ) : (
+                        <input
+                          id={`channel-${platform}-${f.key}`}
+                          aria-required={f.required}
+                          aria-describedby={
+                            f.hint ? `channel-hint-${f.key}` : undefined
+                          }
+                          type={isSecret && !shown ? "password" : "text"}
+                          value={values[f.key] ?? ""}
+                          onChange={(e) =>
+                            setValues((v) => ({
+                              ...v,
+                              [f.key]: e.target.value,
+                            }))
+                          }
+                          placeholder={f.placeholder}
+                          autoComplete="off"
+                          spellCheck={false}
+                          className={cn(
+                            "w-full rounded-md border border-border-default bg-background/70",
+                            "px-2.5 py-1.5 text-xs font-mono outline-none",
+                            "placeholder:text-muted-foreground/40",
+                            "focus:border-primary/50 focus:ring-2 focus:ring-primary/10",
+                            isSecret && "pr-9",
+                          )}
+                        />
+                      )}
                       {isSecret && (
                         <button
                           type="button"
@@ -774,7 +819,10 @@ export function ChannelCredentialDialog({
                       )}
                     </div>
                     {f.hint && (
-                      <div className="text-xs text-muted-foreground">
+                      <div
+                        id={`channel-hint-${f.key}`}
+                        className="text-xs text-muted-foreground"
+                      >
                         {f.hint}
                       </div>
                     )}

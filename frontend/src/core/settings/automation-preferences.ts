@@ -5,10 +5,12 @@ export type LinkOpenTarget = "external" | "in_app";
 const LINK_OPEN_TARGET_KEY = "octopus:automation:link-open-target";
 const LINK_OPEN_TARGET_EVENT = "octopus:link-open-target-changed";
 
-export function getLinkOpenTarget(): LinkOpenTarget {
+export function getLinkOpenTarget(local = false): LinkOpenTarget {
   if (typeof window === "undefined") return "external";
   try {
-    return window.localStorage.getItem(LINK_OPEN_TARGET_KEY) === "in_app"
+    return (window.localStorage.getItem(
+      local ? `${LINK_OPEN_TARGET_KEY}:local` : LINK_OPEN_TARGET_KEY,
+    ) ?? (local ? "in_app" : "external")) === "in_app"
       ? "in_app"
       : "external";
   } catch (error) {
@@ -17,10 +19,14 @@ export function getLinkOpenTarget(): LinkOpenTarget {
   }
 }
 
-export function setLinkOpenTarget(target: LinkOpenTarget): void {
+export function setLinkOpenTarget(target: LinkOpenTarget, local = false): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(LINK_OPEN_TARGET_KEY, target);
+    window.localStorage.setItem(
+      local ? `${LINK_OPEN_TARGET_KEY}:local` : LINK_OPEN_TARGET_KEY,
+      target,
+    );
+    if (local) return;
     window.dispatchEvent(
       new CustomEvent<LinkOpenTarget>(LINK_OPEN_TARGET_EVENT, {
         detail: target,

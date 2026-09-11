@@ -57,6 +57,33 @@ export default function ConversationSettingsPage() {
 
       <div className="divide-y rounded-xl border border-border-default bg-card/35">
         <SettingRow
+          title={zh ? "发送快捷键" : "Send shortcut"}
+          description={
+            zh
+              ? "Shift + Enter 始终换行；也可选择 Ctrl / ⌘ + Enter 发送。"
+              : "Shift + Enter always inserts a newline."
+          }
+        >
+          <Select
+            value={settings.display.send_shortcut ?? "enter"}
+            onValueChange={(value) => {
+              if (value === "enter" || value === "modifier_enter")
+                setSetting("display", { send_shortcut: value });
+            }}
+          >
+            <SelectTrigger
+              aria-label={zh ? "发送快捷键" : "Send shortcut"}
+              className="w-full sm:w-[220px]"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="enter">Enter</SelectItem>
+              <SelectItem value="modifier_enter">Ctrl / ⌘ + Enter</SelectItem>
+            </SelectContent>
+          </Select>
+        </SettingRow>
+        <SettingRow
           title={t.settings.appearance.conversationDetailLevelTitle}
           description={t.settings.appearance.conversationDetailLevelDescription}
         >

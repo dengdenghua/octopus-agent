@@ -1,0 +1,328 @@
+Browser tab: 4, Title: "HUB - Echo", URL: "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=all".
+0 AXWebArea HUB - Echo, URL: localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=all
+	1 container root
+		2 container
+			3 button 返回桌面
+			4 button 切换全屏
+			5 tab group Workspace surface
+				94 tab (selected, settable, boolean) Description: Echo, Value: 1
+				7 tab (selectable, settable, boolean) Description: AI 浏览器, Value: 0
+			8 button (expanded) Description: 收起侧栏 (Ctrl/⌘+B), Secondary Actions: Collapse
+			9 button 新建任务
+			10 content list
+				11 link Description: HUB, Value: localhost:3310/#/workspace/agents?surface=chat
+				12 link Description: 助手, Value: localhost:3310/#/workspace/realtime/octopus-assistant?agent=octopus
+				13 link Description: 订阅, Value: localhost:3310/#/workspace/intelligence?surface=chat
+				14 link Description: 项目管理, Value: localhost:3310/#/workspace/projects
+				15 link Description: 设计画布, Value: localhost:3310/#/workspace/design
+				16 link Description: 叙事工坊, Value: localhost:3310/#/workspace/narrative
+				17 link Description: 自进化, Value: localhost:3310/#/workspace/evolution?surface=chat
+			18 content list
+				19 link Description: 发现社区, Value: localhost:3310/#/workspace/community
+			20 content list
+				21 button (collapsed) Description: 展开本地数据库, Secondary Actions: Expand
+			22 content list
+				23 button 编辑侧栏
+			24 container
+				25 button (expanded) Description: 收起项目, Secondary Actions: Collapse
+				26 button 选择项目空间
+			27 container
+				28 button (expanded) Description: 收起对话, Secondary Actions: Collapse
+				29 button Description: 对话 · 新建任务, Help: 新建任务
+			30 pop up button (collapsed) Description: Raven, ID: radix-_r_1a_, Secondary Actions: Expand, Help: Raven · 现实职业是企业流程自动化专家，通过视觉理解操作 ERP、CRM、表格、浏览器和遗留系统；在 ECHO 世界中是远程接管手 Night Crow。两种身份共享屏幕观察、设备控制与精细操作能力。
+				31 text Raven
+				32 text Lv.
+				33 text 1
+				34 text ⭐
+			35 button 设置
+			36 container
+				37 heading HUB, Value: 1
+					38 text HUB
+				39 tab group
+					40 tab (selectable, settable, boolean) 角色, Value: 0, ID: radix-_r_kl_-trigger-agents
+					41 tab (selected, settable, boolean) 应用, Value: 1, ID: radix-_r_kl_-trigger-applications
+					42 tab (selectable, settable, boolean) Skills, Value: 0, ID: radix-_r_kl_-trigger-skills
+				43 text field (settable) 搜索角色、应用或 Skills…
+				44 container Description: 应用, ID: radix-_r_kl_-content-applications
+					45 container 应用中心
+						46 heading 应用中心, Value: 2, ID: application-library-title
+							47 text 应用中心
+						95 heading 本机应用, Value: 3
+							96 text 本机应用
+						97 container
+							98 button 项目管理 · 里程碑、风险与项目协作
+								99 text 项目管理
+								100 text 里程碑、风险与项目协作
+							101 pop up button (collapsed) Description: 管理项目管理, ID: radix-_r_la_, Secondary Actions: Expand
+						102 container
+							103 button 模拟炒股 · 策略验证与模拟交易
+								104 text 模拟炒股
+								105 text 策略验证与模拟交易
+							106 pop up button (collapsed) Description: 管理模拟炒股, ID: radix-_r_lc_, Secondary Actions: Expand
+						107 container
+							108 button 设计画布 · 视觉创作、素材编排与设计工作流
+								109 text 设计画布
+								110 text 视觉创作、素材编排与设计工作流
+							111 pop up button (collapsed) Description: 管理设计画布, ID: radix-_r_le_, Secondary Actions: Expand
+						112 container
+							113 button 叙事工坊 · 角色、世界观、剧情分支与正典协作
+								114 text 叙事工坊
+								115 text 角色、世界观、剧情分支与正典协作
+							116 pop up button (collapsed) Description: 管理叙事工坊, ID: radix-_r_lg_, Secondary Actions: Expand
+						117 container
+							118 button 自进化 · 双螺旋、候选基因、治理与审计
+								119 text 自进化
+								120 text 双螺旋、候选基因、治理与审计
+							121 pop up button (collapsed) Description: 管理自进化, ID: radix-_r_li_, Secondary Actions: Expand
+						122 container
+							123 button 订阅 · 持续跟踪主题与情报
+								124 text 订阅
+								125 text 持续跟踪主题与情报
+							126 pop up button (collapsed) Description: 管理订阅, ID: radix-_r_lk_, Secondary Actions: Expand
+						127 container
+							128 button 发现社区 · 发现并复用社区工作流
+								129 text 发现社区
+								130 text 发现并复用社区工作流
+							131 pop up button (collapsed) Description: 管理发现社区, ID: radix-_r_lm_, Secondary Actions: Expand
+						85 heading 插件, Value: 3
+							86 text 插件
+						87 text 插件、连接器与 MCP；安装状态直接显示在各项中。
+						88 tab group 插件目录视图
+							89 tab (selectable, settable, boolean) 推荐, Value: 0
+							90 tab (selected, settable, boolean) 全部, Value: 1
+							91 tab (selectable, settable, boolean) 已安装, Value: 0
+							92 tab (selectable, settable, boolean) 远程 Agent, Value: 0
+						132 button (expanded) 效率 9, Secondary Actions: Collapse
+							133 text 效率
+							134 text 9
+						135 text QQ邮箱
+						136 text 收发、搜索和整理 QQ 邮件。用自然语言读取邮件内容、汇总邮件线程、管理文件夹。
+						137 container
+							138 text 来自  WorkBuddy
+						139 button 安装, Help: 按需安装
+						140 text 乐享知识库
+						141 text 搜索、创建和管理乐享知识库中的文档。支持导入 Markdown、按标签整理内容、追踪团队文档的更新动态。
+						142 container
+							143 text 来自  WorkBuddy
+						144 button 安装, Help: 按需安装
+						145 text 腾讯文档
+						146 text 创建、编辑和协作腾讯文档。用自然语言管理在线表格、文档和幻灯片，轻松完成内容查询、数据整理和团队协同。
+						147 container
+							148 text 来自  WorkBuddy
+						149 button 安装, Help: 按需安装
+						150 text 腾讯文档企业版
+						151 text 创建、编辑和协作腾讯文档。用自然语言管理在线表格、文档和幻灯片，轻松完成内容查询、数据整理和团队协同。
+						152 container
+							153 text 来自  WorkBuddy
+						154 button 安装, Help: 按需安装
+						155 text 腾讯会议
+						156 text 通过命令行创建、查询和管理腾讯会议。支持快速发起会议、查看日程安排、管理参会人员。
+						157 container
+							158 text 来自  WorkBuddy
+						159 button 安装, Help: 按需安装
+						160 text 钉钉
+						161 text 通过命令行管理钉钉全产品能力：AI 表格、考勤、日历、群聊与机器人、通讯录、开放平台文档、DING 消息、钉钉文档、钉钉云盘、AI 听记、邮箱、OA 审批、日志、待办。
+						162 container
+							163 text 来自  WorkBuddy
+						164 button 安装, Help: 按需安装
+						165 text TAPD
+						166 text 管理需求、缺陷、任务和迭代。查询项目进度、拆分需求、流转状态、填写工时，覆盖需求到发布的研发全生命周期。
+						167 container
+							168 text 来自  WorkBuddy
+						169 button 安装, Help: 按需安装
+						170 text 金山文档
+						171 text 创建、搜索和管理金山文档（WPS 云文档）。支持新建多种文档类型（Word/Excel/PDF/PPT/智能表格/多维表格/智能文档）、读取与搜索文档内容、编辑更新、分享、移动重命名整理、标签收藏管理、知识库空间操作、网页剪藏，以及接龙转表格、AI PPT 生成等。
+						172 container
+							173 text 来自  WorkBuddy
+						174 button 安装, Help: 按需安装
+						175 text 同程程心
+						176 text 同程程心可通过自然语言查询机票、火车票、酒店、景点、度假产品等旅行资源，支持火空联程、智能交通推荐、特价机票搜索、景区门票预订，以及完整行程规划，显著提升出行效率。
+						177 container
+							178 text 来自  WorkBuddy
+						179 button 安装, Help: 按需安装
+						180 button (expanded) 创意 6, Secondary Actions: Collapse
+							181 text 创意
+							182 text 6
+						183 text Canva可画
+						184 text 无缝调用Canva可画的设计能力。一句话生成海报、演示文稿、小红书封面等设计，通过文字描述调整尺寸、填充品牌模板及检索已有内容
+						185 container
+							186 text 来自  WorkBuddy
+						187 button 安装, Help: 按需安装
+						188 text 飞书
+						189 text 通过命令行管理飞书/Lark 全产品能力：即时通讯、邮箱、日历、云文档、电子表格、多维表格（Base）、幻灯片、画板、知识库、云空间、妙记、视频会议、任务、审批、考勤、通讯录、OKR 等。
+						190 container
+							191 text 来自  WorkBuddy
+						192 button 安装, Help: 按需安装
+						193 text 小鹅通
+						194 text 用自然语言管理小鹅通店铺：查询课程与学员，创建和编辑课程，查看订单，并查找或上传图片、音频、电子书和文档素材。
+						195 container
+							196 text 来自  WorkBuddy
+						197 button 安装, Help: 按需安装
+						198 text 腾讯营销投放
+						199 text 腾讯营销投放 Skill，为大模型赋予广告投放管理能力：支持广告账户授权、广告/智投项目的创建与更新、创意管理、广告数据查询与分析、推广内容资产管理，以及操作日志查询等完整的广告投放全链路操作。
+						200 container
+							201 text 来自  WorkBuddy
+						202 button 安装, Help: 按需安装
+						203 text AgentKey
+						204 text AgentKey 是 AI 助手获取可信工具和实时数据的能力市场。支持网页搜索、URL抓取、新闻、社交媒体、股票市场价格、电商产品数据、企业/公司数据、天气、地图和地理位置、旅行（航班/酒店）、实时信息或任何第三方API。
+						205 container
+							206 text 来自  WorkBuddy
+						207 button 安装, Help: 按需安装
+						208 text Canva可画
+						209 text 无缝调用Canva可画的设计能力。一句话生成海报、演示文稿、小红书封面等设计，通过文字描述调整尺寸、填充品牌模板及检索已有内容
+						210 container
+							211 text 来自  WorkBuddy
+						212 button 安装, Help: 按需安装
+						213 button (expanded) 开发者工具 7, Secondary Actions: Collapse
+							214 text 开发者工具
+							215 text 7
+						216 text Linear
+						217 text 管理 Linear 中的 Issues、项目、文档和发布。支持创建和更新 Issue 并指派负责人与标签，评论与讨论串回复，创建项目和里程碑及进度报告，管理文档和附件，查看 Sprint 周期与团队状态，搜索和 Code Review PR 变更。
+						218 container
+							219 text 来自  WorkBuddy
+						220 button 安装, Help: 按需安装
+						221 text GitHub
+						222 text 在 GitHub 上克隆、推送代码，查看和管理仓库与 Pull Request，用自然语言完成代码协作。
+						223 container
+							224 text 来自  WorkBuddy
+						225 button 安装, Help: 按需安装
+						226 text Notion
+						227 text 创建、搜索和管理 Notion 工作区。用自然语言读取页面、查询数据库、更新内容、整理知识库。
+						228 container
+							229 text 来自  WorkBuddy
+						230 button 安装, Help: 按需安装
+						231 text 腾讯云 CloudBase
+						232 text 腾讯云开发 CloudBase 全栈开发、部署、调试与排障连接器。覆盖 Web 应用、微信小程序、uni-app、原生 App HTTP API、云函数、CloudRun、NoSQL/MySQL 数据库、云存储、静态托管、身份认证、AI 大模型调用、AI Agent、资源巡检与 Spec 工作流。
+						233 container
+							234 text 来自  WorkBuddy
+						235 button 安装, Help: 按需安装
+						236 text 向日葵远程控制
+						237 text 通过命令行管理远端设备，实时监测在线状态、秒级发起远程控制、快速传输文件及远程截屏。零部署、免更新，轻松实现智能批量运维。
+						238 container
+							239 text 来自  WorkBuddy
+						240 button 安装, Help: 按需安装
+						241 text 轻流
+						242 text 轻流无代码平台连接器。通过自然语言创建应用、管理表单数据、处理审批流程、查询和导出数据，一站式连接轻流全部能力。
+						243 container
+							244 text 来自  WorkBuddy
+						245 button 安装, Help: 按需安装
+						246 text 威科先行
+						247 text 威科先行依托全面、准确、及时更新的法规、案例等法律数据研发的MCP服务，支持语义检索、关键词检索等场景。
+						248 container
+							249 text 来自  WorkBuddy
+						250 button 安装, Help: 按需安装
+						251 button (expanded) 业务与运营 9, Secondary Actions: Collapse
+							252 text 业务与运营
+							253 text 9
+						254 text 通达信
+						255 text 通过通达信 MCP 查询全球股票行情数据、条件选股、研究报告、公告资讯和宏观信息。支持个股基本面分析、同行业对比和智能选股筛查。
+						256 container
+							257 text 来自  WorkBuddy
+						258 button 安装, Help: 按需安装
+						259 text 腾讯自选股
+						260 text 直连腾讯自选股，实时掌握毫秒级行情与资金动态，用自然语言分析自选数据、设置股价提醒、管理模拟交易，轻松搞定盯盘与投资决策。
+						261 container
+							262 text 来自  WorkBuddy
+						263 button 安装, Help: 按需安装
+						264 text 企业微信
+						265 text 企业微信官方 CLI 套件，覆盖消息、邮件、文档、待办、日程、会议、微盘、通讯录等业务功能。支持机器人主动通知、新建与读取文档、文档搜索、新建管理日程、预约与获取会议信息、新建跟进待办、上传与获取微盘文件、邮件读取与发送等能力
+						266 container
+							267 text 来自  WorkBuddy
+						268 button 安装, Help: 按需安装
+						269 text 天眼查
+						270 text 通过天眼查 MCP 查询多维度企业数据。支持工商登记、股东结构、司法风险、知识产权、董监高、经营数据等 160+ 项企业数据能力，用自然语言完成企业尽调与商业情报分析。
+						271 container
+							272 text 来自  WorkBuddy
+						273 button 安装, Help: 按需安装
+						274 text 销售易CRM
+						275 text 用自然语言查客户、推商机、盘线索、领公海、写跟进，一句话打通销售工作闭环。
+						276 container
+							277 text 来自  WorkBuddy
+						278 button 安装, Help: 按需安装
+						279 text 同舟金融研究
+						280 text 连接公开行情、研报检索、行业图谱与同舟投研材料，为股市研究提供可复核证据。
+						281 container
+							282 text 来自  WorkBuddy
+						283 button 安装, Help: 按需安装
+						284 text 盈米MCP
+						285 text 查询基金与市场数据，完成基金研究、组合分析、财富规划及金融内容生成。
+						286 container
+							287 text 来自  WorkBuddy
+						288 button 安装, Help: 按需安装
+						289 text 金数据
+						290 text 用自然语言在金数据（jinshuju.net）创建表单、表格、问卷、考试、报名、收款等各类场景应用：一句话生成表单与表格、批量处理数据、自动统计分析，零门槛快速搭建。
+						291 container
+							292 text 来自  WorkBuddy
+						293 button 安装, Help: 按需安装
+						294 text Moka HR 智能体
+						295 text 招聘和人事一体的 AI 同事，把查询与执行收进一个对话。人才推荐、招聘动态、考勤绩效、审批待办，一句话问清；候选人寻访、面试分析与面试官评估，一句话发起。
+						296 container
+							297 text 来自  WorkBuddy
+						298 button 安装, Help: 按需安装
+						299 button (expanded) 其他 12, Secondary Actions: Collapse
+							300 text 其他
+							301 text 12
+						302 text CNB
+						303 text 通过自然语言管理 CNB 平台：仓库、Issue、PR、流水线、制品库等操作。
+						304 container
+							305 text 来自  WorkBuddy
+						306 button 安装, Help: 按需安装
+						307 text 微云
+						308 text 查看、下载、删除微云文件，并且提供上传文件到微云、生成分享链接能力，帮你管理微云文件
+						309 container
+							310 text 来自  WorkBuddy
+						311 button 安装, Help: 按需安装
+						312 text 企查查
+						313 text 查询和核实企业工商登记信息。支持股东结构、实际控制人、受益所有人、高管团队、对外投资、财务数据、年报及上市信息查询，用自然语言快速完成企业身份核验与背景调查。
+						314 container
+							315 text 来自  WorkBuddy
+						316 button 安装, Help: 按需安装
+						317 text 百度网盘
+						318 text 连接百度网盘，支持文件与分类浏览、关键词及语义检索、文件和文件夹管理、创建分享链接、查询容量，以及保存文本内容或通过 URL 转存文件。
+						319 container
+							320 text 来自  WorkBuddy
+						321 button 安装, Help: 按需安装
+						322 text 腾讯企点客服
+						323 text 腾讯企点客服连接器：用自然语言处理工单（查询/创建/更新/状态变更）、查询坐席在线与实时接待、检索/拉取客户资料、拉取人工/大模型/文本机器人的会话记录和消息、查看客服实时监控、会话监控、客服满意度与响应度报表等数据。
+						324 container
+							325 text 来自  WorkBuddy
+						326 button 安装, Help: 按需安装
+						327 text 华宇元典法律数据
+						328 text 华宇元典法律数据为智能体提供法律法规、案例文书、企业信息 MCP 工具能力。
+						329 container
+							330 text 来自  WorkBuddy
+						331 button 安装, Help: 按需安装
+						332 text 知识星球
+						333 text 用自然语言管理知识星球：浏览星球内容、发帖评论、搜索主题、回答问题、管理笔记、查看用户信息。
+						334 container
+							335 text 来自  WorkBuddy
+						336 button 安装, Help: 按需安装
+						337 text 腾讯健康NGES
+						338 text 腾讯健康NGES MCP服务，支持智能问数和合规审核等功能
+						339 container
+							340 text 来自  WorkBuddy
+						341 button 安装, Help: 按需安装
+						342 text 法研·法律法规检索
+						343 text 法研·法律法规检索，支持自然语言获取精准、现行有效的法规条文，将高质量、海量的法规知识库，无缝接入各类AI应用与工作流中。
+						344 container
+							345 text 来自  WorkBuddy
+						346 button 安装, Help: 按需安装
+						347 text 云帐房AI开票
+						348 text 通过自然语言使用云帐房 AI 开票能力，完成开票信息识别，并前往电子税局开票。
+						349 container
+							350 text 来自  WorkBuddy
+						351 button 安装, Help: 按需安装
+						352 text Tec-Do 2.0 广告与增长情报
+						353 text 面向出海广告投放和增长团队的 AI 能力集合。
+						354 container
+							355 text 来自  WorkBuddy
+						356 button 安装, Help: 按需安装
+						357 text Lovrabet CLI
+						358 text 连接企业系统、数据和流程，让AI完成工作，交付结果
+						359 container
+							360 text 来自  WorkBuddy
+						361 button 安装, Help: 按需安装
+						362 button 加载更多(123)
+		93 container Notifications alt+T
+
+The focused UI element is 90 tab (selected, settable, boolean) 全部, Value: 1

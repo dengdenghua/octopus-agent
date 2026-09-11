@@ -85,7 +85,7 @@ def build_job_specs(root: Path, state: Path) -> dict[str, dict[str, Any]]:
                 "--config",
                 "config.local.yaml",
                 "--port",
-                "8888",
+                "8310",
             ],
             "WorkingDirectory": str(root),
             "EnvironmentVariables": base_env,
@@ -99,8 +99,8 @@ def build_job_specs(root: Path, state: Path) -> dict[str, dict[str, Any]]:
             "WorkingDirectory": str(frontend),
             "EnvironmentVariables": {
                 **base_env,
-                "FRONTEND_PORT": "3888",
-                "GATEWAY_PORT": "8888",
+                "FRONTEND_PORT": "3310",
+                "GATEWAY_PORT": "8310",
             },
             "StandardOutPath": str(state / "frontend.log"),
             "StandardErrorPath": str(state / "frontend.log"),
@@ -155,8 +155,8 @@ def start() -> int:
 
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
-        if _port_open(8888) and _port_open(3888):
-            print("dev stack ready: frontend http://127.0.0.1:3888 · backend http://127.0.0.1:8888")
+        if _port_open(8310) and _port_open(3310):
+            print("dev stack ready: frontend http://127.0.0.1:3310 · backend http://127.0.0.1:8310")
             return 0
         time.sleep(0.25)
     raise RuntimeError(f"services did not become ready; inspect logs in {state}")
@@ -170,7 +170,7 @@ def stop() -> int:
 
 
 def status() -> int:
-    services = (("frontend", 3888, FRONTEND_LABEL), ("backend", 8888, BACKEND_LABEL))
+    services = (("frontend", 3310, FRONTEND_LABEL), ("backend", 8310, BACKEND_LABEL))
     all_ready = True
     for name, port, label in services:
         loaded = _run("launchctl", "print", f"{_launch_domain()}/{label}", check=False)

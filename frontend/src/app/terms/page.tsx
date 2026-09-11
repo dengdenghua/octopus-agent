@@ -59,7 +59,7 @@ export default function TermsPage() {
           </div>
 
           <p className="mt-6 border-t border-border pt-4 text-xs leading-5 text-muted-foreground">
-            本页面为产品内公开说明，后续若接入正式法务文本，可在此路由替换为完整版本。
+            本说明适用于当前部署。关于账号、权限和数据管理的疑问，请联系该部署的管理员。
           </p>
         </article>
       </div>

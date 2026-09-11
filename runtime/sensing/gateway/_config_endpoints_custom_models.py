@@ -239,6 +239,9 @@ def _register_custom_models(router: Any, ctx: _ConfigCtx) -> None:
             # Opt-in only. Ordinary custom rows speak Chat Completions and
             # must stay incompatible with Codex until an operator explicitly
             # points them at a secret-free Responses endpoint/proxy.
+            "wire_api": (
+                "responses" if body.get("wire_api", prev.get("wire_api")) == "responses" else None
+            ),
             "codex_wire_api": (
                 "responses"
                 if str(
@@ -363,6 +366,20 @@ def _register_custom_models(router: Any, ctx: _ConfigCtx) -> None:
                     extra_headers=default_headers,
                 )
                 provider_name = "gemini"
+            elif body.get("wire_api", prev.get("wire_api")) == "responses":
+                from runtime.sensing.model_router.openai_responses_router import (
+                    OpenAIResponsesModelRouter,
+                )
+
+                provider_name = str(prev.get("compat_profile") or "openai_responses")
+                router_for_test = OpenAIResponsesModelRouter(
+                    base_url=base_url,
+                    api_key=api_key,
+                    default_model=upstream_model,
+                    extra_headers=default_headers,
+                    timeout_seconds=15.0,
+                    provider_name=provider_name,
+                )
             else:
                 from runtime.sensing.model_router.openai_router import (
                     OpenAIModelRouter,
@@ -387,9 +404,10 @@ def _register_custom_models(router: Any, ctx: _ConfigCtx) -> None:
                 )
             )
             latency_ms = int((time.perf_counter() - started) * 1000)
-            supports_vision = _probe_vision_support(
-                router_for_test,
-                model=upstream_model,
+            supports_vision = (
+                None
+                if provider_name in {"echo_hotspot", "echo_team"}
+                else _probe_vision_support(router_for_test, model=upstream_model)
             )
             return {
                 "ok": True,

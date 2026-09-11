@@ -1,4 +1,11 @@
-from .executor import StepExecutionError, ToolExecutor
+"""Tool contracts are available without constructing the executor import graph."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .executor import StepExecutionError, ToolExecutor
 from .tool_protocol import (
     NormalizedToolCall,
     NormalizedToolLifecycleEvent,
@@ -48,3 +55,17 @@ __all__ = [
     "tool_lifecycle_event_to_react_event",
     "tool_lifecycle_event_to_trace_payload",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    if name in {"StepExecutionError", "ToolExecutor"}:
+        from importlib import import_module
+
+        value = getattr(import_module(".executor", __name__), name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(__all__))

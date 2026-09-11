@@ -1,0 +1,16 @@
+Browser tab: 4, Title: "HUB - Echo", URL: "http://localhost:3310/#/workspace/agents?surface=chat".
+0 AXWebArea HUB - Echo, URL: localhost:3310/#/workspace/agents?surface=chat
+	1 container
+		2 container Notifications alt+T
+		3 container 智能组队, ID: radix-_r_kr_
+			4 heading 智能组队, Value: 2, ID: radix-_r_ks_
+				5 text 智能组队
+			6 text 先匹配最小可行团队和所需插件；启动后由群主按结果动态分工、调整顺序和增减专家。
+			7 text 要完成什么任务？
+			8 text entry area (settable) 要完成什么任务？, ID: smart-team-task
+			9 text 推荐成员不是固定流程。群主会获得本次任务专用的动态编排能力，按真实依赖决定并行、交接和复核，任务结束后不改变角色的永久技能。插件只推荐，不会静默安装。
+			10 button 取消
+			11 button (disabled) 创建专家团队
+			12 button 关闭
+
+The focused UI element is 8 text entry area (settable) 要完成什么任务？, ID: smart-team-task

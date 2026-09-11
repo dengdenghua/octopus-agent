@@ -42,6 +42,53 @@ from runtime.sensing.gateway.config_router import create_config_router
 _FAKE_COMMAND = ("fake-codex", "app-server", "--strict-config", "--listen", "stdio://")
 
 
+def test_model_save_validates_uncached_catalog_and_preserves_preference_on_failure(
+    tmp_path, monkeypatch
+):
+    factory = _ControlFactory()
+    accounts = CodexAccountService(
+        tmp_path / "state", command=_FAKE_COMMAND, client_factory=factory
+    )
+    preferences = CodexModelPreferenceStore(tmp_path / "profile.json")
+    bundle = create_config_router(
+        stack=SimpleNamespace(planner=None),
+        custom_models_path=tmp_path / "models.json",
+        codex_account_service=accounts,
+        codex_preference_store=preferences,
+    )
+    app = FastAPI()
+    app.include_router(bundle.router)
+    route = "/api/coder/codex/model-profile"
+    with TestClient(app) as client:
+        assert accounts.cached_models(None, include_hidden=False) is None
+        assert client.put(route, json={"mode": "chatgpt", "model": "missing"}).status_code == 400
+        assert preferences.read(None).model is None
+        assert (
+            client.put(
+                route, json={"mode": "chatgpt", "model": "gpt-5.6-codex", "reasoning_effort": "low"}
+            ).status_code
+            == 400
+        )
+        valid = client.put(
+            route, json={"mode": "chatgpt", "model": "gpt-5.6-codex", "reasoning_effort": "high"}
+        )
+        assert valid.status_code == 200
+        confirmed = preferences.read(None)
+        assert confirmed.reasoning_effort == "high"
+
+        def fail(*args):
+            raise OSError("private filesystem details")
+
+        monkeypatch.setattr(preferences, "write", fail)
+        rejected = client.put(
+            route, json={"mode": "chatgpt", "model": "gpt-5.6-codex", "reasoning_effort": "xhigh"}
+        )
+        assert rejected.status_code == 503
+        assert "private" not in rejected.text
+        assert preferences.read(None) == confirmed
+    asyncio.run(accounts.close_all())
+
+
 class _FakeControlClient:
     def __init__(self, config: CodexAppServerConfig, *, serial: int) -> None:
         self.config = config

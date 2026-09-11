@@ -13,7 +13,6 @@ import {
   ElectronTitleBar,
   ElectronTitleBarProvider,
 } from "@/components/electron-title-bar";
-import { emitOpenSettings } from "@/core/events";
 import { useI18n } from "@/core/i18n/hooks";
 import { loadAgentsPage } from "@/core/navigation/workspace-route-preload";
 import { RouteTitle } from "@/core/navigation/route-title";
@@ -64,14 +63,12 @@ function SettingsRoute() {
     const target = embedded
       ? `/workspace/realtime/new?embedded=${encodeURIComponent(embedded)}`
       : "/workspace/realtime/new";
-    navigate(target, { replace: true });
-    // Emit after navigation lands so the settings listener is mounted before
-    // the payload arrives; dispatching first lost the tab when the sidebar
-    // attached late.
-    const handle = window.setTimeout(() => {
-      emitOpenSettings(section ?? undefined);
-    }, 0);
-    return () => window.clearTimeout(handle);
+    // Carry the intent to the mounted destination; an event from this route
+    // can be lost when navigation unmounts its effect.
+    navigate(target, {
+      replace: true,
+      state: { settingsSection: section ?? "appearance" },
+    });
   }, [location.search, navigate]);
 
   return <PageLoading />;
@@ -206,10 +203,7 @@ export function AppRouter() {
             <Route path="/share/:token" element={<PublicThreadSharePage />} />
 
             <Route element={<ProtectedRoute />}>
-              <Route
-                path="/settings"
-                element={<Navigate to="/workspace/settings" replace />}
-              />
+              <Route path="/settings" element={<SettingsRoute />} />
               <Route path="/desktop" element={<DesktopPage />} />
               <Route path="/browser" element={<TopBrowserPage />} />
               <Route

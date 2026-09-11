@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -404,7 +405,17 @@ class SwarmRuntime:
         try:
             spawned: list[tuple[Future[ArmResult], Any, Any]] = [
                 (
-                    executor.submit(self._run_one, assignment, arm, budget, seed_outputs),
+                    # Each worker needs its own Context; sharing one Context
+                    # across concurrent arms raises on re-entry. Preserve the
+                    # host request, permissions and cancellation token.
+                    executor.submit(
+                        contextvars.copy_context().run,
+                        self._run_one,
+                        assignment,
+                        arm,
+                        budget,
+                        seed_outputs,
+                    ),
                     assignment,
                     arm,
                 )

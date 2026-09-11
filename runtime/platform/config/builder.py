@@ -29,9 +29,11 @@ from runtime.platform.models import BudgetSpec, SkillId
 from runtime.platform.observability.redactor import Redactor
 from runtime.safety.auth import TrustEngine
 
+from ._lazy_planner import DeferredPlanner
 from .schema import AgentConfig
 
-Planner = StaticPlanner | LLMPlanner
+Planner = StaticPlanner | LLMPlanner | DeferredPlanner
+_INHERIT_APPROVAL_ROUTER = object()
 
 
 @runtime_checkable
@@ -51,6 +53,8 @@ class StackProtocol(Protocol):
     planner: Planner
     mcp_clients: list[Any]
     plugin_hub: Any | None
+    approval_router: Any | None
+    background_router: Any | None
 
     @property
     def is_llm_planner(self) -> bool: ...
@@ -74,10 +78,58 @@ class BuiltStack:
     # after constructing the hub so turn orchestration activates plugins in
     # the same registry exposed by the operator API.
     plugin_hub: Any | None = None
+    # Independent host service. External engines must not require a native
+    # planner merely to review an escalated tool action.
+    approval_router: Any | None = _INHERIT_APPROVAL_ROUTER
+    background_router: Any | None = _INHERIT_APPROVAL_ROUTER
+
+    def __getattribute__(self, name: str) -> Any:
+        value = object.__getattribute__(self, name)
+        if name == "planner" and isinstance(value, DeferredPlanner):
+            planner = value.get()
+            # Once materialized, preserve the legacy identity of inherited
+            # model services. Explicitly injected reviewers remain untouched.
+            for service in ("approval_router", "background_router"):
+                if object.__getattribute__(self, service) is value.router:
+                    object.__setattr__(self, service, planner.router)
+            object.__setattr__(self, "planner", planner)
+            return planner
+        return value
+
+    @property
+    def native_router(self) -> Any:
+        return getattr(object.__getattribute__(self, "planner"), "router", None)
+
+    def configure_native_planner(self, initialize: Any) -> None:
+        planner = object.__getattribute__(self, "planner")
+        if isinstance(planner, DeferredPlanner):
+            planner.configure(initialize)
+        else:
+            initialize(planner)
+
+    def peek_native_planner(self) -> Any:
+        planner = object.__getattribute__(self, "planner")
+        return planner.peek() if isinstance(planner, DeferredPlanner) else planner
+
+    @property
+    def native_planner_model(self) -> str | None:
+        return getattr(object.__getattribute__(self, "planner"), "planner_model", None)
+
+    def __post_init__(self) -> None:
+        if self.approval_router is _INHERIT_APPROVAL_ROUTER:
+            self.approval_router = getattr(self.planner, "router", None)
+        if self.background_router is _INHERIT_APPROVAL_ROUTER:
+            from runtime.execution.model_services import background_model_calls_enabled
+
+            self.background_router = (
+                getattr(self.planner, "router", None)
+                if background_model_calls_enabled(self)
+                else None
+            )
 
     @property
     def is_llm_planner(self) -> bool:
-        return isinstance(self.planner, LLMPlanner)
+        return isinstance(object.__getattribute__(self, "planner"), (DeferredPlanner, LLMPlanner))
 
     def close_mcp_clients(self) -> None:
         """graceful shutdown · 逐个 close 长连 MCP client。"""
@@ -109,7 +161,7 @@ def build_from_config(config: AgentConfig) -> BuiltStack:
     from runtime.execution.all_skills import register_all, register_local
 
     if config.enable_web_skills:
-        register_all(registry)
+        register_all(registry, refresh_prompt_catalog=config.execution.member_engine != "opencode")
     else:
         register_local(registry)
     try:
@@ -181,7 +233,29 @@ def build_from_config(config: AgentConfig) -> BuiltStack:
     runtime = GraphRuntime(executor=executor, journal=journal)
 
     # 7. Planner
-    planner = _build_planner(config, registry, journal)
+    preload_requested = any(
+        getattr(config.learn, name)
+        for name in (
+            "learn_from_journal",
+            "learn_memories_from_journal",
+            "learn_kg_from_journal",
+            "rewrite_from_journal",
+            "assess_recipe_from_journal",
+        )
+    )
+    defer_native = (
+        config.execution.member_engine == "opencode"
+        and config.planner.type == "llm"
+        and not config.planner.model.startswith("mock/")
+        and config.planner.mock_response is None
+        and not preload_requested
+        and config.execution.background_model_calls is not True
+    )
+    planner = (
+        DeferredPlanner(lambda: _build_planner(config, registry, journal), config.planner.model)
+        if defer_native
+        else _build_planner(config, registry, journal)
+    )
 
     # 8. Optional learning preload: rules and memory patterns.
     if config.learn.learn_from_journal and isinstance(planner, LLMPlanner):
@@ -236,6 +310,7 @@ def build_from_config(config: AgentConfig) -> BuiltStack:
         runtime=runtime,
         planner=planner,
         mcp_clients=mcp_clients,
+        approval_router=getattr(planner, "router", None),
     )
 
 
@@ -296,7 +371,6 @@ def _build_planner(
             self_fallback = build_fallback_router_from_custom_models(p.model)
             router = ModelDispatchRouter(fallback=self_fallback or UnconfiguredModelRouter())
         else:
-            from runtime.sensing.model_router.anthropic_router import AnthropicModelRouter
             from runtime.sensing.model_router.dispatch_router import ModelDispatchRouter
             from runtime.sensing.model_router.models import UnconfiguredModelRouter
             from runtime.sensing.model_router.openai_router import (
@@ -316,6 +390,8 @@ def _build_planner(
                 self_fallback = build_fallback_router_from_custom_models(p.model)
                 router = ModelDispatchRouter(fallback=self_fallback or UnconfiguredModelRouter())
             else:
+                from runtime.sensing.model_router.anthropic_router import AnthropicModelRouter
+
                 # Wrap the anthropic router in a dispatcher so
                 # ``config_router._register`` can attach user-defined model
                 # aliases (``claude-mirror`` -> ``claude-sonnet-4-6``) on top.

@@ -100,7 +100,13 @@ export async function openTarget(
 ): Promise<OpenTargetResult> {
   const url = rawUrl.trim();
   if (typeof window === "undefined" || !isWebTarget(url)) return "blocked";
-  const target = options.target ?? getLinkOpenTarget();
+  const hostname = new URL(url).hostname.toLowerCase();
+  const local =
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname === "[::1]" ||
+    /^127\./.test(hostname);
+  const target = options.target ?? getLinkOpenTarget(local);
   if (target === "external") return openExternally(url);
 
   const request: BrowserOpenUrlRequest = {

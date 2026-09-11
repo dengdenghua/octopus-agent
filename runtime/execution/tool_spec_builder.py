@@ -299,6 +299,7 @@ def build_anthropic_tool_specs(
     agent: Any = None,
     user_context: dict[str, Any] | None = None,
     goal: str = "",
+    tool_ceiling: frozenset[str] | None = None,
 ) -> list[ToolSpec]:
     """Translate an Octopus ``SkillRegistry`` into a list of
     ``ToolSpec`` the Anthropic ``tools`` param can accept.
@@ -369,6 +370,9 @@ def build_anthropic_tool_specs(
                 exc_info=True,
             )
             all_names = []
+
+    if tool_ceiling is not None:
+        all_names = [name for name in all_names if name in tool_ceiling]
 
     activation = activate_capabilities(
         goal,

@@ -1,6 +1,8 @@
 /* Implementation note. */
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
+import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
+import { requireArray, serviceErrorMessage } from "@/core/utils/service-error";
 import {
   CheckIcon,
   ChevronRightIcon,
@@ -221,16 +223,18 @@ export default function ChannelsPage() {
     setLoading(true);
     try {
       const [chRes, agRes, groupRes] = await Promise.all([
-        fetch(`${getBackendBaseURL()}/api/channels`),
-        fetch(`${getBackendBaseURL()}/api/agents`),
-        fetch(`${getBackendBaseURL()}/api/groups`),
+        fetch(`${getBackendBaseURL()}/api/channels`, {
+          headers: authHeaders(),
+        }),
+        fetch(`${getBackendBaseURL()}/api/agents`, { headers: authHeaders() }),
+        fetch(`${getBackendBaseURL()}/api/groups`, { headers: authHeaders() }),
       ]);
       if (!chRes.ok)
         throw new Error(`Failed to load channels: ${chRes.status}`);
-      const ch = (await chRes.json()) as ChannelRow[];
+      const ch = requireArray<ChannelRow>(await chRes.json(), "渠道列表");
       setRows(ch);
       if (agRes.ok) {
-        const ag = (await agRes.json()) as AgentLite[];
+        const ag = requireArray<AgentLite>(await agRes.json(), "角色列表");
         setAgents(
           ag
             .map((agent) => ({ ...agent, id: agent.id || agent.name || "" }))
@@ -238,12 +242,12 @@ export default function ChannelsPage() {
         );
       }
       if (groupRes.ok) {
-        setGroups((await groupRes.json()) as GroupLite[]);
+        setGroups(requireArray<GroupLite>(await groupRes.json(), "团队列表"));
       }
       setError(null);
     } catch (e) {
       swallow(e);
-      setError(e instanceof Error ? e.message : "Unknown error");
+      setError(serviceErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -292,7 +296,7 @@ export default function ChannelsPage() {
         `${getBackendBaseURL()}/api/channels/${channelId}/assistant`,
         {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: jsonAuthHeaders(),
           body: JSON.stringify({ agent_id: agentId }),
         },
       );
@@ -314,7 +318,7 @@ export default function ChannelsPage() {
         `${getBackendBaseURL()}/api/channels/${channelId}/assistant`,
         {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: jsonAuthHeaders(),
           body: JSON.stringify({ group_id: groupId }),
         },
       );
@@ -344,7 +348,7 @@ export default function ChannelsPage() {
     try {
       const r = await fetch(
         `${getBackendBaseURL()}/api/channels/${channelId}/assistant`,
-        { method: "DELETE" },
+        { method: "DELETE", headers: authHeaders() },
       );
       if (!r.ok) throw new Error(r.statusText);
       toast.success(t.channels.toastAgentUnbound);
@@ -361,7 +365,7 @@ export default function ChannelsPage() {
     try {
       const response = await fetch(
         `${getBackendBaseURL()}/api/channels/${channelId}/diagnostics/probe`,
-        { method: "POST" },
+        { method: "POST", headers: authHeaders() },
       );
       if (!response.ok) {
         const detail = await response.text();
@@ -455,7 +459,7 @@ export default function ChannelsPage() {
   }, [filteredRows, t.channels.categoryOther]);
 
   return (
-    <WorkspaceContainer>
+    <WorkspaceContainer mobileNavigation>
       <WorkspaceBody className="px-4 pb-4">
         <div className="ui-density-stack mx-auto flex w-full max-w-6xl flex-col">
           {confirmDialog}

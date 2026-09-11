@@ -45,7 +45,8 @@ describe("Echo Design platform contract", () => {
   it("matches the creation-home hierarchy before entering the canvas", () => {
     expect(pageSource).toContain("function DesignHomeView");
     expect(pageSource).toContain("属于你的多模态 Agent 团队");
-    expect(pageSource).toContain("描述你要生成的内容");
+    expect(pageSource).toContain("<ChatInputBox");
+    expect(pageSource).toContain("modelName={settings.context.model_name}");
     expect(pageSource).toContain("Echo 创作基座已就绪");
     expect(pageSource).toContain("<CreativeProjectSelector");
     expect(pageSource).toContain("onSelect={handleCreativeProjectChange}");
@@ -55,7 +56,6 @@ describe("Echo Design platform contract", () => {
     expect(pageSource).toContain('data-echo-design-chat="true"');
     expect(pageSource).toContain("Design 使用指南");
     expect(pageSource).toContain("模型使用指南");
-    expect(pageSource).toContain('aria-label="开始制作"');
     expect(pageSource).toContain('["home", "创作首页"]');
     expect(pageSource).toContain('searchParams.get("new_task")');
     expect(pageSource).toContain('next.delete("new_task")');
@@ -65,12 +65,11 @@ describe("Echo Design platform contract", () => {
     expect(pageSource).toContain("使用提示词");
     expect(pageSource).toContain("grid-cols-3");
     expect(pageSource).toContain("createLocalCreativeProject");
-    expect(pageSource).toContain('aria-label="添加文件"');
     expect(pageSource).toContain("uploadHomeFiles");
     expect(pageSource).toContain("DESIGN_MODEL_SELECTION_KEY");
-    expect(pageSource).toContain("useModels()");
+    expect(pageSource).toContain("useThreadSettings(threadId");
     expect(pageSource).toContain(
-      "勾选后，Agent 可在任务中调用这些模型与本地能力",
+      "按需选择已启用的创作插件，语言模型在输入框中选择",
     );
     expect(pageSource).toContain("可调用创作能力");
     expect(pageSource).toContain(

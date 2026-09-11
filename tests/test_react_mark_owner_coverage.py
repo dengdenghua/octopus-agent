@@ -54,3 +54,73 @@ def test_sandbox_violation_detection() -> None:
     assert _looks_like_sandbox_violation(None) is False
     assert _can_escalate_sandbox("exec_shell") is True
     assert _can_escalate_sandbox("read_file") is False
+
+
+def test_workspace_sandbox_absorbs_routine_shell_and_edit_approval(
+    monkeypatch,
+) -> None:
+    import runtime.core.cerebrum._react_execution_phase6d as phase6d
+    from runtime.core.cerebrum._react_execution_phase6d import (
+        _workspace_sandbox_handles_ordinary_action,
+    )
+    from runtime.safety.approval.approval_gate import assess_approval_risk
+
+    context = {
+        "permission_mode": "acceptEdits",
+        "execution_environment": "sandbox",
+        "sandbox_mode": "sandbox",
+    }
+    monkeypatch.setattr(phase6d, "_hard_workspace_sandbox_available", lambda: True)
+    assert _workspace_sandbox_handles_ordinary_action(
+        "exec_shell",
+        assess_approval_risk("exec_shell", "python -m pytest"),
+        context,
+    )
+    assert _workspace_sandbox_handles_ordinary_action(
+        "edit_text_file",
+        assess_approval_risk("edit_text_file", '{"path": "src/app.py"}'),
+        context,
+    )
+
+
+def test_workspace_sandbox_keeps_external_and_destructive_actions_at_the_gate(
+    monkeypatch,
+) -> None:
+    import runtime.core.cerebrum._react_execution_phase6d as phase6d
+    from runtime.core.cerebrum._react_execution_phase6d import (
+        _workspace_sandbox_handles_ordinary_action,
+    )
+    from runtime.safety.approval.approval_gate import assess_approval_risk
+
+    context = {
+        "permission_mode": "default",
+        "execution_environment": "sandbox",
+        "sandbox_mode": "sandbox",
+    }
+    monkeypatch.setattr(phase6d, "_hard_workspace_sandbox_available", lambda: True)
+    assert not _workspace_sandbox_handles_ordinary_action(
+        "git_push",
+        assess_approval_risk("git_push", "{}"),
+        context,
+    )
+    assert not _workspace_sandbox_handles_ordinary_action(
+        "exec_shell",
+        assess_approval_risk("exec_shell", "Remove-Item -Recurse -Force ."),
+        context,
+    )
+
+
+def test_soft_workspace_sandbox_keeps_native_command_at_the_gate(monkeypatch) -> None:
+    import runtime.core.cerebrum._react_execution_phase6d as phase6d
+    from runtime.safety.approval.approval_gate import assess_approval_risk
+
+    monkeypatch.setattr(phase6d, "_hard_workspace_sandbox_available", lambda: False)
+    assert not phase6d._workspace_sandbox_handles_ordinary_action(
+        "exec_shell",
+        assess_approval_risk("exec_shell", "python -m pytest"),
+        {
+            "permission_mode": "acceptEdits",
+            "execution_environment": "sandbox",
+            "sandbox_mode": "sandbox",
+        },
+    )

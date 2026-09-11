@@ -10,7 +10,6 @@ import pytest
 
 from runtime.execution.engines import (
     EngineId,
-    EngineSelectionError,
     ExecutionAdmissionError,
     ExecutionPhase,
     ExecutionRoute,
@@ -48,18 +47,30 @@ def test_host_orchestration_precedence(signals, engine, driver):
 
 
 @pytest.mark.parametrize(
-    "signals",
+    "signal,driver",
     [
-        {"project_command": True},
-        {"group_fanout": True},
-        {"topology_id": "team"},
-        {"coordinated": True},
+        ("project_command", "project_os"),
+        ("group_fanout", "group_fanout"),
     ],
 )
-def test_codex_cannot_own_host_orchestration(signals):
-    with pytest.raises(EngineSelectionError) as caught:
-        select_execution_route(requested_engine=EngineId.CODEX, **signals)
-    assert caught.value.reason == "orchestration_required"
+@pytest.mark.parametrize("engine", [EngineId.CODEX, EngineId.OPENCODE])
+def test_explicit_engine_preserves_host_scheduler_precedence(signal, driver, engine):
+    route = select_execution_route(requested_engine=engine, topology_id="team", **{signal: True})
+    assert route.engine is engine
+    assert route.driver_for(ExecutionPhase.PRIMARY) == driver
+    assert route.driver_for(ExecutionPhase.REPAIR) == (
+        "codex_app_server" if engine is EngineId.CODEX else "opencode_server"
+    )
+
+
+@pytest.mark.parametrize("engine", [EngineId.CODEX, EngineId.OPENCODE])
+def test_topology_keeps_explicit_engine_for_planning_and_continuations(engine):
+    route = select_execution_route(requested_engine=engine, topology_id="team")
+    assert route.engine is engine
+    assert route.driver_for(ExecutionPhase.PRIMARY) == "swarm_mesh"
+    assert route.driver_for(ExecutionPhase.REPAIR) == (
+        "codex_app_server" if engine is EngineId.CODEX else "opencode_server"
+    )
 
 
 def test_continuations_cannot_reselect_the_bound_engine():

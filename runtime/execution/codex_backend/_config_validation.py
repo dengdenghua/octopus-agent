@@ -22,6 +22,9 @@ class SidecarConfigContext(Protocol):
     @property
     def sandbox_mode(self) -> str: ...
 
+    @property
+    def approval_reviewer(self) -> str: ...
+
 
 def validate_provider_profile(
     config: Mapping[str, object],
@@ -143,6 +146,8 @@ def validate_apps_config(
     config: Mapping[str, object],
     selected_app_ids: Sequence[str],
     errors: list[str],
+    *,
+    approval_reviewer: str = "user",
 ) -> None:
     """Validate the exact server-selected Codex app capability set."""
 
@@ -162,7 +167,7 @@ def validate_apps_config(
         "open_world_enabled": False,
         **(
             {
-                "approvals_reviewer": "user",
+                "approvals_reviewer": approval_reviewer,
                 "default_tools_approval_mode": "prompt",
             }
             if selected_app_ids
@@ -177,7 +182,7 @@ def validate_apps_config(
         "enabled": True,
         "destructive_enabled": False,
         "open_world_enabled": False,
-        "approvals_reviewer": "user",
+        "approvals_reviewer": approval_reviewer,
         "default_tools_approval_mode": "prompt",
     }
     for app_id in selected_app_ids:

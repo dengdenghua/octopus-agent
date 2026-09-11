@@ -1,0 +1,31 @@
+Browser tab: 4, Title: "设计画布 - Echo", URL: "http://localhost:3310/#/workspace/design".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
++								207 text 添加节点
++								208 container
++									209 button 界面画板 UI
++										210 text 界面画板
++										211 text UI
++									212 button 组件 UI
++										213 text 组件
++										214 text UI
++									215 button 设计规范 UI
++										216 text 设计规范
++										217 text UI
++									218 button 交互预览 UI
++										219 text 交互预览
++										220 text UI
++									221 button 文本
++									222 button 表格
++									223 button 图片
++									224 button 视频
++									225 button 音频
++									226 button 3D 导演台 新
++										227 text 3D 导演台
++										228 text 新
++									229 button 视频剪辑 新
++										230 text 视频剪辑
++										231 text 新
++									232 button ComfyUI 工作流 新
++										233 text ComfyUI 工作流
++										234 text 新
+The focused UI element is 201 button 添加节点

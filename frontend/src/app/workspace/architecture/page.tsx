@@ -1,3 +1,4 @@
+import { useStreamdownPlugins } from "@/core/streamdown";
 /* Implementation note. */
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
@@ -19,8 +20,10 @@ import {
 import { ErrorState, LoadingState } from "@/components/ui/state";
 import { cn } from "@/lib/utils";
 
-const LazyStreamdown = lazy(
-  () => import("@/components/ai-elements/streamdown-host"),
+const LazyMarkdown = lazy(() =>
+  import("@/components/workspace/messages/markdown-content").then((module) => ({
+    default: module.MarkdownContent,
+  })),
 );
 
 interface DocMeta {
@@ -52,6 +55,7 @@ const DOC_GROUPS: { titleKey: DocGroupKey; ids: string[] }[] = [
 
 export default function ArchitecturePage() {
   const { t } = useI18n();
+  const plugins = useStreamdownPlugins();
   const [docs, setDocs] = useState<DocMeta[]>([]);
   const [activeId, setActiveId] = useState<string>("core-path");
   const [content, setContent] = useState<string>("");
@@ -114,7 +118,7 @@ export default function ArchitecturePage() {
   };
 
   return (
-    <WorkspaceContainer>
+    <WorkspaceContainer mobileNavigation>
       <WorkspaceBody className="p-0">
         <div className="flex flex-col md:flex-row w-full h-full min-h-0">
           {/* Implementation note. */}
@@ -192,12 +196,13 @@ export default function ArchitecturePage() {
                     />
                   }
                 >
-                  <LazyStreamdown
+                  <LazyMarkdown
+                    rehypePlugins={plugins.rehypePlugins}
+                    remarkPlugins={plugins.remarkPlugins}
+                    content={content}
+                    isLoading={false}
                     className="prose prose-sm dark:prose-invert max-w-none"
-                    parseIncompleteMarkdown={false}
-                  >
-                    {content}
-                  </LazyStreamdown>
+                  />
                 </Suspense>
               )}
               {!loading && !error && !content && (

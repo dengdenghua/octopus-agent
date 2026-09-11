@@ -148,10 +148,10 @@ export default function ObservabilityPage({
   const { t } = useI18n();
   const tab = normalizeObservabilityTab(initialTab);
   return (
-    <WorkspaceContainer>
-      <WorkspaceBody className="px-4 pb-4">
+    <WorkspaceContainer mobileNavigation>
+      <WorkspaceBody className="px-0 pb-4 sm:px-4">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-          <section className="workspace-panel px-6 py-5">
+          <section className="workspace-panel px-4 py-4 sm:px-6 sm:py-5">
             <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
               <div className="flex items-center gap-4">
                 <div className="flex size-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -175,7 +175,7 @@ export default function ObservabilityPage({
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-5 hidden gap-3 md:grid md:grid-cols-2 xl:grid-cols-4">
               <ObservabilitySignalCard
                 icon={<ActivityIcon className="size-4" />}
                 title={t.observabilityPage.shell.runReviewTitle}

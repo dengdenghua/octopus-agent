@@ -77,6 +77,7 @@ class CodexRoleExecution:
     success: bool
     status: str
     events: tuple[dict[str, Any], ...] = ()
+    model: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -300,6 +301,11 @@ def _execution_profile(
     *,
     preference: CodexModelPreference,
 ) -> ResolvedCodexExecutionProfile:
+    if preference.mode == "chatgpt":
+        turn_model, turn_effort = _server_model_override(agent, context)
+        return resolve_codex_execution_profile(
+            preference=preference, turn_model=turn_model, turn_effort=turn_effort
+        ).require_compatible()
     try:
         from runtime.platform.models.custom_model_flags import read_custom_models
 
@@ -359,11 +365,12 @@ def build_codex_role_request(
     approval_provider: ApprovalProvider | None = None,
     is_interrupted: Callable[[], bool] | None = None,
     server_auto_approve: bool = False,
-) -> tuple[CodexExecutionRequest, CodexDynamicToolBroker, ApprovalProvider]:
+) -> tuple[CodexExecutionRequest, CodexDynamicToolBroker | None, ApprovalProvider]:
     """Build one request entirely from server-resolved role/turn state."""
 
     require_codex_backend_enabled()
     ctx = dict(context or {})
+    tool_free = bool(ctx.get("direct_conversation_reply"))
     parent = _trusted_parent(ctx)
     parent_meta = (
         parent.metadata if parent is not None and isinstance(parent.metadata, dict) else {}
@@ -410,7 +417,31 @@ def build_codex_role_request(
         or "local"
     ).strip()
     tenant = str(parent_meta.get("tenant_id") or ctx.get("tenant_id") or "local").strip()
-    provider = approval_provider or _approval_provider(ctx, parent)
+    provider = (
+        AutoDenyProvider() if tool_free else (approval_provider or _approval_provider(ctx, parent))
+    )
+    from runtime.safety.approval.permission_modes import approval_reviewer_for_mode
+
+    approval_reviewer = (
+        "user"
+        if server_auto_approve is True or tool_free
+        else approval_reviewer_for_mode(ctx.get("permission_mode"))
+    )
+    dynamic_approval_provider = provider
+    if approval_reviewer == "auto_review":
+        from runtime.safety.approval.guardian_review import (
+            AutoReviewApprovalProvider,
+            approval_router_for_stack,
+        )
+
+        reviewer_router = approval_router_for_stack(stack)
+        if reviewer_router is None:
+            raise CodexSecurityError("automatic approval review requires a model router")
+        dynamic_approval_provider = AutoReviewApprovalProvider(
+            reviewer_router,
+            user_intent=goal,
+            default_model=str(ctx.get("model_name") or "").strip() or None,
+        )
     interrupted = is_interrupted or (lambda: False)
     registry = getattr(getattr(stack, "executor", None), "registry", None)
     if registry is None:
@@ -422,21 +453,25 @@ def build_codex_role_request(
         registry=registry,
     )
     broker_context = {**ctx, "caller_session": parent} if parent is not None else ctx
-    broker = CodexDynamicToolBroker(
-        stack,
-        agent,
-        context=broker_context,
-        goal=goal,
-        outer_thread_id=thread_id,
-        outer_turn_id=turn_id,
-        workspace=str(workspace),
-        tenant_id=tenant,
-        principal_id=principal,
-        approval_provider=provider,
-        is_interrupted=interrupted,
-        # Authorization is an explicit server-only argument.  Never derive it
-        # from realtime/user context (including permission_mode).
-        server_auto_approve=server_auto_approve is True,
+    broker = (
+        None
+        if tool_free
+        else CodexDynamicToolBroker(
+            stack,
+            agent,
+            context=broker_context,
+            goal=goal,
+            outer_thread_id=thread_id,
+            outer_turn_id=turn_id,
+            workspace=str(workspace),
+            tenant_id=tenant,
+            principal_id=principal,
+            approval_provider=dynamic_approval_provider,
+            is_interrupted=interrupted,
+            # Authorization is an explicit server-only argument.  Never derive it
+            # from realtime/user context (including permission_mode).
+            server_auto_approve=server_auto_approve is True,
+        )
     )
     scope = (
         None
@@ -446,6 +481,8 @@ def build_codex_role_request(
     state_root = state_root_for_workspace(workspace)
     preference = CodexModelPreferenceStore(state_root / "model_profile.json").read(scope)
     requested_app_id = str(ctx.get("_codex_app_id") or "").strip()
+    if tool_free and requested_app_id:
+        raise CodexSecurityError("tool-free member replies cannot invoke a ChatGPT connector")
     if requested_app_id and (
         preference.mode != "chatgpt" or requested_app_id not in preference.app_ids
     ):
@@ -487,15 +524,26 @@ def build_codex_role_request(
         model=profile.effective_model,
         effort=profile.reasoning_effort,
         approval_policy="never" if server_auto_approve is True else "on-request",
-        sandbox_mode=resolved_sandbox_mode,
+        approval_reviewer=approval_reviewer,
+        sandbox_mode="read-only" if tool_free else resolved_sandbox_mode,
         provider_profile=profile.provider_profile,
         use_system_model_proxy=profile.proxy_required,
-        developer_instructions=instructions + connector_instructions,
-        dynamic_tools=() if requested_app_id else broker.catalog.specs,
+        developer_instructions=instructions
+        + connector_instructions
+        + (
+            "\nReturn only the requested response, following the task's format, language and length. "
+            "This turn has no tools."
+            if tool_free
+            else ""
+        ),
+        dynamic_tools=() if requested_app_id or broker is None else broker.catalog.specs,
         dynamic_tool_handler=None if requested_app_id else broker,
-        selected_app_ids=(preference.app_ids if preference.mode == "chatgpt" else ()),
+        selected_app_ids=(
+            preference.app_ids if preference.mode == "chatgpt" and not tool_free else ()
+        ),
         app_mentions=((requested_app_id, requested_app_id),) if requested_app_id else (),
         execution=shared_request,
+        tool_free=tool_free,
     )
     return request, broker, provider
 
@@ -620,6 +668,7 @@ async def run_agent_role(
     context: Mapping[str, Any] | None = None,
     event_callback: Callable[[dict[str, Any]], None] | None = None,
     is_interrupted: Callable[[], bool] | None = None,
+    server_auto_approve: bool = False,
 ) -> CodexRoleExecution:
     """Run one standard role through App Server and return its final text."""
 
@@ -632,6 +681,7 @@ async def run_agent_role(
         context=ctx,
         approval_provider=None,
         is_interrupted=interrupted,
+        server_auto_approve=server_auto_approve,
     )
     state = CodexEventState()
     events: list[dict[str, Any]] = []
@@ -675,16 +725,18 @@ async def run_agent_role(
                     success = bool(event.get("success"))
                     status = str(event.get("terminated_reason") or "completed")
                     return CodexRoleExecution(
-                        "".join(text_parts).strip(), success, status, tuple(events)
+                        "".join(text_parts).strip(), success, status, tuple(events), request.model
                     )
                 elif event.get("type") == "react_cancelled":
                     status = "cancelled"
                     return CodexRoleExecution(
-                        "".join(text_parts).strip(), False, status, tuple(events)
+                        "".join(text_parts).strip(), False, status, tuple(events), request.model
                     )
         if status == "failed":
             status = "timeout"
-        return CodexRoleExecution("".join(text_parts).strip(), success, status, tuple(events))
+        return CodexRoleExecution(
+            "".join(text_parts).strip(), success, status, tuple(events), request.model
+        )
 
 
 def run_agent_role_sync(

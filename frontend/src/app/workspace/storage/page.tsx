@@ -1,7 +1,7 @@
+import { requireArray, serviceErrorMessage } from "@/core/utils/service-error";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AppWindowIcon,
-  ArchiveIcon,
   ChevronRightIcon,
   CopyIcon,
   DatabaseIcon,
@@ -64,13 +64,11 @@ import {
   classifyVideoTags,
   searchVideoByText,
   ocrVideoKeyframes,
-  listNASModels,
   listNASSources,
   listNASDirectory,
   NASRequestTimeoutError,
   openNASApp,
   revealNASApp,
-  downloadNASModel,
   searchNAS,
   startNASService,
   updateNASPolicy,
@@ -197,7 +195,6 @@ const LIBRARY_KEYS = new Set<LibraryKey>([
   "sources",
 ]);
 
-const VISION_AUTO_DOWNLOAD_KEY = "octopus.storage.clip-autodownload.v1";
 const DOCUMENT_PAGE_SIZE = 60;
 const IMAGE_PAGE_SIZE = 96;
 
@@ -386,7 +383,7 @@ function useNASAsset(path: string | undefined): string | null {
   return url;
 }
 
-function disk(
+function _disk(
   name: string,
   path: string,
   type: string,
@@ -433,7 +430,6 @@ export default function StoragePage() {
 
   const refreshNAS = useCallback(async () => {
     try {
-      setServiceError(null);
       // Manifest, policy and sources define whether the knowledge service is
       // usable.  Apps/media are optional capabilities; one unavailable lane
       // must not make the whole knowledge base look offline.
@@ -460,6 +456,7 @@ export default function StoragePage() {
       setImages(nextImages.status === "fulfilled" ? nextImages.value : []);
       setVideos(nextVideos.status === "fulfilled" ? nextVideos.value : []);
       setAlbums(nextAlbums.status === "fulfilled" ? nextAlbums.value : []);
+      setServiceError(null);
       return true;
     } catch (error) {
       setManifest(null);
@@ -477,37 +474,14 @@ export default function StoragePage() {
           ? copy.service.credentialsExpired
           : isNetworkError
             ? copy.service.networkError
-            : error instanceof Error
-              ? error.message
-              : String(error),
+            : serviceErrorMessage(error),
       );
       return false;
     }
   }, [copy]);
 
-  const maybeAutoDownloadVision = useCallback(async () => {
-    if (typeof window === "undefined") return;
-    if (window.localStorage.getItem(VISION_AUTO_DOWNLOAD_KEY)) return;
-    try {
-      const models = await listNASModels();
-      const vision = models.find((item) => item.model_id === "vision-default");
-      if (!vision || vision.provider === "local" || vision.status === "loading")
-        return;
-      const accepted = await downloadNASModel("vision-default");
-      if (accepted.status === "loading" || accepted.status === "running") {
-        window.localStorage.setItem(VISION_AUTO_DOWNLOAD_KEY, "started");
-      }
-    } catch {
-      // Model download is optional; settings keeps a manual retry path.
-    }
-  }, []);
-
   const ensureNASService = useCallback(async () => {
     const startResult = await startNASService();
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      if (await refreshNAS()) return true;
-      await delay(500);
-    }
     if (startResult.status === "not_found") {
       setServiceError(copy.service.notFound);
       return false;
@@ -516,6 +490,10 @@ export default function StoragePage() {
       setServiceError(copy.service.startFailed);
       return false;
     }
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      if (await refreshNAS()) return true;
+      await delay(500);
+    }
     setServiceError(fill(copy.service.notConnected, { url: getNASBaseURL() }));
     return false;
   }, [copy, refreshNAS]);
@@ -523,13 +501,12 @@ export default function StoragePage() {
   useEffect(() => {
     const init = async () => {
       if (await refreshNAS()) {
-        void maybeAutoDownloadVision();
         return;
       }
       if (didAutoStartRef.current) return;
       didAutoStartRef.current = true;
       try {
-        if (await ensureNASService()) void maybeAutoDownloadVision();
+        await ensureNASService();
       } catch (error) {
         const isNetworkError =
           error instanceof TypeError &&
@@ -540,12 +517,7 @@ export default function StoragePage() {
       }
     };
     void init();
-  }, [
-    copy.service.networkError,
-    ensureNASService,
-    maybeAutoDownloadVision,
-    refreshNAS,
-  ]);
+  }, [copy.service.networkError, ensureNASService, refreshNAS]);
 
   useEffect(() => {
     const reconnect = () => {
@@ -675,8 +647,13 @@ export default function StoragePage() {
           <section className="workspace-panel flex min-h-0 flex-1 overflow-hidden rounded-none border-0 bg-card">
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-card">
               {serviceError && (
-                <div className="flex items-center justify-between gap-3 border-b border-warning/70 bg-warning/5 px-4 py-2 text-xs text-warning">
-                  <span className="min-w-0 truncate">{serviceError}</span>
+                <div
+                  role="alert"
+                  className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-warning/70 bg-warning/5 px-4 py-2 text-xs text-warning"
+                >
+                  <span className="min-w-0 flex-1 break-words">
+                    {serviceError}
+                  </span>
                   <Button
                     size="sm"
                     variant="outline"
@@ -726,6 +703,7 @@ export default function StoragePage() {
                     variant="ghost"
                     className="h-8 rounded-md px-2 text-xs text-muted-foreground"
                     onClick={() => void togglePrivacy()}
+                    disabled={!manifest}
                   >
                     {policy.mode === "privacy" ? (
                       <LockKeyholeIcon className="size-3.5" />
@@ -1349,6 +1327,7 @@ function VideoLibraryView({
   const [isVideoSearching, setIsVideoSearching] = useState(false);
   const [searchHits, setSearchHits] = useState<NASVideoSearchHit[]>([]);
   const [ocrHits, setOcrHits] = useState<NASVideoOcrHit[]>([]);
+  const [videoDataError, setVideoDataError] = useState<string | null>(null);
   const [faceGroups, setFaceGroups] = useState<NASVideoFaceGroup[]>([]);
   const [classifyResults, setClassifyResults] = useState<
     NASVideoClassifyResult[]
@@ -1390,8 +1369,10 @@ function VideoLibraryView({
   const loadFaces = useCallback(async () => {
     try {
       const res = await listVideoFaceGroups();
-      setFaceGroups(res.groups);
-    } catch {
+      setFaceGroups(requireArray<NASVideoFaceGroup>(res?.groups, "人物列表"));
+      setVideoDataError(null);
+    } catch (error) {
+      setVideoDataError(serviceErrorMessage(error));
       setFaceGroups([]);
     }
   }, []);
@@ -1399,8 +1380,15 @@ function VideoLibraryView({
   const loadTags = useCallback(async () => {
     try {
       const res = await classifyVideoTags();
-      setClassifyResults(res.results);
-    } catch {
+      setClassifyResults(
+        requireArray<(typeof classifyResults)[number]>(
+          res?.results,
+          "标签列表",
+        ),
+      );
+      setVideoDataError(null);
+    } catch (error) {
+      setVideoDataError(serviceErrorMessage(error));
       setClassifyResults([]);
     }
   }, []);
@@ -1731,6 +1719,24 @@ function VideoLibraryView({
           </>
         )}
 
+        {videoDataError && (
+          <div
+            role="alert"
+            className="mx-4 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm"
+          >
+            {videoDataError}
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-3"
+              onClick={() =>
+                void (activeTab === "people" ? loadFaces() : loadTags())
+              }
+            >
+              重试
+            </Button>
+          </div>
+        )}
         {activeTab === "people" && (
           <div className="space-y-3">
             {faceGroups.length > 0 ? (
@@ -2626,20 +2632,10 @@ function LocalDiskView({
   isSearching: boolean;
   manifest: NASManifest | null;
 }) {
-  const fallbackFolders = useMemo(
-    () => [
-      disk("Applications", "/Applications", "文件夹", "142 项", AppWindowIcon),
-      disk("Desktop", "~/Desktop", "文件夹", "12 项", FolderOpenIcon),
-      disk("Documents", "~/Documents", "文件夹", "326 项", FileTextIcon),
-      disk("Downloads", "~/Downloads", "文件夹", "58 项", ArchiveIcon),
-      disk("Pictures", "~/Pictures", "文件夹", "8,426 项", FileImageIcon),
-      disk("Public", "~/Public", "文件夹", "4 项", FolderIcon),
-    ],
-    [],
-  );
   const [currentPath, setCurrentPath] = useState("/");
-  const [entries, setEntries] = useState<DiskItem[]>(fallbackFolders);
+  const [entries, setEntries] = useState<DiskItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [browseRevision, setBrowseRevision] = useState(0);
   const [browseError, setBrowseError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -2664,12 +2660,10 @@ function LocalDiskView({
         if (!cancelled) {
           setBrowseError(
             error instanceof NASRequestTimeoutError
-              ? "本地服务连接超时，已显示常用位置。"
-              : error instanceof Error
-                ? error.message
-                : "目录读取失败",
+              ? "本地服务连接超时，目录尚未读取。请检查连接后重试。"
+              : serviceErrorMessage(error),
           );
-          if (currentPath === "/") setEntries(fallbackFolders);
+          setEntries([]);
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -2679,11 +2673,11 @@ function LocalDiskView({
     return () => {
       cancelled = true;
     };
-  }, [currentPath, fallbackFolders]);
+  }, [currentPath, browseRevision]);
 
   const pathParts = currentPath.split("/").filter(Boolean);
   const goUp = () => {
-    if (pathParts.length > 1)
+    if (pathParts.length > 0)
       setCurrentPath(`/${pathParts.slice(0, -1).join("/")}`);
   };
 
@@ -2715,13 +2709,18 @@ function LocalDiskView({
           <button
             type="button"
             onClick={goUp}
-            disabled={pathParts.length <= 1}
+            disabled={pathParts.length === 0}
             className="ml-1 rounded px-1.5 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-30"
           >
             返回上一级
           </button>
           <span className="ml-1 text-xs text-muted-foreground">
-            · {entries.length} 项
+            ·{" "}
+            {isLoading
+              ? "正在读取"
+              : browseError
+                ? "未读取"
+                : `${entries.length} 项`}
           </span>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -2763,15 +2762,23 @@ function LocalDiskView({
               ))
             ) : (
               <div className="px-4 py-12 text-center text-sm text-muted-foreground">
-                当前目录为空
+                {browseError ? "无法读取当前目录" : "当前目录为空"}
               </div>
             )}
           </div>
           <div className="border-t border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            {browseError && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mr-3"
+                onClick={() => setBrowseRevision((value) => value + 1)}
+              >
+                重试读取
+              </Button>
+            )}
             {browseError ||
-              (manifest
-                ? "本地路径与索引已连接。"
-                : "当前离线，可浏览常用位置。")}
+              (manifest ? "本地路径与索引已连接。" : "目录服务尚未连接。")}
           </div>
         </main>
       </div>

@@ -1,0 +1,510 @@
+- button "返回桌面":
+- button "切换全屏":
+- tablist "Workspace surface":
+  - tab "Echo" [selected]:
+    - generic: Echo
+  - tab "AI 浏览器":
+- button "收起侧栏 (Ctrl/⌘+B)" [expanded]:
+- button "新建任务":
+  - generic: 新建任务
+- list:
+  - link "HUB":
+    - /url: "#/workspace/agents?surface=chat"
+    - generic: HUB
+  - link "助手":
+    - /url: "#/workspace/realtime/octopus-assistant?agent=octopus"
+    - generic: 助手
+  - link "订阅":
+    - /url: "#/workspace/intelligence?surface=chat"
+    - generic: 订阅
+  - link "项目管理":
+    - /url: "#/workspace/projects"
+    - generic: 项目管理
+  - link "设计画布":
+    - /url: "#/workspace/design"
+    - generic: 设计画布
+  - link "叙事工坊":
+    - /url: "#/workspace/narrative"
+    - generic: 叙事工坊
+  - link "自进化":
+    - /url: "#/workspace/evolution?surface=chat"
+    - generic: 自进化
+- list:
+  - link "发现社区":
+    - /url: "#/workspace/community"
+    - generic: 发现社区
+- list:
+  - button "展开本地数据库":
+    - generic: 本地数据库
+- list:
+  - button "编辑侧栏":
+- button "收起项目" [expanded]:
+  - generic: 项目
+- button "选择项目空间":
+- button "收起对话" [expanded]:
+  - generic: 对话
+- button "对话 · 新建任务":
+- button "Kane":
+  - text: Kane
+  - generic: Lv.1⭐
+- button "设置":
+- main:
+  - generic: Channel Ops
+  - heading "消息渠道" [level=1]
+  - paragraph: 配置 AI 智能体与用户交互的消息平台。所有连接数据存储在本地——无需云端。
+  - generic: 26 个渠道
+  - generic: "26"
+  - generic: 0 个已连接
+  - generic: "0"
+  - textbox "搜索渠道、平台、智能体..."
+  - button "全部"
+  - button "已连接"
+  - button "未关联"
+  - heading "即时通讯" [level=2]
+  - generic: ✈️
+  - generic: Telegram
+  - text: Telegram Bot
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/telegram
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: "#"
+  - generic: Slack
+  - text: Slack 应用 / bot
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/slack
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: 🎮
+  - generic: Discord
+  - text: Discord Interaction Bot
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/discord
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: 🔒
+  - generic: Signal
+  - text: Signal Private Messenger
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/signal
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: 📱
+  - generic: WhatsApp
+  - text: WhatsApp Business API
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/whatsapp
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: 📡
+  - generic: Mattermost
+  - text: Mattermost 开源协作平台
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/mattermost
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: 🟢
+  - generic: Matrix
+  - text: Matrix / Element 去中心化通信
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/matrix
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: 💬
+  - generic: LINE
+  - text: LINE Messaging API
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/line
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: 🔐
+  - generic: SimpleX
+  - text: SimpleX 隐私聊天
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/simplex
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: ⌁
+  - generic: IRC
+  - text: IRC / IRCv3 实时群聊
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/irc
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: 🟣
+  - generic: Twitch
+  - text: Twitch 直播聊天室
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/twitch
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - heading "国内平台" [level=2]
+  - generic: 💬
+  - generic: 微信
+  - text: 微信 ClawBot · 扫码对接个人号 / 客服号
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/wechat
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: 📌
+  - generic: 钉钉
+  - text: 钉钉机器人
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/dingtalk
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: 🐦
+  - generic: 飞书
+  - text: 飞书机器人
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/feishu
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: 💼
+  - generic: 企业微信
+  - text: WeCom 企业微信应用消息
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/wecom
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: 🐧
+  - generic: QQ 机器人
+  - text: QQ 官方机器人
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/qqbot
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: 💎
+  - generic: 腾讯元宝
+  - text: 腾讯元宝机器人
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/yuanbao
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - heading "邮件/短信" [level=2]
+  - generic: ✉️
+  - generic: Email
+  - text: SMTP / IMAP 邮件通道
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/email
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: 📩
+  - generic: SMS (Twilio)
+  - text: Twilio SMS 短信通道
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/sms
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - heading "智能家居" [level=2]
+  - generic: 🏠
+  - generic: Home Assistant
+  - text: 智能家居控制中心
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/homeassistant
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: 🔔
+  - generic: ntfy
+  - text: ntfy.sh 推送通知
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/ntfy
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - heading "开发工具" [level=2]
+  - generic: 👥
+  - generic: Microsoft Teams
+  - text: Teams Bot Framework
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/teams
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: 🔵
+  - generic: BlueBubbles (iMessage)
+  - text: iMessage 桥接通道
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/bluebubbles
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: 🪝
+  - generic: Webhooks
+  - text: 通用 Webhook 集成
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/webhooks
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: 💬
+  - generic: Google Chat
+  - text: Google Workspace 聊天机器人
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/google_chat
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+  - generic: 🌐
+  - generic: Open WebUI
+  - text: Open WebUI 开源聊天界面
+  - link "如何接入?":
+    - /url: https://docs.octopus.ai/channels/open_webui
+  - generic: 未关联
+  - generic: "0"
+  - generic: 已配对用户
+  - generic: "0"
+  - generic: 已配对群聊
+  - generic: "0"
+  - generic: 待处理请求
+  - button "配置响应对象 选择一个智能体或 AI 团队处理消息":
+    - generic: 配置响应对象
+    - generic: 选择一个智能体或 AI 团队处理消息
+  - button "设置机器人":
+    - text: 设置机器人
+- region "Notifications alt+T"

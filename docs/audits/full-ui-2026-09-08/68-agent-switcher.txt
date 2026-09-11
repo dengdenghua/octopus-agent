@@ -1,0 +1,38 @@
+Browser tab: 4, Title: "HUB - Echo", URL: "http://localhost:3310/#/workspace/agents?surface=chat&tab=skills".
+0 AXWebArea HUB - Echo, URL: localhost:3310/#/workspace/agents?surface=chat&tab=skills
+	1 container
+		2 container Notifications alt+T
+		3 menu Raven, ID: radix-_r_1b_
+			4 text 切换智能体
+			5 Eve Eve · 现实职业是 AI 办公首席助理（AI Chief of Staff），负责会议、邮件、文档、日程、汇报与复杂任务推进；在 ECHO 世界中是白幽灵的联络协调中枢 Siren。两种身份共享信息整合、沟通与行动编排能力。 查看 Eve 的资料
+				6 text Eve
+				7 text Eve · 现实职业是 AI 办公首席助理（AI Chief of Staff），负责会议、邮件、文档、日程、汇报与复杂任务推进；在 ECHO 世界中是白幽灵的联络协调中枢 Siren。两种身份共享信息整合、沟通与行动编排能力。
+				8 button 查看 Eve 的资料
+			9 Kane Kane · 现实职业是 AI 应用架构师与全栈工程师，负责模型、Agent、工具、数据和生产交付；在 ECHO 世界中是白幽灵副队长与渗透工程师 Paladin。两种身份共享快速理解系统、排障与工程执行能力。 查看 Kane 的资料
+				10 text Kane
+				11 text Kane · 现实职业是 AI 应用架构师与全栈工程师，负责模型、Agent、工具、数据和生产交付；在 ECHO 世界中是白幽灵副队长与渗透工程师 Paladin。两种身份共享快速理解系统、排障与工程执行能力。
+				12 button 查看 Kane 的资料
+			13 Raven 当前 Agent 查看 Raven 的资料
+				14 text Raven
+				15 text 当前 Agent
+				16 button 查看 Raven 的资料
+			17 Luna Luna · 现实职业是 AI 漫剧制片人与内容增长导演，负责剧本、分镜、角色一致性、生成制作和平台增长；在 ECHO 世界中是叙事渗透手 Dream Walker。两种身份共享故事构建、情绪节奏与传播能力。 查看 Luna 的资料
+				18 text Luna
+				19 text Luna · 现实职业是 AI 漫剧制片人与内容增长导演，负责剧本、分镜、角色一致性、生成制作和平台增长；在 ECHO 世界中是叙事渗透手 Dream Walker。两种身份共享故事构建、情绪节奏与传播能力。
+				20 button 查看 Luna 的资料
+			21 Shion Shion · 现实职业是跨境电商增长负责人，负责选品、内容、广告、定价、库存、履约和利润；在 ECHO 世界中是后勤分发官 Virus Queen。两种身份共享供应链、资源调度与单位经济模型能力。 查看 Shion 的资料
+				22 text Shion
+				23 text Shion · 现实职业是跨境电商增长负责人，负责选品、内容、广告、定价、库存、履约和利润；在 ECHO 世界中是后勤分发官 Virus Queen。两种身份共享供应链、资源调度与单位经济模型能力。
+				24 button 查看 Shion 的资料
+			25 Noah Noah · 现实职业是 AI 投资研究员与策略分析师，负责宏观、行业、公司、估值和风险研究；在 ECHO 世界中是信号分析师 Probability。两种身份共享资金流、产业链、概率与风险判读能力，不替用户承诺收益。 查看 Noah 的资料
+				26 text Noah
+				27 text Noah · 现实职业是 AI 投资研究员与策略分析师，负责宏观、行业、公司、估值和风险研究；在 ECHO 世界中是信号分析师 Probability。两种身份共享资金流、产业链、概率与风险判读能力，不替用户承诺收益。
+				28 button 查看 Noah 的资料
+			29 Zero Zero · 现实职业是 AI 学术研究主任，负责文献、研究设计、实验、数据分析与科学写作；在 ECHO 世界中是白幽灵队长 White Ghost。两种身份共享跨领域知识同步、证据判断和复杂研究指挥能力。 查看 Zero 的资料
+				30 text Zero
+				31 text Zero · 现实职业是 AI 学术研究主任，负责文献、研究设计、实验、数据分析与科学写作；在 ECHO 世界中是白幽灵队长 White Ghost。两种身份共享跨领域知识同步、证据判断和复杂研究指挥能力。
+				32 button 查看 Zero 的资料
+			33 123 —
+			34 退出登录
+
+The focused UI element is 3 menu Raven, ID: radix-_r_1b_

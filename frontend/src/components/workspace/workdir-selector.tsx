@@ -37,6 +37,8 @@ import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/providers/AuthProvider";
 import { useFeatureFlags } from "@/hooks/use-feature-flags";
+import { useProjects } from "@/core/projects/hooks";
+import { managedWorkdirThreadId, workdirDisplayName } from "./workdir-label";
 
 interface WorkDirSelectorProps {
   workDir: string;
@@ -46,6 +48,7 @@ interface WorkDirSelectorProps {
   className?: string;
   variant?: "default" | "muted";
   chromeless?: boolean;
+  designSpace?: boolean;
   /** When true, adds a "Remote mount" tab to the dropdown. */
   enableRemoteTab?: boolean;
   /** Active remote workspace id, if the thread is bound to one. */
@@ -223,18 +226,25 @@ export function WorkDirSelector({
   className,
   variant = "default",
   chromeless = false,
+  designSpace = false,
   enableRemoteTab = false,
   workspaceId,
   onWorkspaceIdChange,
 }: WorkDirSelectorProps) {
   const isMutedVariant = variant === "muted";
   const { t, locale } = useI18n();
+  const personalSpaceLabel = designSpace
+    ? locale.toLowerCase().startsWith("zh")
+      ? "创作空间"
+      : "Creative space"
+    : t.codeMode.personalSpace;
   const { authStatus, isAuthenticated, isLoading: authLoading } = useAuth();
   const featureFlags = useFeatureFlags();
   const remoteWorkspaceEnabled =
     !featureFlags.loading && featureFlags.isOn("ui.remote_workspace");
   const trRemote = t.remoteWorkspace;
   const [isPicking, setIsPicking] = useState(false);
+  const pickerRequestRef = useRef<AbortController | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   // ``browsePath`` drives the in-menu folder browser. When the user
   // hasn't chosen anything yet we seed it from the most recently used
@@ -265,6 +275,16 @@ export function WorkDirSelector({
   // and a one-line hint instead of silently doing nothing. Resets once the
   // user enters a path or closes the menu.
   const [noBridgeHint, setNoBridgeHint] = useState(false);
+  useEffect(() => {
+    const openPicker = () => {
+      setShowMenu(true);
+      setBrowserOpen(true);
+      requestAnimationFrame(() => manualInputRef.current?.focus());
+    };
+    window.addEventListener("octopus:open-workspace-picker", openPicker);
+    return () =>
+      window.removeEventListener("octopus:open-workspace-picker", openPicker);
+  }, []);
   // Remote workspace list (loaded when the Remote tab is enabled and the
   // menu opens). Stored at the component level so the second open is instant.
   const [remoteWorkspaces, setRemoteWorkspaces] = useState<Workspace[]>([]);
@@ -280,15 +300,17 @@ export function WorkDirSelector({
   const menuRef = useRef<HTMLDivElement>(null);
   const manualInputRef = useRef<HTMLInputElement>(null);
   const pendingBrowserPickedNameRef = useRef("");
+  const { data: projects = [] } = useProjects(Boolean(managedWorkdirThreadId(workDir)) && !authLoading && (isAuthenticated || authStatus?.enabled === false));
+  const managedLabel = locale.startsWith("zh") ? "任务工作区" : locale.startsWith("ja") ? "タスクのワークスペース" : locale.startsWith("ko") ? "작업 공간" : "Task workspace";
   const folderName = useMemo(
-    () => (workDir ? basename(workDir) : ""),
-    [workDir],
+    () => workdirDisplayName(workDir, projects, managedLabel),
+    [workDir, projects, managedLabel],
   );
   const lockedCopy = lockedWorkdirText(locale);
   const isEmpty = !workDir;
   const isWorkDirLocked = lockToCurrentThread;
   const emptyTriggerLabel = isMutedVariant
-    ? t.codeMode.personalSpace
+    ? personalSpaceLabel
     : t.codeMode.chooseWorkspaceFolder;
   const triggerLabel =
     !isEmpty && isMutedVariant
@@ -486,41 +508,65 @@ export function WorkDirSelector({
   }, [isMutedVariant, noBridgeHint, showMenu, workDir]);
 
   useEffect(() => {
-    if (!showMenu) return;
+    if (!showMenu && !isPicking) return;
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
       if (
         !containerRef.current?.contains(target) &&
         !menuRef.current?.contains(target)
       ) {
+        pickerRequestRef.current?.abort();
+        setIsPicking(false);
         setShowMenu(false);
       }
     };
     window.addEventListener("mousedown", handleClickOutside);
-    return () => window.removeEventListener("mousedown", handleClickOutside);
-  }, [showMenu]);
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      pickerRequestRef.current?.abort();
+      setIsPicking(false);
+      setShowMenu(false);
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [showMenu, isPicking]);
+
+  useEffect(() => () => pickerRequestRef.current?.abort(), []);
 
   const handlePrimaryAction = useCallback(async () => {
-    if (isPicking) return;
+    if (isPicking) {
+      pickerRequestRef.current?.abort();
+      setIsPicking(false);
+      return;
+    }
+    const request = new AbortController();
+    pickerRequestRef.current = request;
     setIsPicking(true);
     try {
-      const selected = await pickLocalDirectory(workDir);
+      const selected = await pickLocalDirectory(workDir, {
+        signal: request.signal,
+      });
+      if (request.signal.aborted) return;
       if (selected) {
         applyWorkDir(selected);
-        return;
       }
+      return;
     } catch (error) {
+      if (request.signal.aborted) return;
       swallow(error);
       setNoBridgeHint(true);
       setBrowserOpen(true);
     } finally {
-      setIsPicking(false);
+      if (pickerRequestRef.current === request) setIsPicking(false);
     }
 
     setShowMenu(true);
     if (!isMutedVariant) setBrowserOpen(true);
     requestAnimationFrame(() => {
-      manualInputRef.current?.focus();
+      if (!request.signal.aborted) manualInputRef.current?.focus();
     });
   }, [applyWorkDir, isMutedVariant, isPicking, workDir]);
 
@@ -597,27 +643,6 @@ export function WorkDirSelector({
 
   const upDir = parentDir(browsePath);
 
-  const handleOpenFolderCta = useCallback(async () => {
-    setIsPicking(true);
-    try {
-      const selected = await pickLocalDirectory(workDir);
-      if (selected) {
-        applyWorkDir(selected);
-        return;
-      }
-    } catch (error) {
-      swallow(error);
-      setNoBridgeHint(true);
-      setBrowserOpen(true);
-    } finally {
-      setIsPicking(false);
-    }
-
-    setShowMenu(true);
-    if (!isMutedVariant) setBrowserOpen(true);
-    requestAnimationFrame(() => manualInputRef.current?.focus());
-  }, [applyWorkDir, isMutedVariant, workDir]);
-
   // CTA tile for the implemented workspace picker entry point.
   const cta = (opts: {
     icon: React.ReactNode;
@@ -660,8 +685,8 @@ export function WorkDirSelector({
       <FolderOpenIcon className={isMutedVariant ? "size-3.5" : "size-4"} />
     ),
     label: folderPickerLabel,
-    onClick: handleOpenFolderCta,
-    disabled: isPicking,
+    onClick: handlePrimaryAction,
+    disabled: false,
   });
 
   const localMenuContent = (
@@ -681,27 +706,33 @@ export function WorkDirSelector({
       {/* The same system picker is available in both the desktop shell and the
           local web app; the backend supplies the absolute path in web mode. */}
       <div className={cn("shrink-0", isMutedVariant ? "p-1.5" : "p-2.5")}>
-        {folderPickerCta}
         {isWorkDirLocked && (
           <div className="mt-1.5 rounded-md border border-primary/15 bg-primary/5 px-2 py-1.5 text-xs leading-snug text-muted-foreground">
             {lockedCopy.hint}
           </div>
         )}
-        {workDir && !isWorkDirLocked && (
+        {!isWorkDirLocked && (
           <button
             type="button"
             onClick={clearWorkDir}
+            aria-pressed={!workDir}
             className={cn(
-              "mt-1.5 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground",
+              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground",
+              !workDir && "bg-muted/60 text-foreground",
               !isMutedVariant && "border border-border-default",
             )}
           >
             <FolderIcon className="size-3.5 shrink-0" />
             <span className="min-w-0 flex-1 truncate">
-              {t.codeMode.personalSpace}
+              {personalSpaceLabel}
             </span>
+            {!workDir && (
+              <CheckIcon className="size-3.5 shrink-0 text-primary" />
+            )}
           </button>
         )}
+
+        {folderPickerCta}
 
         {noBridgeHint && (
           <div className="mt-2 rounded-md border border-border-default bg-muted/40 px-2 py-1.5 text-xs leading-snug text-muted-foreground">
@@ -1026,19 +1057,23 @@ export function WorkDirSelector({
     >
       <button
         className={cn(
-          "group flex items-center gap-1.5 text-xs font-medium shadow-none transition-colors duration-base",
+          "group flex items-center gap-1.5 text-ui font-medium shadow-none transition-colors duration-base",
           chromeless
             ? "h-8 rounded-lg px-1.5 text-muted-foreground hover:bg-muted/55 hover:text-foreground"
             : "h-8 rounded-lg border border-transparent bg-transparent px-2 text-muted-foreground hover:border-border-default hover:bg-muted/55 hover:text-foreground",
           isEmpty ? emptyTriggerClass : activeTriggerClass,
           isPicking && "cursor-wait opacity-50",
         )}
-        onClick={handlePrimaryAction}
-        disabled={isPicking}
-        title={triggerTitle}
+        onClick={() => {
+          if (isPicking) void handlePrimaryAction();
+          else setShowMenu((open) => !open);
+        }}
+        aria-expanded={showMenu}
+        aria-busy={isPicking}
+        title={isPicking ? t.common.cancel : triggerTitle}
         type="button"
       >
-        <FolderOpenIcon className="size-3 shrink-0 opacity-70" />
+        <FolderOpenIcon className="size-3.5 shrink-0" />
         <span
           className={cn(
             isMutedVariant
@@ -1047,7 +1082,7 @@ export function WorkDirSelector({
             isEmpty ? "font-medium" : "tracking-normal",
           )}
         >
-          {triggerLabel}
+          {isPicking ? t.common.cancel : triggerLabel}
         </span>
         <ChevronDownIcon className="size-3 shrink-0 opacity-35 transition-opacity group-hover:opacity-60" />
       </button>

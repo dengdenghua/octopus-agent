@@ -1,0 +1,16 @@
+Browser tab: 4, Title: "设计画布 - Echo", URL: "http://localhost:3310/#/workspace/design".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 44-667
+~					42 container
+~						43 container Notifications alt+T
++						44 container 动画游戏 PV, ID: radix-_r_u_
++							45 heading 动画游戏 PV, Value: 2, ID: radix-_r_v_
++								46 text 动画游戏 PV
++							47 text 动画
++							48 text 从世界观和角色卖点生成镜头、音乐与节奏一致的 PV 方案。
++							49 container
++								50 text SKILL.md Markdown 正在读取…
++							51 text Echo 原创 · Apache-2.0
++							52 button 加入画布
++							53 button 关闭
+The focused UI element is 52 button 加入画布

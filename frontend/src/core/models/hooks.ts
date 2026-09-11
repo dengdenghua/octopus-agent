@@ -7,13 +7,10 @@ export function useModels({ enabled = true }: { enabled?: boolean } = {}) {
     queryKey: ["models"],
     queryFn: () => loadModels(),
     enabled,
-    refetchOnWindowFocus: false,
-    // Model list changes only when the user edits config.yaml — that's
-    // minutes-scale, not seconds. Keeping the previous default (staleTime: 0)
-    // meant every workspace page mount re-fetched this, adding a round-trip
-    // to the Code-page startup burst. 5 minutes is generous enough to
-    // catch config-yaml edits on next navigation without re-fetching on
-    // every remount.
+    refetchOnWindowFocus: true,
+    // Team catalogs can change while settings are closed. Refresh the shared
+    // query without issuing a separate request for every mounted picker.
+    refetchInterval: 60 * 1000,
     staleTime: 5 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
   });

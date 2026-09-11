@@ -18,7 +18,7 @@ from urllib import request as urllib_request
 
 from .registry import Skill, SkillRegistry
 
-_DEFAULT_GATEWAY_BASE_URL = "http://127.0.0.1:8000"
+_DEFAULT_GATEWAY_BASE_URL = "http://127.0.0.1:8310"
 _COMPUTER_API_PATH = "/api/computer"
 _BASE_URL_ENV_KEYS = (
     "OCTOPUS_COMPUTER_API_BASE_URL",

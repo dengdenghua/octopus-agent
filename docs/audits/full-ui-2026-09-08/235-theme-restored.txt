@@ -1,0 +1,92 @@
+Browser tab: 4, Title: "新对话 - Echo", URL: "http://localhost:3310/#/workspace/realtime/new".
+0 AXWebArea 新对话 - Echo, URL: localhost:3310/#/workspace/realtime/new
+	1 container
+		2 container root
+			6 container 对话工作区
+			5 container Notifications alt+T
+		7 container 设置, ID: radix-_r_1f9_
+			8 heading 设置, Value: 2, ID: radix-_r_1fa_
+				9 text 设置
+			10 text 管理你的 Echo 账户和偏好设置
+			11 text 123
+			12 text 当前登录账号
+			13 button 退出登录
+			14 container
+				15 text field (settable) 搜索设置
+				16 text 设置项
+				17 content list
+					18 button 账户
+					19 button 订阅与用量
+					20 button 通用
+					21 button 对话
+					22 button 模型
+					23 button 记忆与个人规则
+					24 button 通知
+					25 button 编码
+					26 button 工具与集成
+					27 button 浏览器自动化
+					28 button 桌面自动化
+					29 button 执行与安全
+					30 button 个人空间与安全
+					31 button 运行诊断
+					32 button 关于
+			93 container
+				94 container
+					95 heading 主题, Value: 3
+						96 text 主题
+					97 text 选择你喜欢的主题样式
+					98 checkbox 跟随系统 自动跟随系统设置, Value: 1
+						99 text 跟随系统
+						100 text 自动跟随系统设置
+					101 checkbox 浅色 明亮的界面,适合日间使用, Value: 0
+						102 text 浅色
+						103 text 明亮的界面,适合日间使用
+					104 checkbox 深色 深色界面,减轻眼睛疲劳, Value: 0
+						105 text 深色
+						106 text 深色界面,减轻眼睛疲劳
+				107 container
+					108 heading 配色风格, Value: 3
+						109 text 配色风格
+					110 text 选择整体配色风格,影响主色与背景氛围
+					111 text 柔和
+					112 checkbox Description: 蔷薇粉, Help: 蔷薇粉 · 优雅浪漫的粉调,温润高级, Value: 1
+					113 checkbox Description: 蜜杏, Help: 蜜杏 · 柔和的暖杏橙,明亮温柔, Value: 0
+					114 checkbox Description: 藕荷, Help: 藕荷 · 带灰调的玫紫,克制耐看, Value: 0
+					115 checkbox Description: 薄荷, Help: 薄荷 · 清透的薄荷绿,轻盈干净, Value: 0
+					116 text 沉稳
+					117 checkbox Description: 靛蓝, Help: 靛蓝 · 沉稳的靛蓝,理性而不刺眼, Value: 0
+					118 checkbox Description: 黛青, Help: 黛青 · 低彩度的黛青,烟熏冷静, Value: 0
+					119 checkbox Description: 松玉, Help: 松玉 · 蓝调偏移的青玉绿,内敛通透, Value: 0
+					120 checkbox Description: 陶土, Help: 陶土 · 温暖的陶土红,质朴有质感, Value: 0
+					121 checkbox Description: 自定义, Value: 0
+					122 container 用取色器选任意主色,前景色与高亮会自动适配
+						123 color well (settable) Description: 自定义, Value: #3e6fd8
+					124 text 用取色器选任意主色,前景色与高亮会自动适配 #3E6FD8
+				125 text 语言
+				126 text 选择界面显示语言
+				127 combo box (collapsed) Description: 语言, Value: 简体中文, Secondary Actions: Expand
+					128 text 简体中文
+				129 container
+					130 heading 圆角尺寸, Value: 3
+						131 text 圆角尺寸
+					132 text 应用于所有圆角的全局系数。锐利更像代码编辑器，胶囊更圆润友好。
+					133 slider (settable, integer) Description: 圆角尺寸, Value: 2
+					134 checkbox 锐利 0.25rem, Value: 0
+					135 checkbox 柔和 0.375rem, Value: 0
+					136 checkbox 默认 0.5rem, Value: 1
+					137 checkbox 圆润 0.625rem, Value: 0
+					138 checkbox 胶囊 0.75rem, Value: 0
+				139 container
+					140 heading 界面密度, Value: 3
+						141 text 界面密度
+					142 text 调整正文字号、行距和控件间距，适配从轻松浏览到信息密集工作流。
+					143 slider (settable, integer) Description: 界面密度, Value: 1
+					144 checkbox 宽松 16px, Value: 0
+					145 checkbox 舒适 15px, Value: 1
+					146 checkbox 紧凑 14px, Value: 0
+					147 checkbox 密集 13px, Value: 0
+					148 checkbox 极密 12.5px, Value: 0
+			91 splitter Description: 拖动调整大小, Value: 50
+			92 button 关闭
+
+The focused UI element is 98 checkbox 跟随系统 自动跟随系统设置, Value: 1

@@ -1,0 +1,13 @@
+{
+  "sample": "after-planner2",
+  "import_seconds": 0.6972125000029337,
+  "assembly_seconds": 0.6567995000077644,
+  "total_seconds": 1.354012000010698,
+  "rss_mib": 91.78125,
+  "scratch_directory": "D:\\echo agent\\.codex-run\\stack-profile-udfcwqq5",
+  "module_count": 1041,
+  "skill_count": 329,
+  "member_engine": "opencode",
+  "native_planner_created": false,
+  "scope": "complete library stack assembly, not web app lifespan or desktop launch"
+}

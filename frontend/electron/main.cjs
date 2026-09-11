@@ -8,6 +8,7 @@
 const {
   app,
   BrowserWindow,
+  desktopCapturer,
   dialog,
   ipcMain,
   net,
@@ -36,7 +37,7 @@ const {
   ensureDesktopResources,
 } = require("./desktop-config.cjs");
 
-const DEV_URL = process.env.ELECTRON_START_URL || "http://127.0.0.1:3000";
+const DEV_URL = process.env.ELECTRON_START_URL || "http://127.0.0.1:3310";
 const DESKTOP_DIR = path.join(os.homedir(), "Desktop");
 
 // ``--smoke-test`` launches the packaged-style shell against the built
@@ -49,6 +50,83 @@ const DESKTOP_DIR = path.join(os.homedir(), "Desktop");
 const SMOKE_TEST = process.argv.includes("--smoke-test");
 const SMOKE_TEST_BACKEND = process.argv.includes("--smoke-test-backend");
 const BUILT_RENDERER_SMOKE = SMOKE_TEST || SMOKE_TEST_BACKEND;
+
+function normalizePreviewMatchText(value) {
+  return String(value || "")
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[\s\u2013\u2014|:_-]+/g, " ");
+}
+
+function previewSourceScore(source, request) {
+  const sourceId = normalizePreviewMatchText(source?.id);
+  const sourceName = normalizePreviewMatchText(source?.name);
+  const targetId = normalizePreviewMatchText(request?.id);
+  const targetTitle = normalizePreviewMatchText(request?.title);
+  const appName = normalizePreviewMatchText(
+    request?.appName || request?.app_name || request?.appId || request?.app_id,
+  );
+  let score = source?.id?.startsWith("window:") ? 8 : 0;
+
+  if (targetId && sourceId.includes(targetId)) score += 180;
+  if (targetTitle) {
+    if (sourceName === targetTitle) score += 160;
+    else if (
+      sourceName.includes(targetTitle) ||
+      targetTitle.includes(sourceName)
+    ) {
+      score += 110;
+    }
+  }
+  if (appName && sourceName.includes(appName)) score += 70;
+  if (
+    request?.kind === "browser_tab" &&
+    /chrome|edge|chromium|brave|firefox|opera/.test(sourceName)
+  ) {
+    score += 20;
+  }
+  return score;
+}
+
+async function captureAutomationPreview(request = {}) {
+  const width = Math.max(320, Math.min(1280, Number(request.width) || 800));
+  const height = Math.max(180, Math.min(720, Number(request.height) || 450));
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ["window", "screen"],
+      thumbnailSize: { width, height },
+      fetchWindowIcons: false,
+    });
+    const usable = sources.filter(
+      (source) => source?.thumbnail && !source.thumbnail.isEmpty(),
+    );
+    const ranked = usable
+      .map((source) => ({
+        source,
+        score: previewSourceScore(source, request),
+      }))
+      .sort((left, right) => right.score - left.score);
+    const matched = ranked[0]?.score > 8;
+    const selected = matched
+      ? ranked[0]?.source
+      : usable.find((source) => source.id.startsWith("screen:")) || usable[0];
+    if (!selected) {
+      return { ok: false, error: "no capturable window or screen" };
+    }
+    const size = selected.thumbnail.getSize();
+    return {
+      ok: true,
+      dataUrl: selected.thumbnail.toDataURL(),
+      width: size.width,
+      height: size.height,
+      sourceId: selected.id,
+      sourceName: selected.name,
+      matched,
+    };
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
 
 // A standard, secure application origin gives the packaged renderer normal
 // browser URL semantics and persistent storage without weakening Chromium's
@@ -131,7 +209,7 @@ function browserProfileSession() {
 // ── backend URL ────────────────────────────────────────────────
 function resolveBackendBaseURL() {
   return desktopProtocol.normalizeLoopbackBackendBaseURL(
-    process.env.OCTOPUS_BACKEND_URL || "http://127.0.0.1:8000",
+    process.env.OCTOPUS_BACKEND_URL || "http://127.0.0.1:8310",
   );
 }
 
@@ -932,6 +1010,9 @@ function registerIpc() {
     return { ok: true, undone };
   });
   handle("desktop:getSystemInfo", () => sampleSystemInfo());
+  handle("desktop:captureAutomationPreview", (request) =>
+    captureAutomationPreview(request),
+  );
   handle("desktop:installContextMenu", () => {
     // Windows-only shell integration: register "Open with Echo" in the
     // Explorer right-click menu (files + folders) via the current-user registry.
@@ -1464,13 +1545,20 @@ function createMainWindow() {
     ...(process.platform === "win32"
       ? { titleBarStyle: "hidden", titleBarOverlay: { height: 36 } }
       : process.platform === "darwin"
-        ? { titleBarStyle: "hiddenInset" }
+        ? {
+            titleBarStyle: "hiddenInset",
+            trafficLightPosition: { x: 12, y: 12 },
+          }
         : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       webviewTag: true,
+      additionalArguments:
+        process.platform === "win32" || process.platform === "darwin"
+          ? ["--octopus-titlebar-overlay"]
+          : [],
     },
   });
 

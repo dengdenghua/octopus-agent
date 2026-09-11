@@ -1,0 +1,14 @@
+Browser tab: 4, Title: "新对话 - Echo", URL: "http://localhost:3310/#/workspace/realtime/new".
+0 AXWebArea 新对话 - Echo, URL: localhost:3310/#/workspace/realtime/new
+	1 container
+		2 container root
+			60 container 对话工作区
+			59 container Notifications alt+T
+		61 menu 权限: 完全访问, ID: radix-_r_26_
+			62 text 权限
+			63 container
+				64 Description: 询问审批: 可读写当前工作区并运行常规命令；访问网络或超出工作区时询问你。, Value: 0
+				65 Description: 自动审批: 保持相同工作区边界，越界操作交给独立审核代理决定。, Value: 0
+				66 Description: 完全访问: 包含本地运行和全部网络；所有操作自动执行、不再询问。, Value: 1
+
+The focused UI element is 61 menu 权限: 完全访问, ID: radix-_r_26_

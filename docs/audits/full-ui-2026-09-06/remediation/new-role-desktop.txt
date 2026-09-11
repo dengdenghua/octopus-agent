@@ -1,0 +1,82 @@
+- button "返回桌面":
+- button "切换全屏":
+- tablist "Workspace surface":
+  - tab "Echo" [selected]:
+    - generic: Echo
+  - tab "AI 浏览器":
+- button "收起侧栏 (Ctrl/⌘+B)" [expanded]:
+- button "新建任务":
+  - generic: 新建任务
+- list:
+  - link "HUB":
+    - /url: "#/workspace/agents?surface=chat"
+    - generic: HUB
+  - link "助手":
+    - /url: "#/workspace/realtime/octopus-assistant?agent=octopus"
+    - generic: 助手
+  - link "设计画布":
+    - /url: "#/workspace/design"
+    - generic: 设计画布
+- list
+- list:
+  - button "展开本地数据库":
+    - generic: 本地数据库
+- list:
+  - button "编辑侧栏":
+- button "收起项目" [expanded]:
+  - generic: 项目
+- button "选择项目空间":
+- button "echo agent 1":
+  - generic: echo agent
+  - generic: "1"
+- button "更多：echo agent":
+- button "收起对话" [expanded]:
+  - generic: 对话
+- button "对话 · 新建任务":
+- button "Eve":
+  - generic: Eve
+- button "设置":
+- main:
+  - button "返回":
+  - generic: 角色蓝图
+  - generic: 新建角色
+  - heading "新建 Agent" [level=1]
+  - paragraph: 一句话描述目标，Agent Generator 自动补全配置
+  - generic: 角色目标
+  - generic: Ctrl/⌘ + Enter
+  - textbox "角色目标" [active]:
+    - /placeholder: 例如：帮我做竞品调研，每周输出机会点、风险提醒和下一步行动。
+  - generic: Agent ID
+  - textbox "例如 code-reviewer"
+  - button "生成 Agent"
+  - button "返回"
+  - generic: 能力配置
+  - heading "一键配置生成" [level=2]
+  - generic: 角色定位
+  - button "工作流执行者"
+  - button "分析顾问"
+  - button "内容创作"
+  - button "个人助理"
+  - generic: 使用场景
+  - button "工作区协作"
+  - button "深度调研"
+  - button "自动化执行"
+  - button "对话陪伴"
+  - generic: 能力组合
+  - button "知识库"
+  - button "网页调研"
+  - button "工作区工具"
+  - button "本机操作"
+  - generic: "ARM: knowledge, files"
+  - generic: "Skill: agent-generator, read_knowledge, summarize_docs, cite_sources"
+  - generic: "权限: 读取工作区资料 / 写入草案和任务 / 高风险外部动作需确认"
+  - button "生成配置描述"
+  - generic: 参考模板
+  - button "团队聊天问答"
+  - button "晨间计划"
+  - button "缺陷分诊"
+  - button "数据分析"
+  - button "执行助理"
+  - button "知识搜索"
+  - paragraph: 基于团队资料、群消息和共享文档回答问题。
+- region "Notifications alt+T"

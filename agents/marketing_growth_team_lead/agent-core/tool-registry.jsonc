@@ -1,0 +1,18 @@
+{
+  "arms": [
+    "web_read",
+    "fs_writer"
+  ],
+  "extra_affinity": [
+    "finance",
+    "research",
+    "market",
+    "sector",
+    "comps",
+    "analysis"
+  ],
+  "private_skills": [
+    "marketing-growth"
+  ],
+  "disabled_source_tools": []
+}

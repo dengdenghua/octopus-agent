@@ -1,0 +1,58 @@
+Browser tab: 4, Title: "HUB - Echo", URL: "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator".
+0 AXWebArea HUB - Echo, URL: localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator
+	1 container
+		2 container Notifications alt+T
+		3 container Arms · Raven, ID: radix-_r_mh_
+			4 container
+				5 heading Arms · Raven, Value: 2, ID: radix-_r_mi_
+					6 text Arms · Raven
+				7 text 编辑此 agent 可用的 arm(能力组)· 保存后后端热重载,无需重启
+			8 container
+				9 text 勾选这个 agent 能使用的 arm · 每个 arm 附带一组 skill(白名单) · 原子层 skill 对所有 agent 默认放行,不受此处控制。
+				10 tab group
+					11 tab (selectable, settable, boolean) ARM 能力臂, Value: 0, ID: radix-_r_n1_-trigger-arms
+					12 tab (selectable, settable, boolean) Skill 白名单, Value: 0, ID: radix-_r_n1_-trigger-skills
+					13 tab (selected, settable, boolean) 权限, Value: 1, ID: radix-_r_n1_-trigger-permissions
+					14 tab (selectable, settable, boolean) 路由与预算, Value: 0, ID: radix-_r_n1_-trigger-routing
+				15 container Description: 权限, ID: radix-_r_n1_-content-permissions
+					16 text 运行时权限
+					17 text 分开展示全局总闸、Agent 授权和最终实际生效权限。
+					18 text 3/8 生效
+					19 text 全局总闸
+					20 container
+						21 text 8 / 8
+					22 text AGENT 授权
+					23 container
+						24 text 3 / 8
+					25 text 实际生效
+					26 container
+						27 text 3 / 8
+					28 container
+						29 switch Description: 全局授权 builtin, Value: 1
+						30 text BUILTIN 当前角色可用 全局总闸 : 已启用 默认放行 全局总闸开启，且此 Agent 拥有该能力，可执行。 原子/默认能力，对所有 Agent 放行。 count_words file_stats hash_text list_cwd read_file use_chatgpt_connector
+					31 container
+						32 switch Description: 全局授权 web, Value: 1
+						33 text WEB 当前角色未授权 全局总闸 : 已启用 Agent 未授权 全局总闸已开启，但此 Agent 的能力臂或技能白名单未授权。 fetch_url platform_collect platform_monitor platform_read platform_search reach_doctor web_fetch web_search
+					34 container
+						35 switch Description: 全局授权 browser, Value: 1
+						36 text BROWSER 当前角色未授权 全局总闸 : 已启用 Agent 未授权 全局总闸已开启，但此 Agent 的能力臂或技能白名单未授权。 browser_click browser_extract browser_find browser_get browser_navigate browser_screenshot browser_scroll browser_state browser_type browser_upload + 1
+					37 container
+						38 switch Description: 全局授权 computer, Value: 1
+						39 text COMPUTER 当前角色可用 全局总闸 : 已启用 Agent 已授权 全局总闸开启，且此 Agent 拥有该能力，可执行。 computer_execute_token computer_observe computer_plan_next computer_preview_action computer_uia_find computer_uia_status computer_uia_tree keyboard_press + 5 computer_execute_token computer_observe computer_plan_next computer_preview_action computer_uia_find computer_uia_status computer_uia_tree keyboard_press keyboard_type mouse_click + 3
+					40 container
+						41 switch Description: 全局授权 fs_write, Value: 1
+						42 text FS_WRITE 当前角色未授权 全局总闸 : 已启用 Agent 未授权 全局总闸已开启，但此 Agent 的能力臂或技能白名单未授权。 append_text_file edit_file edit_text_file multi_edit_file write_text_file
+					43 container
+						44 switch Description: 全局授权 git, Value: 1
+						45 text GIT 当前角色未授权 全局总闸 : 已启用 Agent 未授权 全局总闸已开启，但此 Agent 的能力臂或技能白名单未授权。 git_add git_branch git_commit git_diff git_log git_status
+					46 container
+						47 switch Description: 全局授权 shell, Value: 1
+						48 text SHELL 当前角色未授权 全局总闸 : 已启用 Agent 未授权 全局总闸已开启，但此 Agent 的能力臂或技能白名单未授权。 background_exec exec_shell ipython kill_background_exec kill_shell read_background_output read_shell_output
+					49 container
+						50 switch Description: 全局授权 memory, Value: 1
+						51 text MEMORY 当前角色可用 全局总闸 : 已启用 默认放行 全局总闸开启，且此 Agent 拥有该能力，可执行。 原子/默认能力，对所有 Agent 放行。 analyze_soul_impact auto_regression_check deep_evolve deep_reflect diary_write list_soul_history note_user recall recall_scores remember + 2
+				52 button (disabled) 重置
+				53 button (disabled) 保存并热重载
+			54 button 关闭
+
+The focused UI element is 13 tab (selected, settable, boolean) 权限, Value: 1, ID: radix-_r_n1_-trigger-permissions

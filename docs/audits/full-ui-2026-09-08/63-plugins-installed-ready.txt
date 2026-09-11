@@ -1,0 +1,27 @@
+Browser tab: 4, Title: "HUB - Echo", URL: "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=installed".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+~						95 text OpenCode Zen 模型适配器
++						96 text 通过 OpenAI 兼容 API 直连 OpenCode Zen；不安装、不检测 OpenCode CLI，流式输出、工具和记忆继续使用 Octopus 原生能力。
++						97 container
++							98 text 来自  WorkBuddy
++						99 button 配置模型, Help: 配置模型并启用
++						100 button Description: 卸载 OpenCode Zen 模型适配器, Help: 卸载能力包
++						101 text Documents
++						102 text Create and edit documents
++						103 container
++							104 text 来自  OpenAI
++						105 button 已启用, Help: 禁用
++						106 button Description: 卸载 Documents, Help: 卸载能力包
++						107 text Spreadsheets
++						108 text Create and edit spreadsheets
++						109 container
++							110 text 来自  OpenAI
++						111 button 已启用, Help: 禁用
++						112 button Description: 卸载 Spreadsheets, Help: 卸载能力包
++						113 text Browser
++						114 text Control the in-app browser
++						115 container
++							116 text 来自  OpenAI
++						117 button 已启用, Help: 禁用
++						118 button Description: 卸载 Browser, Help: 卸载能力包
+The focused UI element is 91 tab (selected, settable, boolean) 已安装, Value: 1

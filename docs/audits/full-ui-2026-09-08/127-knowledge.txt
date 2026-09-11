@@ -1,0 +1,10 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/knowledge".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+~			40 container
++				41 text 知识库 实体、关系与本地记忆
++				42 tab group
++					43 tab (selected, settable, boolean) 图谱, Value: 1, ID: radix-_r_n6_-trigger-graph
++					44 tab (selectable, settable, boolean) 记忆, Value: 0, ID: radix-_r_n6_-trigger-memory
++					45 tab (selectable, settable, boolean) Wiki, Value: 0, ID: radix-_r_n6_-trigger-wiki
++				46 text 需要跨租户管理员权限。
++				47 button 刷新

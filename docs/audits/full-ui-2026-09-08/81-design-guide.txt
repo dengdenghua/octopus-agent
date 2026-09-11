@@ -1,0 +1,7 @@
+Browser tab: 4, Title: "设计画布 - Echo", URL: "http://localhost:3310/#/workspace/design".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
++							167 content list
++								168 container
++									169 image
++									170 text 从目标、素材、风格和交付规格开始描述即可
+The focused UI element is 56 button Design 使用指南

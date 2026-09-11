@@ -4,7 +4,6 @@ import {
   isEmbeddedWindow,
   sendEmbeddedWindowDrag,
 } from "./embedded-window-bridge";
-import { MacWindowControls } from "./mac-window-controls";
 import { WorkspaceSurfaceSwitch } from "./workspace-surface-switch";
 
 export function WorkspaceSurfaceHeader({
@@ -36,8 +35,7 @@ export function WorkspaceSurfaceHeader({
       onPointerUp={(event) => onDrag("end", event)}
       onPointerCancel={(event) => onDrag("end", event)}
       className={cn(
-        // Width follows content: MacWindowControls may render null (non-mac
-        // Electron), collapsing the row to just the surface switch.
+        // Native shells own window controls; this row contains app navigation.
         "flex h-8 shrink-0 items-center justify-start gap-2",
         // Echo OS overlays its 64px system-control hit area above the iframe.
         // Preserve the former switch position so the two layers never overlap.
@@ -45,7 +43,6 @@ export function WorkspaceSurfaceHeader({
         className,
       )}
     >
-      <MacWindowControls />
       <WorkspaceSurfaceSwitch active={active} />
     </div>
   );

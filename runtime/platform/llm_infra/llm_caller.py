@@ -91,11 +91,15 @@ class LLMCaller:
         return (
             str(getattr(resp, "text", None) or ""),
             {
-                "model": use_model,
-                "input_tokens": int(
+                "model": getattr(resp, "model", None) or use_model,
+                "input_tokens": None
+                if getattr(resp, "input_tokens", 0) is None
+                else int(
                     getattr(resp, "input_tokens", 0) or 0,
                 ),
-                "output_tokens": int(
+                "output_tokens": None
+                if getattr(resp, "output_tokens", 0) is None
+                else int(
                     getattr(resp, "output_tokens", 0) or 0,
                 ),
             },

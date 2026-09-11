@@ -22,6 +22,18 @@ from runtime.tentacle.mobile.device import MobileDevice
 logger = logging.getLogger(__name__)
 
 
+def make_stack_decision_engine(stack: Any):
+    """Bind the host without loading its native planner during mobile setup."""
+
+    async def decide(task: str, device: MobileDevice) -> list[ToolCall]:
+        planner = getattr(stack, "planner", None)
+        if not callable(getattr(planner, "plan", None)):
+            planner = StaticPlanner()
+        return await CerebrumDecisionAdapter(planner).decide(task, device)
+
+    return decide
+
+
 class CerebrumDecisionAdapter:
     """Cerebrum → Tentacle ToolCall 适配器.
 

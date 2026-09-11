@@ -1,0 +1,7 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/observability".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 170-179
+~							169 text 把上下文预算和花费放在同一个层级里，减少来回切换。
++							183 text 需要跨租户管理员权限。
++							184 text 需要跨租户管理员权限。
+The focused UI element is 162 tab (selected, settable, boolean) 资源与成本, Value: 1, ID: radix-_r_tu_-trigger-resources

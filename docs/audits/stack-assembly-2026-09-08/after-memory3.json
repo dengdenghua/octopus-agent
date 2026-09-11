@@ -1,0 +1,13 @@
+{
+  "sample": "after-memory3",
+  "import_seconds": 0.8451828999968711,
+  "assembly_seconds": 0.8934919000021182,
+  "total_seconds": 1.7386747999989893,
+  "rss_mib": 98.15234375,
+  "scratch_directory": "D:\\echo agent\\.codex-run\\stack-profile-lmciilb4",
+  "module_count": 1129,
+  "skill_count": 329,
+  "member_engine": "opencode",
+  "native_planner_created": true,
+  "scope": "complete library stack assembly, not web app lifespan or desktop launch"
+}

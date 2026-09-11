@@ -1,0 +1,30 @@
+Browser tab: 4, Title: "新对话 - Echo", URL: "http://localhost:3310/#/workspace/realtime/new".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+~				283 button 返回桌面
+~				284 button 切换全屏
+~				285 tab group Workspace surface
+~					286 tab (selected, settable, boolean) Description: Echo, Value: 1
+~					287 tab (selectable, settable, boolean) Description: AI 浏览器, Value: 0
+~				288 button (expanded) Description: 收起侧栏 (Ctrl/⌘+B), Secondary Actions: Collapse
+~				289 button 新建任务
+~					291 link Description: HUB, Value: localhost:3310/#/workspace/agents?surface=chat
+~					292 link Description: 助手, Value: localhost:3310/#/workspace/realtime/octopus-assistant?agent=octopus
+~					293 link Description: 订阅, Value: localhost:3310/#/workspace/intelligence?surface=chat
+~					294 link Description: 项目管理, Value: localhost:3310/#/workspace/projects
+~					295 link Description: 设计画布, Value: localhost:3310/#/workspace/design
+~					296 link Description: 叙事工坊, Value: localhost:3310/#/workspace/narrative
+~					297 link Description: 自进化, Value: localhost:3310/#/workspace/evolution?surface=chat
+~					299 link Description: 发现社区, Value: localhost:3310/#/workspace/community
+~					301 button (collapsed) Description: 展开本地数据库, Secondary Actions: Expand
+~					303 button 编辑侧栏
+~					305 button (expanded) Description: 收起项目, Secondary Actions: Collapse
+~					306 button 选择项目空间
+~					308 button (expanded) Description: 收起对话, Secondary Actions: Collapse
+~					309 button Description: 对话 · 新建任务, Help: 新建任务
+~				310 pop up button (collapsed) Description: Raven, ID: radix-_r_1aq_, Secondary Actions: Expand, Help: Raven · 现实职业是企业流程自动化专家，通过视觉理解操作 ERP、CRM、表格、浏览器和遗留系统；在 ECHO 世界中是远程接管手 Night Crow。两种身份共享屏幕观察、设备控制与精细操作能力。
++					333 text Raven
++					334 text Lv.
++					335 text 1
++					336 text ⭐
+~				311 button 设置
+The focused UI element is 239 button (expanded) Connector 与用量, Secondary Actions: Collapse

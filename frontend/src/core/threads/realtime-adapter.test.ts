@@ -90,6 +90,18 @@ it("projects the actual turn engine onto messages independently of persona", () 
   expect(message?.additional_kwargs.execution).toEqual(turn.execution);
 });
 
+it("keeps OpenCode evidence on the tool record that anchors a grouped answer", () => {
+  const turn = makeTurn([cmd("opencode.websearch"), agentMsg("done")]);
+  turn.execution = {
+    engine: "opencode", driver: "opencode_server", reason: "explicit_engine",
+    phase: "primary", invocation: 1,
+  };
+  const state = conversationToAgentThreadState(makeConv([turn]));
+  const messages = state.messages.filter((entry) => entry.type === "ai");
+  expect(messages.length).toBeGreaterThan(1);
+  expect(messages.every((entry) => entry.additional_kwargs.execution_engine === "opencode")).toBe(true);
+});
+
 const reasoning = (content: string, id = "r1"): ReasoningItem => ({
   id,
   type: "reasoning",

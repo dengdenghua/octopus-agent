@@ -223,10 +223,8 @@
   }
 }
 
-/* Persona palette — derived from the accent colors in each White Ghost
-   character illustration. It deliberately changes only interaction color and
-   subtle workspace atmosphere; the user's light/dark palette still owns the
-   neutral surfaces and text contrast. */
+/* Persona accents remain available for illustrations and subtle atmosphere.
+   Shared controls use the user's application palette on every surface. */
 .persona-shell[data-persona-theme="eve"] {
   --persona-primary: oklch(0.62 0.18 304);
   --persona-companion: oklch(0.7 0.13 205);
@@ -256,29 +254,13 @@
   --persona-companion: oklch(0.76 0.1 320);
 }
 
+/* Character color belongs to character content. Shared actions inherit the
+   user's application palette, including dialogs rendered through portals. */
 .persona-shell[data-persona-theme] {
-  --primary: var(--persona-primary);
-  --ring: color-mix(in oklch, var(--persona-primary) 82%, white);
-  --sidebar-primary: var(--persona-primary);
-  --sidebar-ring: color-mix(in oklch, var(--persona-primary) 82%, white);
-  --sidebar-accent: color-mix(
-    in oklch,
-    var(--persona-primary) 10%,
-    var(--sidebar)
-  );
   --persona-wash: color-mix(in oklch, var(--persona-companion) 9%, transparent);
 }
 
 .dark .persona-shell[data-persona-theme] {
-  --primary: color-mix(in oklch, var(--persona-primary) 72%, white);
-  --ring: color-mix(in oklch, var(--persona-primary) 78%, white);
-  --sidebar-primary: color-mix(in oklch, var(--persona-primary) 72%, white);
-  --sidebar-ring: var(--ring);
-  --sidebar-accent: color-mix(
-    in oklch,
-    var(--persona-primary) 13%,
-    var(--sidebar)
-  );
   --persona-wash: color-mix(
     in oklch,
     var(--persona-companion) 12%,
@@ -287,6 +269,17 @@
 }
 
 @theme inline {
+  /* Common UI text keeps a readable floor when density reduces rem sizing.
+     Content typography and the user's density preference remain independent. */
+  --text-ui: max(13px, 0.875rem);
+  --text-ui--line-height: 1.5;
+  --text-ui-caption: max(12px, 0.8rem);
+  --text-ui-caption--line-height: 1.5;
+  --text-ui-body: max(14px, 0.9375rem);
+  --text-ui-body--line-height: 1.6;
+  --text-ui-title: max(20px, 1.375rem);
+  --text-ui-title--line-height: 1.35;
+
   /* Micro typography ladder. Font-size theme keys live in the
      ``--text-*`` namespace in Tailwind v4 (``--font-size-*`` is silently
      ignored — an earlier iteration of this block used it and the classes
@@ -518,25 +511,25 @@
   --border-strong: color-mix(in oklch, var(--border) 85%, transparent);
 
   --radius: 0.5rem;
-  --background: oklch(0.99 0.003 90);
-  --foreground: oklch(0.22 0.01 20);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.01 20);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.01 20);
-  --primary: oklch(0.62 0.17 15);
-  --primary-foreground: oklch(0.99 0.005 90);
-  --secondary: oklch(0.96 0.006 90);
-  --secondary-foreground: oklch(0.3 0.02 20);
-  --muted: oklch(0.96 0.006 90);
-  --muted-foreground: oklch(0.5 0.014 20);
-  --accent: oklch(0.95 0.01 90);
-  --accent-foreground: oklch(0.35 0.03 20);
+  --background: #ffffff;
+  --foreground: #1d1d1f;
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  --primary: #b13f6c;
+  --primary-foreground: #ffffff;
+  --secondary: #f8eaf0;
+  --secondary-foreground: #1d1d1f;
+  --muted: #f5f5f5;
+  --muted-foreground: #6e6e73;
+  --accent: #f8eaf0;
+  --accent-foreground: #1d1d1f;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.9 0.01 90);
-  --input: oklch(0.92 0.01 90);
-  --ring: oklch(0.68 0.14 15);
-  --chart-1: oklch(0.55 0.2 264);
+  --border: #e2e2e2;
+  --input: #d6d6d6;
+  --ring: #b13f6c;
+  --chart-1: #b13f6c;
   --chart-2: oklch(0.6 0.15 180);
   --chart-3: oklch(0.55 0.2 330);
   --chart-4: oklch(0.65 0.18 80);
@@ -550,14 +543,14 @@
   --success: oklch(0.6 0.15 160);
   --warning: oklch(0.63 0.15 60);
   --info: oklch(0.56 0.16 250);
-  --sidebar: oklch(0.975 0.004 90);
-  --sidebar-foreground: oklch(0.22 0.01 20);
-  --sidebar-primary: oklch(0.62 0.17 15);
-  --sidebar-primary-foreground: oklch(0.99 0.005 90);
-  --sidebar-accent: oklch(0.94 0.01 90);
-  --sidebar-accent-foreground: oklch(0.33 0.03 20);
-  --sidebar-border: oklch(0.9 0.01 90);
-  --sidebar-ring: oklch(0.68 0.14 15);
+  --sidebar: #fdf7fa;
+  --sidebar-foreground: #1d1d1f;
+  --sidebar-primary: #b13f6c;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f8eaf0;
+  --sidebar-accent-foreground: #1d1d1f;
+  --sidebar-border: #e2e2e2;
+  --sidebar-ring: #b13f6c;
 
   --container-width-xs: calc(var(--spacing) * 72);
   --container-width-sm: calc(var(--spacing) * 144);
@@ -565,58 +558,56 @@
   --container-width-lg: calc(var(--spacing) * 256);
 }
 
-/* 冷钢蓝（steel）配色 —— 男性风格：冷静、理性、偏冷色调。
-   由 <html data-theme="steel"> 触发，位于 :root 之后以覆盖默认的
-   蔷薇粉调（rouge）。 */
+/* Classic blue accent on neutral surfaces. */
 [data-theme="steel"] {
-  --background: oklch(0.97 0.006 240);
-  --foreground: oklch(0.2 0.015 240);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.015 240);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.015 240);
-  --primary: oklch(0.52 0.15 268);
-  --primary-foreground: oklch(0.99 0.005 268);
-  --secondary: oklch(0.95 0.012 240);
-  --secondary-foreground: oklch(0.3 0.02 240);
-  --muted: oklch(0.945 0.012 240);
-  --muted-foreground: oklch(0.45 0.022 240);
-  --accent: oklch(0.93 0.015 240);
-  --accent-foreground: oklch(0.32 0.03 240);
+  --background: #ffffff;
+  --foreground: #1d1d1f;
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  --primary: #0066cc;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f3f3;
+  --secondary-foreground: #1d1d1f;
+  --muted: #f5f5f5;
+  --muted-foreground: #6e6e73;
+  --accent: #eeeeee;
+  --accent-foreground: #1d1d1f;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.89 0.014 240);
-  --input: oklch(0.92 0.014 240);
-  --ring: oklch(0.58 0.14 268);
-  --sidebar: oklch(0.955 0.008 240);
-  --sidebar-foreground: oklch(0.2 0.015 240);
-  --sidebar-primary: oklch(0.52 0.15 268);
-  --sidebar-primary-foreground: oklch(0.99 0.005 268);
-  --sidebar-accent: oklch(0.92 0.015 240);
-  --sidebar-accent-foreground: oklch(0.32 0.03 240);
-  --sidebar-border: oklch(0.89 0.014 240);
-  --sidebar-ring: oklch(0.58 0.14 268);
+  --border: #e2e2e2;
+  --input: #d6d6d6;
+  --ring: #0066cc;
+  --sidebar: #f7f7f7;
+  --sidebar-foreground: #1d1d1f;
+  --sidebar-primary: #0066cc;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eeeeee;
+  --sidebar-accent-foreground: #1d1d1f;
+  --sidebar-border: #e2e2e2;
+  --sidebar-ring: #0066cc;
 }
 
 .dark {
-  --background: oklch(0.2 0.008 20);
-  --foreground: oklch(0.95 0.006 90);
-  --card: oklch(0.25 0.008 20);
-  --card-foreground: oklch(0.95 0.006 90);
-  --popover: oklch(0.24 0.008 20);
-  --popover-foreground: oklch(0.95 0.006 90);
-  --primary: oklch(0.85 0.13 15);
-  --primary-foreground: oklch(0.25 0.03 20);
-  --secondary: oklch(0.3 0.01 20);
-  --secondary-foreground: oklch(0.9 0.01 90);
-  --muted: oklch(0.28 0.01 20);
-  --muted-foreground: oklch(0.75 0.012 90);
-  --accent: oklch(0.32 0.015 20);
-  --accent-foreground: oklch(0.9 0.01 90);
+  --background: #161617;
+  --foreground: #f5f5f7;
+  --card: #202022;
+  --card-foreground: #f5f5f7;
+  --popover: #262628;
+  --popover-foreground: #f5f5f7;
+  --primary: #efb0ca;
+  --primary-foreground: #161617;
+  --secondary: #2c2c2e;
+  --secondary-foreground: #f5f5f7;
+  --muted: #29292b;
+  --muted-foreground: #a1a1a8;
+  --accent: #323235;
+  --accent-foreground: #f5f5f7;
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(0.33 0.012 20);
-  --input: oklch(0.31 0.012 20);
-  --ring: oklch(0.7 0.12 15);
-  --chart-1: oklch(0.65 0.22 264);
+  --border: #38383c;
+  --input: #414145;
+  --ring: #efb0ca;
+  --chart-1: #efb0ca;
   --chart-2: oklch(0.6 0.17 180);
   --chart-3: oklch(0.65 0.2 330);
   --chart-4: oklch(0.7 0.18 80);
@@ -628,14 +619,14 @@
   --success: oklch(0.74 0.15 160);
   --warning: oklch(0.79 0.13 70);
   --info: oklch(0.74 0.14 250);
-  --sidebar: oklch(0.22 0.008 20);
-  --sidebar-foreground: oklch(0.93 0.006 90);
-  --sidebar-primary: oklch(0.85 0.13 15);
-  --sidebar-primary-foreground: oklch(0.25 0.03 20);
-  --sidebar-accent: oklch(0.3 0.012 20);
-  --sidebar-accent-foreground: oklch(0.9 0.01 90);
-  --sidebar-border: oklch(0.33 0.012 20);
-  --sidebar-ring: oklch(0.7 0.12 15);
+  --sidebar: #1c1c1e;
+  --sidebar-foreground: #f5f5f7;
+  --sidebar-primary: #efb0ca;
+  --sidebar-primary-foreground: #161617;
+  --sidebar-accent: #303033;
+  --sidebar-accent-foreground: #f5f5f7;
+  --sidebar-border: #38383c;
+  --sidebar-ring: #efb0ca;
 
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.25);
   --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.3), 0 10px 24px rgba(0, 0, 0, 0.25);
@@ -653,389 +644,386 @@
 
 /* 冷钢蓝（steel）深色模式 */
 [data-theme="steel"].dark {
-  --background: oklch(0.18 0.012 240);
-  --foreground: oklch(0.93 0.008 240);
-  --card: oklch(0.22 0.012 240);
-  --card-foreground: oklch(0.93 0.008 240);
-  --popover: oklch(0.21 0.012 240);
-  --popover-foreground: oklch(0.93 0.008 240);
-  --primary: oklch(0.74 0.13 268);
-  --primary-foreground: oklch(0.17 0.02 268);
-  --secondary: oklch(0.28 0.015 240);
-  --secondary-foreground: oklch(0.9 0.01 240);
-  --muted: oklch(0.26 0.015 240);
-  --muted-foreground: oklch(0.68 0.018 240);
-  --accent: oklch(0.3 0.02 240);
-  --accent-foreground: oklch(0.9 0.01 240);
+  --background: #161617;
+  --foreground: #f5f5f7;
+  --card: #202022;
+  --card-foreground: #f5f5f7;
+  --popover: #262628;
+  --popover-foreground: #f5f5f7;
+  --primary: #78b5ff;
+  --primary-foreground: #161617;
+  --secondary: #2c2c2e;
+  --secondary-foreground: #f5f5f7;
+  --muted: #29292b;
+  --muted-foreground: #a1a1a8;
+  --accent: #323235;
+  --accent-foreground: #f5f5f7;
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(0.32 0.015 240);
-  --input: oklch(0.3 0.015 240);
-  --ring: oklch(0.72 0.13 268);
-  --sidebar: oklch(0.2 0.012 240);
-  --sidebar-foreground: oklch(0.93 0.008 240);
-  --sidebar-primary: oklch(0.74 0.13 268);
-  --sidebar-primary-foreground: oklch(0.17 0.02 268);
-  --sidebar-accent: oklch(0.28 0.015 240);
-  --sidebar-accent-foreground: oklch(0.9 0.01 240);
-  --sidebar-border: oklch(0.32 0.015 240);
-  --sidebar-ring: oklch(0.72 0.13 268);
+  --border: #38383c;
+  --input: #414145;
+  --ring: #78b5ff;
+  --sidebar: #1c1c1e;
+  --sidebar-foreground: #f5f5f7;
+  --sidebar-primary: #78b5ff;
+  --sidebar-primary-foreground: #161617;
+  --sidebar-accent: #303033;
+  --sidebar-accent-foreground: #f5f5f7;
+  --sidebar-border: #38383c;
+  --sidebar-ring: #78b5ff;
 }
 
-/* ── 高级配色预设：每套都是完整配色，中性色（背景 / 卡片 / 边框 / 侧栏）
-   带同色相的低彩度底调，与主色协调，而不是黑白灰配一个强调色。
-   token 集合与上方 steel 一致；浅色与深色（[data-theme=xxx].dark）各一套。
-   中性色彩度按色相视觉权重调整：暖色相同彩度更显色，故取值低于冷色相。 */
+/* Restrained accents share neutral surfaces in light and dark modes. */
 
 /* apricot → 蜜杏：主色相 42、高明度暖橙粉，中性色相 50 的奶杏底调。
    与 amber（陶土 40）同色相区但明度高一档、彩度低一档，走柔和路线。 */
 [data-theme="apricot"] {
-  --background: oklch(0.98 0.007 50);
-  --foreground: oklch(0.21 0.012 50);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.21 0.012 50);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.21 0.012 50);
-  --primary: oklch(0.57 0.15 42);
-  --primary-foreground: oklch(0.99 0.005 42);
-  --secondary: oklch(0.955 0.012 50);
-  --secondary-foreground: oklch(0.31 0.016 50);
-  --muted: oklch(0.95 0.012 50);
-  --muted-foreground: oklch(0.46 0.018 50);
-  --accent: oklch(0.935 0.016 50);
-  --accent-foreground: oklch(0.33 0.024 50);
-  --border: oklch(0.895 0.014 50);
-  --input: oklch(0.925 0.014 50);
-  --ring: oklch(0.61 0.15 42);
-  --sidebar: oklch(0.965 0.009 50);
-  --sidebar-foreground: oklch(0.21 0.012 50);
-  --sidebar-primary: oklch(0.57 0.15 42);
-  --sidebar-primary-foreground: oklch(0.99 0.005 42);
-  --sidebar-accent: oklch(0.93 0.016 50);
-  --sidebar-accent-foreground: oklch(0.33 0.024 50);
-  --sidebar-border: oklch(0.895 0.014 50);
-  --sidebar-ring: oklch(0.61 0.15 42);
-  --chart-1: oklch(0.57 0.15 42);
+  --background: #ffffff;
+  --foreground: #1d1d1f;
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  --primary: #aa5038;
+  --primary-foreground: #ffffff;
+  --secondary: #fbece5;
+  --secondary-foreground: #1d1d1f;
+  --muted: #f5f5f5;
+  --muted-foreground: #6e6e73;
+  --accent: #fbece5;
+  --accent-foreground: #1d1d1f;
+  --border: #e2e2e2;
+  --input: #d6d6d6;
+  --ring: #aa5038;
+  --sidebar: #fef8f4;
+  --sidebar-foreground: #1d1d1f;
+  --sidebar-primary: #aa5038;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #fbece5;
+  --sidebar-accent-foreground: #1d1d1f;
+  --sidebar-border: #e2e2e2;
+  --sidebar-ring: #aa5038;
+  --chart-1: #aa5038;
 }
 [data-theme="apricot"].dark {
-  --background: oklch(0.19 0.011 50);
-  --foreground: oklch(0.94 0.008 50);
-  --card: oklch(0.23 0.011 50);
-  --card-foreground: oklch(0.94 0.008 50);
-  --popover: oklch(0.22 0.011 50);
-  --popover-foreground: oklch(0.94 0.008 50);
-  --primary: oklch(0.79 0.1 42);
-  --primary-foreground: oklch(0.18 0.02 42);
-  --secondary: oklch(0.29 0.013 50);
-  --secondary-foreground: oklch(0.91 0.01 50);
-  --muted: oklch(0.27 0.013 50);
-  --muted-foreground: oklch(0.69 0.016 50);
-  --accent: oklch(0.31 0.017 50);
-  --accent-foreground: oklch(0.91 0.01 50);
-  --border: oklch(0.33 0.013 50);
-  --input: oklch(0.31 0.013 50);
-  --ring: oklch(0.77 0.1 42);
-  --sidebar: oklch(0.21 0.011 50);
-  --sidebar-foreground: oklch(0.94 0.008 50);
-  --sidebar-primary: oklch(0.79 0.1 42);
-  --sidebar-primary-foreground: oklch(0.18 0.02 42);
-  --sidebar-accent: oklch(0.29 0.013 50);
-  --sidebar-accent-foreground: oklch(0.91 0.01 50);
-  --sidebar-border: oklch(0.33 0.013 50);
-  --sidebar-ring: oklch(0.77 0.1 42);
-  --chart-1: oklch(0.79 0.1 42);
+  --background: #161617;
+  --foreground: #f5f5f7;
+  --card: #202022;
+  --card-foreground: #f5f5f7;
+  --popover: #262628;
+  --popover-foreground: #f5f5f7;
+  --primary: #f2b69f;
+  --primary-foreground: #161617;
+  --secondary: #2c2c2e;
+  --secondary-foreground: #f5f5f7;
+  --muted: #29292b;
+  --muted-foreground: #a1a1a8;
+  --accent: #323235;
+  --accent-foreground: #f5f5f7;
+  --border: #38383c;
+  --input: #414145;
+  --ring: #f2b69f;
+  --sidebar: #1c1c1e;
+  --sidebar-foreground: #f5f5f7;
+  --sidebar-primary: #f2b69f;
+  --sidebar-primary-foreground: #161617;
+  --sidebar-accent: #303033;
+  --sidebar-accent-foreground: #f5f5f7;
+  --sidebar-border: #38383c;
+  --sidebar-ring: #f2b69f;
+  --chart-1: #f2b69f;
 }
 
 /* mint → 薄荷：主色相 162、高明度清透绿，中性色相 168 的雪青底调。
    与 emerald（松玉 178）区分在明度高一档、色相更偏黄绿，更轻盈。 */
 [data-theme="mint"] {
-  --background: oklch(0.98 0.007 168);
-  --foreground: oklch(0.21 0.013 168);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.21 0.013 168);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.21 0.013 168);
-  --primary: oklch(0.54 0.13 162);
-  --primary-foreground: oklch(0.99 0.005 162);
-  --secondary: oklch(0.955 0.011 168);
-  --secondary-foreground: oklch(0.31 0.017 168);
-  --muted: oklch(0.95 0.011 168);
-  --muted-foreground: oklch(0.46 0.019 168);
-  --accent: oklch(0.935 0.014 168);
-  --accent-foreground: oklch(0.33 0.026 168);
-  --border: oklch(0.895 0.013 168);
-  --input: oklch(0.925 0.013 168);
-  --ring: oklch(0.58 0.13 162);
-  --sidebar: oklch(0.965 0.008 168);
-  --sidebar-foreground: oklch(0.21 0.013 168);
-  --sidebar-primary: oklch(0.54 0.13 162);
-  --sidebar-primary-foreground: oklch(0.99 0.005 162);
-  --sidebar-accent: oklch(0.93 0.014 168);
-  --sidebar-accent-foreground: oklch(0.33 0.026 168);
-  --sidebar-border: oklch(0.895 0.013 168);
-  --sidebar-ring: oklch(0.58 0.13 162);
-  --chart-1: oklch(0.54 0.13 162);
+  --background: #ffffff;
+  --foreground: #1d1d1f;
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  --primary: #686b73;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f3f3;
+  --secondary-foreground: #1d1d1f;
+  --muted: #f5f5f5;
+  --muted-foreground: #6e6e73;
+  --accent: #eeeeee;
+  --accent-foreground: #1d1d1f;
+  --border: #e2e2e2;
+  --input: #d6d6d6;
+  --ring: #686b73;
+  --sidebar: #f7f7f7;
+  --sidebar-foreground: #1d1d1f;
+  --sidebar-primary: #686b73;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eeeeee;
+  --sidebar-accent-foreground: #1d1d1f;
+  --sidebar-border: #e2e2e2;
+  --sidebar-ring: #686b73;
+  --chart-1: #686b73;
 }
 [data-theme="mint"].dark {
-  --background: oklch(0.19 0.01 168);
-  --foreground: oklch(0.94 0.008 168);
-  --card: oklch(0.23 0.01 168);
-  --card-foreground: oklch(0.94 0.008 168);
-  --popover: oklch(0.22 0.01 168);
-  --popover-foreground: oklch(0.94 0.008 168);
-  --primary: oklch(0.78 0.095 162);
-  --primary-foreground: oklch(0.18 0.02 162);
-  --secondary: oklch(0.29 0.013 168);
-  --secondary-foreground: oklch(0.91 0.01 168);
-  --muted: oklch(0.27 0.013 168);
-  --muted-foreground: oklch(0.69 0.016 168);
-  --accent: oklch(0.31 0.017 168);
-  --accent-foreground: oklch(0.91 0.01 168);
-  --border: oklch(0.33 0.013 168);
-  --input: oklch(0.31 0.013 168);
-  --ring: oklch(0.76 0.095 162);
-  --sidebar: oklch(0.21 0.01 168);
-  --sidebar-foreground: oklch(0.94 0.008 168);
-  --sidebar-primary: oklch(0.78 0.095 162);
-  --sidebar-primary-foreground: oklch(0.18 0.02 162);
-  --sidebar-accent: oklch(0.29 0.013 168);
-  --sidebar-accent-foreground: oklch(0.91 0.01 168);
-  --sidebar-border: oklch(0.33 0.013 168);
-  --sidebar-ring: oklch(0.76 0.095 162);
-  --chart-1: oklch(0.78 0.095 162);
+  --background: #161617;
+  --foreground: #f5f5f7;
+  --card: #202022;
+  --card-foreground: #f5f5f7;
+  --popover: #262628;
+  --popover-foreground: #f5f5f7;
+  --primary: #c7c9d0;
+  --primary-foreground: #161617;
+  --secondary: #2c2c2e;
+  --secondary-foreground: #f5f5f7;
+  --muted: #29292b;
+  --muted-foreground: #a1a1a8;
+  --accent: #323235;
+  --accent-foreground: #f5f5f7;
+  --border: #38383c;
+  --input: #414145;
+  --ring: #c7c9d0;
+  --sidebar: #1c1c1e;
+  --sidebar-foreground: #f5f5f7;
+  --sidebar-primary: #c7c9d0;
+  --sidebar-primary-foreground: #161617;
+  --sidebar-accent: #303033;
+  --sidebar-accent-foreground: #f5f5f7;
+  --sidebar-border: #38383c;
+  --sidebar-ring: #c7c9d0;
+  --chart-1: #c7c9d0;
 }
 
 /* emerald → 松玉（jade）：主色相 178，中性色相 185 的青灰底调。 */
 [data-theme="emerald"] {
-  --background: oklch(0.97 0.005 185);
-  --foreground: oklch(0.2 0.013 185);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.013 185);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.013 185);
-  --primary: oklch(0.52 0.09 178);
-  --primary-foreground: oklch(0.99 0.005 178);
-  --secondary: oklch(0.95 0.01 185);
-  --secondary-foreground: oklch(0.3 0.017 185);
-  --muted: oklch(0.945 0.01 185);
-  --muted-foreground: oklch(0.45 0.019 185);
-  --accent: oklch(0.93 0.013 185);
-  --accent-foreground: oklch(0.32 0.026 185);
-  --border: oklch(0.89 0.012 185);
-  --input: oklch(0.92 0.012 185);
-  --ring: oklch(0.57 0.09 178);
-  --sidebar: oklch(0.955 0.007 185);
-  --sidebar-foreground: oklch(0.2 0.013 185);
-  --sidebar-primary: oklch(0.52 0.09 178);
-  --sidebar-primary-foreground: oklch(0.99 0.005 178);
-  --sidebar-accent: oklch(0.92 0.013 185);
-  --sidebar-accent-foreground: oklch(0.32 0.026 185);
-  --sidebar-border: oklch(0.89 0.012 185);
-  --sidebar-ring: oklch(0.57 0.09 178);
-  --chart-1: oklch(0.52 0.09 178);
+  --background: #ffffff;
+  --foreground: #1d1d1f;
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  --primary: #85641f;
+  --primary-foreground: #ffffff;
+  --secondary: #f7f0dd;
+  --secondary-foreground: #1d1d1f;
+  --muted: #f5f5f5;
+  --muted-foreground: #6e6e73;
+  --accent: #f7f0dd;
+  --accent-foreground: #1d1d1f;
+  --border: #e2e2e2;
+  --input: #d6d6d6;
+  --ring: #85641f;
+  --sidebar: #fdfbf4;
+  --sidebar-foreground: #1d1d1f;
+  --sidebar-primary: #85641f;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f7f0dd;
+  --sidebar-accent-foreground: #1d1d1f;
+  --sidebar-border: #e2e2e2;
+  --sidebar-ring: #85641f;
+  --chart-1: #85641f;
 }
 [data-theme="emerald"].dark {
-  --background: oklch(0.18 0.01 185);
-  --foreground: oklch(0.93 0.007 185);
-  --card: oklch(0.22 0.01 185);
-  --card-foreground: oklch(0.93 0.007 185);
-  --popover: oklch(0.21 0.01 185);
-  --popover-foreground: oklch(0.93 0.007 185);
-  --primary: oklch(0.74 0.085 178);
-  --primary-foreground: oklch(0.17 0.02 178);
-  --secondary: oklch(0.28 0.013 185);
-  --secondary-foreground: oklch(0.9 0.009 185);
-  --muted: oklch(0.26 0.013 185);
-  --muted-foreground: oklch(0.68 0.016 185);
-  --accent: oklch(0.3 0.017 185);
-  --accent-foreground: oklch(0.9 0.009 185);
-  --border: oklch(0.32 0.013 185);
-  --input: oklch(0.3 0.013 185);
-  --ring: oklch(0.72 0.085 178);
-  --sidebar: oklch(0.2 0.01 185);
-  --sidebar-foreground: oklch(0.93 0.007 185);
-  --sidebar-primary: oklch(0.74 0.085 178);
-  --sidebar-primary-foreground: oklch(0.17 0.02 178);
-  --sidebar-accent: oklch(0.28 0.013 185);
-  --sidebar-accent-foreground: oklch(0.9 0.009 185);
-  --sidebar-border: oklch(0.32 0.013 185);
-  --sidebar-ring: oklch(0.72 0.085 178);
-  --chart-1: oklch(0.74 0.085 178);
+  --background: #161617;
+  --foreground: #f5f5f7;
+  --card: #202022;
+  --card-foreground: #f5f5f7;
+  --popover: #262628;
+  --popover-foreground: #f5f5f7;
+  --primary: #e6d199;
+  --primary-foreground: #161617;
+  --secondary: #2c2c2e;
+  --secondary-foreground: #f5f5f7;
+  --muted: #29292b;
+  --muted-foreground: #a1a1a8;
+  --accent: #323235;
+  --accent-foreground: #f5f5f7;
+  --border: #38383c;
+  --input: #414145;
+  --ring: #e6d199;
+  --sidebar: #1c1c1e;
+  --sidebar-foreground: #f5f5f7;
+  --sidebar-primary: #e6d199;
+  --sidebar-primary-foreground: #161617;
+  --sidebar-accent: #303033;
+  --sidebar-accent-foreground: #f5f5f7;
+  --sidebar-border: #38383c;
+  --sidebar-ring: #e6d199;
+  --chart-1: #e6d199;
 }
 
 /* violet → 丁香紫（lilac）：主色相 322，中性色相 320 的紫灰底调。
    明度提到 0.60 与蔷薇粉/蜜杏/薄荷同档，归入柔和组。 */
 [data-theme="violet"] {
-  --background: oklch(0.98 0.006 320);
-  --foreground: oklch(0.2 0.013 320);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.013 320);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.013 320);
-  --primary: oklch(0.56 0.16 322);
-  --primary-foreground: oklch(0.99 0.004 322);
-  --secondary: oklch(0.95 0.01 320);
-  --secondary-foreground: oklch(0.3 0.017 320);
-  --muted: oklch(0.945 0.01 320);
-  --muted-foreground: oklch(0.45 0.019 320);
-  --accent: oklch(0.93 0.013 320);
-  --accent-foreground: oklch(0.32 0.026 320);
-  --border: oklch(0.89 0.012 320);
-  --input: oklch(0.92 0.012 320);
-  --ring: oklch(0.6 0.16 322);
-  --sidebar: oklch(0.965 0.008 320);
-  --sidebar-foreground: oklch(0.2 0.013 320);
-  --sidebar-primary: oklch(0.56 0.16 322);
-  --sidebar-primary-foreground: oklch(0.99 0.004 322);
-  --sidebar-accent: oklch(0.92 0.013 320);
-  --sidebar-accent-foreground: oklch(0.32 0.026 320);
-  --sidebar-border: oklch(0.89 0.012 320);
-  --sidebar-ring: oklch(0.6 0.16 322);
-  --chart-1: oklch(0.56 0.16 322);
+  --background: #ffffff;
+  --foreground: #1d1d1f;
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  --primary: #8052ac;
+  --primary-foreground: #ffffff;
+  --secondary: #f1eafa;
+  --secondary-foreground: #1d1d1f;
+  --muted: #f5f5f5;
+  --muted-foreground: #6e6e73;
+  --accent: #f1eafa;
+  --accent-foreground: #1d1d1f;
+  --border: #e2e2e2;
+  --input: #d6d6d6;
+  --ring: #8052ac;
+  --sidebar: #faf7fd;
+  --sidebar-foreground: #1d1d1f;
+  --sidebar-primary: #8052ac;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f1eafa;
+  --sidebar-accent-foreground: #1d1d1f;
+  --sidebar-border: #e2e2e2;
+  --sidebar-ring: #8052ac;
+  --chart-1: #8052ac;
 }
 [data-theme="violet"].dark {
-  --background: oklch(0.18 0.01 320);
-  --foreground: oklch(0.93 0.007 320);
-  --card: oklch(0.22 0.01 320);
-  --card-foreground: oklch(0.93 0.007 320);
-  --popover: oklch(0.21 0.01 320);
-  --popover-foreground: oklch(0.93 0.007 320);
-  --primary: oklch(0.78 0.115 322);
-  --primary-foreground: oklch(0.18 0.02 322);
-  --secondary: oklch(0.28 0.013 320);
-  --secondary-foreground: oklch(0.9 0.009 320);
-  --muted: oklch(0.26 0.013 320);
-  --muted-foreground: oklch(0.68 0.016 320);
-  --accent: oklch(0.3 0.017 320);
-  --accent-foreground: oklch(0.9 0.009 320);
-  --border: oklch(0.32 0.013 320);
-  --input: oklch(0.3 0.013 320);
-  --ring: oklch(0.76 0.115 322);
-  --sidebar: oklch(0.2 0.01 320);
-  --sidebar-foreground: oklch(0.93 0.007 320);
-  --sidebar-primary: oklch(0.78 0.115 322);
-  --sidebar-primary-foreground: oklch(0.18 0.02 322);
-  --sidebar-accent: oklch(0.28 0.013 320);
-  --sidebar-accent-foreground: oklch(0.9 0.009 320);
-  --sidebar-border: oklch(0.32 0.013 320);
-  --sidebar-ring: oklch(0.76 0.115 322);
-  --chart-1: oklch(0.78 0.115 322);
+  --background: #161617;
+  --foreground: #f5f5f7;
+  --card: #202022;
+  --card-foreground: #f5f5f7;
+  --popover: #262628;
+  --popover-foreground: #f5f5f7;
+  --primary: #d0b5ed;
+  --primary-foreground: #161617;
+  --secondary: #2c2c2e;
+  --secondary-foreground: #f5f5f7;
+  --muted: #29292b;
+  --muted-foreground: #a1a1a8;
+  --accent: #323235;
+  --accent-foreground: #f5f5f7;
+  --border: #38383c;
+  --input: #414145;
+  --ring: #d0b5ed;
+  --sidebar: #1c1c1e;
+  --sidebar-foreground: #f5f5f7;
+  --sidebar-primary: #d0b5ed;
+  --sidebar-primary-foreground: #161617;
+  --sidebar-accent: #303033;
+  --sidebar-accent-foreground: #f5f5f7;
+  --sidebar-border: #38383c;
+  --sidebar-ring: #d0b5ed;
+  --chart-1: #d0b5ed;
 }
 
 /* amber → 陶土（clay）：色相 40。金黄在 AA 对比度下必然压暗成土黄，
    改走暖陶红更耐看；id 保留 amber 以免影响已保存的用户偏好。 */
 [data-theme="amber"] {
-  --background: oklch(0.97 0.004 45);
-  --foreground: oklch(0.2 0.011 45);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.011 45);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.011 45);
-  --primary: oklch(0.55 0.13 40);
-  --primary-foreground: oklch(0.99 0.005 40);
-  --secondary: oklch(0.95 0.008 45);
-  --secondary-foreground: oklch(0.3 0.014 45);
-  --muted: oklch(0.945 0.008 45);
-  --muted-foreground: oklch(0.45 0.016 45);
-  --accent: oklch(0.93 0.011 45);
-  --accent-foreground: oklch(0.32 0.022 45);
-  --border: oklch(0.89 0.01 45);
-  --input: oklch(0.92 0.01 45);
-  --ring: oklch(0.6 0.13 40);
-  --sidebar: oklch(0.955 0.006 45);
-  --sidebar-foreground: oklch(0.2 0.011 45);
-  --sidebar-primary: oklch(0.55 0.13 40);
-  --sidebar-primary-foreground: oklch(0.99 0.005 40);
-  --sidebar-accent: oklch(0.92 0.011 45);
-  --sidebar-accent-foreground: oklch(0.32 0.022 45);
-  --sidebar-border: oklch(0.89 0.01 45);
-  --sidebar-ring: oklch(0.6 0.13 40);
-  --chart-1: oklch(0.55 0.13 40);
+  --background: #ffffff;
+  --foreground: #1d1d1f;
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  --primary: #807366;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f3f3;
+  --secondary-foreground: #1d1d1f;
+  --muted: #f5f5f5;
+  --muted-foreground: #6e6e73;
+  --accent: #eeeeee;
+  --accent-foreground: #1d1d1f;
+  --border: #e2e2e2;
+  --input: #d6d6d6;
+  --ring: #807366;
+  --sidebar: #f7f7f7;
+  --sidebar-foreground: #1d1d1f;
+  --sidebar-primary: #807366;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eeeeee;
+  --sidebar-accent-foreground: #1d1d1f;
+  --sidebar-border: #e2e2e2;
+  --sidebar-ring: #807366;
+  --chart-1: #807366;
 }
 [data-theme="amber"].dark {
-  --background: oklch(0.18 0.009 45);
-  --foreground: oklch(0.93 0.006 45);
-  --card: oklch(0.22 0.009 45);
-  --card-foreground: oklch(0.93 0.006 45);
-  --popover: oklch(0.21 0.009 45);
-  --popover-foreground: oklch(0.93 0.006 45);
-  --primary: oklch(0.74 0.115 40);
-  --primary-foreground: oklch(0.17 0.02 40);
-  --secondary: oklch(0.28 0.011 45);
-  --secondary-foreground: oklch(0.9 0.008 45);
-  --muted: oklch(0.26 0.011 45);
-  --muted-foreground: oklch(0.68 0.014 45);
-  --accent: oklch(0.3 0.014 45);
-  --accent-foreground: oklch(0.9 0.008 45);
-  --border: oklch(0.32 0.011 45);
-  --input: oklch(0.3 0.011 45);
-  --ring: oklch(0.72 0.115 40);
-  --sidebar: oklch(0.2 0.009 45);
-  --sidebar-foreground: oklch(0.93 0.006 45);
-  --sidebar-primary: oklch(0.74 0.115 40);
-  --sidebar-primary-foreground: oklch(0.17 0.02 40);
-  --sidebar-accent: oklch(0.28 0.011 45);
-  --sidebar-accent-foreground: oklch(0.9 0.008 45);
-  --sidebar-border: oklch(0.32 0.011 45);
-  --sidebar-ring: oklch(0.72 0.115 40);
-  --chart-1: oklch(0.74 0.115 40);
+  --background: #161617;
+  --foreground: #f5f5f7;
+  --card: #202022;
+  --card-foreground: #f5f5f7;
+  --popover: #262628;
+  --popover-foreground: #f5f5f7;
+  --primary: #c9beb0;
+  --primary-foreground: #161617;
+  --secondary: #2c2c2e;
+  --secondary-foreground: #f5f5f7;
+  --muted: #29292b;
+  --muted-foreground: #a1a1a8;
+  --accent: #323235;
+  --accent-foreground: #f5f5f7;
+  --border: #38383c;
+  --input: #414145;
+  --ring: #c9beb0;
+  --sidebar: #1c1c1e;
+  --sidebar-foreground: #f5f5f7;
+  --sidebar-primary: #c9beb0;
+  --sidebar-primary-foreground: #161617;
+  --sidebar-accent: #303033;
+  --sidebar-accent-foreground: #f5f5f7;
+  --sidebar-border: #38383c;
+  --sidebar-ring: #c9beb0;
+  --chart-1: #c9beb0;
 }
 
 /* teal → 黛青（slate teal）：主色相 215、低彩度，中性色相 220 的烟灰蓝底调。 */
 [data-theme="teal"] {
-  --background: oklch(0.97 0.005 220);
-  --foreground: oklch(0.2 0.013 220);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.013 220);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.013 220);
-  --primary: oklch(0.53 0.068 215);
-  --primary-foreground: oklch(0.99 0.005 215);
-  --secondary: oklch(0.95 0.01 220);
-  --secondary-foreground: oklch(0.3 0.017 220);
-  --muted: oklch(0.945 0.01 220);
-  --muted-foreground: oklch(0.45 0.019 220);
-  --accent: oklch(0.93 0.013 220);
-  --accent-foreground: oklch(0.32 0.026 220);
-  --border: oklch(0.89 0.012 220);
-  --input: oklch(0.92 0.012 220);
-  --ring: oklch(0.58 0.068 215);
-  --sidebar: oklch(0.955 0.007 220);
-  --sidebar-foreground: oklch(0.2 0.013 220);
-  --sidebar-primary: oklch(0.53 0.068 215);
-  --sidebar-primary-foreground: oklch(0.99 0.005 215);
-  --sidebar-accent: oklch(0.92 0.013 220);
-  --sidebar-accent-foreground: oklch(0.32 0.026 220);
-  --sidebar-border: oklch(0.89 0.012 220);
-  --sidebar-ring: oklch(0.58 0.068 215);
-  --chart-1: oklch(0.53 0.068 215);
+  --background: #ffffff;
+  --foreground: #1d1d1f;
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  --primary: #34363b;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f3f3;
+  --secondary-foreground: #1d1d1f;
+  --muted: #f5f5f5;
+  --muted-foreground: #6e6e73;
+  --accent: #eeeeee;
+  --accent-foreground: #1d1d1f;
+  --border: #e2e2e2;
+  --input: #d6d6d6;
+  --ring: #34363b;
+  --sidebar: #f7f7f7;
+  --sidebar-foreground: #1d1d1f;
+  --sidebar-primary: #34363b;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eeeeee;
+  --sidebar-accent-foreground: #1d1d1f;
+  --sidebar-border: #e2e2e2;
+  --sidebar-ring: #34363b;
+  --chart-1: #34363b;
 }
 [data-theme="teal"].dark {
-  --background: oklch(0.18 0.01 220);
-  --foreground: oklch(0.93 0.007 220);
-  --card: oklch(0.22 0.01 220);
-  --card-foreground: oklch(0.93 0.007 220);
-  --popover: oklch(0.21 0.01 220);
-  --popover-foreground: oklch(0.93 0.007 220);
-  --primary: oklch(0.74 0.068 215);
-  --primary-foreground: oklch(0.17 0.02 215);
-  --secondary: oklch(0.28 0.013 220);
-  --secondary-foreground: oklch(0.9 0.009 220);
-  --muted: oklch(0.26 0.013 220);
-  --muted-foreground: oklch(0.68 0.016 220);
-  --accent: oklch(0.3 0.017 220);
-  --accent-foreground: oklch(0.9 0.009 220);
-  --border: oklch(0.32 0.013 220);
-  --input: oklch(0.3 0.013 220);
-  --ring: oklch(0.72 0.068 215);
-  --sidebar: oklch(0.2 0.01 220);
-  --sidebar-foreground: oklch(0.93 0.007 220);
-  --sidebar-primary: oklch(0.74 0.068 215);
-  --sidebar-primary-foreground: oklch(0.17 0.02 215);
-  --sidebar-accent: oklch(0.28 0.013 220);
-  --sidebar-accent-foreground: oklch(0.9 0.009 220);
-  --sidebar-border: oklch(0.32 0.013 220);
-  --sidebar-ring: oklch(0.72 0.068 215);
-  --chart-1: oklch(0.74 0.068 215);
+  --background: #161617;
+  --foreground: #f5f5f7;
+  --card: #202022;
+  --card-foreground: #f5f5f7;
+  --popover: #262628;
+  --popover-foreground: #f5f5f7;
+  --primary: #dedee3;
+  --primary-foreground: #161617;
+  --secondary: #2c2c2e;
+  --secondary-foreground: #f5f5f7;
+  --muted: #29292b;
+  --muted-foreground: #a1a1a8;
+  --accent: #323235;
+  --accent-foreground: #f5f5f7;
+  --border: #38383c;
+  --input: #414145;
+  --ring: #dedee3;
+  --sidebar: #1c1c1e;
+  --sidebar-foreground: #f5f5f7;
+  --sidebar-primary: #dedee3;
+  --sidebar-primary-foreground: #161617;
+  --sidebar-accent: #303033;
+  --sidebar-accent-foreground: #f5f5f7;
+  --sidebar-border: #38383c;
+  --sidebar-ring: #dedee3;
+  --chart-1: #dedee3;
 }
 
 /* 浏览器首页「跟随配色」默认背景。
@@ -2193,11 +2181,72 @@
   /* Codex composer footer: responsive atoms via container queries.
      Apply .composer-footer to the footer row; children use the
      .composer-footer__* classes to collapse at narrow widths. */
+  /* The full-workbench composer starts as one row, growing with text or attachments. */
+  [data-composer-placement="floating"] [data-composer-root] {
+    translate: none;
+    transform: none;
+  }
+  [data-composer-placement="floating"] [data-composer-welcome] {
+    display: none;
+  }
+  [data-composer-placement="floating"] [data-testid="chat-composer"] {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 24px !important;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 3%);
+  }
+  [data-composer-placement="floating"] [data-testid="chat-composer"] > * {
+    grid-column: 1 / -1;
+  }
+  [data-composer-placement="floating"] .composer-editor {
+    grid-column: 2;
+    grid-row: 20;
+    min-width: 0;
+  }
+  [data-composer-placement="floating"] .composer-editor textarea {
+    display: block;
+    min-height: 36px !important;
+    padding-top: 7px !important;
+    padding-bottom: 7px !important;
+    font-size: 13px;
+    line-height: 22px;
+  }
+  [data-composer-placement="floating"] .composer-footer {
+    display: contents !important;
+    container-type: normal;
+  }
+  [data-composer-placement="floating"] .composer-footer > :first-child {
+    grid-column: 1;
+    grid-row: 20;
+    flex-wrap: nowrap;
+  }
+  [data-composer-placement="floating"] .composer-footer > :last-child {
+    grid-column: 3;
+    grid-row: 20;
+    max-width: 260px;
+  }
+  [data-composer-placement="floating"] [data-testid="permission-mode-trigger"] {
+    width: 28px;
+    height: 28px;
+    justify-content: center;
+    padding: 0;
+  }
+  [data-composer-placement="floating"] [data-testid="permission-mode-trigger"] > span,
+  [data-composer-placement="floating"] [data-testid="permission-mode-trigger"] > svg:last-child {
+    display: none;
+  }
+  [data-composer-placement="floating"] [data-testid="chat-tools-trigger"] {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+  }
   .composer-footer {
     container: composer-footer / inline-size;
   }
   .composer-footer__model [data-testid="model-picker-trigger"] {
-    max-width: 8rem;
+    max-width: 9rem;
   }
   @container composer-footer (width <= 440px) {
     .composer-footer__label--sm {

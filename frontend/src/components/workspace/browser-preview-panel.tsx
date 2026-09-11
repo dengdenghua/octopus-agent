@@ -23,6 +23,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { toast } from "sonner";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
@@ -57,6 +58,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuLabel,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -85,6 +90,7 @@ interface BrowserSession {
   healthy?: boolean;
   current_url?: string;
   current_title?: string;
+  launch_error?: string;
 }
 
 interface ActionLogEntry {
@@ -619,7 +625,9 @@ interface BrowserPreviewToolbarProps {
   autoRefresh: boolean;
   onAutoRefreshChange: (enabled: boolean) => void;
   sessionHealthy: boolean;
+  sessionIdle?: boolean;
   runtimeLabel: string;
+  returnToTask?: boolean;
 }
 
 /**
@@ -645,6 +653,8 @@ export function BrowserPreviewToolbar({
   autoRefresh,
   onAutoRefreshChange,
   sessionHealthy,
+  sessionIdle = false,
+  returnToTask = false,
   runtimeLabel,
 }: BrowserPreviewToolbarProps) {
   const { t } = useI18n();
@@ -657,7 +667,7 @@ export function BrowserPreviewToolbar({
       aria-label={t.browser.browserAutomation}
       className="@container/browser-preview-toolbar flex shrink-0 items-center gap-1.5 border-b border-border-default bg-background px-2 py-1.5"
     >
-      <div className="flex shrink-0 items-center rounded-lg border border-border-subtle bg-muted/35 p-0.5">
+      <div className="flex shrink-0 items-center gap-0.5">
         <button
           type="button"
           onClick={onBack}
@@ -694,7 +704,7 @@ export function BrowserPreviewToolbar({
         }}
         className="flex min-w-0 flex-1 items-center"
       >
-        <div className="relative flex h-8 min-w-0 flex-1 items-center rounded-lg border border-border-default bg-muted/35 transition-colors focus-within:border-ring focus-within:bg-background">
+        <div className="relative flex h-8 min-w-0 flex-1 items-center rounded-md border border-transparent bg-muted/35 transition-colors hover:bg-muted/50 focus-within:border-ring focus-within:bg-background">
           <GlobeIcon className="absolute left-2.5 size-3.5 text-muted-foreground" />
           <input
             type="text"
@@ -710,13 +720,17 @@ export function BrowserPreviewToolbar({
       <button
         type="button"
         onClick={onOpenFullBrowser}
-        className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border-default bg-background px-2 text-xs font-medium text-foreground transition-colors hover:bg-muted/55"
-        title={bp.continueInFullBrowser}
-        aria-label={bp.continueInFullBrowser}
+        className="flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/55 hover:text-foreground"
+        title={returnToTask ? "返回任务" : bp.continueInFullBrowser}
+        aria-label={returnToTask ? "返回任务" : bp.continueInFullBrowser}
       >
-        <Maximize2Icon className="size-3.5" />
+        {returnToTask ? (
+          <ArrowLeftIcon className="size-3.5" />
+        ) : (
+          <Maximize2Icon className="size-3.5" />
+        )}
         <span className="hidden @min-[520px]/browser-preview-toolbar:inline">
-          {bp.takeoverButton}
+          {returnToTask ? "返回任务" : bp.takeoverButton}
         </span>
       </button>
 
@@ -754,31 +768,40 @@ export function BrowserPreviewToolbar({
               </span>
             </span>
           </DropdownMenuItem>
-          <div className="px-2 py-1.5">
-            <label className="mb-1 block text-xs text-muted-foreground">
-              {bp.selectDevicePreset}
-            </label>
-            <select
-              value={devicePreview}
-              onChange={(event) =>
-                onDevicePreviewChange(event.target.value as DevicePreviewPreset)
-              }
-              disabled={viewportChanging}
-              className="h-8 w-full rounded-md border border-border-default bg-background px-2 text-xs font-medium text-foreground outline-none"
-              aria-label={bp.selectDevicePreset}
-            >
-              {(
-                Object.keys(DEVICE_PREVIEW_PRESETS) as DevicePreviewPreset[]
-              ).map((preset) => {
-                const device = DEVICE_PREVIEW_PRESETS[preset];
-                return (
-                  <option key={preset} value={preset}>
-                    {preset === "desktop" ? bp.desktopLabel : device.label}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>设备预览</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-56">
+              <div className="px-2 py-1.5">
+                <label className="mb-1 block text-xs text-muted-foreground">
+                  {bp.selectDevicePreset}
+                </label>
+                <select
+                  value={devicePreview}
+                  onChange={(event) =>
+                    onDevicePreviewChange(
+                      event.target.value as DevicePreviewPreset,
+                    )
+                  }
+                  disabled={viewportChanging}
+                  className="h-8 w-full rounded-md border border-border-default bg-background px-2 text-xs font-medium text-foreground outline-none"
+                  aria-label={bp.selectDevicePreset}
+                >
+                  {(
+                    Object.keys(DEVICE_PREVIEW_PRESETS) as DevicePreviewPreset[]
+                  ).map((preset) => {
+                    const device = DEVICE_PREVIEW_PRESETS[preset];
+                    return (
+                      <option key={preset} value={preset}>
+                        {preset === "desktop" ? bp.desktopLabel : device.label}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>任务工具</DropdownMenuLabel>
           <DropdownMenuItem onSelect={onAttachScreenshot}>
             <ImageIcon className="size-3.5" />
             {bp.attachScreenshotToComposer}
@@ -804,13 +827,23 @@ export function BrowserPreviewToolbar({
             <span
               className={cn(
                 "size-1.5 shrink-0 rounded-full",
-                sessionHealthy ? "bg-success" : "bg-destructive",
+                sessionIdle
+                  ? "bg-muted-foreground"
+                  : sessionHealthy
+                    ? "bg-success"
+                    : "bg-destructive",
               )}
             />
             <span className="min-w-0 flex-1 truncate">
-              {sessionHealthy
-                ? bp.sessionHealthyLabel
-                : bp.sessionAttentionLabel}
+              {runtimeLabel === "mock"
+                ? "浏览器待启动，打开网址后连接"
+                : runtimeLabel === "未连接"
+                  ? "尚未连接浏览器"
+                  : sessionIdle
+                    ? "暂无浏览器操作记录"
+                    : sessionHealthy
+                      ? bp.sessionHealthyLabel
+                      : bp.sessionAttentionLabel}
             </span>
             <span className="shrink-0 font-mono text-xs">{runtimeLabel}</span>
           </div>
@@ -838,6 +871,8 @@ interface BrowserPreviewPanelProps {
    * panel behaves exactly as before. */
   initialUrl?: string;
   className?: string;
+  sharedSessionId?: string;
+  onReturnToTask?: () => void;
 }
 
 export function BrowserPreviewPanel({
@@ -845,7 +880,21 @@ export function BrowserPreviewPanel({
   workspacePath,
   initialUrl,
   className,
+  sharedSessionId,
+  onReturnToTask,
 }: BrowserPreviewPanelProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [returnedSessionId] = useState(() => {
+    try {
+      const key = `echo:browser-return:${location.pathname}`;
+      const value = sessionStorage.getItem(key);
+      sessionStorage.removeItem(key);
+      return value;
+    } catch {
+      return null;
+    }
+  });
   const { t } = useI18n();
   const bp = t.browserPreviewPanel;
   const [session, setSession] = useState<BrowserSession | null>(null);
@@ -886,6 +935,20 @@ export function BrowserPreviewPanel({
   const [surfaceMode, setSurfaceMode] =
     useState<PreviewSurfaceMode>("screenshot");
   const [liveFrameLoaded, setLiveFrameLoaded] = useState(false);
+  const [fitPreview, setFitPreview] = useState(() => {
+    try {
+      return localStorage.getItem("echo:preview-fit") === "full";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("echo:preview-fit", fitPreview ? "full" : "width");
+    } catch {
+      /* Optional preference. */
+    }
+  }, [fitPreview]);
   const [devicePreview, setDevicePreview] =
     useState<DevicePreviewPreset>("desktop");
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -893,8 +956,13 @@ export function BrowserPreviewPanel({
   const clickMarkerTimeoutRef = useRef<number | null>(null);
 
   const sessionIdentity = useMemo(
-    () => createOctopusBrowserSessionIdentity({ threadId, workspacePath }),
-    [threadId, workspacePath],
+    () => ({
+      ...createOctopusBrowserSessionIdentity({ threadId, workspacePath }),
+      ...(sharedSessionId || returnedSessionId
+        ? { sessionId: sharedSessionId || returnedSessionId! }
+        : {}),
+    }),
+    [threadId, workspacePath, sharedSessionId, returnedSessionId],
   );
   const sessionId = sessionIdentity.sessionId;
   const liveWebviewRef = useRef<WebviewTabHandle | null>(null);
@@ -1517,15 +1585,22 @@ export function BrowserPreviewPanel({
   }, [sessionIdentity]);
 
   const openInFullBrowser = useCallback(() => {
-    const target = pageInfo.url || urlInput.trim();
+    const target = pageInfo.url || "about:blank";
     if (target) {
       try {
         const request: BrowserOpenUrlRequest = {
           url: target,
-          title: pageInfo.title || target,
+          title:
+            pageInfo.title || (target === "about:blank" ? "任务浏览" : target),
           device: browserTabDeviceForPreset(devicePreview),
           source: "agent-preview",
           sessionId,
+          taskPreview: {
+            threadId,
+            workspacePath,
+            sessionId,
+            returnRoute: location.pathname + location.search,
+          },
         };
         localStorage.setItem(
           BROWSER_OPEN_URL_REQUEST_KEY,
@@ -1535,12 +1610,29 @@ export function BrowserPreviewPanel({
         swallow(e);
       }
     }
-    window.location.hash = BROWSER_WORKSPACE_ROUTE;
-  }, [devicePreview, pageInfo.title, pageInfo.url, sessionId, urlInput]);
+    navigate(BROWSER_WORKSPACE_ROUTE);
+  }, [
+    devicePreview,
+    pageInfo.title,
+    pageInfo.url,
+    sessionId,
+    threadId,
+    workspacePath,
+    navigate,
+    location.pathname,
+    location.search,
+  ]);
 
-  const runtimeLabel = session?.runtime || session?.mode || "mock";
-  const sessionHealthy = (sessionHealth?.healthy ?? session?.healthy) !== false;
-  const sessionIssues = sessionHealth?.issues ?? [];
+  const runtimeLabel = session?.runtime || session?.mode || "未连接";
+  const sessionHealthy =
+    !/mock|未连接/.test(runtimeLabel) &&
+    (sessionHealth?.healthy ?? session?.healthy) === true;
+  const sessionIssues = (sessionHealth?.issues ?? []).filter(
+    (issue) => issue !== "no_actions_recorded",
+  );
+  const sessionIdle =
+    sessionHealth?.issues?.includes("no_actions_recorded") === true &&
+    sessionIssues.length === 0;
   const visibleActions = actionLog.slice(-20);
   const visibleActionStartIndex = actionLog.length - visibleActions.length;
   const actionFailureCount = actionLog.filter(
@@ -1570,6 +1662,10 @@ export function BrowserPreviewPanel({
   const canLivePreview = Boolean(livePreviewUrl);
   const effectiveSurfaceMode =
     surfaceMode === "live" && canLivePreview ? "live" : "screenshot";
+  const hasOpenPage = Boolean(
+    (pageInfo.url || session?.current_url || "").trim() &&
+    (pageInfo.url || session?.current_url) !== "about:blank",
+  );
   const electronLiveSurface =
     typeof window !== "undefined" && Boolean(window.octopus?.isElectron);
 
@@ -1619,7 +1715,7 @@ export function BrowserPreviewPanel({
     return (
       <div
         className={cn(
-          "relative flex h-full flex-col items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_top,color-mix(in_oklch,var(--primary)_10%,transparent),transparent_38%),linear-gradient(180deg,var(--background),color-mix(in_oklch,var(--muted)_42%,transparent))] p-6 text-center",
+          "relative flex h-full flex-col items-center justify-center overflow-hidden bg-background p-6 text-center",
           className,
         )}
       >
@@ -1674,7 +1770,8 @@ export function BrowserPreviewPanel({
         onBack={() => void handleBack()}
         onForward={() => void handleForward()}
         onReload={() => void handleReload()}
-        onOpenFullBrowser={openInFullBrowser}
+        onOpenFullBrowser={onReturnToTask ?? openInFullBrowser}
+        returnToTask={Boolean(onReturnToTask)}
         onEndSession={() => void handleClose()}
         canLivePreview={canLivePreview}
         surfaceMode={effectiveSurfaceMode}
@@ -1688,10 +1785,11 @@ export function BrowserPreviewPanel({
         autoRefresh={autoRefresh}
         onAutoRefreshChange={setAutoRefresh}
         sessionHealthy={sessionHealthy}
+        sessionIdle={sessionIdle}
         runtimeLabel={runtimeLabel}
       />
 
-      {!sessionHealthy && sessionIssues.length > 0 && (
+      {!error && !sessionHealthy && sessionIssues.length > 0 && (
         <div className="flex h-8 shrink-0 items-center gap-2 border-b border-destructive/20 bg-destructive/8 px-2 text-xs text-destructive">
           <span className="relative flex size-4 shrink-0 items-center justify-center rounded-full bg-destructive/10">
             <span className="size-1.5 rounded-full bg-destructive" />
@@ -1723,10 +1821,44 @@ export function BrowserPreviewPanel({
           </button>
         </div>
       )}
+      {!error && session.launch_error && (
+        <p role="alert" className="border-b px-3 py-2 text-xs text-destructive">
+          浏览器启动失败，请检查浏览器安装或重试连接。
+        </p>
+      )}
 
+      {hasOpenPage &&
+        !error &&
+        (sessionHealthy || sessionIssues.length === 0) && (
+          <div className="flex h-8 shrink-0 items-center justify-between border-b border-border-default px-3 text-xs text-muted-foreground">
+            <span role="status">
+              {loading || viewportChanging
+                ? "正在加载…"
+                : error || (!sessionHealthy && sessionIssues.length > 0)
+                  ? "连接需要检查"
+                  : !hasOpenPage
+                    ? "尚未打开网页"
+                    : effectiveSurfaceMode === "live"
+                      ? "实时网页"
+                      : autoRefresh
+                        ? "截图自动更新中"
+                        : "操作画面 · 点击与网页交互"}
+            </span>
+            {hasOpenPage && effectiveSurfaceMode === "screenshot" && (
+              <button
+                type="button"
+                aria-pressed={fitPreview}
+                onClick={() => setFitPreview((value) => !value)}
+                className="rounded px-2 py-1 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {fitPreview ? "完整画面" : "适应宽度"}
+              </button>
+            )}
+          </div>
+        )}
       {/* Screenshot area */}
-      <div className="relative flex-1 overflow-auto bg-[radial-gradient(circle_at_top,color-mix(in_oklch,var(--primary)_8%,transparent),transparent_34%),linear-gradient(180deg,color-mix(in_oklch,var(--muted)_34%,transparent),var(--background))] [&::-webkit-scrollbar]:size-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/80 [&::-webkit-scrollbar-track]:bg-transparent">
-        {screenshot && effectiveSurfaceMode === "screenshot" && (
+      <div className="relative min-h-0 flex-1 overflow-auto bg-background [container-type:size] [&::-webkit-scrollbar]:size-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/80 [&::-webkit-scrollbar-track]:bg-transparent">
+        {screenshot && hasOpenPage && effectiveSurfaceMode === "screenshot" && (
           <div
             className={cn(
               AUTOMATION_CAPSULE_OVERLAY_CLASS_NAME,
@@ -1780,6 +1912,9 @@ export function BrowserPreviewPanel({
                 />
                 <button
                   type="button"
+                  disabled={
+                    !annotationText.trim() && annotationPoints.length === 0
+                  }
                   onClick={() => void handleSendAnnotation()}
                   className="flex h-7 shrink-0 items-center gap-1 rounded-md bg-primary px-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
                 >
@@ -1801,17 +1936,15 @@ export function BrowserPreviewPanel({
             </div>
           )}
         {effectiveSurfaceMode === "live" ? (
-          <div className="flex min-h-full items-center justify-center p-3">
+          <div className="flex min-h-full items-start justify-center">
             <div
               className={cn(
-                "relative overflow-hidden bg-background ring-1 ring-black/5 shadow-[0_18px_48px_rgba(15,23,42,0.18)]",
+                "relative overflow-hidden bg-background",
                 devicePreview === "desktop"
-                  ? "w-full rounded-lg border border-border-default"
+                  ? "w-full"
                   : "border-[5px] border-foreground/80",
-                deviceFrameKind === "tablet" &&
-                  "max-h-full rounded-4xl shadow-[0_22px_64px_rgba(15,23,42,0.24)]",
-                deviceFrameKind === "phone" &&
-                  "max-h-full rounded-4xl shadow-[0_24px_70px_rgba(15,23,42,0.28)]",
+                deviceFrameKind === "tablet" && "max-h-full rounded-4xl",
+                deviceFrameKind === "phone" && "max-h-full rounded-4xl",
               )}
               style={{
                 aspectRatio:
@@ -1861,18 +1994,16 @@ export function BrowserPreviewPanel({
               )}
             </div>
           </div>
-        ) : screenshot ? (
-          <div className="flex min-h-full items-center justify-center p-3">
+        ) : screenshot && hasOpenPage ? (
+          <div className="flex min-h-full items-start justify-center">
             <div
               className={cn(
-                "relative overflow-hidden bg-background ring-1 ring-black/5 shadow-[0_18px_48px_rgba(15,23,42,0.18)]",
+                "relative overflow-hidden bg-background",
                 devicePreview === "desktop"
-                  ? "w-full rounded-lg border border-border-default"
+                  ? "w-full"
                   : "border-[5px] border-foreground/80",
-                deviceFrameKind === "tablet" &&
-                  "max-h-full rounded-4xl shadow-[0_22px_64px_rgba(15,23,42,0.24)]",
-                deviceFrameKind === "phone" &&
-                  "max-h-full rounded-4xl shadow-[0_24px_70px_rgba(15,23,42,0.28)]",
+                deviceFrameKind === "tablet" && "max-h-full rounded-4xl",
+                deviceFrameKind === "phone" && "max-h-full rounded-4xl",
               )}
               style={{
                 aspectRatio:
@@ -1881,7 +2012,9 @@ export function BrowserPreviewPanel({
                     : `${activeDevicePreview.width} / ${activeDevicePreview.height}`,
                 maxWidth:
                   devicePreview === "desktop"
-                    ? undefined
+                    ? fitPreview
+                      ? `min(100%, ${(100 * screenshotSize.width) / Math.max(1, screenshotSize.height)}cqh)`
+                      : undefined
                     : deviceFrameKind === "tablet"
                       ? 420
                       : 240,
@@ -1950,7 +2083,7 @@ export function BrowserPreviewPanel({
           <div className="flex h-full flex-col items-center justify-center p-5">
             {/* 本地服务快速入口 */}
             {detectedServices.length > 0 ? (
-              <div className="w-full max-w-sm space-y-3 rounded-lg border border-border-default bg-background/82 p-3 shadow-[var(--shadow-xs)] backdrop-blur">
+              <div className="w-full max-w-sm space-y-3 p-3">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -1991,7 +2124,7 @@ export function BrowserPreviewPanel({
                       <button
                         key={svc.port}
                         onClick={() => handleQuickNavigate(svc.url)}
-                        className="group flex w-full items-center gap-3 rounded-lg border border-border-default bg-muted/25 px-3 py-2 text-left shadow-[var(--shadow-xs)] transition-colors hover:border-primary/25 hover:bg-primary/5"
+                        className="group flex w-full items-center gap-3 border-b border-border-subtle px-3 py-2 text-left transition-colors hover:bg-muted/40"
                       >
                         <div
                           className={cn(
@@ -2035,17 +2168,20 @@ export function BrowserPreviewPanel({
                 )}
               </div>
             ) : (
-              <div className="max-w-sm rounded-lg border border-border-default bg-background/82 p-5 text-center shadow-[var(--shadow-xs)] backdrop-blur">
-                <div className="mx-auto grid size-10 place-items-center rounded-lg bg-muted/60">
-                  <ImageIcon className="size-5 text-muted-foreground/45" />
+              <div className="max-w-sm p-5 text-center">
+                <div className="mx-auto grid size-10 place-items-center">
+                  <GlobeIcon className="size-5 text-muted-foreground" />
                 </div>
-                <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                <h3 className="mt-3 text-sm font-medium text-foreground">
+                  {hasOpenPage ? "等待网页画面" : "开始浏览"}
+                </h3>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                   {t.browser.navigateHint}
                 </p>
                 <button
                   onClick={handleRescanPorts}
                   disabled={scanningPorts}
-                  className="mx-auto mt-3 flex h-8 items-center gap-1.5 rounded-md border border-border-default px-3 text-xs text-muted-foreground shadow-[var(--shadow-xs)] transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
+                  className="mx-auto mt-3 flex h-8 items-center gap-1.5 rounded-md px-3 text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
                 >
                   {scanningPorts ? (
                     <Loader2Icon className="size-3 animate-spin" />
@@ -2062,11 +2198,6 @@ export function BrowserPreviewPanel({
           <div className="absolute inset-0 flex items-center justify-center bg-background/60">
             <Loader2Icon className="text-primary size-6 animate-spin" />
           </div>
-        )}
-        {screenshotSize.width > 0 && (
-          <span className="text-muted-foreground/50 absolute right-1 bottom-1 text-xs">
-            {screenshotSize.width}x{screenshotSize.height} · {pointerMode}
-          </span>
         )}
       </div>
 
@@ -2089,7 +2220,7 @@ export function BrowserPreviewPanel({
               {t.browser.actionLog}
             </span>
           </span>
-          <span className="text-muted-foreground/60 shrink-0 text-xs">
+          <span className="text-muted-foreground shrink-0 text-xs">
             {t.browser.actions(actionLog.length)}
             {actionFailureCount > 0
               ? ` · ${bp.failureCount(actionFailureCount)}`
@@ -2143,6 +2274,11 @@ export function BrowserPreviewPanel({
         )}
         {actionLogExpanded && (
           <div className="max-h-52 overflow-auto px-2 pb-2 [&::-webkit-scrollbar]:size-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/80 [&::-webkit-scrollbar-track]:bg-transparent">
+            {screenshotSize.width > 0 && (
+              <p className="py-2 text-xs text-muted-foreground">
+                {screenshotSize.width} × {screenshotSize.height} · {pointerMode}
+              </p>
+            )}
             {actionLog.length === 0 ? (
               <p className="text-muted-foreground/50 py-2 text-center text-xs">
                 {t.browser.noActions}

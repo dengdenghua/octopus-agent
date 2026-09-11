@@ -19,6 +19,8 @@ import asyncio
 import logging
 from typing import Any
 
+from runtime.execution.model_services import native_model_services
+
 _LOG = logging.getLogger("octopus.team.twin")
 
 # Keep twin lines short — this is a chat room, not an essay. A small token
@@ -38,11 +40,10 @@ def make_twin_responder(stack: Any) -> Any:
     the ReAct loop and account fallback use); we capture it once. The returned
     coroutine resolves the bound twin agent in ``team.members`` and delegates
     to :func:`_generate_twin_line`."""
-    planner = getattr(stack, "planner", None) if stack is not None else None
-    router = getattr(planner, "router", None)
+    router, configured_model = native_model_services(stack)
     if router is None:
         return None
-    default_model = getattr(planner, "planner_model", None) or _DEFAULT_MODEL
+    default_model = configured_model or _DEFAULT_MODEL
 
     async def _twin_responder(
         team: Any, participant: Any, transcript: list[dict[str, Any]]

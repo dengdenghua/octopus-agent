@@ -1,18 +1,17 @@
 import { cn } from "@/lib/utils";
 import { useWorkbenchSurface } from "@/core/workbench/workbench-surface";
-
-/* Implementation note. */
-const ELECTRON_TITLE_BAR_HEIGHT = 36;
-const inElectron = (): boolean =>
-  typeof window !== "undefined" && !!window.octopus?.isElectron;
+import { useElectronTitleBar } from "@/components/electron-title-bar";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 export function WorkspaceContainer({
   className,
   children,
+  mobileNavigation = false,
   ...props
-}: React.ComponentProps<"div">) {
+}: React.ComponentProps<"div"> & { mobileNavigation?: boolean }) {
   const surface = useWorkbenchSurface();
   const embeddedInBrowser = surface === "browser";
+  const { titleBarHeight, contentTopInset } = useElectronTitleBar();
   // Implementation note.
   // Implementation note.
   return (
@@ -23,18 +22,17 @@ export function WorkspaceContainer({
         className,
       )}
       style={
-        inElectron() && !embeddedInBrowser
-          ? { paddingTop: ELECTRON_TITLE_BAR_HEIGHT }
+        titleBarHeight > 0 && !embeddedInBrowser
+          ? { height: `calc(100dvh - ${contentTopInset})` }
           : undefined
       }
       {...props}
     >
-      {inElectron() && !embeddedInBrowser && (
-        <div
-          aria-hidden
-          className="pointer-events-none fixed left-0 right-0 top-0 z-50 h-9"
-          style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
-        />
+      {mobileNavigation && !embeddedInBrowser && (
+        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border/60 md:hidden">
+          <SidebarTrigger className="size-10" />
+          <span className="text-sm font-medium">Echo</span>
+        </div>
       )}
       {children}
     </div>

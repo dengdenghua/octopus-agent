@@ -111,19 +111,22 @@ export function buildDesignCanvasAgentContext({
 
 export function designWorkspaceRoute({
   threadId,
+  newTask = false,
   projectId,
   projectName,
   creativeProjectId,
   creationSpace,
 }: {
   threadId?: string | null;
+  newTask?: boolean;
   projectId?: string | null;
   projectName?: string | null;
   creativeProjectId?: string | null;
   creationSpace?: string | null;
 }): string {
   const query = new URLSearchParams();
-  if (threadId && threadId !== "new") query.set("thread", threadId);
+  if (newTask) query.set("new_task", "new");
+  else if (threadId && threadId !== "new") query.set("thread", threadId);
   if (projectId) query.set("project", projectId);
   if (projectName) query.set("name", projectName);
   if (creativeProjectId) query.set("creative_project", creativeProjectId);

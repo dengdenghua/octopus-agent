@@ -74,7 +74,7 @@ function PublicShareError({
         </div>
         <h1 className="mt-4 text-lg font-semibold">无法打开分享内容</h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          {message || "链接可能已失效、被取消或输入不完整。"}
+          {"链接可能已失效、被取消或输入不完整。"}
         </p>
         <button
           type="button"
@@ -84,6 +84,18 @@ function PublicShareError({
           <RefreshCwIcon className="size-4" />
           重新加载
         </button>
+        <a
+          href="#/workspace/realtime/new"
+          className="ml-3 inline-flex h-10 items-center rounded-lg px-3 text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          返回工作区
+        </a>
+        {message && (
+          <details className="mt-4 text-left text-xs text-muted-foreground">
+            <summary className="cursor-pointer">错误详情</summary>
+            <p className="mt-2 break-words">{message}</p>
+          </details>
+        )}
       </section>
     </main>
   );

@@ -1,0 +1,12 @@
+Browser tab: 4, Title: "Echo 公开分享", URL: "http://localhost:3310/#/share/audit-invalid-token".
+0 AXWebArea Echo 公开分享, URL: localhost:3310/#/share/audit-invalid-token
+	1 container
+		2 container root
+			40 container
+				41 heading 无法打开分享内容, Value: 1
+					42 text 无法打开分享内容
+				43 text shared task not found, expired, or revoked
+				44 button 重新加载
+			39 container Notifications alt+T
+
+The focused UI element is 0 AXWebArea Echo 公开分享, URL: localhost:3310/#/share/audit-invalid-token

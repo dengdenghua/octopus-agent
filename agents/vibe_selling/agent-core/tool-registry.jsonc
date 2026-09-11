@@ -1,6 +1,3 @@
-// arms reference factories in runtime/execution/arms/presets.py.
-// extra_affinity keywords boost agent matching by topic.
-
 {
   "arms": [
     "web_read",
@@ -15,5 +12,20 @@
     "social",
     "campaign",
     "product"
+  ],
+  "private_skills": [
+    "creative-visual-direction",
+    "creative-microdrama-writer",
+    "creative-storyboard-assets",
+    "creative-video-editor",
+    "creative-comfyui-workflow",
+    "seedance-video-generate",
+    "seedream-image-generate",
+    "narrative-authoring",
+    "continuity",
+    "canon-review",
+    "general-writer",
+    "external-4651ae9dff841f6746bbc2a0",
+    "external-8ae583fa1618bdd30337ea4d"
   ]
 }

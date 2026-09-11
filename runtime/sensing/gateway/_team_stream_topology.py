@@ -130,7 +130,17 @@ async def _drive_team_topology(
         except Exception:  # noqa: BLE001
             _logger.debug("agent resolution failed, using default", exc_info=True)
             agent = None
-        await runtime._drive_react(turn, log, emitter, intent, provider, agent)
+        engine = getattr(getattr(turn, "execution", None), "engine", "octopus")
+        if engine == "opencode":
+            from runtime.sensing.gateway.realtime_opencode_backend import drive_opencode
+
+            await drive_opencode(runtime, turn, log, emitter, intent, agent, provider, text=text)
+        elif engine == "codex":
+            await runtime._drive_codex_app_server(
+                turn, log, emitter, intent, agent, provider, text=text
+            )
+        else:
+            await runtime._drive_react(turn, log, emitter, intent, provider, agent)
 
     thread_id = turn.thread_id
     registry = load_registry()

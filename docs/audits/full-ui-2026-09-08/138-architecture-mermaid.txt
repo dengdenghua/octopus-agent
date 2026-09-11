@@ -1,0 +1,149 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/architecture".
+0 AXWebArea Echo, URL: localhost:3310/#/workspace/architecture
+	1 container
+		2 container root
+			3 container
+				4 button 返回桌面
+				5 button 切换全屏
+				6 tab group Workspace surface
+					7 tab (selected, settable, boolean) Description: Echo, Value: 1
+					8 tab (selectable, settable, boolean) Description: AI 浏览器, Value: 0
+				9 button (expanded) Description: 收起侧栏 (Ctrl/⌘+B), Secondary Actions: Collapse
+				10 button 新建任务
+				11 content list
+					12 link Description: HUB, Value: localhost:3310/#/workspace/agents?surface=chat
+					13 link Description: 助手, Value: localhost:3310/#/workspace/realtime/octopus-assistant?agent=octopus
+					14 link Description: 订阅, Value: localhost:3310/#/workspace/intelligence?surface=chat
+					15 link Description: 项目管理, Value: localhost:3310/#/workspace/projects
+					16 link Description: 设计画布, Value: localhost:3310/#/workspace/design
+					17 link Description: 叙事工坊, Value: localhost:3310/#/workspace/narrative
+					18 link Description: 自进化, Value: localhost:3310/#/workspace/evolution?surface=chat
+				19 content list
+					20 link Description: 发现社区, Value: localhost:3310/#/workspace/community
+				21 content list
+					22 button (collapsed) Description: 展开本地数据库, Secondary Actions: Expand
+				23 content list
+					24 button 编辑侧栏
+				25 container
+					26 button (expanded) Description: 收起项目, Secondary Actions: Collapse
+					27 button 选择项目空间
+				28 container
+					29 button (expanded) Description: 收起对话, Secondary Actions: Collapse
+					30 button Description: 对话 · 新建任务, Help: 新建任务
+				31 pop up button (collapsed) Description: Raven, ID: radix-_r_1a_, Secondary Actions: Expand, Help: Raven · 现实职业是企业流程自动化专家，通过视觉理解操作 ERP、CRM、表格、浏览器和遗留系统；在 ECHO 世界中是远程接管手 Night Crow。两种身份共享屏幕观察、设备控制与精细操作能力。
+					32 text Raven
+					33 text Lv.
+					34 text 1
+					35 text ⭐
+				36 button 设置
+				37 container
+					38 heading 架构探索, Value: 1
+						39 text 架构探索
+					40 text docs/architecture/ 下的手写设计文档 · Mermaid 代码块自动渲染
+					41 container
+						42 text 入口
+						43 content list
+							44 button README · 入口, Help: docs/architecture/README.md
+							45 button 核心路径 5+3+5+6, Help: docs/architecture/core-path.md
+						46 text 高清图
+						47 content list
+							48 button 高清架构图 (ASCII), Help: docs/architecture/high-res-map.md
+							49 button 高清架构图 (Mermaid), Help: docs/architecture/high-res-map.mermaid.md
+						50 text 专题
+						51 content list
+							52 button Chat 模式对照, Help: docs/architecture/chat-modes.md
+							53 button ReAct 自进化闭环, Help: docs/architecture/react-self-evolution.md
+							54 button 器官分层(维护), Help: docs/architecture/organ-tiering.md
+							55 button 模块地图, Help: docs/architecture/module-map.md
+						56 text 核心器官
+						57 content list
+							58 button 🧠 Cerebrum · 中枢脑, Help: docs/architecture/organs/cerebrum.md
+							59 button 🧬 Ganglia · 神经节, Help: docs/architecture/organs/ganglia.md
+							60 button 🐦 Beak · 工具执行, Help: docs/architecture/organs/beak.md
+							61 button ❤️ Hearts · 调度 facade, Help: docs/architecture/organs/hearts.md
+							62 button 🎨 Chromatophores · arm 广播, Help: docs/architecture/organs/chromatophores.md
+					63 heading Octopus 架构图（Mermaid 版）, Value: 1
+						64 text Octopus 架构图（Mermaid 版）
+					65 container
+						66 text high-res-map.md  的 ASCII 图对应的 Mermaid 版。GitHub / GitLab / 大多数 Markdown 渲染器原生支持，能直接渲染成可交互的 SVG。
+					67 container
+						68 text 终端阅读者用
+						69 link Description: ASCII 版, Value: localhost:3310/high-res-map.md
+						70 text ；浏览器阅读者读这份。
+					71 heading 图 1 · 一次请求的完整旅程, Value: 2
+						72 text 图 1 · 一次请求的完整旅程
+					73 text MERMAID
+					74 button Copy Mermaid source
+					75 flowchart-v2 mermaid-chat-_r_t8_
+						76 text 命中
+						77 text 未命中
+						78 text 读
+						79 text 读
+						80 text 选
+					81 heading 图 2 · 治理侧事件流（自进化闭环）, Value: 2
+						82 text 图 2 · 治理侧事件流（自进化闭环）
+					83 text MERMAID
+					84 button Copy Mermaid source
+					85 flowchart-v2 mermaid-chat-_r_t9_
+						86 container
+							87 text explore/exploit  闭环
+					88 heading 图 3 · 内部事件总线, Value: 2
+						89 text 图 3 · 内部事件总线
+					90 text MERMAID
+					91 button Copy Mermaid source
+					92 flowchart-v2 mermaid-chat-_r_ta_
+						93 container
+							94 text FileChanged GitCommitDetected
+						95 container
+							96 text VariantRetired SignalBroadcast
+						97 text SkillRegistered
+						98 text dispatch
+						99 container
+							100 text ⚡  Nerves.TypedEventBus
+					101 heading 图 4 · Hearts 去诗化真相, Value: 2
+						102 text 图 4 · Hearts 去诗化真相
+					103 text MERMAID
+					104 button Copy Mermaid source
+					105 flowchart-v2 mermaid-chat-_r_tb_
+						106 container
+							107 text ❤️  Hearts  聚合  facade
+					108 heading 图 5 · 前端入口到后端全链路, Value: 2
+						109 text 图 5 · 前端入口到后端全链路
+					110 text MERMAID
+					111 button Copy Mermaid source
+					112 flowchart-v2 mermaid-chat-_r_tc_
+						113 text 命中
+						114 text 未命中
+						115 text 闭环
+					116 heading 图 6 · 数据持久化矩阵（补充）, Value: 2
+						117 text 图 6 · 数据持久化矩阵（补充）
+					118 text MERMAID
+					119 button Copy Mermaid source
+					120 flowchart-v2 mermaid-chat-_r_td_
+						121 text ./data/
+						122 text 用
+					123 heading 如何用这份文件, Value: 2
+						124 text 如何用这份文件
+					125 container
+						126 text 浏览器 ：GitHub / GitLab / Obsidian / VSCode Preview 都会自动渲染  mermaid  代码块为 SVG。
+点击某个节点未来可加跳转（Mermaid 支持  click  指令，若想加点击跳源码行号）。
+					127 container
+						128 text PPT / 演示 ：导出每个 Mermaid 为 PNG 再贴；或用  mermaid-cli  批量：
+					129 container
+						130 text BASH
+						131 button 横向滚动
+						132 button
+						133 container
+							134 text mmdc  -i  high-res-map.mermaid.md  -o  diagrams/  --outputFormat  svg
+					135 container
+						136 text 迭代 ：想加新器官或改连线？ 只改这份文件 ，ASCII 版（ high-res-map.md ）作为降级不必每次同步；用户用哪份就用哪份。
+					137 heading 对齐说明, Value: 2
+						138 text 对齐说明
+					139 container
+						140 text 本文件的 6 张图  严格对齐
+						141 link Description: high-res-map.md, Value: localhost:3310/high-res-map.md
+						142 text  的 ASCII 版（标题、节点、连线一致）；额外新增第 6 张数据持久化矩阵（ASCII 版是纯表格，Mermaid 版画成图更直观）。
+					143 text 若发现两版不一致 → 以 ASCII 版为准（是主 source），修 Mermaid 版来追齐。
+			144 container Notifications alt+T
+
+The focused UI element is 49 button 高清架构图 (Mermaid), Help: docs/architecture/high-res-map.mermaid.md

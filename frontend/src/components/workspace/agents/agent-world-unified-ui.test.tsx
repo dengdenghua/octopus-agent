@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { renderWithProviders } from "@/test/harness";
 import type * as AgentsApiModule from "@/core/agents/api";
+import * as enabledModules from "@/core/modules/enabled-modules";
 
 const listLocalAgentsMock = vi.hoisted(() => vi.fn());
 const listRegistryRolesMock = vi.hoisted(() => vi.fn());
@@ -250,7 +251,7 @@ describe("HUB market shell", () => {
     expect(screen.queryByRole("heading", { name: "常用应用" })).toBeNull();
     expect(
       screen.getByRole("textbox", {
-        name: "搜索角色、应用或 Skills…",
+        name: "搜索角色…",
       }),
     ).toBeVisible();
     expect(screen.queryByText(/统一资产/)).toBeNull();
@@ -311,7 +312,7 @@ describe("HUB market shell", () => {
     expect((await screen.findAllByText("通用助手")).length).toBeGreaterThan(0);
     expect(screen.queryByText("法务合规分身")).toBeNull();
     expect(screen.getByRole("heading", { name: "精选场景" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "远端角色" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "角色目录" })).toBeVisible();
     expect(screen.getByTestId("workbuddy-talent-market")).not.toHaveAttribute(
       "data-kind",
     );
@@ -351,8 +352,8 @@ describe("HUB market shell", () => {
       applicationView: "installed",
     });
     expect(resolveHubMarketRoute("?tab=plugins&view=remote")).toEqual({
-      section: "applications",
-      applicationView: "remote",
+      section: "agents",
+      applicationView: "all",
     });
     expect(resolveHubMarketRoute("?tab=skills")).toEqual({
       section: "skills",
@@ -383,11 +384,11 @@ describe("HUB market shell", () => {
     expect(
       screen.getByRole("heading", { name: "应用中心" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "应用" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "本机应用" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "推荐插件" })).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: "从这些能力开始" }),
-    ).toBeVisible();
+      screen.queryByRole("heading", { name: "从这些能力开始" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "推荐" })).toHaveAttribute(
       "aria-selected",
       "true",
@@ -437,10 +438,8 @@ describe("HUB market shell", () => {
       },
     );
 
-    expect(screen.getByRole("tab", { name: "远程 Agent" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    expect(screen.queryByRole("tab", { name: "外部智能体" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeVisible();
     expect(screen.getByTestId("a2a-agents-panel")).toBeVisible();
   });
 
@@ -480,7 +479,7 @@ describe("HUB market shell", () => {
 
     await user.click(screen.getByRole("tab", { name: "角色" }));
     expect(screen.queryByRole("group", { name: "成员范围" })).toBeNull();
-    expect(screen.getByRole("heading", { name: "远端角色" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "角色目录" })).toBeVisible();
   });
 
   it("shows repair and rollback controls for a broken workbench package", async () => {
@@ -512,15 +511,58 @@ describe("HUB market shell", () => {
     );
 
     expect(await screen.findByText("安装损坏 · 点击修复")).toBeVisible();
-    await user.click(
-      screen.getByRole("button", { name: /设计画布添加到侧栏/ }),
-    );
+    await user.click(screen.getByRole("button", { name: "管理设计画布" }));
     expect(
       screen.getByRole("menuitem", { name: "重新安装修复" }),
     ).toBeVisible();
     expect(
       screen.getByRole("menuitem", { name: "回退上个版本" }),
     ).toBeVisible();
+  });
+
+  it("opens installed app management without changing it, then reinstalls explicitly", async () => {
+    const user = userEvent.setup();
+    const pinSpy = vi.spyOn(enabledModules, "setModuleEnabled");
+    agentWorldApiMocks.fetchCloudInstalled.mockResolvedValue({
+      skills: [],
+      plugins: ["design"],
+      plugin_states: {
+        design: {
+          installed: true,
+          enabled: true,
+          lifecycle_state: "installed",
+        },
+      },
+    });
+    renderWithProviders(
+      <SidebarProvider>
+        <AgentWorldUnified />
+      </SidebarProvider>,
+      {
+        initialRoute: "/workspace/agents?surface=chat&tab=plugins",
+        locale: "zh-CN",
+      },
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "管理设计画布" }),
+    );
+    expect(
+      screen.getByRole("menuitem", { name: "重新安装", exact: true }),
+    ).toBeVisible();
+    expect(agentWorldApiMocks.installCloudPlugin).not.toHaveBeenCalled();
+    expect(agentWorldApiMocks.uninstallCloudPlugin).not.toHaveBeenCalled();
+    await user.click(
+      screen.getByRole("menuitem", { name: "重新安装", exact: true }),
+    );
+    await waitFor(() =>
+      expect(agentWorldApiMocks.installCloudPlugin).toHaveBeenCalledWith(
+        "workbench_design",
+        expect.anything(),
+      ),
+    );
+    expect(agentWorldApiMocks.uninstallCloudPlugin).not.toHaveBeenCalled();
+    expect(pinSpy).not.toHaveBeenCalled();
+    pinSpy.mockRestore();
   });
 
   it("offers to restore retained work when reinstalling", async () => {

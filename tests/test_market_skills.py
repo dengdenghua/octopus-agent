@@ -256,6 +256,35 @@ class TestRegistration:
 
 
 class TestPromptCatalogDistribution:
+    def test_cloud_installed_skill_survives_registry_rebuild(self, tmp_path, monkeypatch):
+        from types import SimpleNamespace
+
+        from runtime.execution.tool_engine import role_instructions
+        from runtime.platform.process import paths
+
+        data = tmp_path / "data"
+        monkeypatch.setattr(paths, "app_paths", lambda: SimpleNamespace(data_dir=data))
+        monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "desktop")
+        self._write_skill(data / "skills", "cloud-extra", "installed instructions")
+        bundled = tmp_path / "bundled"
+        self._write_skill(bundled, "core")
+        self._write_skill(data / "skills", "core", "must not replace core")
+        for _ in range(2):
+            registry = SkillRegistry()
+            assert (
+                register_prompt_market_skills(
+                    registry,
+                    resource_dir=tmp_path / "resources",
+                    bundled_dir=bundled,
+                    refresh_deadline_s=0,
+                )
+                == 2
+            )
+            assert registry.has("cloud-extra")
+        assert data / "skills" in role_instructions._prompt_skill_roots()
+        monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "shared")
+        assert data / "skills" not in role_instructions._prompt_skill_roots()
+
     @staticmethod
     def _write_skill(root: Path, name: str, body: str = "body") -> None:
         skill = root / name
@@ -559,6 +588,47 @@ class TestPromptCatalogDistribution:
         assert second_count == 2
         assert second_registry.get("registry-only").handler()["instructions"] == "downloaded body"
 
+    @pytest.mark.parametrize("installed", [True, False])
+    def test_disabled_refresh_never_bootstraps_missing_bundle(
+        self, tmp_path, monkeypatch, installed
+    ):
+        resources = tmp_path / "resources"
+        external = resources / "skills" / "public"
+        resources.mkdir()
+        (resources / "skills.lock.json").write_text(
+            '{"skills": ["registry-only"]}', encoding="utf-8"
+        )
+        if installed:
+            self._write_skill(external, "installed", "local instructions")
+        calls = []
+
+        def forbidden(*args, **kwargs):
+            calls.append(True)
+            raise AssertionError("disabled startup refresh attempted network bootstrap")
+
+        monkeypatch.setattr("octopus_runtime.bootstrap_skills", forbidden)
+        registry = SkillRegistry()
+        if installed:
+            assert (
+                register_prompt_market_skills(
+                    registry,
+                    resource_dir=resources,
+                    bundled_dir=tmp_path / "missing",
+                    refresh_deadline_s=0,
+                )
+                == 1
+            )
+            assert registry.get("installed").handler()["instructions"] == "local instructions"
+        else:
+            with pytest.raises(RuntimeError, match="installation is incomplete"):
+                register_prompt_market_skills(
+                    registry,
+                    resource_dir=resources,
+                    bundled_dir=tmp_path / "missing",
+                    refresh_deadline_s=0,
+                )
+        assert not calls
+
     def test_without_bundled_catalog_preserves_synchronous_bootstrap(
         self,
         tmp_path: Path,
@@ -661,7 +731,7 @@ class TestMainSkillRegistration:
         external = tmp_path / "skills" / "public"
         TestPromptCatalogDistribution._write_skill(
             external,
-            "frontend-design",
+            "frontend-ui-engineering",
             "MUTABLE REMOTE OVERRIDE",
         )
         monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "commercial")
@@ -673,10 +743,10 @@ class TestMainSkillRegistration:
 
         register_agent_doc_skills(registry)
 
-        assert registry.has("frontend-design")
+        assert registry.has("frontend-ui-engineering")
         assert (
             "MUTABLE REMOTE OVERRIDE"
-            not in registry.get("frontend-design").handler()["instructions"]
+            not in registry.get("frontend-ui-engineering").handler()["instructions"]
         )
 
 

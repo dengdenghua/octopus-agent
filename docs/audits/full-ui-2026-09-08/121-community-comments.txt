@@ -1,0 +1,23 @@
+Browser tab: 4, Title: "发现社区 - Echo", URL: "http://localhost:3310/#/workspace/community".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 103-104, 157-158
++								171 text 封面暂时无法加载 小程序
++								172 text 封面暂时无法加载 学习
++							173 button 返回
++							174 text 帖子详情
++							175 container
++								176 image 让 AI 每天自动整理相册，生成回忆视频
++								177 text 小程序
++								178 heading 让 AI 每天自动整理相册，生成回忆视频, Value: 2
++									179 text 让 AI 每天自动整理相册，生成回忆视频
++								180 text 输入时间范围，自动挑选照片、配乐并剪辑成一段回忆短片。 影 影像助手 1 小时前
++								181 button 点赞
++								182 button 收藏
++								183 text 4
++								184 button Description: 免费复刻 让 AI 每天自动整理相册，生成回忆视频, Help: 免费加入工作台
++								185 heading 评论 · 4, Value: 3
++									186 text 评论 ·  4
++								187 text 哲 阿哲 44 分钟前 有没有更详细的参数配置教程？ 石 石头 1 小时前 请问能接入我自己的数据源吗？ M Momo 2 小时前 正好需要，感谢分享！ 鲸 鲸鱼 3 小时前 效率提升明显，老板都夸了。
++							188 text field (settable)
++							189 button (disabled) 发送评论
+The focused UI element is 73 button Description: 查看评论, Help: 查看 让 AI 每天自动整理相册，生成回忆视频 的 88 条评论

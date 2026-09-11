@@ -15,6 +15,10 @@ const assistantSource = readFileSync(
   join(process.cwd(), "src/components/browser/assistant-panel.tsx"),
   "utf8",
 );
+const surfaceSource = readFileSync(
+  join(process.cwd(), "src/components/browser/assistant-surface.tsx"),
+  "utf8",
+);
 const homeSource = readFileSync(
   join(process.cwd(), "src/components/browser/browser-home.tsx"),
   "utf8",
@@ -27,7 +31,7 @@ const webviewSource = readFileSync(
 describe("AI browser layout hierarchy", () => {
   it("places the web stage before the right-side AI workbench", () => {
     const contentStart = browserSource.indexOf(
-      '<div className="flex min-h-0 flex-1 overflow-hidden">',
+      'className="flex min-h-0 flex-1 overflow-hidden"',
     );
     const contentEnd = browserSource.indexOf(
       "</div>\n        </div>",
@@ -38,7 +42,7 @@ describe("AI browser layout hierarchy", () => {
     expect(content.indexOf("ref={stageRef}")).toBeLessThan(
       content.indexOf("state.copilotOpen"),
     );
-    expect(content).toContain("border-l border-border-subtle");
+    expect(surfaceSource).toContain("border-l border-border-subtle");
     expect(assistantSource).toContain("dragRef.current.startX - ev.clientX");
     expect(assistantSource).toContain('className="absolute left-0');
   });

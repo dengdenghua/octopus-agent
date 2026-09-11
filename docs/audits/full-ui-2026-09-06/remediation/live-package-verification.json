@@ -1,0 +1,50 @@
+{
+  "checkedAt": "2026-09-07T03:16:42.3076730+08:00",
+  "frontend": "http://localhost:3310",
+  "backend": "http://127.0.0.1:8310",
+  "dataDirectory": "D:/echo agent/.codex-run/octopus",
+  "packages": [
+    {
+      "package": "projects",
+      "files": 64,
+      "allMatch": true,
+      "mismatches": []
+    },
+    {
+      "package": "paper-trading",
+      "files": 64,
+      "allMatch": true,
+      "mismatches": []
+    },
+    {
+      "package": "design",
+      "files": 223,
+      "allMatch": true,
+      "mismatches": []
+    },
+    {
+      "package": "narrative_studio",
+      "files": 64,
+      "allMatch": true,
+      "mismatches": []
+    },
+    {
+      "package": "self_evolution",
+      "files": 71,
+      "allMatch": true,
+      "mismatches": []
+    },
+    {
+      "package": "intelligence",
+      "files": 64,
+      "allMatch": true,
+      "mismatches": []
+    },
+    {
+      "package": "community",
+      "files": 64,
+      "allMatch": true,
+      "mismatches": []
+    }
+  ]
+}

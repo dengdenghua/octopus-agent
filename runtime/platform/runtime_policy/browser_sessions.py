@@ -254,6 +254,7 @@ class BrowserSessionCenter:
             ),
             "mode": mode,
             "runtime": mode,
+            "launch_error": session.get("launch_error"),
             "has_page": page is not None,
             "healthy": bool(session.get("is_launched")) and (mode == "mock" or page is not None),
             "current_url": str(session.get("current_url") or ""),

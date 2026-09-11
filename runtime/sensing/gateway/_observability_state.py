@@ -9,6 +9,7 @@ one coherent context instead of a long positional list.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -26,6 +27,10 @@ class ObservabilityContext:
     jwt_secret: str | None = None
     jwt_issuer: str | None = None
     jwt_audience: str | None = None
+    planner_provider: Callable[[], Any] | None = None
+
+    def get_planner(self) -> Any:
+        return self.planner_provider() if self.planner_provider is not None else self.planner
 
 
 __all__ = ["ObservabilityContext"]

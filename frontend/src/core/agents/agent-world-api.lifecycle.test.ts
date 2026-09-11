@@ -10,6 +10,7 @@ vi.mock("@/core/auth/api", () => ({
 }));
 
 import {
+  fetchCloudSkills,
   fetchRuntimePluginStatuses,
   getCapabilityInstallPlan,
   installCapability,
@@ -20,6 +21,22 @@ import {
 
 beforeEach(() => {
   vi.restoreAllMocks();
+});
+
+it("loads every cloud skill page beyond the server page limit", async () => {
+  const fetchSpy = vi
+    .spyOn(window, "fetch")
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ items: [{ name: "a" }, { name: "b" }], total: 3 }),
+      ),
+    )
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify({ items: [{ name: "c" }], total: 3 })),
+    );
+  const result = await fetchCloudSkills({ limit: 2 });
+  expect(result.items.map((item) => item.name)).toEqual(["a", "b", "c"]);
+  expect(fetchSpy.mock.calls[1]?.[0]).toContain("offset=2");
 });
 
 it("surfaces the backend reason when capability uninstall is forbidden", async () => {
@@ -76,12 +93,7 @@ it("binds install and permission activation to the reviewed plan", async () => {
 
   const plan = await getCapabilityInstallPlan("browser");
   await installCapability("browser", plan.plan_id);
-  await setCapabilityEnabled(
-    "browser",
-    true,
-    ["content.read"],
-    plan.plan_id,
-  );
+  await setCapabilityEnabled("browser", true, ["content.read"], plan.plan_id);
 
   expect(fetchSpy.mock.calls[1]).toEqual([
     "/api/capabilities/browser/install",

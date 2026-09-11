@@ -1,0 +1,42 @@
+Browser tab: 4, Title: "HUB - Echo", URL: "http://localhost:3310/#/workspace/agents?surface=chat&tab=plugins&view=featured".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
++						98 text OpenCode Zen 模型适配器
++						99 text 通过 OpenAI 兼容 API 直连 OpenCode Zen；不安装、不检测 OpenCode CLI，流式输出、工具和记忆继续使用 Octopus 原生能力。
++						100 container
++							101 text 来自  WorkBuddy
++						102 button 配置模型, Help: 配置模型并启用
++						103 button Description: 卸载 OpenCode Zen 模型适配器, Help: 卸载能力包
++						104 text Browser
++						105 text Control the in-app browser
++						106 container
++							107 text 来自  OpenAI
++						108 button 已启用, Help: 禁用
++						109 button Description: 卸载 Browser, Help: 卸载能力包
++						110 text Documents
++						111 text Create and edit documents
++						112 container
++							113 text 来自  OpenAI
++						114 button 已启用, Help: 禁用
++						115 button Description: 卸载 Documents, Help: 卸载能力包
++						116 text Spreadsheets
++						117 text Create and edit spreadsheets
++						118 container
++							119 text 来自  OpenAI
++						120 button 已启用, Help: 禁用
++						121 button Description: 卸载 Spreadsheets, Help: 卸载能力包
++						122 text Presentations
++						123 text Create and edit presentations
++						124 container
++							125 text 来自  OpenAI
++						126 button 安装, Help: 按需安装
++						127 text PDF
++						128 text Read, create, and verify PDFs
++						129 container
++							130 text 来自  OpenAI
++						131 button 安装, Help: 按需安装
++						132 text Visualize
++						133 text Create interactive visuals
++						134 container
++							135 text 来自  OpenAI
++						136 button 安装, Help: 按需安装
+The focused UI element is 41 tab (selected, settable, boolean) 应用, Value: 1, ID: radix-_r_kl_-trigger-applications

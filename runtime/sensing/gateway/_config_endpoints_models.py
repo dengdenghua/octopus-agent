@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from fastapi import HTTPException, Request
+
 from runtime.platform.models.custom_model_selection import custom_model_selection_id
 from runtime.sensing.gateway._config_helpers import (
     _builtin_openai_compat_catalog,
@@ -32,6 +34,26 @@ if TYPE_CHECKING:
 
 def _register_models(router: Any, ctx: _ConfigCtx) -> None:
     custom_models_state = ctx.custom_models
+
+    @router.get("/api/opencode/reasoning-variants")
+    async def api_opencode_reasoning_variants(request: Request, model: str) -> dict[str, Any]:
+        from runtime.execution import opencode_backend as backend
+        from runtime.safety.auth.scope import scope_from_request
+
+        scope = scope_from_request(request)
+        try:
+            resolved = backend.resolve_zen_model(model, backend.zen_catalog())
+            command = backend.executable()
+            if not command:
+                raise backend.OpenCodeError("OpenCode 尚未安装")
+            async with backend.managed_server(
+                command, backend.state_directory(scope, "model-capabilities"),
+                backend.model_key(scope, resolved), resolved, False,
+            ) as client:
+                variants = await backend.reasoning_variants(client, resolved)
+            return {"reasoning_efforts": ["off" if v == "none" else v for v in variants]}
+        except backend.OpenCodeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
 
     @router.get("/api/providers", response_model=ProvidersResponse)
     def api_list_providers() -> dict[str, Any]:
@@ -190,7 +212,7 @@ def _register_models(router: Any, ctx: _ConfigCtx) -> None:
                     "supports_thinking": supports_thinking,
                     "supports_vision": supports_vision,
                     "supports_tool_use": supports_tool_use,
-                    "is_free": bool(e.get("is_free", False)),
+                    "is_free": bool((e.get("model_free_status") or {}).get(variant, e.get("is_free", False))),
                     "context_window": context_window,
                     "context_profile": "default",
                     "omit_sampling_parameters": (

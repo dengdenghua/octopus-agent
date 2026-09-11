@@ -35,6 +35,7 @@ class RealtimeExecutionContext:
     maximum_duration_s: float | None = None
     handoff_recorder: HandoffRecorder | None = None
     trusted_workspace_mode: str | None = None
+    approval_provider: Any = None
 
     def _initialize(self, runtime: Any, turn: Turn, agent: Any, intent: ParsedIntent) -> None:
         from runtime.core.cerebrum.pause_control import turn_wall_time_cap_s
@@ -108,6 +109,10 @@ class RealtimeExecutionContext:
             actor_id=actor,
             tenant_id=tenant,
             goal=goal,
+            execution_engine=turn.execution.engine if turn.execution else None,
+            approval_provider=self.approval_provider,
+            authorization_intent=str(intent.raw or intent.normalized_goal or ""),
+            server_auto_approve=bool(getattr(runtime, "_allow_client_auto_approve", False)),
             permissions=permissions,
             resources=ExecutionResources(
                 token_target=budget.max_tokens,

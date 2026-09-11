@@ -343,18 +343,24 @@ def _register_coder_codex(router: Any, ctx: _ConfigCtx) -> None:
             except ConfigurationError:
                 raise HTTPException(400, "Coder model preference is invalid") from None
             if preference.model is not None or preference.reasoning_effort is not None:
-                # Never make a user selection wait on App Server's model/list.
-                # Validate against the account-session catalog when one is
-                # already available; otherwise Codex performs the authoritative
-                # validation when the selected model is used.
                 models = accounts.cached_models(scope, include_hidden=False)
-                if models is not None:
-                    _validate_account_model_preference(preference, models)
-        preferences.write(scope, preference)
+                if models is None:
+                    try:
+                        models = await accounts.run_on_runtime_loop(
+                            scope, lambda: accounts.list_models(scope, include_hidden=False)
+                        )
+                    except Exception as exc:
+                        raise _account_http_error(exc, operation="models") from None
+                _validate_account_model_preference(preference, models)
+        try:
+            preferences.write(scope, preference)
+        except OSError:
+            raise HTTPException(503, "Model selection could not be saved; please retry") from None
         return _resolved_profile(ctx, preference, scope)
 
 
 def _resolved_profile(ctx: _ConfigCtx, preference: CodexModelPreference, scope: Any = None):
+    from runtime.execution.engine_observations import engine_observations
     router = getattr(getattr(ctx.stack, "planner", None), "router", None)
     profile = resolve_codex_execution_profile(
         preference=preference,
@@ -374,6 +380,8 @@ def _resolved_profile(ctx: _ConfigCtx, preference: CodexModelPreference, scope: 
         "selected_model": preference.model,
         "execution_available": readiness.available,
         "execution_unavailable_reason": readiness.reason,
+        "readiness_kind": "configuration_only",
+        **engine_observations(scope, "codex"),
     }
 
 

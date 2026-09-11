@@ -1,0 +1,79 @@
+- button "返回桌面":
+- button "切换全屏":
+- tablist "Workspace surface":
+  - tab "Echo" [selected]:
+    - generic: Echo
+  - tab "AI 浏览器":
+- button "收起侧栏 (Ctrl/⌘+B)" [expanded]:
+- button "新建任务":
+  - generic: 新建任务
+- list:
+  - link "HUB":
+    - /url: "#/workspace/agents?surface=chat"
+    - generic: HUB
+  - link "助手":
+    - /url: "#/workspace/realtime/octopus-assistant?agent=octopus"
+    - generic: 助手
+  - link "设计画布":
+    - /url: "#/workspace/design"
+    - generic: 设计画布
+- list
+- list:
+  - button "展开本地数据库":
+    - generic: 本地数据库
+- list:
+  - button "编辑侧栏":
+- button "收起项目" [expanded]:
+  - generic: 项目
+- button "选择项目空间":
+- button "echo agent 1":
+  - generic: echo agent
+  - generic: "1"
+- button "更多：echo agent":
+- button "收起对话" [expanded]:
+  - generic: 对话
+- button "对话 · 新建任务":
+- button "Eve":
+  - generic: Eve
+- button "设置":
+- main:
+  - complementary:
+    - heading "架构探索" [level=1]
+    - paragraph: docs/architecture/ 下的手写设计文档 · Mermaid 代码块自动渲染
+    - navigation:
+      - generic: 入口
+      - list:
+        - button "README · 入口"
+        - button "核心路径 5+3+5+6"
+      - generic: 高清图
+      - list:
+        - button "高清架构图 (ASCII)"
+        - button "高清架构图 (Mermaid)"
+      - generic: 专题
+      - list:
+        - button "Chat 模式对照"
+        - button "ReAct 自进化闭环" [active]
+        - button "器官分层(维护)"
+        - button "模块地图"
+      - generic: 核心器官
+      - list:
+        - button "🧠 Cerebrum · 中枢脑"
+        - button "🧬 Ganglia · 神经节"
+        - button "🐦 Beak · 工具执行"
+        - button "❤️ Hearts · 调度 facade"
+        - button "🎨 Chromatophores · arm 广播"
+  - main:
+    - heading "ReAct 与自进化" [level=1]
+    - paragraph: ReAct 执行循环交替进行分析、工具调用和结果观察，直到产生结果、需要用户介入，或达到运行边界。
+    - paragraph: 任务记录也可以作为自进化的输入：提取失败规律、整理可复用记忆、比较执行策略。一次任务完成不等于新的策略已经发布；评估、保护设置和发布状态需要分别查看。
+    - paragraph: 在当前界面中：
+    - list:
+      - listitem: 在对话的运行设置中查看执行引擎，在消息标记中核对实际执行引擎。
+      - listitem: 在“自进化”中查看治理、候选与运行状态。
+      - listitem: 在“规则”中查看规则命中和覆盖情况。
+      - listitem: 在“运行诊断”中查看服务可用性。没有读取到状态时，不能据此认定系统正常。
+    - paragraph:
+      - text: 2026 年 4 月的完整历史设计已归档至仓库
+      - code: docs/archive/react-self-evolution.md
+      - text: 。该文档包含当时的路由和模式名称，不能作为当前界面的操作指南。
+- region "Notifications alt+T"

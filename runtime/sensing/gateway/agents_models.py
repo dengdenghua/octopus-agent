@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 
 class CreateAgentRequest(BaseModel):
+    display_name: str | None = None
     name: str
     description: str = ""
     model: str | None = None

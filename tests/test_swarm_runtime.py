@@ -188,6 +188,47 @@ def generous_budget() -> Budget:
 class TestSwarmRuntimeBasics:
     """Implementation note."""
 
+    def test_parallel_arms_inherit_host_context_without_sharing_context_state(
+        self, three_node_graph, generous_budget
+    ):
+        from contextvars import ContextVar
+        from threading import Barrier
+
+        from runtime.execution.host_boundary import create_host_execution_boundary
+        from runtime.execution.request import current_execution_request, execution_request_scope
+        from runtime.platform.process.session import current_session, session_scope
+
+        boundary = create_host_execution_boundary(
+            task_id="parent",
+            thread_id="thread",
+            goal="inspect",
+            timeout_s=30,
+            metadata={"permission_mode": "plan"},
+        )
+        marker = ContextVar("swarm_worker_marker", default="parent")
+        barrier = Barrier(3, timeout=5)
+
+        def handle(assignment, budget):
+            assert current_execution_request() is boundary.request
+            assert current_session() is boundary.session
+            assert current_session().metadata["permission_mode"] == "plan"
+            assert marker.get() == "parent"
+            node_id = assignment.subgraph.nodes[0].node_id
+            marker.set(node_id)
+            barrier.wait()
+            assert marker.get() == node_id
+            return ArmResult(
+                arm_id=ArmId("reader"), task_id=assignment.subgraph.task_id, status="success"
+            )
+
+        arm = FakeArm("reader", allowed=["read_file"], handler=handle)
+        runtime = SwarmRuntime(arm_pool=FakeArmPool([arm]), max_workers=3)
+        with session_scope(boundary.session), execution_request_scope(boundary.request):
+            result = runtime.run(graph=three_node_graph, budget=generous_budget)
+        assert len(result.arm_results) == 3
+        assert result.all_successful, [arm.reason for arm in result.arm_results]
+        assert marker.get() == "parent"
+
     def test_single_task_single_arm_success(
         self,
         two_node_graph: TaskGraph,

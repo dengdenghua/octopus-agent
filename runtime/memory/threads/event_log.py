@@ -532,6 +532,7 @@ class EventLog:
         checkpoint_id: int | None = None,
         outcome_reason: str | None = None,
         execution: dict[str, Any] | None = None,
+        execution_model: dict[str, Any] | None = None,
         durable: bool = False,
     ) -> LoggedEvent | None:
         payload: dict[str, Any] = {}
@@ -553,6 +554,8 @@ class EventLog:
             payload["outcomeReason"] = outcome_reason
         if execution is not None:
             payload["execution"] = execution
+        if execution_model is not None:
+            payload["executionModel"] = execution_model
         if not payload:
             return None
         return self.append(

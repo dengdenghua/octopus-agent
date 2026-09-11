@@ -401,7 +401,7 @@ class TestConstruct:
             runtime = object()
 
         with pytest.raises(ValueError, match="planner"):
-            make_stack_subagent_runner(stack=_Bad())
+            make_stack_subagent_runner(stack=_Bad())("task", subagent_name="general")
 
     def test_missing_runtime_raises(self):
         class _Bad:
@@ -409,7 +409,7 @@ class TestConstruct:
             runtime = None
 
         with pytest.raises(ValueError, match="runtime"):
-            make_stack_subagent_runner(stack=_Bad())
+            make_stack_subagent_runner(stack=_Bad())("task", subagent_name="general")
 
 
 class TestInjectionTaintThreading:

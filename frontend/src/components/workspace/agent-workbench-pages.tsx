@@ -1510,7 +1510,9 @@ export function AgentSummaryPage({
                   </span>
                 </div>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {t.agentWorkbenchPages.resultReceiptDescription}
+                  {!terminalState && recoveredCount > 0 && unresolvedCount === 0
+                    ? `任务已交付，运行中有 ${recoveredCount} 项步骤警告。正文与成果仍可阅读；下方保留来源和运行记录供核对。`
+                    : t.agentWorkbenchPages.resultReceiptDescription}
                 </p>
                 {latestAttention?.subtitle && (
                   <p className="mt-2 rounded-md border border-warning/20 bg-warning/5 px-2.5 py-2 text-xs leading-5 text-warning-foreground">

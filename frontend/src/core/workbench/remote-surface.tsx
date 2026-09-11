@@ -136,7 +136,8 @@ export async function fetchRemoteWorkbenchManifest(
     manifest.schema !== "octopus.workbench_app.v1" ||
     manifest.id !== packageId ||
     manifest.isolation !== "iframe" ||
-    !manifest.entry_url
+    !manifest.entry_url ||
+    !Array.isArray(manifest.permissions)
   ) {
     throw new RemoteWorkbenchLoadError(
       "incompatible",
@@ -245,6 +246,15 @@ export function RemoteWorkbenchSurface({
   const effectiveHostPath =
     hostPath ?? `${location.pathname}${location.search}${location.hash}`;
   const initialHostPathRef = useRef(effectiveHostPath);
+  const freshTask = new URL(
+    effectiveHostPath,
+    window.location.origin,
+  ).searchParams.get("new_task");
+  const lastFreshTaskRef = useRef(freshTask);
+  if (freshTask && freshTask !== lastFreshTaskRef.current) {
+    initialHostPathRef.current = effectiveHostPath;
+    lastFreshTaskRef.current = freshTask;
+  }
 
   useEffect(() => {
     if (!packageId) {
@@ -411,7 +421,7 @@ export function RemoteWorkbenchSurface({
     entry.searchParams.set("octopus_host_path", initialHostPathRef.current);
     entry.searchParams.set("octopus_host_origin", window.location.origin);
     return entry.toString();
-  }, [manifest]);
+  }, [manifest, freshTask]);
 
   const sendContext = useCallback(() => {
     iframeRef.current?.contentWindow?.postMessage(
@@ -444,15 +454,31 @@ export function RemoteWorkbenchSurface({
   }
 
   return (
-    <iframe
-      ref={iframeRef}
-      src={src}
-      title={manifest.name || app.name}
-      className="size-full min-h-0 border-0 bg-background"
-      sandbox={`allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-scripts${manifest.permissions.includes("host.same_origin") ? " allow-same-origin" : ""}`}
-      allow="clipboard-read; clipboard-write"
-      onLoad={sendContext}
-    />
+    <div className="flex size-full min-h-0 flex-col">
+      <nav
+        aria-label="应用导航"
+        className="flex h-11 shrink-0 items-center gap-3 border-b border-border bg-background px-3 md:hidden"
+      >
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate("/workspace/agents?tab=plugins")}
+        >
+          返回 HUB
+        </Button>
+        <span className="truncate text-sm font-medium">{app.name}</span>
+      </nav>
+      <iframe
+        key={lastFreshTaskRef.current || "workbench"}
+        ref={iframeRef}
+        src={src}
+        title={manifest.name || app.name}
+        className="size-full min-h-0 border-0 bg-background"
+        sandbox={`allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-scripts${manifest.permissions.includes("host.same_origin") ? " allow-same-origin" : ""}`}
+        allow="clipboard-read; clipboard-write"
+        onLoad={sendContext}
+      />
+    </div>
   );
 }
 

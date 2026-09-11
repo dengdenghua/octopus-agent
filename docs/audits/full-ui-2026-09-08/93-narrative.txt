@@ -1,0 +1,22 @@
+Browser tab: 4, Title: "叙事工坊 - Echo", URL: "http://localhost:3310/#/workspace/narrative".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+~			40 container 叙事工坊
+~				41 AXWebArea 叙事工坊, URL: localhost:3310/api/workbench-packages/narrative_studio/assets/dist/index.html?octopus_host_path=%2Fworkspace%2Fnarrative&octopus_host_origin=http%3A%2F%2Flocalhost%3A3310
++					42 container root
++						43 container
++							44 heading 叙事工坊, Value: 1
++								45 text 叙事工坊
++							46 text 候选态
++							47 text 通用叙事引擎 · ECHO 是首个可导入世界包
++							48 button MCP · 3 Skills
++								49 text MCP ·
++								50 text 3
++								51 text  Skills
++							52 button 新建项目
++							53 button (disabled) 导入 ECHO
++							54 heading 建立第一个叙事项目, Value: 2
++								55 text 建立第一个叙事项目
++							56 text 项目是题材无关的容器。创建后会自动获得 main 候选分支，你可以从零开始，也可以导入 ECHO 世界资料。
++							57 button 新建项目
++							58 text Narrative Engine  0.2.0  · candidate only
++						59 container Notifications alt+T

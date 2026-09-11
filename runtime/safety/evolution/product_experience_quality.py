@@ -18,6 +18,69 @@ class ProductExperienceCheck:
 
 CHECKS: tuple[ProductExperienceCheck, ...] = (
     ProductExperienceCheck(
+        id="work_surface_realtime_first_task",
+        title="Realtime workspace first-task path",
+        paths=(
+            "frontend/src/app/workspace/realtime/[thread_id]/page.tsx",
+            "frontend/src/components/workspace/chat-input-box.tsx",
+            "frontend/src/components/workspace/chat-input-box/ChatComposer.tsx",
+            "frontend/src/components/workspace/chat-input-box.test.tsx",
+        ),
+        required_terms=(
+            "isNewThread",
+            "ChatInputBox",
+            "send",
+            "writePendingNewSession",
+            "aria-label",
+            "chat-input",
+        ),
+        weight=2,
+    ),
+    ProductExperienceCheck(
+        id="work_surface_projects_empty_state",
+        title="Projects workspace empty state and first action",
+        paths=(
+            "frontend/src/app/workspace/projects/page.tsx",
+            "frontend/src/app/workspace/projects/page.test.tsx",
+            "frontend/src/components/workspace/create-project-dialog.tsx",
+        ),
+        required_terms=(
+            "创建第一个项目",
+            "新建项目",
+            "CreateProjectDialog",
+            "portfolio",
+            "空态",
+        ),
+        weight=2,
+    ),
+    ProductExperienceCheck(
+        id="work_surface_design_first_canvas",
+        title="Design workspace first canvas path",
+        paths=(
+            "frontend/src/app/workspace/design/page.tsx",
+        ),
+        required_terms=(
+            "新建本地项目",
+            "创建项目",
+            "描述想法，开始创作",
+            "画布还没有项目文件",
+            "aria-label",
+        ),
+        weight=2,
+    ),
+    ProductExperienceCheck(
+        id="design_token_baseline",
+        title="Shared visual tokens cover text, shape, color, and borders",
+        paths=("frontend/src/styles/globals.css",),
+        required_terms=(
+            "--text-ui",
+            "--appearance-radius",
+            "--color-token",
+            "--border-subtle",
+        ),
+        weight=1,
+    ),
+    ProductExperienceCheck(
         id="operator_scorecard_drilldown_ui",
         title="Operator scorecard drill-down UI",
         paths=(

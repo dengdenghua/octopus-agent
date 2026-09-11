@@ -155,6 +155,25 @@ class ExecutionConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     deployment_mode: Literal["local", "shared", "commercial", "production", "server"] = "local"
+    # Registered members and realtime Auto requests without an explicit backend
+    # use the official OpenCode process. Native is a compatibility choice.
+    member_engine: Literal["opencode", "octopus"] = "opencode"
+    # None: off for OpenCode members, legacy behavior for native members.
+    # Explicit true permits configured unattended model jobs; false disables
+    # their model calls while deterministic host maintenance remains available.
+    background_model_calls: bool | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def local_member_default(cls, values):
+        if (
+            isinstance(values, dict)
+            and values.get("deployment_mode", "local") != "local"
+            and "member_engine" not in values
+        ):
+            return {**values, "member_engine": "octopus"}
+        return values
+
     process_sandbox: Literal[
         "auto",
         "soft",
@@ -349,6 +368,7 @@ class OctConfig(BaseModel):
 class LocalAuthConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
+    password_only_username: str | None = None
     enabled: bool = False
     allow_any_username: bool = False
     allowed_usernames: list[str] = Field(default_factory=list)
@@ -372,6 +392,8 @@ class LocalAuthConfig(BaseModel):
     @model_validator(mode="after")
     def _reject_weak_jwt_secret(self) -> LocalAuthConfig:
         validate_jwt_secret(self.jwt_secret, owner="local_auth")
+        if self.password_only_username and self.password_only_username not in self.users:
+            raise ValueError("password_only_username must have a configured password hash")
         return self
 
     @property

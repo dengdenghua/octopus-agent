@@ -158,3 +158,34 @@ def test_unsigned_remote_catalog_fails_closed_without_poisoning_cache(
     with pytest.raises(RuntimeError, match="unavailable or untrusted"):
         CloudCatalog("plugins", trust_store_path=trust_store).items()
     assert not (tmp_path / "cache" / "cloud-plugin-store.json").exists()
+
+
+@pytest.mark.parametrize("update", ["offline", "mismatched_signature", "valid"])
+def test_refresh_preserves_verified_cache_until_valid_update(tmp_path, monkeypatch, update):
+    private_key, trust_store = _trust_material(tmp_path)
+    monkeypatch.setattr(cloud_catalog, "REPO", tmp_path / "installed-app")
+    monkeypatch.setattr(cloud_catalog, "LOCAL_MIRROR_DIR", tmp_path / "mirror")
+    monkeypatch.setattr(cloud_catalog, "CACHE_DIR", tmp_path / "cache")
+    old = {"meta": {"version": 1}, "skills": [{"name": "example"}]}
+    new = {"meta": {"version": 2}, "skills": [{"name": "example"}]}
+    catalog_name = "skill-registry.json"
+    old_signature = _sign(private_key, old, name=catalog_name)
+    remote = {catalog_name: old, "skill-registry.provenance.json": old_signature}
+    monkeypatch.setattr(cloud_catalog, "_load_remote", remote.get)
+    instance = CloudCatalog("skills", trust_store_path=trust_store)
+    assert instance.meta()["version"] == 1
+    if update == "offline":
+        remote.clear()
+    else:
+        remote[catalog_name] = new
+        if update == "valid":
+            remote["skill-registry.provenance.json"] = _sign(private_key, new, name=catalog_name)
+    instance.refresh()
+    expected = 2 if update == "valid" else 1
+    assert instance.meta()["version"] == expected
+    assert instance.meta()["catalog_trust"]["status"] == "verified"
+    # The fallback also survives a process restart, not just in-memory reuse.
+    remote.clear()
+    restarted = CloudCatalog("skills", trust_store_path=trust_store)
+    assert restarted.meta()["version"] == expected
+    assert restarted.meta()["catalog_trust"]["status"] == "verified"

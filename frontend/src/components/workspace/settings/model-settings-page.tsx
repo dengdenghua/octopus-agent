@@ -1,6 +1,7 @@
 import {
   AlertTriangleIcon,
   CheckCircle2Icon,
+  ChevronDownIcon,
   ChevronRightIcon,
   InfoIcon,
   EyeIcon,
@@ -10,11 +11,12 @@ import {
   RefreshCwIcon,
   SearchIcon,
   Trash2Icon,
+  UserRoundIcon,
   WifiIcon,
   XCircleIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -27,6 +29,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { RoutedWebLink } from "@/components/ui/routed-web-link";
 import { cn } from "@/lib/utils";
@@ -49,8 +57,17 @@ import {
 } from "@/core/settings/local";
 import { registerPageAgentCapability } from "@/core/page-agent-bridge";
 import { useLocalSettings } from "@/core/settings/hooks";
+import { useModels } from "@/core/models/hooks";
+import {
+  consumeCustomModelSetup,
+  CUSTOM_MODEL_SETUP_EVENT,
+} from "@/core/models/setup";
+import { ModelPicker } from "@/components/workspace/model-picker";
 import { ModelCookbook } from "@/components/workspace/model-cookbook";
 import { CoderEngineSettings } from "@/components/workspace/coder-engine-control";
+import { OpenCodeConnections } from "./opencode-connections";
+import { EchoModelHotspotSettings } from "./echo-model-hotspot";
+import { TeamGatewaySettings } from "./team-gateway-settings";
 
 import { MixSettingsSection } from "./mix-settings-section";
 import { SettingsSection } from "./settings-section";
@@ -679,6 +696,15 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     gatewayChecking: string;
     addApiModel: string;
     scanLocalModels: string;
+    addConnection: string;
+    formAdvancedTitle: string;
+    formAdvancedSubtitle: string;
+    codexTitle: string;
+    codexSubtitle: string;
+    visionTitle: string;
+    visionSubtitle: string;
+    officialTitle: string;
+    officialSubtitle: string;
     advancedTitle: string;
     advancedSubtitle: string;
     advancedBadge: string;
@@ -712,25 +738,32 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
   }
 > = {
   zh: {
-    overviewTitle: "当前模型",
-    overviewSubtitle:
-      "选择对话与自动路由使用的模型；新的服务可通过 API 连接或本地扫描接入。",
+    overviewTitle: "默认模型",
+    overviewSubtitle: "新对话默认使用，可在对话中单独切换。",
     currentDefault: "对话默认模型",
     noDefault: "未设置",
     configuredModels: "已接入 API 资源",
     configuredSummary: (connections, models) =>
       `${connections} 个连接 · ${models} 个模型`,
-    connectionsTitle: "API 模型连接",
-    connectionsSubtitle: "管理已接入的模型服务。展开连接可查看模型与路由角色。",
+    connectionsTitle: "已连接的服务",
+    connectionsSubtitle: "Key 与服务地址在这里统一管理。",
     gateway: "模型网关",
     gatewayConnected: "已连接",
     gatewayDisconnected: "未连接",
     gatewayChecking: "检查中",
     addApiModel: "接入 API 模型",
     scanLocalModels: "扫描本地模型",
-    advancedTitle: "高级能力与兼容诊断",
-    advancedSubtitle:
-      "网关排障、连接兼容详情、Cookbook、Echo Mix 和 OpenAI-compatible 矩阵统一收在这里。",
+    addConnection: "添加连接",
+    formAdvancedTitle: "高级选项",
+    formAdvancedSubtitle: "显示名称、协议与模型能力",
+    codexTitle: "Codex 授权",
+    codexSubtitle: "登录与管理 ChatGPT / Codex 账号",
+    visionTitle: "本地图片理解",
+    visionSubtitle: "管理图片与视频检索模型",
+    officialTitle: "官方模型",
+    officialSubtitle: "查看官方托管的模型服务",
+    advancedTitle: "高级设置",
+    advancedSubtitle: "本地图片理解、自动路由与连接诊断",
     advancedBadge: "高级",
     sameOriginProxy: "同源代理",
     compatDetails: "查看兼容处理规则",
@@ -767,26 +800,34 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     retryLoad: "重新加载",
   },
   en: {
-    overviewTitle: "Model setup overview",
+    overviewTitle: "Default model",
     overviewSubtitle:
-      "Manage models used by Echo chat and automatic routing here. Add hosted providers through explicitly installed API model adapters or scan local models; external CLIs are not auto-detected.",
+      "Used for new chats. You can switch models in each conversation.",
     currentDefault: "Chat default model",
     noDefault: "Not set",
     configuredModels: "API model connections",
     configuredSummary: (connections, models) =>
       `${connections} connection${connections === 1 ? "" : "s"} · ${models} model${models === 1 ? "" : "s"}`,
-    connectionsTitle: "API model connections",
-    connectionsSubtitle:
-      "A connection can contain multiple models. The first is the default choice and the last powers the performance route.",
+    connectionsTitle: "Connected services",
+    connectionsSubtitle: "Manage keys and service addresses in one place.",
     gateway: "Model gateway",
     gatewayConnected: "Connected",
     gatewayDisconnected: "Disconnected",
     gatewayChecking: "Checking",
     addApiModel: "Add API model",
     scanLocalModels: "Scan local models",
-    advancedTitle: "Advanced capabilities and diagnostics",
+    addConnection: "Add connection",
+    formAdvancedTitle: "Advanced options",
+    formAdvancedSubtitle: "Display name, protocol, and model capabilities",
+    codexTitle: "Codex authorization",
+    codexSubtitle: "Sign in and manage your ChatGPT / Codex account",
+    visionTitle: "Local image understanding",
+    visionSubtitle: "Manage the image and video search model",
+    officialTitle: "Official models",
+    officialSubtitle: "View officially hosted model services",
+    advancedTitle: "Advanced settings",
     advancedSubtitle:
-      "Gateway troubleshooting, connection compatibility, Cookbook, Echo Mix, and the OpenAI-compatible matrix stay grouped here.",
+      "Local image understanding, routing, and connection diagnostics",
     advancedBadge: "Advanced",
     sameOriginProxy: "Same-origin proxy",
     compatDetails: "View compatibility rules",
@@ -829,26 +870,32 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     retryLoad: "Reload",
   },
   ja: {
-    overviewTitle: "モデル設定の概要",
-    overviewSubtitle:
-      "ここでは Echo の会話と自動ルーティング用モデルを管理します。外部サービスは明示的にインストールした API モデルアダプター、端末内推論はローカルスキャンから追加します。外部 CLI は自動検出しません。",
+    overviewTitle: "既定のモデル",
+    overviewSubtitle: "新しい会話で使用します。会話ごとに切り替えられます。",
     currentDefault: "現在の既定",
     noDefault: "未設定",
     configuredModels: "API モデル接続",
     configuredSummary: (connections, models) =>
       `${connections} 接続 · ${models} モデル`,
-    connectionsTitle: "API モデル接続",
-    connectionsSubtitle:
-      "1 つの接続に複数モデルを登録できます。先頭は既定、末尾は高性能ルートに使われます。",
+    connectionsTitle: "接続済みサービス",
+    connectionsSubtitle: "キーとサービスのアドレスをここで一元管理します。",
     gateway: "モデルゲートウェイ",
     gatewayConnected: "接続済み",
     gatewayDisconnected: "未接続",
     gatewayChecking: "確認中",
     addApiModel: "API モデルを追加",
     scanLocalModels: "ローカルモデルをスキャン",
-    advancedTitle: "高度な機能と互換診断",
-    advancedSubtitle:
-      "ゲートウェイ診断、接続互換性、Cookbook、Echo Mix、OpenAI 互換マトリクスをここにまとめています。",
+    addConnection: "接続を追加",
+    formAdvancedTitle: "詳細オプション",
+    formAdvancedSubtitle: "表示名、プロトコル、モデルの機能",
+    codexTitle: "Codex 認証",
+    codexSubtitle: "ChatGPT / Codex アカウントへのログインと管理",
+    visionTitle: "ローカル画像理解",
+    visionSubtitle: "画像・動画検索モデルの管理",
+    officialTitle: "公式モデル",
+    officialSubtitle: "公式のモデルサービスを確認",
+    advancedTitle: "詳細設定",
+    advancedSubtitle: "ローカル画像理解、自動ルーティング、接続診断",
     advancedBadge: "上級",
     sameOriginProxy: "同一オリジンプロキシ",
     compatDetails: "互換処理ルールを表示",
@@ -887,26 +934,33 @@ const MODEL_SETTINGS_PAGE_COPY: Record<
     retryLoad: "再読み込み",
   },
   ko: {
-    overviewTitle: "모델 설정 개요",
+    overviewTitle: "기본 모델",
     overviewSubtitle:
-      "여기서는 Echo 대화와 자동 라우팅 모델을 관리합니다. 외부 서비스는 명시적으로 설치한 API 모델 어댑터로 연결하고 기기 내 추론은 로컬 스캔으로 추가합니다. 외부 CLI는 자동 감지하지 않습니다.",
+      "새 대화에서 사용합니다. 대화별로 모델을 변경할 수 있습니다.",
     currentDefault: "현재 기본값",
     noDefault: "미설정",
     configuredModels: "API 모델 연결",
     configuredSummary: (connections, models) =>
       `연결 ${connections}개 · 모델 ${models}개`,
-    connectionsTitle: "API 모델 연결",
-    connectionsSubtitle:
-      "하나의 연결에 여러 모델을 등록할 수 있습니다. 첫 항목은 기본 선택, 마지막 항목은 고성능 경로에 사용됩니다.",
+    connectionsTitle: "연결된 서비스",
+    connectionsSubtitle: "키와 서비스 주소를 한곳에서 관리합니다.",
     gateway: "모델 게이트웨이",
     gatewayConnected: "연결됨",
     gatewayDisconnected: "연결 안 됨",
     gatewayChecking: "확인 중",
     addApiModel: "API 모델 추가",
     scanLocalModels: "로컬 모델 스캔",
-    advancedTitle: "고급 기능 및 호환성 진단",
-    advancedSubtitle:
-      "게이트웨이 진단, 연결 호환성, Cookbook, Echo Mix, OpenAI 호환 매트릭스를 여기에 모았습니다.",
+    addConnection: "연결 추가",
+    formAdvancedTitle: "고급 옵션",
+    formAdvancedSubtitle: "표시 이름, 프로토콜 및 모델 기능",
+    codexTitle: "Codex 인증",
+    codexSubtitle: "ChatGPT / Codex 계정 로그인 및 관리",
+    visionTitle: "로컬 이미지 이해",
+    visionSubtitle: "이미지 및 동영상 검색 모델 관리",
+    officialTitle: "공식 모델",
+    officialSubtitle: "공식 호스팅 모델 서비스 보기",
+    advancedTitle: "고급 설정",
+    advancedSubtitle: "로컬 이미지 이해, 자동 라우팅 및 연결 진단",
     advancedBadge: "고급",
     sameOriginProxy: "동일 출처 프록시",
     compatDetails: "호환 처리 규칙 보기",
@@ -957,23 +1011,26 @@ const LOCAL_MODEL_SCAN_EVENT = "octopus:model-settings:scan-local";
 
 function ModelSettingsOverview({
   copy,
-  defaultModelName,
+  modelPicker,
   customModelCount,
   modelCount,
   gatewayStatus,
   onAddModel,
   onScanLocal,
   onOpenZen,
+  onOpenCodex,
 }: {
   copy: ReturnType<typeof modelSettingsPageCopy>;
-  defaultModelName: string;
+  modelPicker: React.ReactNode;
   customModelCount: number;
   modelCount: number;
   gatewayStatus: "connected" | "disconnected" | "checking";
   onAddModel: () => void;
   onScanLocal: () => void;
   onOpenZen: () => void;
+  onOpenCodex: () => void;
 }) {
+  const nextFocusSelector = useRef<string | null>(null);
   const gatewayLabel =
     gatewayStatus === "connected"
       ? copy.gatewayConnected
@@ -982,7 +1039,7 @@ function ModelSettingsOverview({
         : copy.gatewayDisconnected;
 
   return (
-    <section className="rounded-lg border border-border bg-card/45 p-3">
+    <section className="rounded-lg border border-border bg-card/45 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h2 className="text-base font-semibold">{copy.overviewTitle}</h2>
@@ -990,69 +1047,88 @@ function ModelSettingsOverview({
             {copy.overviewSubtitle}
           </p>
         </div>
-        <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap">
-          <Button size="sm" className="w-full sm:w-auto" onClick={onAddModel}>
-            <PlusIcon className="mr-1.5 size-3.5" />
-            {copy.addApiModel}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-full sm:w-auto"
-            onClick={onScanLocal}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="outline" className="shrink-0 gap-1.5">
+              <PlusIcon className="size-3.5" />
+              {copy.addConnection}
+              <ChevronDownIcon className="size-3 text-muted-foreground" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className="w-52"
+            onCloseAutoFocus={(event) => {
+              const selector = nextFocusSelector.current;
+              nextFocusSelector.current = null;
+              if (!selector) return;
+              // These actions open a section below the trigger. Restoring
+              // focus to the trigger would undo the section's scroll.
+              event.preventDefault();
+              requestAnimationFrame(() => {
+                document
+                  .querySelector<HTMLElement>(selector)
+                  ?.focus({ preventScroll: true });
+              });
+            }}
           >
-            <WifiIcon className="mr-1.5 size-3.5" />
-            {copy.scanLocalModels}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-full sm:w-auto"
-            onClick={onOpenZen}
-          >
-            OpenCode Zen
-            <ChevronRightIcon className="ml-1 size-3.5" />
-          </Button>
-        </div>
-      </div>
-
-      <div className="mt-3 flex flex-col border-t border-border pt-2.5 sm:flex-row sm:items-center sm:divide-x sm:divide-border">
-        <div className="min-w-0 py-1 sm:flex-1 sm:py-0 sm:pr-4">
-          <div className="text-[11px] text-muted-foreground">
-            {copy.currentDefault}
-          </div>
-          <div className="truncate font-mono text-xs font-medium text-foreground">
-            {defaultModelName || copy.noDefault}
-          </div>
-        </div>
-        <div className="min-w-0 py-1 sm:flex-1 sm:px-4 sm:py-0">
-          <div className="text-[11px] text-muted-foreground">
-            {copy.configuredModels}
-          </div>
-          <div className="text-xs font-medium text-foreground">
-            {copy.configuredSummary(customModelCount, modelCount)}
-          </div>
-        </div>
-        <div className="flex items-center justify-between gap-3 py-1 sm:flex-1 sm:py-0 sm:pl-4">
-          <div>
-            <div className="text-[11px] text-muted-foreground">
-              {copy.gateway}
-            </div>
-            <div
-              role="status"
-              aria-live="polite"
-              className={cn(
-                "inline-flex items-center gap-1.5 text-xs font-medium",
-                gatewayStatus === "connected" && "text-success",
-                gatewayStatus === "checking" && "text-info",
-                gatewayStatus === "disconnected" && "text-destructive",
-              )}
+            <DropdownMenuItem
+              onSelect={() => {
+                nextFocusSelector.current = "#add-model-provider";
+                onAddModel();
+              }}
             >
-              <span className="size-1.5 rounded-full bg-current" />
-              {gatewayLabel}
-            </div>
+              <PlusIcon className="size-4" />
+              {copy.addApiModel}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
+                nextFocusSelector.current = "#model-settings-codex > summary";
+                onOpenCodex();
+              }}
+            >
+              <UserRoundIcon className="size-4" />
+              ChatGPT / Codex
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
+                nextFocusSelector.current =
+                  "#model-settings-opencode > summary";
+                onOpenZen();
+              }}
+            >
+              <ChevronRightIcon className="size-4" />
+              OpenCode · Zen / Go
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
+                nextFocusSelector.current = "#model-settings-local button";
+                onScanLocal();
+              }}
+            >
+              <WifiIcon className="size-4" />
+              {copy.scanLocalModels}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      <div className="mt-4">{modelPicker}</div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span>{copy.configuredSummary(customModelCount, modelCount)}</span>
+        {gatewayStatus !== "connected" ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className={cn(
+              "inline-flex items-center gap-1.5 text-xs font-medium",
+              gatewayStatus === "checking" && "text-info",
+              gatewayStatus === "disconnected" && "text-destructive",
+            )}
+          >
+            <span className="size-1.5 rounded-full bg-current" />
+            {gatewayLabel}
           </div>
-        </div>
+        ) : null}
       </div>
     </section>
   );
@@ -1061,8 +1137,9 @@ function ModelSettingsOverview({
 // ── Main page ──────────────────────────────────────────────────
 export default function ModelSettingsPage() {
   const { t, locale } = useI18n();
-  const navigate = useNavigate();
   const pageCopy = modelSettingsPageCopy(locale);
+  const queryClient = useQueryClient();
+  const { models: availableModels } = useModels();
   const [models, setModels] = useState<ModelConfig[]>([]);
   const [compatDiagnostics, setCompatDiagnostics] =
     useState<CompatDiagnosticState>({
@@ -1077,6 +1154,11 @@ export default function ModelSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [modelsLoadError, setModelsLoadError] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [showLocalModels, setShowLocalModels] = useState(false);
+  const [codexOpen, setCodexOpen] = useState(false);
+  const [openCodeOpen, setOpenCodeOpen] = useState(false);
+  const [codexAccountSetupRequest, setCodexAccountSetupRequest] = useState(0);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [editingModel, setEditingModel] = useState<string | null>(null);
   const [modelToDelete, setModelToDelete] = useState<string | null>(null);
 
@@ -1179,8 +1261,7 @@ export default function ModelSettingsPage() {
       setModels(list);
       setModelsLoadError(false);
       setGatewayStatus("connected");
-      void fetchCompatDiagnostics();
-      void fetchCompatProfileCatalog();
+      void queryClient.invalidateQueries({ queryKey: ["models"] });
     } catch (error) {
       console.error("[model-settings] load models failed:", error);
       setModelsLoadError(true);
@@ -1189,11 +1270,7 @@ export default function ModelSettingsPage() {
     } finally {
       setLoading(false);
     }
-  }, [
-    fetchCompatDiagnostics,
-    fetchCompatProfileCatalog,
-    t.settings.model.loadFailed,
-  ]);
+  }, [queryClient, t.settings.model.loadFailed]);
 
   const checkGateway = useCallback(async () => {
     setGatewayStatus("checking");
@@ -1216,6 +1293,12 @@ export default function ModelSettingsPage() {
     fetchModels();
   }, [fetchModels]);
 
+  useEffect(() => {
+    if (!advancedOpen) return;
+    void fetchCompatDiagnostics();
+    void fetchCompatProfileCatalog();
+  }, [advancedOpen, models, fetchCompatDiagnostics, fetchCompatProfileCatalog]);
+
   const handleSetDefault = async (name: string) => {
     try {
       // Implementation note.
@@ -1228,7 +1311,6 @@ export default function ModelSettingsPage() {
         },
       });
       toast.success(t.settings.model.setDefaultSuccess);
-      await fetchModels();
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -1361,19 +1443,41 @@ export default function ModelSettingsPage() {
 
   const scrollToSection = useCallback((id: string) => {
     requestAnimationFrame(() => {
-      document
-        .getElementById(id)
-        ?.scrollIntoView({ block: "start", behavior: "smooth" });
+      const target = document.getElementById(id);
+      const viewport = target?.closest<HTMLElement>(
+        '[data-slot="scroll-area-viewport"]',
+      );
+      if (!target || !viewport) return;
+      viewport.scrollTo({
+        top:
+          viewport.scrollTop +
+          target.getBoundingClientRect().top -
+          viewport.getBoundingClientRect().top -
+          16,
+        behavior: "smooth",
+      });
     });
   }, []);
 
   const handleOverviewAddModel = useCallback(() => {
     setEditingModel(null);
+    setShowLocalModels(false);
     setShowAdd(true);
-    scrollToSection("model-settings-custom");
+    scrollToSection("model-settings-add");
   }, [scrollToSection]);
 
+  useEffect(() => {
+    const handle = () => {
+      if (consumeCustomModelSetup()) handleOverviewAddModel();
+    };
+    handle();
+    window.addEventListener(CUSTOM_MODEL_SETUP_EVENT, handle);
+    return () => window.removeEventListener(CUSTOM_MODEL_SETUP_EVENT, handle);
+  }, [handleOverviewAddModel]);
+
   const handleOverviewScanLocal = useCallback(() => {
+    setShowAdd(false);
+    setShowLocalModels(true);
     scrollToSection("model-settings-local");
     window.dispatchEvent(new Event(LOCAL_MODEL_SCAN_EVENT));
   }, [scrollToSection]);
@@ -1600,6 +1704,14 @@ export default function ModelSettingsPage() {
     0,
   );
   const visibleDefaultModel = useMemo(() => {
+    const catalogModel =
+      availableModels.find((model) =>
+        [model.selection_id, model.name, model.id].includes(defaultModelName),
+      ) ?? availableModels.find((model) => model.entry_id === defaultModelName);
+    if (catalogModel)
+      return (
+        catalogModel.display_name || catalogModel.model || catalogModel.name
+      );
     const matched = models.find((model) =>
       customModelMatchesSelection(model, defaultModelName),
     );
@@ -1619,26 +1731,48 @@ export default function ModelSettingsPage() {
       return pageCopy.noDefault;
     }
     return defaultModelName;
-  }, [defaultModelName, models, pageCopy.noDefault]);
+  }, [defaultModelName, models, availableModels, pageCopy.noDefault]);
 
   return (
     <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden">
       <ModelSettingsOverview
         copy={pageCopy}
-        defaultModelName={visibleDefaultModel}
+        modelPicker={
+          <ModelPicker
+            models={availableModels}
+            value={defaultModelName || "auto"}
+            showSettingsLink={false}
+            onChange={(name) => void handleSetDefault(name)}
+            renderTrigger={() => (
+              <button
+                type="button"
+                aria-label={pageCopy.currentDefault}
+                className="flex min-h-10 w-full items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-left text-sm font-medium transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span className="min-w-0 truncate">
+                  {defaultModelName && defaultModelName !== "auto"
+                    ? visibleDefaultModel
+                    : t.modelPicker.autoModelLabel}
+                </span>
+                <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
+              </button>
+            )}
+          />
+        }
         customModelCount={models.length}
         modelCount={configuredModelCount}
         gatewayStatus={gatewayStatus}
         onAddModel={handleOverviewAddModel}
         onScanLocal={handleOverviewScanLocal}
-        onOpenZen={() =>
-          navigate("/workspace/agents?tab=plugins&connect=opencode")
-        }
-      />
-
-      <CoderEngineSettings
-        conversationDefaultModel={defaultModelName}
-        conversationDefaultLabel={visibleDefaultModel}
+        onOpenZen={() => {
+          setOpenCodeOpen(true);
+          scrollToSection("model-settings-opencode");
+        }}
+        onOpenCodex={() => {
+          setCodexAccountSetupRequest((request) => request + 1);
+          setCodexOpen(true);
+          scrollToSection("model-settings-codex");
+        }}
       />
 
       {/* ── Models Section ── */}
@@ -1762,7 +1896,7 @@ export default function ModelSettingsPage() {
                           ) : (
                             <button
                               type="button"
-                              className="text-xs font-medium text-muted-foreground hover:text-foreground"
+                              className="min-h-8 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                               onClick={() =>
                                 handleSetDefault(
                                   customModelPreferredSelection(m),
@@ -1775,7 +1909,7 @@ export default function ModelSettingsPage() {
                           )}
                           <button
                             type="button"
-                            className="text-xs font-medium text-chart-7 hover:text-chart-7"
+                            className="min-h-8 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             onClick={() => {
                               setShowAdd(false);
                               setEditingModel((current) =>
@@ -1790,7 +1924,7 @@ export default function ModelSettingsPage() {
                           </button>
                           <button
                             type="button"
-                            className="text-xs font-medium text-chart-7 hover:text-chart-7"
+                            className="min-h-8 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-destructive/5 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             onClick={() => handleDelete(modelId)}
                             aria-label={`${t.common.delete}: ${displayName}`}
                           >
@@ -1827,7 +1961,7 @@ export default function ModelSettingsPage() {
 
             {/* Add form */}
             {showAdd && (
-              <div className="mt-4">
+              <div id="model-settings-add" className="mt-4 scroll-mt-6">
                 <AddModelForm
                   onCancel={() => setShowAdd(false)}
                   onSaved={() => {
@@ -1847,35 +1981,85 @@ export default function ModelSettingsPage() {
           custom-models list — a successful import re-runs
           ``fetchModels`` via ``onImported`` so the new row appears
           in the section above without a manual refresh. */}
-      <div id="model-settings-local" className="scroll-mt-6">
+      <div
+        id="model-settings-local"
+        className="scroll-mt-6"
+        hidden={!showLocalModels}
+      >
+        <div className="mb-2 flex justify-end">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowLocalModels(false)}
+          >
+            {t.common.close}
+          </Button>
+        </div>
         <LocalModelsSection onImported={fetchModels} />
       </div>
 
-      <LocalVisionSection />
+      <EchoModelHotspotSettings onConnected={fetchModels} />
+      <TeamGatewaySettings onConnected={fetchModels} />
 
-      {/* Official models */}
-      <OfficialModelsSection />
+      <AdvancedDisclosure
+        id="model-settings-opencode"
+        title="OpenCode"
+        description="Zen / Go 连接与 API Key"
+        open={openCodeOpen}
+        onOpenChange={setOpenCodeOpen}
+      >
+        <OpenCodeConnections onConnected={fetchModels} />
+      </AdvancedDisclosure>
 
-      <details className="group rounded-lg border border-border bg-card/40 p-4">
+      <AdvancedDisclosure
+        id="model-settings-codex"
+        title={pageCopy.codexTitle}
+        description={pageCopy.codexSubtitle}
+        open={codexOpen}
+        onOpenChange={setCodexOpen}
+      >
+        <CoderEngineSettings
+          authorizationOnly
+          accountSetupRequest={codexAccountSetupRequest}
+        />
+      </AdvancedDisclosure>
+
+      <AdvancedDisclosure
+        id="model-settings-official"
+        title={pageCopy.officialTitle}
+        description={pageCopy.officialSubtitle}
+      >
+        <OfficialModelsSection />
+      </AdvancedDisclosure>
+
+      <details
+        className="group rounded-lg border border-border bg-card/40 px-4 py-3"
+        open={advancedOpen}
+        onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+      >
         <summary
           aria-label={pageCopy.advancedTitle}
-          className="cursor-pointer list-none"
+          className="cursor-pointer list-none rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-lg font-semibold">
+              <div className="text-sm font-semibold">
                 {pageCopy.advancedTitle}
               </div>
-              <div className="mt-1 text-sm text-muted-foreground">
+              <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
                 {pageCopy.advancedSubtitle}
               </div>
             </div>
-            <span className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors group-open:bg-muted">
-              {pageCopy.advancedBadge}
-            </span>
+            <ChevronRightIcon className="mt-2 size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
           </div>
         </summary>
         <div className="mt-5 space-y-3">
+          <AdvancedDisclosure
+            title={pageCopy.visionTitle}
+            description={pageCopy.visionSubtitle}
+          >
+            <LocalVisionSection />
+          </AdvancedDisclosure>
           <AdvancedDisclosure
             title={pageCopy.connectionToolsTitle}
             description={pageCopy.connectionToolsSubtitle}
@@ -2168,16 +2352,32 @@ function LocalVisionSection() {
 }
 
 function AdvancedDisclosure({
+  id,
   title,
   description,
   children,
+  open,
+  onOpenChange,
 }: {
+  id?: string;
   title: string;
   description: string;
   children: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
+  const [hasOpened, setHasOpened] = useState(Boolean(open));
   return (
-    <details className="group/advanced-item rounded-lg border border-border bg-background/55 px-4 py-3">
+    <details
+      id={id}
+      open={open}
+      onToggle={(event) => {
+        const expanded = event.currentTarget.open;
+        if (expanded) setHasOpened(true);
+        onOpenChange?.(expanded);
+      }}
+      className="group/advanced-item scroll-mt-6 rounded-lg border border-border bg-background/55 px-4 py-3"
+    >
       <summary
         aria-label={title}
         className="cursor-pointer list-none rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -2192,7 +2392,9 @@ function AdvancedDisclosure({
           <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open/advanced-item:rotate-90" />
         </div>
       </summary>
-      <div className="mt-5 border-t border-border pt-5">{children}</div>
+      {(hasOpened || open) && (
+        <div className="mt-4 border-t border-border pt-4">{children}</div>
+      )}
     </details>
   );
 }
@@ -2338,7 +2540,9 @@ function BuiltInCompatProfilesCard({
   catalog: CompatProfileCatalogState;
   copy: ReturnType<typeof modelSettingsPageCopy>;
 }) {
-  const visible = catalog.items.slice(0, 8);
+  const { locale } = useI18n();
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? catalog.items : catalog.items.slice(0, 8);
   const remaining = Math.max(0, catalog.items.length - visible.length);
   const loaded = catalog.status === "ready" || catalog.items.length > 0;
 
@@ -2440,6 +2644,14 @@ function BuiltInCompatProfilesCard({
         {remaining > 0 && (
           <div className="text-xs text-muted-foreground">
             {copy.compatRemaining(remaining)}
+            <Button
+              className="ml-2"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAll(true)}
+            >
+              {locale.startsWith("zh") ? "查看全部" : "Show all"}
+            </Button>
           </div>
         )}
       </div>
@@ -2607,86 +2819,20 @@ function CompatDiagnosticSummary({
   );
 }
 
-// Official models from the account-backed gateway.
-//
-// Reads from the oct gateway model list when the official gateway is enabled.
-// When the bridge is disabled (503) or the user hasn't linked their account
-// yet (404), hides the section entirely.
-//
-interface UpstreamModel {
-  id: string;
-  display_name?: string | null;
-  owned_by?: string | null;
-  multiplier?: string | null;
-  recommended?: boolean;
-}
-
+// Share the composer's model catalog and cache, including official route ids.
 function OfficialModelsSection() {
   const { t } = useI18n();
-  const [models, setModels] = useState<UpstreamModel[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [unavailableReason, setUnavailableReason] = useState<string | null>(
-    null,
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const r = await fetch(
-          `${getBackendBaseURL()}/api/oct/openai/v1/models`,
-          { headers: authHeaders() },
-        );
-        if (cancelled) return;
-        if (r.status === 404) {
-          setUnavailableReason(t.settings.model.accountNotLinked);
-          setModels([]);
-          return;
-        }
-        if (r.status === 503) {
-          setUnavailableReason(t.settings.model.gatewayNotEnabled);
-          setModels([]);
-          return;
-        }
-        if (!r.ok) {
-          setUnavailableReason(`upstream ${r.status}`);
-          setModels([]);
-          return;
-        }
-        const j = await r.json();
-        setModels(Array.isArray(j?.data) ? j.data : []);
-      } catch (err) {
-        swallow(err);
-        if (!cancelled) {
-          setUnavailableReason(
-            err instanceof Error ? err.message : String(err),
-          );
-          setModels([]);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [t.settings.model.gatewayNotEnabled, t.settings.model.accountNotLinked]);
-
-  if (loading) {
-    return (
-      <SettingsSection title={t.settings.model.officialModels}>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2Icon className="size-4 animate-spin" /> {t.common.loading}
-        </div>
-      </SettingsSection>
-    );
-  }
-
-  // Hide the whole section when the bridge isn't usable — the rest of
-  // the settings page (custom models + gateway) is fully self-contained.
-  if (unavailableReason) {
-    return null;
-  }
+  const { models: catalog, isLoading: loading, error } = useModels();
+  const models = catalog
+    .filter((model) => model.official === true)
+    .map((model) => ({
+      id: model.model?.replace(/^official\//, "") || model.name,
+      display_name: model.display_name,
+      multiplier: model.multiplier as string | undefined,
+      recommended: model.recommended === true,
+    }));
+  if (loading) return <p role="status">{t.common.loading}</p>;
+  if (error) return <p role="alert">{String(error)}</p>;
 
   // Build rows from the backend catalog. Skip the synthetic "auto"
   // / provider-specific pseudo-models the gateway may advertise.
@@ -2710,7 +2856,7 @@ function OfficialModelsSection() {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">
-                  {upstream.display_name || upstream.id}
+                  {upstream.display_name || t.settings.model.officialModels}
                 </span>
                 {upstream.recommended && (
                   <span className="rounded border border-success/40 px-1.5 py-0.5 text-xs font-medium text-success">
@@ -2718,7 +2864,6 @@ function OfficialModelsSection() {
                   </span>
                 )}
               </div>
-              <div className="text-xs text-muted-foreground">{upstream.id}</div>
             </div>
             <div className="flex items-center gap-3">
               <span className="rounded-lg bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
@@ -3329,12 +3474,7 @@ function EditModelForm({
         <Button variant="ghost" size="sm" onClick={onCancel}>
           {t.common.cancel}
         </Button>
-        <Button
-          size="sm"
-          className="bg-chart-7 hover:bg-chart-7/90 text-white"
-          onClick={handleSave}
-          disabled={saving || loading}
-        >
+        <Button size="sm" onClick={handleSave} disabled={saving || loading}>
           {saving ? t.common.loading : t.common.save}
         </Button>
       </div>
@@ -3350,7 +3490,8 @@ function AddModelForm({
   onCancel: () => void;
   onSaved: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const pageCopy = modelSettingsPageCopy(locale);
   const getProviderLabel = (value: string): string => {
     switch (value) {
       case "zhipu":
@@ -3573,17 +3714,14 @@ function AddModelForm({
 
   return (
     <form
-      className="space-y-4 rounded-lg border border-border p-4 sm:p-5"
+      className="space-y-3 rounded-lg border border-border p-4 sm:p-5"
       autoComplete="off"
       onSubmit={(event) => {
         event.preventDefault();
         void handleSave();
       }}
     >
-      <div className="flex items-center gap-2 rounded-lg bg-warning/10 border border-warning/30 px-3 py-2 text-sm text-warning">
-        <AlertTriangleIcon className="h-4 w-4 shrink-0" />
-        <span>{t.settings.model.externalModelRisk}</span>
-      </div>
+      <h3 className="text-sm font-semibold">{pageCopy.addApiModel}</h3>
 
       <div>
         <label htmlFor="add-model-provider" className="text-sm font-medium">
@@ -3687,98 +3825,60 @@ function AddModelForm({
       </div>
 
       <div>
-        <label htmlFor="add-model-display-name" className="text-sm font-medium">
-          {t.settings.model.displayName}
-        </label>
-        <Input
-          id="add-model-display-name"
-          name="octopus-model-display-name"
-          autoComplete="off"
-          data-1p-ignore="true"
-          data-lpignore="true"
-          data-form-type="other"
-          className="mt-1"
-          placeholder={t.settings.model.displayNamePlaceholder}
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <div className="flex items-center justify-between gap-2">
-            <label htmlFor="add-model-api-key" className="text-sm font-medium">
-              <span className="text-destructive">*</span>{" "}
-              {getProviderLabel(provider) || t.settings.model.provider}{" "}
-              {t.settings.model.apiKey}
-            </label>
-            {/* Console link · opens the provider's dashboard in a
+        <div className="flex items-center justify-between gap-2">
+          <label htmlFor="add-model-api-key" className="text-sm font-medium">
+            <span className="text-destructive">*</span>{" "}
+            {getProviderLabel(provider) || t.settings.model.provider}{" "}
+            {t.settings.model.apiKey}
+          </label>
+          {/* Console link · opens the provider's dashboard in a
                 new tab so users don't have to hunt for the API
                 key page. Renders only when the preset carries one. */}
-            {(() => {
-              const preset = PROVIDERS.find((p) => p.value === provider);
-              if (!preset?.consoleUrl) return null;
-              return (
-                <RoutedWebLink
-                  href={preset.consoleUrl}
-                  openTargetSource="model-provider-console"
-                  className="text-xs text-primary hover:underline font-normal"
-                >
-                  {t.settings.model.getApiKey}
-                </RoutedWebLink>
-              );
-            })()}
-          </div>
-          <div className="relative mt-1">
-            <Input
-              id="add-model-api-key"
-              name="octopus-new-model-api-key"
-              className="pr-10"
-              type={showKey ? "text" : "password"}
-              autoComplete="new-password"
-              data-1p-ignore="true"
-              data-lpignore="true"
-              data-form-type="other"
-              spellCheck={false}
-              placeholder={t.settings.model.apiKeyPlaceholder}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-            />
-            <button
-              type="button"
-              aria-label={
-                showKey
-                  ? t.settings.model.hideApiKey
-                  : t.settings.model.showApiKey
-              }
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              onClick={() => setShowKey(!showKey)}
-            >
-              {showKey ? (
-                <EyeOffIcon className="size-4" />
-              ) : (
-                <EyeIcon className="size-4" />
-              )}
-            </button>
-          </div>
+          {(() => {
+            const preset = PROVIDERS.find((p) => p.value === provider);
+            if (!preset?.consoleUrl) return null;
+            return (
+              <RoutedWebLink
+                href={preset.consoleUrl}
+                openTargetSource="model-provider-console"
+                className="text-xs text-primary hover:underline font-normal"
+              >
+                {t.settings.model.getApiKey}
+              </RoutedWebLink>
+            );
+          })()}
         </div>
-        <div>
-          <label htmlFor="add-model-protocol" className="text-sm font-medium">
-            {t.settings.model.apiProtocol}
-          </label>
-          <select
-            id="add-model-protocol"
-            name="octopus-model-protocol"
-            className="mt-1 flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            value={protocol}
-            onChange={(e) => setProtocol(e.target.value)}
+        <div className="relative mt-1">
+          <Input
+            id="add-model-api-key"
+            name="octopus-new-model-api-key"
+            className="pr-10"
+            type={showKey ? "text" : "password"}
+            autoComplete="new-password"
+            data-1p-ignore="true"
+            data-lpignore="true"
+            data-form-type="other"
+            spellCheck={false}
+            placeholder={t.settings.model.apiKeyPlaceholder}
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+          />
+          <button
+            type="button"
+            aria-label={
+              showKey
+                ? t.settings.model.hideApiKey
+                : t.settings.model.showApiKey
+            }
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            onClick={() => setShowKey(!showKey)}
           >
-            {PROTOCOLS.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </select>
+            {showKey ? (
+              <EyeOffIcon className="size-4" />
+            ) : (
+              <EyeIcon className="size-4" />
+            )}
+          </button>
         </div>
       </div>
 
@@ -3798,89 +3898,138 @@ function AddModelForm({
         />
       </div>
 
-      {/* Extra HTTP headers — collapsed by default to keep the form
+      <AdvancedDisclosure
+        title={pageCopy.formAdvancedTitle}
+        description={pageCopy.formAdvancedSubtitle}
+      >
+        <div className="space-y-4">
+          <div>
+            <label
+              htmlFor="add-model-display-name"
+              className="text-sm font-medium"
+            >
+              {t.settings.model.displayName}
+            </label>
+            <Input
+              id="add-model-display-name"
+              name="octopus-model-display-name"
+              autoComplete="off"
+              data-1p-ignore="true"
+              data-lpignore="true"
+              data-form-type="other"
+              className="mt-1"
+              placeholder={t.settings.model.displayNamePlaceholder}
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="add-model-protocol" className="text-sm font-medium">
+              {t.settings.model.apiProtocol}
+            </label>
+            <select
+              id="add-model-protocol"
+              name="octopus-model-protocol"
+              className="mt-1 flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              value={protocol}
+              onChange={(e) => setProtocol(e.target.value)}
+            >
+              {PROTOCOLS.map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* Extra HTTP headers — collapsed by default to keep the form
           uncluttered for the 95% case. Needed for APIs that gate on
           User-Agent (Kimi Coding) or require custom routing headers. */}
-      <div className="rounded-lg border border-border-default bg-muted/20">
-        <button
-          type="button"
-          aria-expanded={showHeaders}
-          onClick={() => setShowHeaders((v) => !v)}
-          className="flex w-full items-center justify-between px-3 py-2 text-sm font-medium hover:bg-muted/40"
-        >
-          <span>
-            {t.settings.model.extraHeadersTitle}
-            {(() => {
-              const n = Object.keys(parseHeadersText(headersText)).length;
-              return n > 0 ? ` (${n})` : "";
-            })()}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {showHeaders ? "▾" : "▸"}
-          </span>
-        </button>
-        {showHeaders && (
-          <div className="space-y-2 border-t border-border-default px-3 py-3">
-            <textarea
-              value={headersText}
-              onChange={(e) => setHeadersText(e.target.value)}
-              placeholder={t.settings.model.extraHeadersPlaceholder}
-              spellCheck={false}
-              rows={3}
-              className="w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            />
-            <p className="text-xs text-muted-foreground">
-              {t.settings.model.extraHeadersHint}
-            </p>
-          </div>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="flex items-center gap-2">
-          <Switch
-            aria-label={t.settings.model.thinkingLabel}
-            checked={thinking}
-            onCheckedChange={setThinking}
-          />{" "}
-          <span className="text-sm">{t.settings.model.thinkingLabel}</span>
-        </div>
-        <div className="flex flex-col items-start gap-1">
-          <div className="flex items-center gap-2">
-            <Switch
-              aria-label={t.settings.model.visionLabel}
-              checked={vision}
-              onCheckedChange={setVision}
-              disabled={visionLocked}
-            />{" "}
-            <span className="text-sm">{t.settings.model.visionLabel}</span>
-          </div>
-          {visionLocked && (
-            <span
-              className="text-[11px] leading-tight text-muted-foreground"
-              role="status"
+          <div className="rounded-lg border border-border-default bg-muted/20">
+            <button
+              type="button"
+              aria-expanded={showHeaders}
+              onClick={() => setShowHeaders((v) => !v)}
+              className="flex w-full items-center justify-between px-3 py-2 text-sm font-medium hover:bg-muted/40"
             >
-              {t.settings.model.visionNotSupported}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <Switch
-            aria-label={t.settings.model.millionContextLabel}
-            checked={millionContext}
-            onCheckedChange={setMillionContext}
-          />{" "}
-          <span className="text-sm">
-            {t.settings.model.millionContextLabel}
-          </span>
-        </div>
-      </div>
+              <span>
+                {t.settings.model.extraHeadersTitle}
+                {(() => {
+                  const n = Object.keys(parseHeadersText(headersText)).length;
+                  return n > 0 ? ` (${n})` : "";
+                })()}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {showHeaders ? "▾" : "▸"}
+              </span>
+            </button>
+            {showHeaders && (
+              <div className="space-y-2 border-t border-border-default px-3 py-3">
+                <textarea
+                  value={headersText}
+                  onChange={(e) => setHeadersText(e.target.value)}
+                  placeholder={t.settings.model.extraHeadersPlaceholder}
+                  spellCheck={false}
+                  rows={3}
+                  className="w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t.settings.model.extraHeadersHint}
+                </p>
+              </div>
+            )}
+          </div>
 
-      <DefaultEffortSelect
-        value={defaultReasoningEffort}
-        reasoningEfforts={clientSideReasoningEfforts(baseUrl, models[0] || "")}
-        onChange={setDefaultReasoningEffort}
-      />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="flex items-center gap-2">
+              <Switch
+                aria-label={t.settings.model.thinkingLabel}
+                checked={thinking}
+                onCheckedChange={setThinking}
+              />{" "}
+              <span className="text-sm">{t.settings.model.thinkingLabel}</span>
+            </div>
+            <div className="flex flex-col items-start gap-1">
+              <div className="flex items-center gap-2">
+                <Switch
+                  aria-label={t.settings.model.visionLabel}
+                  checked={vision}
+                  onCheckedChange={setVision}
+                  disabled={visionLocked}
+                />{" "}
+                <span className="text-sm">{t.settings.model.visionLabel}</span>
+              </div>
+              {visionLocked && (
+                <span
+                  className="text-[11px] leading-tight text-muted-foreground"
+                  role="status"
+                >
+                  {t.settings.model.visionNotSupported}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                aria-label={t.settings.model.millionContextLabel}
+                checked={millionContext}
+                onCheckedChange={setMillionContext}
+              />{" "}
+              <span className="text-sm">
+                {t.settings.model.millionContextLabel}
+              </span>
+            </div>
+          </div>
+
+          <DefaultEffortSelect
+            value={defaultReasoningEffort}
+            reasoningEfforts={clientSideReasoningEfforts(
+              baseUrl,
+              models[0] || "",
+            )}
+            onChange={setDefaultReasoningEffort}
+          />
+        </div>
+      </AdvancedDisclosure>
 
       {/* Test status + buttons */}
       <div className="flex flex-col gap-3 rounded-lg border border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -3945,11 +4094,7 @@ function AddModelForm({
         <Button type="button" variant="ghost" onClick={onCancel}>
           {t.common.cancel}
         </Button>
-        <Button
-          type="submit"
-          className="bg-chart-7 hover:bg-chart-7/90 text-white"
-          disabled={saving}
-        >
+        <Button type="submit" disabled={saving}>
           {saving ? t.common.loading : t.common.save}
         </Button>
       </div>

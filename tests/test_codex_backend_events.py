@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import pytest
+
 from runtime.execution.codex_backend.events import (
     CodexEventState,
     translate_notification,
 )
 from runtime.execution.codex_backend.types import Notification
+from runtime.platform.models.provider_errors import (
+    MODEL_UNAVAILABLE_MESSAGE,
+    OPENCODE_REQUIRED_MESSAGE,
+)
 
 
 def _notification(method: str, **params: object) -> Notification:
@@ -357,22 +363,42 @@ def test_terminal_error_fails_without_retry() -> None:
     ]
 
 
-def test_model_unavailable_error_and_completion_have_plain_public_message() -> None:
-    from runtime.platform.models.provider_errors import MODEL_UNAVAILABLE_MESSAGE
-
+@pytest.mark.parametrize("public_message", [MODEL_UNAVAILABLE_MESSAGE, OPENCODE_REQUIRED_MESSAGE])
+def test_model_error_and_completion_have_plain_public_message(public_message) -> None:
     wrapped = {
         "codexErrorInfo": "other",
         "message": (
             "unexpected status 400 Bad Request: "
-            + MODEL_UNAVAILABLE_MESSAGE
+            + public_message
             + ", url: http://127.0.0.1:12345/v1/responses"
         ),
     }
     state = CodexEventState()
     error = translate_notification(_notification("error", error=wrapped, willRetry=False), state)
-    assert error[0]["message"] == MODEL_UNAVAILABLE_MESSAGE
+    assert error[0]["message"] == public_message
     completed = translate_notification(
         _notification("turn/completed", turn={"status": "failed", "error": wrapped}), state
     )
     assert completed[0]["success"] is False
-    assert completed[0]["completion_receipt"]["message"] == MODEL_UNAVAILABLE_MESSAGE
+    assert completed[0]["completion_receipt"]["message"] == public_message
+
+
+def test_nested_tool_catalog_error_has_plain_public_message() -> None:
+    import json
+
+    from runtime.execution.codex_backend.tool_limits import TOOL_CATALOG_MESSAGE
+
+    wrapped = {
+        "additionalDetails": None,
+        "codexErrorInfo": "other",
+        "message": json.dumps({"error": {"message": "Responses tool catalog is too large"}}),
+    }
+    events = translate_notification(
+        _notification("error", error=wrapped, willRetry=False), CodexEventState()
+    )
+    assert events[0]["message"] == TOOL_CATALOG_MESSAGE
+    events = translate_notification(
+        _notification("turn/completed", turn={"status": "failed", "error": wrapped}),
+        CodexEventState(),
+    )
+    assert events[0]["completion_receipt"]["message"] == TOOL_CATALOG_MESSAGE

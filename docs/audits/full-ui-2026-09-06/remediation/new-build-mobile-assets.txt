@@ -1,0 +1,74 @@
+- banner:
+  - button "选择本地创作项目":
+    - generic: 创作空间
+  - generic: /
+  - textbox "画布名称": 创作空间 · 创作画布
+  - navigation:
+    - button "创作首页"
+    - button "创作画布"
+    - button "资产中心"
+    - button "Skill"
+    - button "ComfyUI"
+  - button "自由画布"
+  - button "工作流"
+- generic "画布视图":
+  - button "画布" [pressed]
+  - button "对话"
+- main:
+  - generic: 需求
+  - generic: 创作需求
+  - generic: 需求
+  - paragraph: 面向年轻用户，完成新品发布的视觉内容套件
+  - button "连接到 创作需求"
+  - button "从 创作需求 开始连接"
+  - generic: 角色
+  - generic: 视觉导演
+  - generic: 角色
+  - paragraph: 理解品牌与受众，拆解镜头、版式和内容节奏
+  - button "连接到 视觉导演"
+  - button "从 视觉导演 开始连接"
+  - generic: Sk
+  - generic: 图像生成技能
+  - generic: Skill
+  - paragraph: 生成主视觉、社媒配图与多尺寸变体
+  - button "连接到 图像生成技能"
+  - button "从 图像生成技能 开始连接"
+  - generic: 交付
+  - generic: 交付物
+  - generic: 交付
+  - paragraph: 海报 · 短视频 · 营销文案 · 发布清单
+  - button "连接到 交付物"
+  - button "从 交付物 开始连接"
+  - generic "画布缩放与视图工具":
+    - button "整理":
+    - button "缩小":
+    - button "83%"
+    - button "放大":
+    - button "画布设置":
+    - button "隐藏连线":
+    - button "小地图":
+  - button "添加节点":
+  - button "移动 V":
+  - button "移动 / 小手工具":
+  - button "项目资产" [active]:
+  - button "帮助指南":
+- complementary:
+  - button "画布"
+  - button "资产"
+  - button "关闭项目资产":
+  - button "树形视图":
+  - button "网格视图":
+  - button "刷新文件列表":
+  - textbox "搜索文件"
+  - combobox:
+    - option "类型" [selected]
+    - option "图片"
+    - option "视频"
+    - option "音频"
+    - option "文件"
+  - button "标签"
+  - button "时间"
+  - generic: 画布还没有项目文件
+  - button "上传文件" [disabled]:
+    - text: 上传文件
+- region "Notifications alt+T"

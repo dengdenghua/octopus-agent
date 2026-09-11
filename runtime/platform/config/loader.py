@@ -26,6 +26,9 @@ class ConfigLoadError(ValueError):
 
 def _interpolate_env(value: Any) -> Any:
     if isinstance(value, str):
+        # bcrypt separators and salts contain '$'; they are not env references.
+        if re.fullmatch(r"bcrypt:\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}", value):
+            return value
 
         def _sub(m: re.Match[str]) -> str:
             name = m.group(1) or m.group(2)

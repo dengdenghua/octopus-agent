@@ -11,6 +11,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from runtime.execution.model_services import native_model_services
+
 from ._app_context import AppContext
 
 
@@ -30,11 +32,11 @@ def mount_collaboration(
     # and optionally triggers regeneration · no LLM involved.
     from runtime.sensing.gateway.wiki_router import create_wiki_router
 
-    _wiki_planner = getattr(stack, "planner", None) if stack is not None else None
+    _wiki_router, _wiki_model = native_model_services(stack)
     app.include_router(
         create_wiki_router(
-            model_router=getattr(_wiki_planner, "router", None),
-            model=getattr(_wiki_planner, "planner_model", None),
+            model_router=_wiki_router,
+            model=_wiki_model,
             identity_store=ctx.identity_store,
             require_auth=ctx.require_auth,
             jwt_secret=ctx.jwt_secret,
@@ -105,13 +107,12 @@ def mount_collaboration(
             _tentacle_ws_port = 8765
 
         try:
-            from runtime.core.cerebrum.planner import StaticPlanner
             from runtime.sensing.gateway.tentacle_join_router import (
                 create_tentacle_join_router,
             )
             from runtime.tentacle.coordinator import TentacleCoordinator
             from runtime.tentacle.dashboard import create_tentacle_router
-            from runtime.tentacle.mobile.cerebrum_adapter import CerebrumDecisionAdapter
+            from runtime.tentacle.mobile.cerebrum_adapter import make_stack_decision_engine
             from runtime.tentacle.team_bridge import (
                 get_or_create_tentacle_token,
                 set_active_coordinator,
@@ -124,10 +125,7 @@ def mount_collaboration(
             # (the adapter degrades gracefully — a failed/empty plan just yields no
             # device actions rather than crashing). This is the decision engine that
             # turns a team task's natural-language goal into device tool calls.
-            _tentacle_planner = getattr(stack, "planner", None)
-            if not callable(getattr(_tentacle_planner, "plan", None)):
-                _tentacle_planner = StaticPlanner()
-            _tentacle_engine = CerebrumDecisionAdapter(_tentacle_planner).decide
+            _tentacle_engine = make_stack_decision_engine(stack)
 
             _tentacle_coordinator = TentacleCoordinator(
                 host="0.0.0.0",  # nosec B104 — tentacle WS server, intentional LAN bind

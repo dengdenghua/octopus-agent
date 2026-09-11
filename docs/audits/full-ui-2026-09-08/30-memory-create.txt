@@ -1,0 +1,23 @@
+Browser tab: 4, Title: "新对话 - Echo", URL: "http://localhost:3310/#/workspace/realtime/new".
+0 AXWebArea 新对话 - Echo, URL: localhost:3310/#/workspace/realtime/new
+	1 container
+		2 container root
+			60 container 对话工作区
+			59 container Notifications alt+T
+		61 container 添加新记忆, ID: radix-_r_h5_
+			62 heading 添加新记忆, Value: 2, ID: radix-_r_h6_
+				63 text 添加新记忆
+			64 text 保存一条可检索的事实记忆；置信度越高，系统越倾向在相关对话中采用。
+			65 text 内容
+			66 text entry area (settable) 内容
+			67 container
+				68 text 类别
+				69 text field (settable) 类别, Value: context
+			70 text 置信度
+			71 stepper (settable, float) 置信度, Value: 0.800000011920929, Details: 0.8
+			72 text 置信度为 0 到 1 之间的数值
+			73 button 取消
+			74 button (disabled) 保存记忆
+			75 button 关闭
+
+The focused UI element is 66 text entry area (settable) 内容

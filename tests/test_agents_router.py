@@ -16,6 +16,7 @@ from runtime.core.graph_runtime import GraphRuntime
 from runtime.execution.agents import (
     Agent,
     AgentRegistry,
+    make_admin_agent,
     make_all_agent_presets,
     make_general_agent,
 )
@@ -56,6 +57,8 @@ def _png_bytes(color: tuple[int, int, int, int]) -> bytes:
 def registry_with_presets() -> AgentRegistry:
     reg = AgentRegistry()
     reg.register_all(make_all_agent_presets(_rt()))
+    # Match serve startup: Leon is registered separately from routing presets.
+    reg.register(make_admin_agent(_rt()))
     return reg
 
 
@@ -76,13 +79,15 @@ class TestListAgents:
         # The preset roster grows over time as new agents ship under
         # agents/. We assert on REQUIRED names being present rather
         # than exact count so adding a new preset doesn't break the
-        # test. Six core presets must always be there.
+        # test. The seven White Ghost personas must always be there.
         required = {
             "general",
             "coder",
             "vibe_selling",
             "ecommerce_mind",
-            "market_researcher",
+            "desktop_operator",
+            "aoi",
+            "admin",
         }
         missing = required - names
         assert not missing, f"missing required presets: {missing}"
@@ -180,7 +185,8 @@ class TestListAgents:
         app.include_router(create_agents_router(registry=AgentRegistry()))
         assert TestClient(app).get("/api/agents").json() == []
 
-    def test_system_agent_is_hidden_from_list(self):
+    @pytest.mark.parametrize("include_visuals", [True, False])
+    def test_leon_is_visible_alongside_other_personas(self, include_visuals):
         registry = AgentRegistry()
         registry.register(
             Agent(
@@ -194,7 +200,7 @@ class TestListAgents:
         registry.register(
             Agent(
                 agent_id="admin",
-                display_name="Admin",
+                display_name="Leon",
                 description="",
                 soul="",
                 arms=ArmPool([make_web_read_arm(_rt())]),
@@ -214,9 +220,9 @@ class TestListAgents:
         app = FastAPI()
         app.include_router(create_agents_router(registry=registry))
 
-        data = TestClient(app).get("/api/agents").json()
+        data = TestClient(app).get("/api/agents", params={"include_visuals": include_visuals}).json()
 
-        assert [agent["name"] for agent in data] == ["general", "desktop_operator"]
+        assert [agent["name"] for agent in data] == ["general", "admin", "desktop_operator"]
 
 
 # ═══════════════════════════════════════════════════════════
@@ -963,6 +969,24 @@ class TestRemovedLocalPartnerSurface:
 
 
 class TestAuth:
+    def test_visible_leon_does_not_grant_user_admin_operations(self):
+        registry = AgentRegistry()
+        registry.register(Agent(agent_id="admin", display_name="Leon", description="系统管家",
+                                soul="", arms=ArmPool([make_web_read_arm(_rt())])))
+        store = IdentityStore()
+        store.add(Identity(actor_id="member"), api_key_plaintext="sk-member")
+        app = FastAPI()
+        app.include_router(create_agents_router(registry=registry, identity_store=store, require_auth=True))
+        client = TestClient(app)
+        headers = {"Authorization": "Bearer sk-member"}
+        response = client.get("/api/agents?include_visuals=false", headers=headers)
+        assert response.status_code == 200
+        assert response.json()[0]["display_name"] == "Leon"
+        assert client.put("/api/agents/admin/tool-registry", headers=headers,
+                          json={"arms": [], "private_skills": []}).status_code == 403
+        assert client.post("/api/agents/admin/reload", headers=headers).status_code == 403
+        assert client.delete("/api/agents/admin", headers=headers).status_code == 403
+
     def test_require_auth_blocks_anon(self, registry_with_presets):
         store = IdentityStore()
         app = FastAPI()

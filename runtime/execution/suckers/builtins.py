@@ -745,7 +745,7 @@ BUILTIN_NAMES = [
 ]
 
 
-def register_all(registry: SkillRegistry) -> int:
+def register_all(registry: SkillRegistry, *, refresh_prompt_catalog: bool = True) -> int:
     register_builtins(registry)
     web_count = register_web_skills(registry)
     crawler_count = register_crawler_skills(registry)
@@ -760,7 +760,9 @@ def register_all(registry: SkillRegistry) -> int:
     # Prompt-as-skill catalog. Registry-managed ``skills/public`` wins when it
     # is usable; an empty/failed external catalog falls back to package data so
     # clean wheels and containers never silently start with zero market skills.
-    market_count = register_prompt_market_skills(registry)
+    market_count = register_prompt_market_skills(
+        registry, refresh_deadline_s=None if refresh_prompt_catalog else 0
+    )
     # AST-aware code editing · tree-sitter powered · 2026-04-26
     from .code_edit_skills import register_code_edit_skills
 

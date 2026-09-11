@@ -1,0 +1,75 @@
+- button "返回桌面":
+- button "切换全屏":
+- tablist "Workspace surface":
+  - tab "Echo" [selected]:
+    - generic: Echo
+  - tab "AI 浏览器":
+- button "收起侧栏 (Ctrl/⌘+B)" [expanded]:
+- button "新建任务":
+  - generic: 新建任务
+- list:
+  - link "HUB":
+    - /url: "#/workspace/agents?surface=chat"
+    - generic: HUB
+  - link "助手":
+    - /url: "#/workspace/realtime/octopus-assistant?agent=octopus"
+    - generic: 助手
+  - link "订阅":
+    - /url: "#/workspace/intelligence?surface=chat"
+    - generic: 订阅
+  - link "项目管理":
+    - /url: "#/workspace/projects"
+    - generic: 项目管理
+  - link "设计画布":
+    - /url: "#/workspace/design"
+    - generic: 设计画布
+  - link "叙事工坊":
+    - /url: "#/workspace/narrative"
+    - generic: 叙事工坊
+  - link "自进化":
+    - /url: "#/workspace/evolution?surface=chat"
+    - generic: 自进化
+- list:
+  - link "发现社区":
+    - /url: "#/workspace/community"
+    - generic: 发现社区
+- list:
+  - button "展开本地数据库":
+    - generic: 本地数据库
+- list:
+  - button "编辑侧栏":
+- button "收起项目" [expanded]:
+  - generic: 项目
+- button "选择项目空间":
+- button "收起对话" [expanded]:
+  - generic: 对话
+- button "对话 · 新建任务":
+- button "Kane":
+  - text: Kane
+  - generic: Lv.1⭐
+- button "设置":
+- main:
+  - alert:
+    - generic: 未找到 octopus-storage，请安装本地知识库服务，或设置 OCTOPUS_STORAGE_CMD 后重试。
+    - button "重新连接":
+      - text: 重新连接
+  - button "授权":
+    - text: 授权
+  - button "扫描" [disabled]:
+    - text: 扫描
+  - button "效率" [disabled]:
+    - text: 效率
+  - generic: 离线
+  - button "返回上一级" [disabled]
+  - generic: · 未读取
+  - generic: 在当前位置中搜索：
+  - textbox "文件名、正文、OCR、路径或应用"
+  - button "搜索" [disabled]:
+  - main:
+    - generic: 名称
+    - generic: 类型
+    - generic: 项目
+    - generic: 无法读取当前目录
+    - button "重试读取"
+    - text: 服务暂时无法连接，数据尚未读取。请检查连接后重试。
+- region "Notifications alt+T"

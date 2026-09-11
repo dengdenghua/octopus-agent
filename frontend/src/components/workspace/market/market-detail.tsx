@@ -1,3 +1,4 @@
+import { ImageWithFallback } from "@/components/ui/image-with-fallback";
 import { useEffect, useState } from "react";
 import { BadgeCheckIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -51,10 +52,10 @@ export function MarketDetail({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="relative shrink-0">
-          <img
+          <ImageWithFallback
             src={item.cover}
             alt={item.title}
-            className="aspect-[3/4] w-full object-cover"
+            className="aspect-video max-h-80 w-full object-cover"
           />
           <button
             type="button"
@@ -83,7 +84,9 @@ export function MarketDetail({
             </span>
             <span>{item.seller}</span>
             {item.mine && (
-              <span className="rounded bg-muted px-1.5 py-0.5 text-micro">我的</span>
+              <span className="rounded bg-muted px-1.5 py-0.5 text-micro">
+                我的
+              </span>
             )}
           </div>
           <h2 className="mt-2 text-lg font-bold leading-snug">{item.title}</h2>

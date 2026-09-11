@@ -1,14 +1,98 @@
+import { serviceErrorMessage } from "@/core/utils/service-error";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { E2E_SURPASS_TARGET_SCORE, applyAgentTraceReviewQueuePromotions, decideAgentTraceReviewQueueItem, decideSubagentPolicy, fetchAgentCompetitorScorecard, fetchAgentTraceExperienceQualitySummary, fetchAgentTracePolicyReviewRuleDrafts, fetchAgentTraceProcessTimeline, fetchAgentTracePromotionAuditSummary, fetchAgentTraceReplayGate, fetchAgentTraceReviewQueue, fetchAgentTraceReviewQueueSummary, fetchAgentTraceTaskRuns, fetchAgentTraceTrustDenialSummary, fetchAutoVerifierMetrics, fetchAutomationPolicyRuleDrafts, fetchAutomationRadar, fetchBrowserDesktopQuality, fetchBrowserDesktopRepairRecipeVerifications, fetchBrowserDesktopRepairRecipes, fetchE2ESurpassCertification, fetchOrganizationTopologies, fetchOrganizationTopologyLift, fetchOrganizationTopologyProposals, fetchRepairRouteQuality, fetchSubagentFitness, fetchTaskRecoveryQueue, installAgentTracePolicyReviewRuleDraft, installAutomationPolicyRuleDraft, queueAgentScorecardGaps, queueAgentTraceTaskRunReview, queueBrowserDesktopRepairRecipes, queueComputerActivityReplayCase, queueLatestBrowserSessionReplayCase, queueRepairRoutePromotionCandidates, queueReplayEvidenceHint, rejectStaleBrowserDesktopReplayArtifacts, rerunBrowserDesktopRepairRecipeEvidenceBatch, takeoverTaskRun } from "@/core/agent-trace/api";
-import type { AgentCompetitorScorecard, AgentTraceExperienceQualitySummary, AgentTracePolicyReviewRuleDrafts, AgentTraceProcessTimeline, AgentTracePromotionAuditSummary, AgentTraceReplayGate, AgentTraceReviewQueueItem, AgentTraceReviewQueueSummary, AgentTraceTaskRecoveryQueue, AgentTraceTaskRun, AgentTraceTrustDenialSummary, AutoVerifierMetricsReport, AutomationPolicyRuleDraftsReport, AutomationRadarReport, BrowserDesktopQualityReport, BrowserDesktopRepairRecipeVerificationsReport, BrowserDesktopRepairRecipesReport, E2ESurpassCertification, OrganizationTopology, OrganizationTopologyLiftReport, OrganizationTopologyProposalsReport, RepairRouteQualityReport, ReplayEvidenceHint, SubagentFitnessReport } from "@/core/agent-trace/api";
-import { fetchPluginLifecycleHistory, fetchPluginPublisherTrust, fetchPluginSmokeSummary } from "@/core/plugins/api";
-import type { PluginLifecycleHistory, PluginPublisherTrustReport, PluginSmokeSummary } from "@/core/plugins/types";
+import {
+  E2E_SURPASS_TARGET_SCORE,
+  applyAgentTraceReviewQueuePromotions,
+  decideAgentTraceReviewQueueItem,
+  decideSubagentPolicy,
+  fetchAgentCompetitorScorecard,
+  fetchAgentTraceExperienceQualitySummary,
+  fetchAgentTracePolicyReviewRuleDrafts,
+  fetchAgentTraceProcessTimeline,
+  fetchAgentTracePromotionAuditSummary,
+  fetchAgentTraceReplayGate,
+  fetchAgentTraceReviewQueue,
+  fetchAgentTraceReviewQueueSummary,
+  fetchAgentTraceTaskRuns,
+  fetchAgentTraceTrustDenialSummary,
+  fetchAutoVerifierMetrics,
+  fetchAutomationPolicyRuleDrafts,
+  fetchAutomationRadar,
+  fetchBrowserDesktopQuality,
+  fetchBrowserDesktopRepairRecipeVerifications,
+  fetchBrowserDesktopRepairRecipes,
+  fetchE2ESurpassCertification,
+  fetchOrganizationTopologies,
+  fetchOrganizationTopologyLift,
+  fetchOrganizationTopologyProposals,
+  fetchRepairRouteQuality,
+  fetchSubagentFitness,
+  fetchTaskRecoveryQueue,
+  installAgentTracePolicyReviewRuleDraft,
+  installAutomationPolicyRuleDraft,
+  queueAgentScorecardGaps,
+  queueAgentTraceTaskRunReview,
+  queueBrowserDesktopRepairRecipes,
+  queueComputerActivityReplayCase,
+  queueLatestBrowserSessionReplayCase,
+  queueRepairRoutePromotionCandidates,
+  queueReplayEvidenceHint,
+  rejectStaleBrowserDesktopReplayArtifacts,
+  rerunBrowserDesktopRepairRecipeEvidenceBatch,
+  takeoverTaskRun,
+} from "@/core/agent-trace/api";
+import type {
+  AgentCompetitorScorecard,
+  AgentTraceExperienceQualitySummary,
+  AgentTracePolicyReviewRuleDrafts,
+  AgentTraceProcessTimeline,
+  AgentTracePromotionAuditSummary,
+  AgentTraceReplayGate,
+  AgentTraceReviewQueueItem,
+  AgentTraceReviewQueueSummary,
+  AgentTraceTaskRecoveryQueue,
+  AgentTraceTaskRun,
+  AgentTraceTrustDenialSummary,
+  AutoVerifierMetricsReport,
+  AutomationPolicyRuleDraftsReport,
+  AutomationRadarReport,
+  BrowserDesktopQualityReport,
+  BrowserDesktopRepairRecipeVerificationsReport,
+  BrowserDesktopRepairRecipesReport,
+  E2ESurpassCertification,
+  OrganizationTopology,
+  OrganizationTopologyLiftReport,
+  OrganizationTopologyProposalsReport,
+  RepairRouteQualityReport,
+  ReplayEvidenceHint,
+  SubagentFitnessReport,
+} from "@/core/agent-trace/api";
+import {
+  fetchPluginLifecycleHistory,
+  fetchPluginPublisherTrust,
+  fetchPluginSmokeSummary,
+} from "@/core/plugins/api";
+import type {
+  PluginLifecycleHistory,
+  PluginPublisherTrustReport,
+  PluginSmokeSummary,
+} from "@/core/plugins/types";
 import { swallow } from "@/core/utils/log";
 import { cn } from "@/lib/utils";
-import { BrowserDesktopReplayReviewCard, ReplayEvidenceDrilldownCard, ReplayGateCard, StatusDot } from "../replay-panel";
-import { CheckCircle2Icon, GitBranchIcon, ListChecksIcon, RefreshCwIcon } from "lucide-react";
+import {
+  BrowserDesktopReplayReviewCard,
+  ReplayEvidenceDrilldownCard,
+  ReplayGateCard,
+  StatusDot,
+} from "../replay-panel";
+import {
+  CheckCircle2Icon,
+  GitBranchIcon,
+  ListChecksIcon,
+  RefreshCwIcon,
+} from "lucide-react";
 import { AutoVerifierCard } from "./cards/AutoVerifierCard";
 import { AutomationRadarCard } from "./cards/AutomationRadarCard";
 import { CompetitorScorecardCard } from "./cards/CompetitorScorecardCard";
@@ -27,8 +111,37 @@ import { TopologyPolicyCard } from "./cards/TopologyPolicyCard";
 import { TopologyPromotionCard } from "./cards/TopologyPromotionCard";
 import { ReplayGateOverrideDialog } from "./dialogs/ReplayGateOverrideDialog";
 import { EmptyPanel, Metric, PanelTitle } from "./operator-primitives";
-import { formatApplyResult, formatOperatorCopy, readRequestErrorMessage, replayEvidenceFromError, replayGateBlockFromError, shortId } from "./operator-utils";
-import { EMPTY_AGENT_SCORECARD, EMPTY_AUDIT_SUMMARY, EMPTY_AUTOMATION_POLICY_RULE_DRAFTS, EMPTY_AUTOMATION_RADAR, EMPTY_AUTO_VERIFIER_METRICS, EMPTY_BROWSER_DESKTOP_QUALITY, EMPTY_BROWSER_DESKTOP_REPAIR_RECIPES, EMPTY_BROWSER_DESKTOP_REPAIR_VERIFICATIONS, EMPTY_E2E_SURPASS_CERTIFICATION, EMPTY_EXPERIENCE_QUALITY, EMPTY_PLUGIN_LIFECYCLE_HISTORY, EMPTY_PLUGIN_PUBLISHER_TRUST, EMPTY_PLUGIN_SMOKE_SUMMARY, EMPTY_POLICY_REVIEW_RULE_DRAFTS, EMPTY_REPAIR_ROUTE_QUALITY, EMPTY_SUBAGENT_FITNESS, EMPTY_SUMMARY, EMPTY_TASK_RECOVERY_QUEUE, EMPTY_TOPOLOGY_LIFT, EMPTY_TOPOLOGY_PROPOSALS, EMPTY_TRUST_DENIAL_SUMMARY } from "./shared";
+import {
+  formatApplyResult,
+  formatOperatorCopy,
+  readRequestErrorMessage,
+  replayEvidenceFromError,
+  replayGateBlockFromError,
+  shortId,
+} from "./operator-utils";
+import {
+  EMPTY_AGENT_SCORECARD,
+  EMPTY_AUDIT_SUMMARY,
+  EMPTY_AUTOMATION_POLICY_RULE_DRAFTS,
+  EMPTY_AUTOMATION_RADAR,
+  EMPTY_AUTO_VERIFIER_METRICS,
+  EMPTY_BROWSER_DESKTOP_QUALITY,
+  EMPTY_BROWSER_DESKTOP_REPAIR_RECIPES,
+  EMPTY_BROWSER_DESKTOP_REPAIR_VERIFICATIONS,
+  EMPTY_E2E_SURPASS_CERTIFICATION,
+  EMPTY_EXPERIENCE_QUALITY,
+  EMPTY_PLUGIN_LIFECYCLE_HISTORY,
+  EMPTY_PLUGIN_PUBLISHER_TRUST,
+  EMPTY_PLUGIN_SMOKE_SUMMARY,
+  EMPTY_POLICY_REVIEW_RULE_DRAFTS,
+  EMPTY_REPAIR_ROUTE_QUALITY,
+  EMPTY_SUBAGENT_FITNESS,
+  EMPTY_SUMMARY,
+  EMPTY_TASK_RECOVERY_QUEUE,
+  EMPTY_TOPOLOGY_LIFT,
+  EMPTY_TOPOLOGY_PROPOSALS,
+  EMPTY_TRUST_DENIAL_SUMMARY,
+} from "./shared";
 import type { ReplayGateOverridePrompt } from "./shared";
 import { useOperatorCopy } from "./use-operator-copy";
 
@@ -107,6 +220,7 @@ export function AgentOperatorPanel() {
     null,
   );
   const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [lastApplyResult, setLastApplyResult] = useState<string | null>(null);
   const [overridePrompt, setOverridePrompt] =
     useState<ReplayGateOverridePrompt | null>(null);
@@ -239,6 +353,7 @@ export function AgentOperatorPanel() {
     setLoading(true);
     try {
       await Promise.all([refreshTaskRuns(), refreshQueue()]);
+      setHasLoaded(true);
       setError(null);
     } catch (err) {
       swallow(err);
@@ -418,14 +533,10 @@ export function AgentOperatorPanel() {
           ? await queueLatestBrowserSessionReplayCase()
           : await queueComputerActivityReplayCase();
       setLastApplyResult(
-        formatOperatorCopy(
-          to,
-          "Queued {count} {kind} replay review item(s).",
-          {
-            count: result.queue.created + result.queue.updated,
-            kind: to(kind),
-          },
-        ),
+        formatOperatorCopy(to, "Queued {count} {kind} replay review item(s).", {
+          count: result.queue.created + result.queue.updated,
+          kind: to(kind),
+        }),
       );
       await refreshQueue();
       setError(null);
@@ -674,6 +785,34 @@ export function AgentOperatorPanel() {
     }
   };
 
+  if ((!hasLoaded && loading) || error) {
+    return (
+      <section
+        className="workspace-panel space-y-3 px-5 py-4"
+        aria-busy={loading}
+      >
+        <h2 className="text-base font-semibold">
+          {to("Agent evolution queue")}
+        </h2>
+        <p
+          role={error ? "alert" : "status"}
+          className="text-sm text-muted-foreground"
+        >
+          {error ? serviceErrorMessage(error) : "正在读取运行与治理数据…"}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {error
+            ? "统计与健康检查尚未完成，暂不显示结论。"
+            : "请稍候，读取后显示统计和检查结果。"}
+        </p>
+        {error && (
+          <Button variant="outline" size="sm" onClick={() => void refreshAll()}>
+            {to("Refresh")}
+          </Button>
+        )}
+      </section>
+    );
+  }
   return (
     <section className="workspace-panel px-5 py-4">
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">

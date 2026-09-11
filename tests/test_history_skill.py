@@ -23,6 +23,65 @@ OLD = NOW - timedelta(days=30)
 RECENT = NOW - timedelta(days=2)
 
 
+def test_registration_does_not_open_or_scan_user_history(monkeypatch):
+    from runtime.execution.suckers import SkillRegistry
+
+    accesses = []
+
+    def unexpected_store():
+        accesses.append(True)
+        raise AssertionError("startup must not resolve user history")
+
+    monkeypatch.setattr(hs, "_resolve_store", unexpected_store)
+    registry = SkillRegistry(strict_mode=True)
+    assert hs.register_history_skill(registry) == 2
+    assert registry.has("history_search") and registry.has("history_read")
+    assert accesses == []
+
+
+def test_fallback_reads_existing_history_without_databases_or_repairs(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    source = ThreadStateStore(
+        per_agent_base=tmp_path,
+        index_enabled=False,
+        search_enabled=False,
+        feedback_enabled=False,
+    )
+    thread = source.create(
+        values={
+            "title": "Alpha history",
+            "messages": [{"role": "user", "content": "Read this existing message"}],
+        }
+    )
+    journals = {path: path.read_bytes() for path in tmp_path.rglob("*.jsonl")}
+    assert journals
+    monkeypatch.setattr(hs, "_DEFAULT_STORE", None)
+    monkeypatch.setattr(hs, "_FALLBACK_STORE", None)
+    monkeypatch.setattr(
+        "runtime.platform.process.paths.app_paths",
+        lambda: SimpleNamespace(threads_path=tmp_path / "data" / "threads.jsonl"),
+    )
+
+    def forbidden_repair(self):
+        raise AssertionError("history fallback must not repair persisted threads")
+
+    monkeypatch.setattr(
+        ThreadStateStore, "_repair_conflicting_agent_copies_locked", forbidden_repair
+    )
+    results = hs._history_search(query="Alpha", include_current=True)
+    assert results["count"] == 1
+    assert (
+        hs._history_read(thread["thread_id"])["messages"][0]["content"]
+        == "Read this existing message"
+    )
+    assert hs._FALLBACK_STORE._index is None
+    assert hs._FALLBACK_STORE._search is None
+    assert hs._FALLBACK_STORE._feedback is None
+    assert not (tmp_path / "data" / "sessions" / "search.db").exists()
+    assert {path: path.read_bytes() for path in tmp_path.rglob("*.jsonl")} == journals
+
+
 @pytest.fixture
 def store(monkeypatch):
     """In-memory store with two threads at different points in time."""

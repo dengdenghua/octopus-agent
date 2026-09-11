@@ -118,7 +118,15 @@ async def select_turn_execution(
     reflection_fast_path: bool,
     coordinated: bool = False,
 ) -> ExecutionRoute:
+    context = intent.user_context or {}
+    if context.get("cowork_group") and any(
+        str(member).startswith("a2a_") for member in context.get("cowork_responders", [])
+    ):
+        # Host dispatch only: each member owns its backend and credentials.
+        return ExecutionRoute(EngineId.OCTOPUS, "group_fanout", "remote_group_member")
     requested = getattr(turn.params, "execution_engine", "auto")
+    config = getattr(getattr(runtime, "_stack", None), "config", None)
+    default_member = getattr(getattr(config, "execution", None), "member_engine", "octopus")
     route = select_execution_route(
         project_command=project_command,
         group_fanout=group_fanout,
@@ -128,9 +136,19 @@ async def select_turn_execution(
         requested_engine=None if requested == "auto" else EngineId(requested),
         coding_task=is_coding_task(intent),
         coordinated=coordinated,
+        coordinator_engine=EngineId.OPENCODE if default_member == "opencode" else None,
+        default_engine=EngineId.OPENCODE if default_member == "opencode" else None,
     )
     if route.engine is EngineId.OCTOPUS:
         return route
+    if route.engine is EngineId.OPENCODE:
+        from runtime.execution.opencode_backend import inspect_readiness
+        from runtime.sensing.gateway.realtime_opencode_backend import scope_for_turn
+
+        status = await asyncio.to_thread(inspect_readiness, scope_for_turn(turn))
+        if status["available"]:
+            return route
+        raise EngineSelectionError(status["reason"], engine=EngineId.OPENCODE, reason="unavailable")
     readiness = await asyncio.to_thread(codex_readiness_for_turn, runtime, turn, agent)
     if readiness.available:
         return route
@@ -166,6 +184,25 @@ class _TurnHost:
     context: RealtimeExecutionContext = field(default_factory=RealtimeExecutionContext)
 
 
+async def _dispatch_host_driver(
+    host: _TurnHost, request: TurnExecutionRequest, phase: ExecutionPhase
+) -> bool:
+    """Dispatch host orchestration separately from model continuations."""
+    args = (host.turn, host.log, host.emitter, request.intent)
+    driver = host.route.driver_for(phase)
+    if driver == "project_os":
+        await host.runtime._drive_project_os(
+            *args, thread_id=host.turn.thread_id, text=request.text, leader=host.agent
+        )
+    elif driver == "group_fanout":
+        await host.runtime._drive_group_fanout(*args, text=request.text)
+    elif driver == "swarm_mesh":
+        await host.runtime._drive_swarm_mesh(*args, text=request.text, topology_id=host.topology_id)
+    else:
+        return False
+    return True
+
+
 @dataclass(frozen=True, slots=True)
 class NativeExecutionAdapter:
     host: _TurnHost
@@ -180,13 +217,9 @@ class NativeExecutionAdapter:
         h = self.host
         args = (h.turn, h.log, h.emitter, request.intent)
         driver = h.route.driver_for(phase)
-        if driver == "project_os":
-            await h.runtime._drive_project_os(*args, thread_id=h.turn.thread_id, text=request.text)
-        elif driver == "group_fanout":
-            await h.runtime._drive_group_fanout(*args, text=request.text)
-        elif driver == "swarm_mesh":
-            await h.runtime._drive_swarm_mesh(*args, text=request.text, topology_id=h.topology_id)
-        elif driver == "reflection_fast_path":
+        if await _dispatch_host_driver(h, request, phase):
+            return
+        if driver == "reflection_fast_path":
             await h.runtime._drive_reflection_fast_path(*args, h.agent, model=request.model)
         elif driver == "react":
             await h.runtime._drive_react(*args, h.provider, h.agent, model=request.model)
@@ -204,8 +237,34 @@ class CodexExecutionAdapter:
         # Every continuation resumes the same durable Codex thread. Never
         # use the native planner as an implicit verification/failure fallback.
         async with h.context.activate(h.runtime, h.turn, h.agent, request.intent, request.text):
+            if await _dispatch_host_driver(h, request, phase):
+                return
             await h.runtime._drive_codex_app_server(
                 h.turn, h.log, h.emitter, request.intent, h.agent, h.provider, text=request.text
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class OpenCodeExecutionAdapter:
+    host: _TurnHost
+    engine = EngineId.OPENCODE
+
+    async def execute(self, request: TurnExecutionRequest, phase: ExecutionPhase) -> None:
+        from runtime.sensing.gateway.realtime_opencode_backend import drive_opencode
+
+        h = self.host
+        async with h.context.activate(h.runtime, h.turn, h.agent, request.intent, request.text):
+            if await _dispatch_host_driver(h, request, phase):
+                return
+            await drive_opencode(
+                h.runtime,
+                h.turn,
+                h.log,
+                h.emitter,
+                request.intent,
+                h.agent,
+                h.provider,
+                text=request.text,
             )
 
 
@@ -230,6 +289,7 @@ def bind_turn_execution(
         )
 
     context = RealtimeExecutionContext(
+        approval_provider=provider,
         handoff_recorder=HandoffRecorder(
             lambda receipt: log.execution_handoff(turn.thread_id, turn.id, receipt),
             read_handoffs,
@@ -243,11 +303,11 @@ def bind_turn_execution(
         # this host turn instead of granting every continuation a new window.
         context.maximum_duration_s = _turn_timeout_s()
     host = _TurnHost(runtime, turn, log, emitter, provider, agent, route, topology_id, context)
-    adapter = (
-        CodexExecutionAdapter(host)
-        if route.engine is EngineId.CODEX
-        else NativeExecutionAdapter(host)
-    )
+    adapter = {
+        EngineId.CODEX: CodexExecutionAdapter,
+        EngineId.OPENCODE: OpenCodeExecutionAdapter,
+        EngineId.OCTOPUS: NativeExecutionAdapter,
+    }[route.engine](host)
 
     async def before_invoke(phase: ExecutionPhase, invocation: int) -> None:
         snapshot = ExecutionSnapshot(
@@ -263,6 +323,13 @@ def bind_turn_execution(
             turn.thread_id,
             turn.id,
             execution=snapshot.model_dump(mode="json"),
+            execution_model={
+                "engine": route.engine.value,
+                "invocation": invocation,
+                "model": turn.params.model or "auto",
+            }
+            if route.engine is not EngineId.OCTOPUS and turn.params is not None
+            else None,
             durable=True,
         )
         turn.execution = snapshot

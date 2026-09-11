@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/harness";
@@ -26,7 +26,8 @@ describe("<WorkDirSelector />", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
-        ok: true,
+        ok: false,
+        status: 503,
         json: vi.fn().mockResolvedValue({
           success: false,
           path: null,
@@ -39,6 +40,30 @@ describe("<WorkDirSelector />", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("switches to personal space through the dropdown without opening a picker", async () => {
+    const onWorkDirChange = vi.fn();
+    const open = vi.fn();
+    vi.stubGlobal("octopus", { dialog: { open } });
+    renderWithProviders(
+      <WorkDirSelector
+        workDir="C:/Users/Administrator"
+        variant="muted"
+        onWorkDirChange={onWorkDirChange}
+      />,
+    );
+    const trigger = screen.getByTitle(
+      "Choose workspace folder: C:/Users/Administrator",
+    );
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Personal space" }),
+    );
+    expect(onWorkDirChange).toHaveBeenCalledWith("");
+    expect(open).not.toHaveBeenCalled();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 
   it("keeps the portaled menu open when pressing an action inside it", async () => {
@@ -115,7 +140,7 @@ describe("<WorkDirSelector />", () => {
       />,
     );
 
-    // Canceling the system picker reveals recent workspaces as the fallback.
+    // An unavailable system picker reveals recent workspaces as the fallback.
     fireEvent.click(screen.getByTitle("Personal space"));
     fireEvent.click(await screen.findByText("Public"));
 
@@ -208,6 +233,9 @@ describe("<WorkDirSelector />", () => {
 
     // A picker failure keeps manual path entry available.
     fireEvent.click(screen.getByTitle("Personal space"));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Choose workspace folder" }),
+    );
     const input = await screen.findByPlaceholderText(
       "Enter workspace directory path:",
     );
@@ -243,6 +271,9 @@ describe("<WorkDirSelector />", () => {
     );
 
     fireEvent.click(screen.getByTitle("Personal space"));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Choose workspace folder" }),
+    );
 
     await waitFor(() => {
       expect(onWorkDirChange).toHaveBeenCalledWith(
@@ -268,11 +299,12 @@ describe("<WorkDirSelector />", () => {
       />,
     );
 
-    // Primary trigger now directly invokes the native picker (no menu)
+    // The dropdown opens first; choosing Open folder invokes the native picker
     fireEvent.click(
       screen.getByTitle("Choose workspace folder: F:/work/octopus-agent"),
     );
 
+    fireEvent.click(await screen.findByRole("button", { name: "Open folder" }));
     await waitFor(() => {
       expect(open).toHaveBeenCalledWith({
         title: "选择工作区文件夹",
@@ -315,7 +347,7 @@ describe("<WorkDirSelector />", () => {
     expect(onWorkDirChange).toHaveBeenCalledWith("F:/");
   });
 
-  it("opens the desktop folder picker from the muted primary trigger", async () => {
+  it("opens the desktop folder picker from the dropdown action", async () => {
     const onWorkDirChange = vi.fn();
     const open = vi.fn().mockResolvedValue({
       canceled: false,
@@ -336,6 +368,9 @@ describe("<WorkDirSelector />", () => {
     );
 
     fireEvent.click(screen.getByTitle("Personal space"));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Choose workspace folder" }),
+    );
 
     await waitFor(() => {
       expect(open).toHaveBeenCalledWith({
@@ -347,5 +382,60 @@ describe("<WorkDirSelector />", () => {
       });
       expect(onWorkDirChange).toHaveBeenCalledWith("F:\\picked\\primary");
     });
+  });
+
+  it("discards a late native result after the user clicks outside", async () => {
+    let resolvePicker!: (value: {
+      canceled: boolean;
+      filePaths: string[];
+    }) => void;
+    const open = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolvePicker = resolve;
+        }),
+    );
+    vi.stubGlobal("octopus", { dialog: { open } });
+    const onWorkDirChange = vi.fn();
+    renderWithProviders(
+      <>
+        <button>Other action</button>
+        <WorkDirSelector
+          workDir=""
+          variant="muted"
+          onWorkDirChange={onWorkDirChange}
+        />
+      </>,
+    );
+    fireEvent.click(screen.getByTitle("Personal space"));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Choose workspace folder" }),
+    );
+    expect(screen.getByTitle("Cancel")).toBeInTheDocument();
+    const other = screen.getByRole("button", { name: "Other action" });
+    fireEvent.mouseDown(other);
+    other.focus();
+    await act(async () =>
+      resolvePicker({ canceled: false, filePaths: ["F:/late"] }),
+    );
+    expect(onWorkDirChange).not.toHaveBeenCalled();
+    expect(screen.queryByText("Browse current folder")).toBeNull();
+    expect(other).toHaveFocus();
+  });
+
+  it("keeps the fallback closed when the native dialog is canceled", async () => {
+    const open = vi.fn().mockResolvedValue({ canceled: true, filePaths: [] });
+    vi.stubGlobal("octopus", { dialog: { open } });
+    renderWithProviders(
+      <WorkDirSelector workDir="" variant="muted" onWorkDirChange={vi.fn()} />,
+    );
+    fireEvent.click(screen.getByTitle("Personal space"));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Choose workspace folder" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTitle("Personal space")).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("Browse current folder")).toBeNull();
   });
 });

@@ -5,7 +5,7 @@
 ## 启动与停止
 
 - 双击根目录 `Start-Echo.cmd`：启动 Python 后端、Vite 前端和 Electron 桌面窗口。
-- 浏览器模式：运行 `Start-Echo.cmd -Web`，地址为 http://127.0.0.1:3000 。
+- 浏览器模式：运行 `Start-Echo.cmd -Web`，地址为 http://127.0.0.1:3310 。
 - 双击 `Stop-Echo.cmd`：停止这些脚本启动的本地进程。
 - `Start-Octopus.cmd` / `Stop-Octopus.cmd` 仍保留为兼容入口。
 - 关闭桌面窗口不会停止后端；需要完全退出时使用停止脚本。
@@ -44,7 +44,7 @@ OpenCode Zen 插件确认权限后需在应用内填写自己的 API Key，验�
 - 本地配置：`config.local.yaml`，基于项目桌面模板生成，含本机独立登录签名密钥，已被 Git 忽略。
 - 运行数据：`.codex-run/octopus`；日志与进程记录：`.codex-run`。
 - Node.js 使用本机 Codex 附带运行时；其路径保存在被忽略的 `.codex-run/runtime-paths.json` 中。换机器后需重新安装依赖并设置 Node.js。
-- 后端健康检查：http://127.0.0.1:8000/api/health 。
+- 后端健康检查：http://127.0.0.1:8310/api/health 。
 
 Codex 按账号、任务隔离的状态目录会超过 Windows 旧的 260 字符限制。本机已于
 2026-09-05 将 `HKLM\SYSTEM\CurrentControlSet\Control\FileSystem\LongPathsEnabled`
@@ -63,14 +63,14 @@ Set-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem
 .\.venv\Scripts\Activate.ps1
 $env:PYTHONUTF8 = '1'
 $env:OCTOPUS_HOME = Join-Path $PWD '.codex-run\octopus'
-python -m runtime serve --config config.local.yaml --host 127.0.0.1 --port 8000
+python -m runtime serve --config config.local.yaml --host 127.0.0.1 --port 8310
 ```
 
 另一个终端运行前端：
 
 ```powershell
 cd frontend
-node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 3000 --strictPort
+node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 3310 --strictPort
 ```
 
 在项目根目录打开新终端，构建前端：
@@ -87,3 +87,17 @@ node node_modules/vite/bin/vite.js build
 ```
 
 前端使用仓库锁文件安装：在 `frontend` 中运行 `pnpm install --frozen-lockfile`。`electron-winstaller` 的可选构建脚本已明确禁用；当前使用 Electron 开发运行方式，尚未生成签名的 Windows 安装包。
+
+### OpenCode / Zen 引擎
+
+在本地安装官方 [OpenCode](https://opencode.ai/docs/) 后，将可执行文件加入 PATH，或设置 `OCTOPUS_OPENCODE_BIN` 为完整路径。Windows 启动脚本也会读取 `.codex-run/runtime-paths.json` 中的 `opencode` 路径。当前接入已用 OpenCode 1.18.29 验证。
+
+在 Echo 的插件设置中连接当前账号的 OpenCode Zen，然后在对话输入框选择「执行引擎 → OpenCode」，模型选择 Zen 的 `big-pickle` 等可用模型。Auto 使用 `big-pickle`，不替换用户明确选择的模型。
+
+这条路径启动真正的 `opencode serve`，由它执行 Zen 推理；原生 Echo / Codex 不通过此进程转发模型请求。除文本、网页调研、连续对话、流式输出和停止外，OpenCode 通过每轮临时的本地 MCP 接口调用 Echo 的共享工具。角色、模式、显式选择的 `$skill` / `@skill:name` 指令沿用 Echo；已启用、当前角色获授权并进入本轮目录的插件动作也由 Echo 执行，无需在 OpenCode 再安装一遍。
+
+文件、终端和桌面工具受原生执行器、当前工作区和审批策略约束；完整能力取决于当前角色、已连接插件及模型。OpenCode 每轮最多公布 64 个相关工具，Codex 继续使用原有的 128 个动态工具预算。尚未接入 OpenCode 团队编排、交互式插件界面及工具图片/音频的完整多模态传递，不能把“插件动作可调用”理解为所有插件界面和媒体能力均已兼容。
+
+子进程和工具接口只监听回环地址，分别使用随机密码、每轮临时令牌。密钥从当前账号的加密凭据库读取并仅注入子进程环境。会话按租户、账号和对话分别保存在 Echo 数据目录的 `opencode/` 下；任务结束或停止后关闭进程及工具接口，下一次对话恢复原会话。此路径仍受 Zen 的模型可用性和额度限制。
+
+跨引擎续聊以 Echo 的会话日志为历史来源。Codex / OpenCode 恢复既有会话时只补上缺失的历史；新建内部会话时恢复近期上下文。历史包含用户消息、回答和有限的工具结果摘要，不会重新执行过去的工具。每次历史补充最多选择近期 24 轮、约 48,000 字符，过长内容明确标记截断；当前多模态附件不随该文本历史补充自动重传。同步进度写入现有 Echo 日志，不增加记忆数据库，也不把测试或普通聊天自动写入长期记忆。详见 [跨引擎续聊验收](docs/audits/cross-engine-history-2026-09-08.md)。

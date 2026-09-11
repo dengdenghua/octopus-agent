@@ -1,0 +1,60 @@
+{
+  "version": "1.18.29",
+  "release": "https://github.com/anomalyco/opencode/releases/tag/v1.18.29",
+  "license": {
+    "source": "https://raw.githubusercontent.com/anomalyco/opencode/v1.18.29/LICENSE",
+    "sha256": "625f0f619133f89bbbb2abe37369613dfa1885eba1e50d02170deb62bb42cb6b"
+  },
+  "platforms": {
+    "win32-x64": {
+      "asset": "opencode-windows-x64.zip",
+      "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.29/opencode-windows-x64.zip",
+      "sha256": "b32618aa3d1415f6e4f473aec248edef25759203fb707d7d968359d86d4a35ee",
+      "archiveFormat": "zip",
+      "archiveMember": "opencode.exe",
+      "executable": "opencode.exe",
+      "executableMagic": "4d5a",
+      "fileHashPhase": "pre-authenticode"
+    },
+    "darwin-arm64": {
+      "asset": "opencode-darwin-arm64.zip",
+      "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.29/opencode-darwin-arm64.zip",
+      "sha256": "fe764f7f360c584a83e18dd5f23fb1a6b2725f5ee8854b0252fe558f7798e946",
+      "archiveFormat": "zip",
+      "archiveMember": "opencode",
+      "executable": "opencode",
+      "executableMagic": "cffaedfe",
+      "fileHashPhase": "pre-codesign"
+    },
+    "darwin-x64": {
+      "asset": "opencode-darwin-x64.zip",
+      "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.29/opencode-darwin-x64.zip",
+      "sha256": "9858853e7bacdbbd22c2d70c377e009dc4b354dd04f5588705411e7afb89fd2d",
+      "archiveFormat": "zip",
+      "archiveMember": "opencode",
+      "executable": "opencode",
+      "executableMagic": "cffaedfe",
+      "fileHashPhase": "pre-codesign"
+    },
+    "linux-x64": {
+      "asset": "opencode-linux-x64.tar.gz",
+      "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.29/opencode-linux-x64.tar.gz",
+      "sha256": "ea800b7ff56226b70952126c9fc1e2517ca4c4b5682fd9d3f9e87449697a1194",
+      "archiveFormat": "tar.gz",
+      "archiveMember": "opencode",
+      "executable": "opencode",
+      "executableMagic": "7f454c46",
+      "fileHashPhase": "pre-package"
+    },
+    "linux-arm64": {
+      "asset": "opencode-linux-arm64.tar.gz",
+      "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.29/opencode-linux-arm64.tar.gz",
+      "sha256": "70baf769395ca4e7a68924026530c390eace194f3b7e4919d4efcb2aa2eed3c0",
+      "archiveFormat": "tar.gz",
+      "archiveMember": "opencode",
+      "executable": "opencode",
+      "executableMagic": "7f454c46",
+      "fileHashPhase": "pre-package"
+    }
+  }
+}

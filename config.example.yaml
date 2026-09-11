@@ -312,6 +312,16 @@ safety:
     # weak-test guard: true       # explicit on (overrides any blanket off)
 
 execution:
+  # Members and realtime Auto requests default to OpenCode; explicit engines
+  # and dedicated Codex roles retain their selection.
+  # Without Zen credentials, official anonymous zero-cost models are available.
+  # Paid or unknown-price models fail before inference; no native fallback.
+  # Shared deployments currently need octopus (OpenCode supports local only).
+  member_engine: opencode
+  # null follows the member policy: OpenCode keeps unattended model calls off.
+  # true opts into configured background evolution/experiment/summary models.
+  # Memory buckets still update deterministically when model calls are off.
+  background_model_calls: null
   # local keeps the single-user desktop/developer contract. For a networked
   # commercial service use shared/commercial/production/server; serve then
   # requires a hard process sandbox and refuses startup when unavailable.

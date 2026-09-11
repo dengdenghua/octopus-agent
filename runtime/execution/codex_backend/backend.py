@@ -84,6 +84,7 @@ class CodexExecutionRequest:
     effort: str | None = None
     sandbox_mode: CodexSandboxMode = "workspace-write"
     approval_policy: Literal["on-request", "never"] = "on-request"
+    approval_reviewer: Literal["user", "auto_review"] = "user"
     host_env: Mapping[str, str] | None = field(default=None, repr=False)
     provider_profile: CodexProviderProfile | None = None
     use_system_model_proxy: bool = False
@@ -93,8 +94,19 @@ class CodexExecutionRequest:
     selected_app_ids: tuple[str, ...] = ()
     app_mentions: tuple[tuple[str, str], ...] = ()
     execution: ExecutionRequest | None = field(default=None, repr=False)
+    fresh_thread_prompt: str | None = field(default=None, repr=False)
+    tool_free: bool = False
 
     def __post_init__(self) -> None:
+        if type(self.tool_free) is not bool:
+            raise ValueError("tool_free must be a boolean")
+        if self.tool_free and (
+            self.dynamic_tools
+            or self.dynamic_tool_handler is not None
+            or self.selected_app_ids
+            or self.app_mentions
+        ):
+            raise ValueError("tool-free Codex requests cannot expose tools or apps")
         for field_name in (
             "outer_thread_id",
             "outer_turn_id",
@@ -107,6 +119,10 @@ class CodexExecutionRequest:
                 raise ValueError(f"{field_name} must be a non-empty string")
         if not isinstance(self.prompt, str) or not self.prompt.strip():
             raise ValueError("prompt must be a non-empty string")
+        if self.fresh_thread_prompt is not None and (
+            not isinstance(self.fresh_thread_prompt, str) or not self.fresh_thread_prompt.strip()
+        ):
+            raise ValueError("fresh_thread_prompt must be a non-empty string when supplied")
         if not isinstance(self.command, tuple) or not self.command:
             raise ValueError("command must be an explicit non-empty tuple")
         if any(not isinstance(part, str) or not part or "\x00" in part for part in self.command):
@@ -153,6 +169,8 @@ class CodexExecutionRequest:
             )
         if self.approval_policy not in {"on-request", "never"}:
             raise ValueError("approval_policy must be 'on-request' or 'never'")
+        if self.approval_reviewer not in {"user", "auto_review"}:
+            raise ValueError("approval_reviewer must be 'user' or 'auto_review'")
         if self.provider_profile is not None and not isinstance(
             self.provider_profile, CodexProviderProfile
         ):
@@ -287,7 +305,12 @@ class CodexExecutionSession:
         try:
             process_backend = self._effective_process_backend()
             context = self._security.prepare(
-                realm_id=self.request.realm_id,
+                # Keep tool-free conversations in a separate private state
+                # namespace. Resuming a task after a chat reply must not retain
+                # the earlier empty execution-environment selection.
+                realm_id=(self.request.realm_id + "/codex-tool-free-v1")
+                if self.request.tool_free
+                else self.request.realm_id,
                 tenant_id=_principal_scoped_tenant(
                     self.request.tenant_id,
                     self.request.principal_id,
@@ -296,6 +319,7 @@ class CodexExecutionSession:
                 task_id=self.request.outer_turn_id,
                 workspace=self.request.workspace,
                 sandbox_mode=self.request.sandbox_mode,
+                approval_reviewer=self.request.approval_reviewer,
                 provider_profile=self.request.provider_profile,
                 selected_app_ids=self.request.selected_app_ids,
                 # This attestation is derived from the effective BackendChoice
@@ -361,6 +385,8 @@ class CodexExecutionSession:
             self._inner_thread_id = inner_thread_id
 
             turn_params = _turn_extra_params(context.turn_start_security_overrides())
+            if self.request.tool_free:
+                turn_params["environments"] = []
             turn_params["approvalPolicy"] = self.request.approval_policy
             if self.request.model is not None:
                 turn_params["model"] = self.request.model
@@ -371,9 +397,14 @@ class CodexExecutionSession:
             # deliberate: after this point a lost/malformed response cannot
             # prove that the model did not run or tools did not execute.
             self._turn_started = True
-            input_items: str | list[dict[str, str]] = self.request.prompt
+            prompt = (
+                self.request.fresh_thread_prompt
+                if not self._resumed and self.request.fresh_thread_prompt is not None
+                else self.request.prompt
+            )
+            input_items: str | list[dict[str, str]] = prompt
             if self.request.app_mentions:
-                input_items = [{"type": "text", "text": self.request.prompt}]
+                input_items = [{"type": "text", "text": prompt}]
                 input_items.extend(
                     {"type": "mention", "name": name, "path": f"app://{app_id}"}
                     for app_id, name in self.request.app_mentions
@@ -516,6 +547,8 @@ class CodexExecutionSession:
         # Reassert the exact current-turn catalog, including an explicit empty
         # list when Octopus revoked every tool since the previous turn.
         params["dynamicTools"] = [dict(spec) for spec in self.request.dynamic_tools]
+        if self.request.tool_free:
+            params["environments"] = []
         if self.request.developer_instructions is not None:
             params["developerInstructions"] = self.request.developer_instructions
         return await self._require_client().resume_thread(
@@ -539,6 +572,8 @@ class CodexExecutionSession:
         permissions = _permission_profile(overrides)
         params = _thread_extra_params(overrides, resume=False)
         params["dynamicTools"] = [dict(spec) for spec in self.request.dynamic_tools]
+        if self.request.tool_free:
+            params["environments"] = []
         if self.request.developer_instructions is not None:
             params["developerInstructions"] = self.request.developer_instructions
         try:

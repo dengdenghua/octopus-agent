@@ -91,9 +91,11 @@ class _SessionBackendMixin:
             return True
         sync_playwright = self._playwright_runtime()
         if sync_playwright is None:
+            session["launch_error"] = "Playwright is not installed"
             return False
         executable_path = self._preferred_browser_executable()
         if not executable_path:
+            session["launch_error"] = "No supported Chromium browser was found"
             return False
         playwright = None
         browser = None
@@ -115,7 +117,8 @@ class _SessionBackendMixin:
                 },
             )
             page = context.pages[0] if context.pages else context.new_page()
-        except self._browser_runtime_errors():
+        except self._browser_runtime_errors() as exc:
+            session["launch_error"] = str(exc)
             with contextlib.suppress(Exception):
                 if context is not None:
                     context.close()
@@ -136,6 +139,7 @@ class _SessionBackendMixin:
         session["context"] = context
         session["page"] = page
         session["mode"] = "playwright"
+        session.pop("launch_error", None)
         return True
 
     def _close_real_browser_session(self, session: dict[str, Any]) -> None:

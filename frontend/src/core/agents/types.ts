@@ -173,6 +173,7 @@ export interface AgentWorldListResponse {
 
 export interface CreateAgentRequest {
   name: string;
+  display_name?: string;
   description?: string;
   model?: string | null;
   tool_groups?: string[] | null;

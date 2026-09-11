@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import tarfile
@@ -14,6 +15,97 @@ import pytest
 
 from runtime.platform.plugins import cloud_catalog
 from runtime.platform.plugins.cloud_catalog import CloudCatalog
+
+
+def test_individual_skill_download_is_verified_and_cached(tmp_path, monkeypatch):
+    body = _make_skill_pack()
+    digest = hashlib.sha256(body).hexdigest()
+    cat = CloudCatalog("skills", use_remote=False, use_cache=False)
+    cat._store = {
+        "skills": [
+            {
+                "name": "api-doc-gen",
+                "package_url": "https://example.com/skill.tar.gz",
+                "package_sha256": digest,
+            }
+        ]
+    }
+    monkeypatch.setattr(cloud_catalog, "CACHE_DIR", tmp_path / "cache")
+    calls = []
+
+    def fetch(url, **kwargs):
+        calls.append(url)
+        return body
+
+    monkeypatch.setattr(cloud_catalog, "fetch_public_https_bytes", fetch)
+    monkeypatch.setattr(
+        cat, "_archive_path", lambda: pytest.fail("must not download the full archive")
+    )
+    cat.install_skill("api-doc-gen", skills_dir=tmp_path / "installed")
+    assert (tmp_path / "installed/api-doc-gen/SKILL.md").is_file()
+    cat._skill_archive_path("api-doc-gen")
+    assert len(calls) == 1
+    (tmp_path / "cache/skills" / f"{digest}.tar.gz").write_bytes(b"corrupt")
+    cat._skill_archive_path("api-doc-gen")
+    assert len(calls) == 2
+
+
+def test_individual_skill_rejects_hash_mismatch(tmp_path, monkeypatch):
+    cat = CloudCatalog("skills", use_remote=False, use_cache=False)
+    cat._store = {
+        "skills": [
+            {
+                "name": "bad",
+                "package_url": "https://example.com/bad.tar.gz",
+                "package_sha256": "0" * 64,
+            }
+        ]
+    }
+    monkeypatch.setattr(cloud_catalog, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(cloud_catalog, "fetch_public_https_bytes", lambda *a, **k: b"bad")
+    with pytest.raises(ValueError, match="checksum mismatch"):
+        cat.install_skill("bad", skills_dir=tmp_path / "installed")
+    assert not (tmp_path / "installed/bad").exists()
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_cloud_install_endpoint_registers_skill_immediately(tmp_path, monkeypatch, stream):
+    from types import SimpleNamespace
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from runtime.execution.suckers.registry import SkillRegistry
+    from runtime.sensing.gateway import agent_world_router
+
+    data = tmp_path / "data"
+    monkeypatch.setenv("OCTOPUS_DEPLOYMENT_MODE", "desktop")
+    monkeypatch.setattr(agent_world_router, "app_paths", lambda: SimpleNamespace(data_dir=data))
+
+    def install(self, name):
+        root = data / "skills" / name
+        root.mkdir(parents=True)
+        (root / "SKILL.md").write_text(
+            f"---\nname: {name}\ndescription: installed test\n---\nUse this skill.",
+            encoding="utf-8",
+        )
+        return {"installed": True, "name": name}
+
+    monkeypatch.setattr(CloudCatalog, "install_skill", install)
+    registry = SkillRegistry()
+    app = FastAPI()
+    app.include_router(
+        agent_world_router.create_agent_world_router(
+            skill_registry=registry, allow_local_user_plugin_lifecycle=True
+        )
+    )
+    response = TestClient(app).post(
+        "/api/agent-market/cloud/skills/cloud-demo/install" + ("/stream" if stream else "")
+    )
+    assert response.status_code == 200
+    result = json.loads(response.text.splitlines()[-1])["result"] if stream else response.json()
+    assert result["registered_now"] == 1
+    assert registry.has("cloud-demo")
 
 
 def _make_skill_pack() -> bytes:

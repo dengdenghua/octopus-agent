@@ -175,6 +175,8 @@ def _dirty_worktree(base: Path) -> dict[str, Any]:
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=5,
         )
     except Exception as exc:  # noqa: BLE001

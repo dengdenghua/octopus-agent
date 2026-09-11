@@ -1,0 +1,99 @@
+{
+  "python": "3.12.14 (main, Aug 25 2026, 14:01:42) [MSC v.1944 64 bit (AMD64)]",
+  "platform": "win32",
+  "samples": 3,
+  "targets": {
+    "runtime.platform.config.schema": {
+      "median_seconds": 0.847437100004754,
+      "samples": [
+        {
+          "seconds": 0.8538738999923225,
+          "modules": 852,
+          "native_planner_loaded": true,
+          "working_set_bytes": 68325376
+        },
+        {
+          "seconds": 0.8182989000051748,
+          "modules": 852,
+          "native_planner_loaded": true,
+          "working_set_bytes": 68460544
+        },
+        {
+          "seconds": 0.847437100004754,
+          "modules": 852,
+          "native_planner_loaded": true,
+          "working_set_bytes": 68190208
+        }
+      ]
+    },
+    "runtime.execution.request": {
+      "median_seconds": 0.027299699999275617,
+      "samples": [
+        {
+          "seconds": 0.02932899999723304,
+          "modules": 142,
+          "native_planner_loaded": false,
+          "working_set_bytes": 21319680
+        },
+        {
+          "seconds": 0.027299699999275617,
+          "modules": 142,
+          "native_planner_loaded": false,
+          "working_set_bytes": 21532672
+        },
+        {
+          "seconds": 0.02663399999437388,
+          "modules": 142,
+          "native_planner_loaded": false,
+          "working_set_bytes": 21581824
+        }
+      ]
+    },
+    "runtime.execution.opencode_backend": {
+      "median_seconds": 1.3378518000099575,
+      "samples": [
+        {
+          "seconds": 1.3094372000050498,
+          "modules": 1102,
+          "native_planner_loaded": true,
+          "working_set_bytes": 95072256
+        },
+        {
+          "seconds": 1.3378518000099575,
+          "modules": 1102,
+          "native_planner_loaded": true,
+          "working_set_bytes": 95182848
+        },
+        {
+          "seconds": 1.3419106000073953,
+          "modules": 1102,
+          "native_planner_loaded": true,
+          "working_set_bytes": 95313920
+        }
+      ]
+    },
+    "runtime.sensing.gateway.realtime_opencode_backend": {
+      "median_seconds": 1.575011100008851,
+      "samples": [
+        {
+          "seconds": 1.575011100008851,
+          "modules": 1168,
+          "native_planner_loaded": true,
+          "working_set_bytes": 99848192
+        },
+        {
+          "seconds": 1.6304578999988735,
+          "modules": 1168,
+          "native_planner_loaded": true,
+          "working_set_bytes": 99622912
+        },
+        {
+          "seconds": 1.4498496000014711,
+          "modules": 1168,
+          "native_planner_loaded": true,
+          "working_set_bytes": 99868672
+        }
+      ]
+    }
+  }
+}

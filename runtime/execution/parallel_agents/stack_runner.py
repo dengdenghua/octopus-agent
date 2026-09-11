@@ -5,7 +5,6 @@ import logging
 from collections.abc import Callable
 from typing import Any, cast
 
-from runtime.core.cerebrum.planner import PlannerError
 from runtime.execution.request import current_execution_request
 from runtime.platform.models import (
     ArmId,
@@ -22,6 +21,27 @@ from .orchestrator import TaskRunner
 _log = logging.getLogger(__name__)
 
 _DIRECT_CONVERSATION_MAX_TOKENS = 512
+
+
+def member_execution_backend(stack: Any, agent: Any) -> str:
+    """Resolve role/config policy before touching any model or credentials."""
+    capabilities = getattr(agent, "capabilities", None)
+    explicit = (
+        str(capabilities.get("execution_backend") or "").strip().casefold()
+        if isinstance(capabilities, dict)
+        else ""
+    )
+    if explicit:
+        if explicit not in {"opencode_server", "codex_app_server", "native", "octopus"}:
+            raise ValueError(f"unsupported member execution backend: {explicit}")
+        return "native" if explicit == "octopus" else explicit
+    execution = getattr(getattr(stack, "config", None), "execution", None)
+    # Legacy embedded hosts have no AgentConfig. Standard application stacks
+    # consume the validated default from ExecutionConfig.
+    selected = getattr(execution, "member_engine", "octopus")
+    if selected not in {"opencode", "octopus"}:
+        raise ValueError(f"unsupported default member engine: {selected}")
+    return "opencode_server" if selected == "opencode" else "native"
 
 
 def _run_direct_conversation_reply(
@@ -204,17 +224,8 @@ def make_stack_subagent_runner(
 ) -> TaskRunner:
     if stack is None:
         raise ValueError("stack must not be None")
-    planner = getattr(stack, "planner", None)
-    runtime = getattr(stack, "runtime", None)
-    if planner is None or runtime is None:
-        raise ValueError("stack is missing planner or runtime")
 
     summ = summarizer or _summarize_trajectory
-
-    try:
-        _accepted: set[str] = set(inspect.signature(planner.plan).parameters.keys())
-    except (TypeError, ValueError):  # pragma: no cover
-        _accepted = {"allowed_skills", "soul", "model"}
 
     def runner(
         description: str,
@@ -249,45 +260,77 @@ def make_stack_subagent_runner(
             if not model:
                 model = getattr(agent, "model", None)
 
+        backend = member_execution_backend(stack, agent)
+        if backend == "opencode_server":
+            if agent is None:
+                raise ValueError("OpenCode member requires a registered role with a tool policy")
+            from runtime.execution.opencode_roles import run_role_sync
+            from runtime.safety.approval.cancellation import current_cancellation_token
+
+            cancellation = current_cancellation_token()
+            return run_role_sync(
+                stack,
+                agent,
+                description,
+                context=ctx,
+                interrupted=lambda: (
+                    cancellation.is_cancelled
+                    or bool(cancel_event is not None and cancel_event.is_set())
+                ),
+            )
+
         # A group-chat bubble is a plain conversational response, not a task
         # graph. Keep it on a tool-free one-call lane so natural prose is not
         # rejected for failing the planner's JSON contract.
-        if bool(ctx.get("direct_conversation_reply")):
+        if bool(ctx.get("direct_conversation_reply")) and backend == "native":
             if cancel_event is not None and cancel_event.is_set():
                 return ""
             return _run_direct_conversation_reply(
-                planner,
+                getattr(stack, "planner", None),
                 description,
                 soul=runtime_soul,
                 model=str(model).strip() if model else None,
             )
 
-        if agent is not None:
+        if agent is not None and backend == "codex_app_server":
             from runtime.execution.codex_backend.role_runner import (
                 agent_uses_codex_execution_backend,
                 run_agent_role_sync,
             )
 
-            if agent_uses_codex_execution_backend(agent):
-                from runtime.safety.approval.cancellation import current_cancellation_token
+            if not agent_uses_codex_execution_backend(agent):
+                raise RuntimeError("configured Codex member backend is disabled")
+            from runtime.safety.approval.cancellation import current_cancellation_token
 
-                parent_cancellation = current_cancellation_token()
-                result = run_agent_role_sync(
-                    stack,
-                    agent,
-                    description,
-                    context=ctx,
-                    is_interrupted=lambda: (
-                        parent_cancellation.is_cancelled
-                        or bool(cancel_event is not None and cancel_event.is_set())
-                    ),
-                )
-                if not result.success:
-                    detail = result.output or result.status
-                    raise RuntimeError(f"Codex role execution failed: {detail}")
-                return result.output or f"[{agent.display_name} completed via Codex]"
+            parent_cancellation = current_cancellation_token()
+            result = run_agent_role_sync(
+                stack,
+                agent,
+                description,
+                context=ctx,
+                is_interrupted=lambda: (
+                    parent_cancellation.is_cancelled
+                    or bool(cancel_event is not None and cancel_event.is_set())
+                ),
+            )
+            if not result.success:
+                detail = result.output or result.status
+                raise RuntimeError(f"Codex role execution failed: {detail}")
+            if ctx.get("direct_conversation_reply") and not result.output.strip():
+                raise RuntimeError("Codex member returned an empty reply")
+            return result.output or f"[{agent.display_name} completed via Codex]"
+
+        from runtime.core.cerebrum.planner import PlannerError
 
         plan_kwargs: dict[str, Any] = {}
+        planner = getattr(stack, "planner", None)
+        runtime = getattr(stack, "runtime", None)
+        if planner is None or runtime is None:
+            raise ValueError("native task requires a planner and graph runtime")
+        try:
+            _accepted = set(inspect.signature(planner.plan).parameters.keys())
+        except (TypeError, ValueError):
+            _accepted = {"allowed_skills", "soul", "model"}
         if agent is not None:
             plan_kwargs["allowed_skills"] = agent.allowed_skill_union() or None
             if runtime_soul:
@@ -405,4 +448,10 @@ def make_stack_subagent_runner(
     # avoiding a second process-global registry.
     runner.agent_registry = agent_registry  # type: ignore[attr-defined]
     runner.execution_stack = stack  # type: ignore[attr-defined]
+    runner.execution_backend_for = lambda name: member_execution_backend(  # type: ignore[attr-defined]
+        stack,
+        agent_registry.get(name)
+        if agent_registry is not None and agent_registry.has(name)
+        else None,
+    )
     return runner

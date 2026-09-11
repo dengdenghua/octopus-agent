@@ -1,0 +1,20 @@
+Browser tab: 4, Title: "新对话 - Echo", URL: "http://localhost:3310/#/workspace/realtime/new".
+0 AXWebArea 新对话 - Echo, URL: localhost:3310/#/workspace/realtime/new
+	1 container
+		2 container root
+			60 container 对话工作区
+			59 container Notifications alt+T
+		61 menu 插入到输入框, ID: radix-_r_24_
+			62 上传图片
+			63 (collapsed) 项目文件, ID: radix-_r_2i_, Secondary Actions: Expand
+			64 (expanded) 窗口, ID: radix-_r_2l_, Secondary Actions: Collapse
+			68 menu 窗口, ID: radix-_r_2k_
+				69 附加当前窗口快照 一次性添加截图与可访问文本
+				70 text 选择浏览器或桌面窗口
+				71 button 正在发现可操作窗口…
+				72 text 暂无可操作窗口，请先连接浏览器扩展或打开应用窗口。
+			65 (collapsed) 命令, ID: radix-_r_2o_, Secondary Actions: Expand
+			66 (collapsed) 插件, ID: radix-_r_2r_, Secondary Actions: Expand
+			67 (collapsed) 技能, ID: radix-_r_2u_, Secondary Actions: Expand
+
+The focused UI element is 64 (expanded) 窗口, ID: radix-_r_2l_, Secondary Actions: Collapse

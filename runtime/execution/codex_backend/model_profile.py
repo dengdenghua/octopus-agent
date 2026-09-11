@@ -268,7 +268,7 @@ def resolve_codex_execution_profile(
             proxy_required=True,
         )
     resolved = _resolve_custom_entry(catalog, selected_model)
-    effective_model = resolved[2] if resolved is not None else selected_model
+    effective_model = selected_model if selected_model.startswith("octopus-custom-model:v1:") else (resolved[2] if resolved is not None else selected_model)
     route_available = proxy_available and (
         proxy_route_available is None or proxy_route_available(effective_model)
     )
@@ -299,6 +299,8 @@ def codex_proxy_route_available(router: Any, model: str) -> bool:
 
     if not callable(getattr(router, "call", None)):
         return False
+    from runtime.execution.model_services import SharedExecutionRouter
+    router = SharedExecutionRouter(router)
     has_route = getattr(router, "has", None)
     if not callable(has_route):
         # A direct provider router owns its whole model namespace.  Exact

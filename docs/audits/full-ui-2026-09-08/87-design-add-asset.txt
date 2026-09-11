@@ -1,0 +1,25 @@
+Browser tab: 4, Title: "设计画布 - Echo", URL: "http://localhost:3310/#/workspace/design".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 45-50, 166-190
+~					42 container
+~						43 container Notifications alt+T
++						44 container 添加资产, ID: radix-_r_r_
++							45 heading 添加资产, Value: 2, ID: radix-_r_s_
++								46 text 添加资产
++							47 text 填写清晰的名称、描述和标签，让 Agent 能搜索并在不同项目中复用。
++							48 text field (settable)
++							49 pop up button (collapsed, settable) Value: 角色, Secondary Actions: Expand
++								50 menu
++									51 (selected) 角色
++									52 场景
++									53 风格包
++									54 道具
++									55 自定义
++							56 text entry area (settable)
++							57 button 将素材文件拖入 / 点击上传 单个文件最大 64 MB
++								58 text 将素材文件拖入 / 点击上传
++								59 text 单个文件最大 64 MB
++							60 text field (settable)
++							61 button (disabled) 创建资产
++							62 button 关闭
+The focused UI element is 48 text field (settable)

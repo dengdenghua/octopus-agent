@@ -34,7 +34,6 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
 
     journal = ctx.journal
     registry = ctx.registry
-    planner = ctx.planner
 
     def _rollback_file_events(
         source_journal: Any,
@@ -417,6 +416,7 @@ def register_rollback_panels_endpoints(router: Any, ctx: ObservabilityContext) -
         # rule_extractor · sync with planner's learned rules
         rules_count = 0
         memories_count = 0
+        planner = ctx.get_planner()
         if planner is not None:
             rules_count = sum(
                 1

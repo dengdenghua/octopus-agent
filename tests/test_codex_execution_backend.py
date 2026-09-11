@@ -361,6 +361,36 @@ async def test_app_mention_is_sent_as_typed_turn_input(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("resumed", [False, True])
+async def test_history_bootstrap_uses_actual_inner_session_state(
+    tmp_path: Path, resumed: bool
+) -> None:
+    from dataclasses import replace
+
+    session, _security, _context, _factory, client = _make_session(
+        tmp_path,
+        binding=_binding() if resumed else None,
+        selected_app_ids=("google_drive",),
+        app_mentions=(("google_drive", "Google Drive"),),
+    )
+    session.request = replace(
+        session.request,
+        prompt="MISSING_HISTORY\nLATEST",
+        fresh_thread_prompt="FULL_HISTORY\nLATEST",
+    )
+    try:
+        await session.start()
+        turn_call = next(value for name, value in client.calls if name == "turn/start")
+        assert turn_call[1][0] == {
+            "type": "text",
+            "text": ("MISSING_HISTORY" if resumed else "FULL_HISTORY") + "\nLATEST",
+        }
+        assert turn_call[1][1]["path"] == "app://google_drive"
+    finally:
+        await session.close()
+
+
+@pytest.mark.asyncio
 async def test_first_start_is_isolated_durable_and_binds_approval_scope(tmp_path: Path) -> None:
     session, security, context, _factory, client = _make_session(tmp_path, source_auth=True)
 

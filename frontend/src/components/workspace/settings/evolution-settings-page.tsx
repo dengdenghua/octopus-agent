@@ -1,3 +1,4 @@
+import { displayValue } from "@/core/utils/display-value";
 import { useEffect, useState } from "react";
 import {
   ActivityIcon,
@@ -183,19 +184,24 @@ export default function EvolutionSettingsPage() {
           </div>
         </div>
         {sched.last_summary && Object.keys(sched.last_summary).length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {Object.entries(sched.last_summary)
-              .filter(([k]) => !["tick", "ts"].includes(k))
-              .map(([k, v]) => (
-                <Badge
-                  key={k}
-                  variant="outline"
-                  className="text-xs font-mono"
-                >
-                  {k}={String(v)}
-                </Badge>
-              ))}
-          </div>
+          <details className="mt-3 rounded-md border p-2">
+            <summary className="cursor-pointer text-xs text-muted-foreground">
+              本次调度详情（仅描述学习指标）
+            </summary>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {Object.entries(sched.last_summary)
+                .filter(([k]) => !["tick", "ts"].includes(k))
+                .map(([k, v]) => (
+                  <Badge
+                    key={k}
+                    variant="outline"
+                    className="max-w-full whitespace-normal break-words text-xs font-mono"
+                  >
+                    {k}：{displayValue(v)}
+                  </Badge>
+                ))}
+            </div>
+          </details>
         )}
       </div>
 

@@ -1,0 +1,24 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/channels".
+0 AXWebArea Echo, URL: localhost:3310/#/workspace/channels
+	1 container
+		2 container Notifications alt+T
+		3 container 设置 钉钉 机器人, ID: radix-_r_q4_
+			4 heading 设置 钉钉 机器人, Value: 2, ID: radix-_r_q5_
+				5 text 设置 钉钉 机器人
+			6 container radix-_r_q6_
+				7 text 凭证会保存到本地 channel_credentials.json (不上云)。
+				8 link Description: 如何接入?, Value: docs.octopus.ai/channels/dingtalk
+			9 container
+				10 text Webhook URL *
+			11 text field (settable) Webhook URL*, ID: channel-dingtalk-webhook_url
+			12 text 钉钉开发者后台 · 群内机器人 · 添加机器人 · 拷贝 Webhook 地址。
+			13 text 加签密钥 (可选 · 推荐)
+			14 container
+				15 text field (settable) 加签密钥 (可选 · 推荐)
+				16 button 显示
+			17 text 机器人安全设置里勾"加签"时给出的密钥。不填则跳过签名校验(仅内网可靠)。
+			18 button 取消
+			19 button 保存并连接
+			20 button 关闭
+
+The focused UI element is 11 text field (settable) Webhook URL*, ID: channel-dingtalk-webhook_url

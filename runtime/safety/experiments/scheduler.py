@@ -71,6 +71,12 @@ class CamouflageScheduler:
         stack: Any,
         config: CamouflageConfig | None = None,
     ) -> None:
+        from runtime.execution.model_services import background_model_calls_enabled
+
+        if not background_model_calls_enabled(stack):
+            self.stop()
+            self._last_error = "disabled by background model policy"
+            return
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 _LOG.info("camouflage scheduler already running · skip start")

@@ -28,9 +28,10 @@ import {
   useRef,
   useState,
 } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { TabBar } from "@/components/browser/tab-bar";
+import { AssistantSurface } from "@/components/browser/assistant-surface";
 import { UrlBar } from "@/components/browser/url-bar";
 import {
   BROWSER_HOME_URL,
@@ -46,6 +47,11 @@ import {
 } from "@/components/browser/browser-store";
 import type { WebviewTabHandle } from "@/components/browser/webview-tab";
 import { WorkspaceSurfaceHeader } from "@/components/workspace/workspace-surface-header";
+import { BrowserPreviewPanel } from "@/components/workspace/browser-preview-panel";
+import {
+  isWindows,
+  useElectronTitleBar,
+} from "@/components/electron-title-bar";
 import { useActiveAgentId } from "@/core/agents/active";
 import {
   isLocalPreviewUrl,
@@ -63,11 +69,6 @@ const WebviewTab = lazy(() =>
     default: module.WebviewTab,
   })),
 );
-
-const isWindows = (): boolean =>
-  typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
-const inElectron = (): boolean =>
-  typeof window !== "undefined" && !!window.octopus?.isElectron;
 
 const CHROME_WEB_STORE_EXTENSIONS_URL =
   "https://chromewebstore.google.com/category/extensions";
@@ -100,6 +101,7 @@ const DEVICE_STAGE = {
 } as const;
 
 function BrowserShell() {
+  const navigate = useNavigate();
   const { t } = useI18n();
   const activeAgentId = useActiveAgentId() ?? "general";
   const personaThemeId = workspacePresetForAgent(activeAgentId).themeId;
@@ -112,6 +114,8 @@ function BrowserShell() {
     restoreClosedTab,
     activateTab,
     recordVisit,
+    setCopilotOpen,
+    setCopilotWidth,
   } = useBrowserStore();
   // Implementation note.
   const handlesRef = useRef<Map<string, WebviewTabHandle | null>>(new Map());
@@ -124,7 +128,7 @@ function BrowserShell() {
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const stageRef = useRef<HTMLDivElement>(null);
   const sidePanelCloseTimerRef = useRef<number | null>(null);
-  const electron = inElectron();
+  const { titleBarInset } = useElectronTitleBar();
   const activeTabId = activeTab?.id ?? null;
   const activeTabUrl = activeTab?.url ?? "";
   const activeTabTitle = activeTab?.title ?? "";
@@ -168,6 +172,7 @@ function BrowserShell() {
       try {
         localStorage.removeItem(BROWSER_OPEN_URL_REQUEST_KEY);
         openTab(request.url, {
+          ...(request.taskPreview ? { taskPreview: request.taskPreview } : {}),
           ...(request.title ? { title: request.title } : {}),
           ...(request.device ? { device: request.device } : {}),
         });
@@ -205,9 +210,11 @@ function BrowserShell() {
     stageSize.width < 640
       ? "mobile"
       : activeDevice;
-  const activeStage = DEVICE_STAGE[renderDevice];
+  // Narrow homepages reflow naturally. A device frame is only shown when
+  // the user explicitly selects device preview in the browser toolbar.
+  const activeStage = DEVICE_STAGE[activeDevice];
   const activeScale =
-    renderDevice === "desktop"
+    activeDevice === "desktop"
       ? 1
       : Math.min(
           1,
@@ -296,6 +303,12 @@ function BrowserShell() {
               typeof parsed.sessionId === "string"
                 ? parsed.sessionId
                 : undefined,
+            taskPreview:
+              parsed.taskPreview &&
+              typeof parsed.taskPreview.threadId === "string" &&
+              typeof parsed.taskPreview.sessionId === "string"
+                ? parsed.taskPreview
+                : undefined,
           };
         }
       } catch {
@@ -304,6 +317,7 @@ function BrowserShell() {
       if (!request?.url) return;
       try {
         openTab(request.url, {
+          ...(request.taskPreview ? { taskPreview: request.taskPreview } : {}),
           ...(request.title ? { title: request.title } : {}),
           ...(request.device ? { device: request.device } : {}),
         });
@@ -419,37 +433,6 @@ function BrowserShell() {
     state.activeId,
   ]);
 
-  // Implementation note.
-  // Implementation note.
-  // Implementation note.
-  useEffect(() => {
-    if (!isWindows() || !window.octopus) return;
-    const apply = () => {
-      // Implementation note.
-      const root = document.documentElement;
-      const bg = getComputedStyle(root).getPropertyValue("--background").trim();
-      const fg = getComputedStyle(root).getPropertyValue("--foreground").trim();
-      // Implementation note.
-      const toCss = (v: string) =>
-        v.startsWith("#") || v.startsWith("rgb") ? v : `hsl(${v})`;
-      void window
-        .octopus!.window.setTitleBarOverlay({
-          color: toCss(bg) || "#f1f1f3",
-          symbolColor: toCss(fg) || "#525252",
-        })
-        .catch((e) => {
-          swallow(e);
-        });
-    };
-    apply();
-    const obs = new MutationObserver(apply);
-    obs.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-theme", "class"],
-    });
-    return () => obs.disconnect();
-  }, []);
-
   const sidePanelOpen = sidePanelHovered || sidePanelPinned;
   const clearSidePanelCloseTimer = useCallback(() => {
     if (sidePanelCloseTimerRef.current === null) return;
@@ -474,6 +457,7 @@ function BrowserShell() {
     <div
       data-persona-theme={personaThemeId}
       className="persona-shell browser-shell relative flex h-screen overflow-hidden bg-[linear-gradient(135deg,var(--muted)_0%,var(--background)_42%,var(--muted)_100%)] text-foreground"
+      style={{ paddingTop: titleBarInset }}
     >
       <BrowserSidePanel
         open={sidePanelOpen}
@@ -489,7 +473,7 @@ function BrowserShell() {
             style={
               {
                 paddingLeft: 10,
-                paddingRight: isWindows() && electron ? 154 : 6,
+                paddingRight: 6,
                 WebkitAppRegion: "drag",
               } as React.CSSProperties
             }
@@ -544,16 +528,21 @@ function BrowserShell() {
           </div>
 
           {/* URL bar */}
-          <UrlBar
-            webviewHandle={activeHandle}
-            onOpenExtensions={openExtensionsStore}
-          />
+          {!activeTab?.taskPreview && (
+            <UrlBar
+              webviewHandle={activeHandle}
+              onOpenExtensions={openExtensionsStore}
+            />
+          )}
         </div>
 
         <div className="relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="flex min-h-0 flex-1 overflow-hidden">
+          <div
+            className="flex min-h-0 flex-1 overflow-hidden"
+            style={{ position: "relative" }}
+          >
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-              {localPreview && activeTab ? (
+              {localPreview && activeTab && !activeTab.taskPreview ? (
                 <div
                   data-testid="local-preview-toolbar"
                   className="flex h-10 shrink-0 items-center gap-2 border-b border-border-subtle bg-muted/35 px-3"
@@ -623,19 +612,19 @@ function BrowserShell() {
                 ref={stageRef}
                 className={cn(
                   "relative min-h-0 min-w-0 flex-1 overflow-hidden bg-background",
-                  renderDevice !== "desktop" &&
+                  activeDevice !== "desktop" &&
                     "flex items-center justify-center bg-[radial-gradient(circle_at_top,var(--muted)_0%,var(--background)_58%)] p-5",
                 )}
               >
                 <div
                   className={cn(
                     "relative overflow-hidden bg-background",
-                    renderDevice === "desktop"
+                    activeDevice === "desktop"
                       ? "h-full w-full"
                       : "h-full max-h-full max-w-full rounded-4xl border-[6px] border-foreground/22 shadow-[0_22px_64px_rgba(15,23,42,0.18)]",
                   )}
                   style={
-                    renderDevice === "desktop"
+                    activeDevice === "desktop"
                       ? undefined
                       : {
                           width: activeStage.width,
@@ -655,56 +644,80 @@ function BrowserShell() {
                       />
                     }
                   >
-                    {state.tabs.map((tab) => (
-                      <WebviewTab
-                        key={tab.id}
-                        tab={tab}
-                        active={tab.id === state.activeId}
-                        renderDevice={
-                          tab.id === state.activeId ? renderDevice : tab.device
-                        }
-                        onPatch={(patch) => patchTab(tab.id, patch)}
-                        onClose={() => closeTab(tab.id)}
-                        ref={(handle) => {
-                          if (handle) {
-                            handlesRef.current.set(tab.id, handle);
-                            if (tab.id === state.activeId) {
-                              setActiveHandle((prev) => prev ?? handle);
-                            }
-                          } else {
-                            handlesRef.current.delete(tab.id);
+                    {state.tabs.map((tab) =>
+                      tab.taskPreview ? (
+                        tab.id === state.activeId ? (
+                          <BrowserPreviewPanel
+                            key={tab.id}
+                            threadId={tab.taskPreview.threadId}
+                            workspacePath={tab.taskPreview.workspacePath}
+                            sharedSessionId={tab.taskPreview.sessionId}
+                            onReturnToTask={() => {
+                              const task = tab.taskPreview!;
+                              const route = task.returnRoute?.startsWith(
+                                "/workspace/realtime/",
+                              )
+                                ? task.returnRoute
+                                : `/workspace/realtime/${encodeURIComponent(task.threadId)}`;
+                              try {
+                                sessionStorage.setItem(
+                                  `echo:browser-return:${route.split("?")[0]}`,
+                                  task.sessionId,
+                                );
+                              } catch {
+                                /* Return works without storage. */
+                              }
+                              navigate(route);
+                            }}
+                          />
+                        ) : null
+                      ) : (
+                        <WebviewTab
+                          key={tab.id}
+                          tab={tab}
+                          active={tab.id === state.activeId}
+                          renderDevice={
+                            tab.id === state.activeId
+                              ? renderDevice
+                              : tab.device
                           }
-                        }}
-                      />
-                    ))}
+                          onPatch={(patch) => patchTab(tab.id, patch)}
+                          onClose={() => closeTab(tab.id)}
+                          ref={(handle) => {
+                            if (handle) {
+                              handlesRef.current.set(tab.id, handle);
+                              if (tab.id === state.activeId) {
+                                setActiveHandle((prev) => prev ?? handle);
+                              }
+                            } else {
+                              handlesRef.current.delete(tab.id);
+                            }
+                          }}
+                        />
+                      ),
+                    )}
                   </Suspense>
                 </div>
               </div>
             </div>
-            {state.copilotOpen && (
-              <div
-                className="flex min-h-0 border-l border-border-subtle bg-background"
-                style={{
-                  flex:
-                    renderDevice !== "desktop"
-                      ? "1 1 0"
-                      : `0 0 ${state.copilotWidth}px`,
-                  minWidth: renderDevice !== "desktop" ? 280 : undefined,
-                }}
+            <AssistantSurface
+              open={state.copilotOpen}
+              onOpenChange={setCopilotOpen}
+              dockWidth={state.copilotWidth}
+              onDockWidthChange={setCopilotWidth}
+            >
+              <Suspense
+                fallback={
+                  <div
+                    className="size-full min-w-72 animate-pulse bg-muted/25"
+                    role="status"
+                    aria-label="加载 AI 助手"
+                  />
+                }
               >
-                <Suspense
-                  fallback={
-                    <div
-                      className="size-full min-w-72 animate-pulse bg-muted/25"
-                      role="status"
-                      aria-label="加载 AI 助手"
-                    />
-                  }
-                >
-                  <AssistantPanel webviewHandle={activeHandle} />
-                </Suspense>
-              </div>
-            )}
+                <AssistantPanel webviewHandle={activeHandle} framed />
+              </Suspense>
+            </AssistantSurface>
           </div>
         </div>
       </div>

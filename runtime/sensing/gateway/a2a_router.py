@@ -23,6 +23,7 @@ Task snapshots and events persist to ``~/.octopus/a2a/tasks.db``.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import re
@@ -43,6 +44,12 @@ _REGISTRY_DIR = Path.home() / ".octopus" / "a2a"
 _REGISTRY_FILE = _REGISTRY_DIR / "registry.json"
 _lock = threading.RLock()
 _LOCAL_TASK_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,200}$")
+
+
+async def _close_client(client: Any) -> None:
+    if client is not None and (close := getattr(client, "close", None)):
+        with contextlib.suppress(Exception):
+            await close()
 
 
 # ── Registry persistence ─────────────────────────────────────────
@@ -79,7 +86,7 @@ def _find_agent(agents: list[dict[str, Any]], agent_id: str) -> dict[str, Any] |
 # ── A2A SDK helpers (lazy import — SDK is optional at runtime) ───
 
 
-async def _resolve_agent_card(url: str) -> dict[str, Any]:
+async def _resolve_agent_card(url: str, bearer_token: str | None = None) -> dict[str, Any]:
     """Fetch a remote agent's A2A card and normalize it for our wire shape."""
     try:
         from a2a.client import ClientFactory
@@ -88,12 +95,24 @@ async def _resolve_agent_card(url: str) -> dict[str, Any]:
 
     factory = ClientFactory()
     try:
-        client = await factory.create_from_url(url)
+        if bearer_token:
+            from runtime.sensing.gateway.remote_credentials import remote_client
+
+            client = await remote_client({"base_url": url}, token=bearer_token)
+        else:
+            client = await factory.create_from_url(url)
     except Exception as exc:  # noqa: BLE001 — surface as a clean 502
         _log.warning("A2A card resolution failed for %s: %s", url, exc)
         raise HTTPException(502, f"failed to resolve agent card: {exc}") from exc
 
-    card = getattr(client, "agent_card", None) or getattr(client, "card", None)
+    # a2a-sdk 1.x BaseClient keeps the resolved public card in _card.
+    card = (
+        getattr(client, "agent_card", None)
+        or getattr(client, "card", None)
+        or getattr(client, "_card", None)
+    )
+    if close := getattr(client, "close", None):
+        await close()
     if card is None:
         raise HTTPException(502, f"no agent card resolved from {url}")
 
@@ -267,6 +286,18 @@ def _task_result(value: Any) -> dict[str, Any]:
             for part in artifact.get("parts", []) or []
             if isinstance(part, dict) and part.get("text") is not None
         ]
+        # A2A v1 raw bytes are base64 encoded by MessageToDict. Preserve them
+        # so remote roles can deliver actual files, not just file names.
+        parts.extend(
+            {
+                "type": "file",
+                "raw": part["raw"],
+                "filename": str(part.get("filename") or artifact.get("name") or "download"),
+                "media_type": str(part.get("media_type") or "application/octet-stream"),
+            }
+            for part in artifact.get("parts", []) or []
+            if isinstance(part, dict) and isinstance(part.get("raw"), str)
+        )
         artifacts.append({"name": str(artifact.get("name", "") or ""), "parts": parts})
     return {
         "id": str(task.get("id") or ""),
@@ -283,7 +314,9 @@ def _task_result(value: Any) -> dict[str, Any]:
 def _stream_snapshot(value: Any) -> tuple[dict[str, Any], str, str]:
     """Return normalized task result, canonical state, and event kind."""
     payload = _protobuf_dict(value)
-    if payload.get("task") is not None or getattr(value, "task", None) is not None:
+    if payload.get("task") is not None or (
+        not hasattr(value, "DESCRIPTOR") and getattr(value, "task", None) is not None
+    ):
         result = _task_result(value)
         return result, canonical_a2a_state(result["status"]["state"]), "remote_task"
 
@@ -338,6 +371,9 @@ def create_a2a_router(
         dependencies=[Depends(_auth_dep)],
     )
     task_store = A2ATaskStore(_REGISTRY_DIR)
+    from runtime.sensing.gateway.hotspot_control import mount_control
+
+    mount_control(router)
 
     def _registered_agent(agent_id: str) -> dict[str, Any]:
         with _lock:
@@ -349,11 +385,9 @@ def create_a2a_router(
 
     async def _client_for(entry: dict[str, Any]) -> Any:
         try:
-            from a2a.client import ClientFactory
-        except ImportError as exc:  # pragma: no cover
-            raise HTTPException(500, "a2a-sdk not installed") from exc
-        try:
-            return await ClientFactory().create_from_url(str(entry["base_url"]))
+            from runtime.sensing.gateway.remote_credentials import remote_client
+
+            return await remote_client(entry)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(502, f"failed to connect to remote agent: {exc}") from exc
 
@@ -400,7 +434,21 @@ def create_a2a_router(
         if not url.startswith(("http://", "https://")):
             raise HTTPException(400, "url must be http(s)")
 
-        card = await _resolve_agent_card(url)
+        bearer_token = body.get("bearer_token")
+        if bearer_token is not None and (
+            not isinstance(bearer_token, str) or not 16 <= len(bearer_token) <= 4096
+        ):
+            raise HTTPException(400, "远程访问凭证格式无效")
+        card = (
+            await _resolve_agent_card(url, bearer_token)
+            if bearer_token
+            else await _resolve_agent_card(url)
+        )
+        credential_ref = None
+        if bearer_token:
+            from runtime.sensing.gateway.remote_credentials import save_token
+
+            credential_ref = save_token(bearer_token)
         now = datetime.now(UTC).isoformat()
         with _lock:
             registry = _load_registry()
@@ -431,6 +479,9 @@ def create_a2a_router(
                 }
                 registry["agents"].append(entry)
             _save_registry(registry["agents"])
+            if credential_ref:
+                entry["credential_ref"] = credential_ref
+                _save_registry(registry["agents"])
         return entry
 
     @router.delete("/agents/{agent_id}")
@@ -451,7 +502,20 @@ def create_a2a_router(
             entry = _find_agent(registry["agents"], agent_id)
         if entry is None:
             raise HTTPException(404, f"agent not found: {agent_id}")
-        result = await _probe_agent(str(entry["base_url"]))
+        if entry.get("credential_ref"):
+            try:
+                from runtime.sensing.gateway.remote_credentials import read_token
+
+                await _resolve_agent_card(str(entry["base_url"]), read_token(entry))
+                result = {"healthy": True, "status": "active", "error": None}
+            except Exception:
+                result = {
+                    "healthy": False,
+                    "status": "unreachable",
+                    "error": "远程连接或邀请凭证不可用",
+                }
+        else:
+            result = await _probe_agent(str(entry["base_url"]))
         now = datetime.now(UTC).isoformat()
         with _lock:
             registry = _load_registry()
@@ -509,6 +573,7 @@ def create_a2a_router(
 
         last_result: dict[str, Any] = {}
         response_count = 0
+        client = None
         try:
             client = await _client_for(entry)
             message = Message(
@@ -554,6 +619,16 @@ def create_a2a_router(
                     event_type=event_type,
                     event_payload={"remote": _protobuf_dict(response) or result},
                 )
+            # A2A streaming servers send one initial Task followed by status
+            # and artifact deltas, not a second complete Task. Reconcile the
+            # durable final snapshot so replies and binary files are retained.
+            if response_count and event_type != "remote_task" and last_result.get("id"):
+                from a2a.types import GetTaskRequest
+
+                last_result = _task_result(
+                    await client.get_task(GetTaskRequest(id=last_result["id"]))
+                )
+                _update_from_remote(local_task_id, last_result, event_type="remote_snapshot")
         except HTTPException as exc:
             current = _stored_task(local_task_id)
             failure_state = current["status"] if current["terminal_at"] else "failed"
@@ -579,6 +654,8 @@ def create_a2a_router(
             )
             _log.warning("A2A send_task to %s failed: %s", entry["base_url"], exc)
             raise HTTPException(502, f"remote agent call failed: {exc}") from exc
+        finally:
+            await _close_client(client)
 
         if response_count == 0:
             task_store.update(
@@ -618,6 +695,7 @@ def create_a2a_router(
 
     @router.post("/tasks/{local_task_id}/refresh")
     async def refresh_task(local_task_id: str) -> dict[str, Any]:
+        client = None
         task = _stored_task(local_task_id)
         if not task["remote_task_id"]:
             raise HTTPException(409, "remote task id is not available")
@@ -645,10 +723,13 @@ def create_a2a_router(
                 event_payload={"error": str(exc)[:4000]},
             )
             raise HTTPException(502, f"remote task refresh failed: {exc}") from exc
+        finally:
+            await _close_client(client)
         return _update_from_remote(local_task_id, _task_result(remote_task), event_type="refreshed")
 
     @router.post("/tasks/{local_task_id}/cancel")
     async def cancel_task(local_task_id: str) -> dict[str, Any]:
+        client = None
         task = _stored_task(local_task_id)
         if task["terminal_at"]:
             return task
@@ -678,6 +759,8 @@ def create_a2a_router(
                 event_payload={"error": str(exc)[:4000]},
             )
             raise HTTPException(502, f"remote task cancellation failed: {exc}") from exc
+        finally:
+            await _close_client(client)
         return _update_from_remote(local_task_id, _task_result(remote_task), event_type="canceled")
 
     @router.get("/tasks/{local_task_id}/subscribe")
@@ -701,6 +784,12 @@ def create_a2a_router(
             try:
                 async for response in client.subscribe(request):
                     result, state, event_type = _stream_snapshot(response)
+                    if state in {"completed", "failed", "canceled", "rejected"}:
+                        from a2a.types import GetTaskRequest
+
+                        result = _task_result(
+                            await client.get_task(GetTaskRequest(id=task["remote_task_id"]))
+                        )
                     if result:
                         stored = _update_from_remote(
                             local_task_id,
@@ -734,6 +823,8 @@ def create_a2a_router(
                     "event: error\ndata: "
                     f"{json.dumps({'task': stored, 'error': str(exc)}, ensure_ascii=False)}\n\n"
                 )
+            finally:
+                await _close_client(client)
 
         return StreamingResponse(
             _events(),

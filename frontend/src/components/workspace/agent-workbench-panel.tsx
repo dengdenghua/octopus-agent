@@ -425,11 +425,17 @@ function AgentWorkbenchPanelImpl({
     onSelectTab,
   });
 
-  // Keep task preview discoverable as a first-class workbench surface. Diff and
-  // terminal remain opt-in until a run focuses them; tab CONTENT is still lazy,
-  // so showing the browser tab does not create an extra browser session.
+  // Optional surfaces start unchecked; opening or focusing one reveals its tab.
   const [closedTabs, setClosedTabs] = useState<Set<AgentWorkbenchTabId>>(
-    () => new Set<AgentWorkbenchTabId>(["diff", "terminal"]),
+    () =>
+      new Set<AgentWorkbenchTabId>([
+        "workspace",
+        "browser",
+        "artifacts",
+        "project",
+        "diff",
+        "terminal",
+      ]),
   );
   // Browser tab source: while the run streams, the inline srcDoc blocks are
   // the freshest view; once the run settles a deployed URL wins. The override
@@ -477,7 +483,7 @@ function AgentWorkbenchPanelImpl({
     agentTiles.length > 0 &&
     agentTiles.every((agent) => agent.role === "cowork");
   const mainRunStatus = workbenchStatus(mainBlocks, mainPhases, {
-    settled: runSettled,
+    settled: runSettled && !(emptyShell && !hasAnswer),
     failed: runFailed,
     interrupted: runInterrupted,
     blocked: runBlocked,
@@ -489,7 +495,7 @@ function AgentWorkbenchPanelImpl({
       ? "waiting"
       : isLoading
         ? "running"
-        : runSettled
+        : runSettled && !(emptyShell && !hasAnswer)
           ? "done"
           : workbenchRunState({
               blocks: mainBlocks,
@@ -518,13 +524,13 @@ function AgentWorkbenchPanelImpl({
     hasBoundProject ||
     (requestedActiveTab === "project" &&
       (projectOsQuery.isLoading || projectOsQuery.isError));
+  const mergeProjectHome = projectTabVisible && workspacePresetForAgent(personaId).workbench === "office";
   const effectiveActiveTab:
     | "agent"
     | "diff"
     | "terminal"
     | "browser"
     | "artifacts"
-  const mergeProjectHome = projectTabVisible && workspacePresetForAgent(personaId).workbench === "office";
     | "workspace"
     | "project" =
     requestedActiveTab === "workspace" && mergeProjectHome
@@ -546,7 +552,7 @@ function AgentWorkbenchPanelImpl({
         id: "workspace" as const,
         label: workspacePresetForAgent(personaId).workbenchLabel,
         Icon: PanelsTopLeftIcon,
-      },
+      }]),
       {
         id: "diff",
         label: t.agentWorkbenchPages.diffTab,
@@ -790,14 +796,14 @@ function AgentWorkbenchPanelImpl({
           currentThreadTitle={currentThreadTitle}
           onOpenArtifact={onOpenArtifact}
           onInvitePeople={onInvitePeople}
+          onProjectCommand={onProjectCommand}
+          commandBusy={isLoading}
           onRefetch={() => {
             void projectOsQuery.refetch();
           }}
         />
       ) : projectOsQuery.isError ? (
         <ProjectOsTabError
-          onProjectCommand={onProjectCommand}
-          commandBusy={isLoading}
           onRetry={() => {
             void projectOsQuery.refetch();
           }}

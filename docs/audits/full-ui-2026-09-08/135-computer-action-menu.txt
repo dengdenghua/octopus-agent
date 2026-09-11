@@ -1,0 +1,17 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/computer".
+0 AXWebArea Echo, URL: localhost:3310/#/workspace/computer
+	1 container
+		2 container Notifications alt+T
+		3 list radix-_r_so_
+			4 (selected) 点击坐标
+				5 text 点击坐标
+			6 移动鼠标
+				7 text 移动鼠标
+			8 输入文字
+				9 text 输入文字
+			10 快捷键
+				11 text 快捷键
+			12 等待
+				13 text 等待
+
+The focused UI element is 4 (selected) 点击坐标

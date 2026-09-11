@@ -1,0 +1,9 @@
+Browser tab: 4, Title: "设计画布 - Echo", URL: "http://localhost:3310/#/workspace/design".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 56
++							191 container
++								192 pop up button (expanded) 导入/新建工作流, Secondary Actions: Collapse
++								193 menu 导入/新建工作流
++									194 导入本地工作流
++									195 在画布中创建
+The focused UI element is 192 pop up button (expanded) 导入/新建工作流, Secondary Actions: Collapse

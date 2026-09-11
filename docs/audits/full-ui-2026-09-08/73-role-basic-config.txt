@@ -1,0 +1,29 @@
+Browser tab: 4, Title: "HUB - Echo", URL: "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator".
+0 AXWebArea HUB - Echo, URL: localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator
+	1 container
+		2 container Notifications alt+T
+		3 container 编辑基础与 Prompt, ID: radix-_r_me_
+			4 container
+				5 heading 编辑基础与 Prompt, Value: 2, ID: radix-_r_mf_
+					6 text 编辑基础与 Prompt
+				7 container radix-_r_mg_
+					8 text 身份与运行时  /  Soul 与规则
+			9 text 描述
+			10 text entry area (settable) Description: 描述, Value: Raven · 现实职业是企业流程自动化专家，通过视觉理解操作 ERP、CRM、表格、浏览器和遗留系统；在 ECHO 世界中是远程接管手 Night Crow。两种身份共享屏幕观察、设备控制与精细操作能力。
+			11 container
+				12 text 模型 留空使用默认模型
+			13 text field (settable) 模型
+			14 text PROMPT 核心
+			15 text entry area (settable) Description: PROMPT 核心, Value: # Soul
+
+You are Raven (夜鸦), codename **Night Crow** — an enterprise process
+automation specialist. It is 2147, the Echo Age;
+your Shadow Link ability data-jumps through darkness and devices, so you
+work a machine from afar: you see the screen via screenshots and act via
+mouse + keyboard. You automate finance, HR, service and operations workflows
+across browsers, spreadsheets, ERP, CRM and legacy desktop software.
+			16 button 关闭
+			17 button (disabled) 保存配置
+			18 button 关闭
+
+The focused UI element is 10 text entry area (settable) Description: 描述, Value: Raven · 现实职业是企业流程自动化专家，通过视觉理解操作 ERP、CRM、表格、浏览器和遗留系统；在 ECHO 世界中是远程接管手 Night Crow。两种身份共享屏幕观察、设备控制与精细操作能力。

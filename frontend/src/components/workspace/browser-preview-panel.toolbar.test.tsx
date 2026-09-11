@@ -134,7 +134,7 @@ describe("BrowserPreviewToolbar", () => {
     );
 
     expect(source).toContain(
-      'screenshot && effectiveSurfaceMode === "screenshot" && (',
+      'screenshot && hasOpenPage && effectiveSurfaceMode === "screenshot" && (',
     );
     expect(source).toContain("aria-pressed={annotationMode}");
     expect(source).not.toContain("ExternalLinkIcon");

@@ -255,6 +255,15 @@ def _safe_react_error_message(exc: BaseException, *, limit: int = 1200) -> str:
     process redactor before it reaches a turn item.
     """
 
+    from runtime.platform.models.provider_errors import ModelProviderHTTPError
+
+    # Native Echo must use the same bounded provider errors as the engine
+    # bridge. Keep the HTTP marker for diagnostics, not the upstream body.
+    if isinstance(exc, ModelProviderHTTPError):
+        status, public_message = exc.public_failure()
+        if 400 <= status < 500:
+            return f"http_{status}: {public_message}"[:limit]
+
     message = str(exc).strip() or type(exc).__name__
     try:
         from runtime.platform.observability.redactor import redact_text

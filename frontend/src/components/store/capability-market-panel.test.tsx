@@ -1,4 +1,5 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -6,6 +7,7 @@ import { renderWithProviders } from "@/test/harness";
 import { CAPABILITY_SURFACE_QUERY_KEY } from "@/core/plugins/use-capability-surface";
 
 import { CapabilityMarketPanel } from "./capability-market-panel";
+import { OpenCodeConnections } from "../workspace/settings/opencode-connections";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -187,20 +189,74 @@ const freebuff2apiCommunity = {
 };
 
 describe("CapabilityMarketPanel", () => {
+  it("routes OpenCode configuration to model settings without connecting", async () => {
+    mocks.listCapabilities.mockResolvedValue({
+      capabilities: [openCodeZen],
+      total: 1,
+    });
+    const opened = vi.fn();
+    window.addEventListener("octopus:open-settings", opened);
+    try {
+      renderWithProviders(<CapabilityMarketPanel />, { locale: "zh-CN" });
+      fireEvent.click(await screen.findByRole("button", { name: "配置模型" }));
+      expect(opened).toHaveBeenCalledOnce();
+      expect((opened.mock.calls[0]![0] as CustomEvent).detail).toEqual({
+        tab: "models",
+      });
+      expect(mocks.connectCapability).not.toHaveBeenCalled();
+      expect(
+        screen.queryByLabelText("OpenCode Zen API Key"),
+      ).not.toBeInTheDocument();
+    } finally {
+      window.removeEventListener("octopus:open-settings", opened);
+    }
+  });
+
+  it("keeps a failed connection read distinct from disconnected and offers recovery", async () => {
+    mocks.listCapabilities.mockResolvedValue({
+      capabilities: [westock],
+      total: 1,
+    });
+    mocks.getCapabilityStatus.mockRejectedValueOnce(new Error("HTTP 403"));
+    renderWithProviders(<CapabilityMarketPanel compact />, { locale: "zh-CN" });
+    expect(await screen.findByText(/连接状态未读取/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "重读状态" }));
+    await waitFor(() =>
+      expect(screen.queryByText(/连接状态未读取/)).not.toBeInTheDocument(),
+    );
+    expect(mocks.getCapabilityStatus).toHaveBeenCalledTimes(2);
+    expect(mocks.connectCapability).not.toHaveBeenCalled();
+  });
+
+  it("shows the installation restriction on the card before any install request", async () => {
+    mocks.listCapabilities.mockResolvedValue({
+      capabilities: [
+        { ...browserPlugin, installed: false, installable: false },
+      ],
+      total: 1,
+    });
+    renderWithProviders(<CapabilityMarketPanel compact />, { locale: "zh-CN" });
+    expect(
+      await screen.findByRole("button", { name: "不可安装" }),
+    ).toBeDisabled();
+    expect(screen.getByText(/请联系此部署的管理员检查插件权限/)).toBeVisible();
+    expect(mocks.getCapabilityInstallPlan).not.toHaveBeenCalled();
+    expect(mocks.installCapability).not.toHaveBeenCalled();
+  });
+
   it("hides authentication actions for enabled plugins that need no account", async () => {
     mocks.listCapabilities.mockResolvedValue({
       capabilities: [{ ...browserPlugin, installed: true, enabled: true }],
       total: 1,
     });
     renderWithProviders(<CapabilityMarketPanel compact />, { locale: "zh-CN" });
-    expect(
-      await screen.findByRole("button", { name: "已启用" }),
-    ).toBeInTheDocument();
+    expect((await screen.findAllByText("已启用"))[0]).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "连接" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("未连接")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "已启用" }));
+    await userEvent.click(screen.getByRole("button", { name: "管理 Browser" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "停用插件" }));
     await waitFor(() =>
       expect(mocks.setCapabilityEnabled).toHaveBeenCalledWith("browser", false),
     );
@@ -420,7 +476,7 @@ describe("CapabilityMarketPanel", () => {
     );
   });
 
-  it("connects OpenCode Zen as an API model plugin without CLI fields", async () => {
+  it("connects OpenCode Zen from model settings without CLI fields", async () => {
     mocks.listCapabilities.mockResolvedValue({
       capabilities: [openCodeZen],
       total: 1,
@@ -429,9 +485,13 @@ describe("CapabilityMarketPanel", () => {
       connected: true,
       message: "已接入 2 个免费模型。",
     });
-    renderWithProviders(<CapabilityMarketPanel />, { locale: "zh-CN" });
+    renderWithProviders(<OpenCodeConnections onConnected={vi.fn()} />, {
+      locale: "zh-CN",
+    });
 
-    fireEvent.click(await screen.findByRole("button", { name: "配置模型" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "连接", exact: true }),
+    );
 
     expect(screen.getByText(/不安装或检测 OpenCode CLI/)).toBeInTheDocument();
     expect(screen.getByText("big-pickle")).toBeInTheDocument();
@@ -535,7 +595,11 @@ describe("CapabilityMarketPanel", () => {
     renderWithProviders(<CapabilityMarketPanel />, { locale: "zh-CN" });
 
     await screen.findByText("Browser");
-    expect(screen.getByTitle("当前账号或工作区不允许卸载")).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "管理 Browser" }));
+    expect(screen.getByRole("menuitem", { name: "卸载插件" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
   });
 
   it("按显式 ID 顺序展示精选并限制数量", async () => {
@@ -1187,7 +1251,10 @@ describe("CapabilityMarketPanel", () => {
     renderWithProviders(<CapabilityMarketPanel />, { locale: "zh-CN" });
 
     await screen.findByText("CLI One");
-    fireEvent.click(screen.getByTitle("卸载能力包"));
+    await userEvent.click(screen.getByRole("button", { name: /^管理 / }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "卸载插件" }));
+    expect(mocks.uninstallCapability).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "卸载插件" }));
     await waitFor(() => expect(lifecycle).toEqual(["cancel", "uninstall"]));
     expect(mocks.cancelCapabilityDeviceFlow).toHaveBeenCalledWith(
       "cli-one",
@@ -1213,7 +1280,10 @@ describe("CapabilityMarketPanel", () => {
 
     renderWithProviders(<CapabilityMarketPanel />, { locale: "zh-CN" });
     await screen.findByText("CLI One");
-    fireEvent.click(screen.getByTitle("卸载能力包"));
+    await userEvent.click(screen.getByRole("button", { name: /^管理 / }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "卸载插件" }));
+    expect(mocks.uninstallCapability).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "卸载插件" }));
 
     expect(
       await screen.findByText(
@@ -1240,7 +1310,10 @@ describe("CapabilityMarketPanel", () => {
     renderWithProviders(<CapabilityMarketPanel />, { locale: "zh-CN" });
 
     await screen.findByText("CLI One");
-    fireEvent.click(screen.getByTitle("卸载能力包"));
+    await userEvent.click(screen.getByRole("button", { name: /^管理 / }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "卸载插件" }));
+    expect(mocks.uninstallCapability).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "卸载插件" }));
 
     expect(await screen.findByText("cleanup failed")).toBeInTheDocument();
     expect(mocks.uninstallCapability).not.toHaveBeenCalled();

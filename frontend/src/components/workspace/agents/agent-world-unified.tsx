@@ -1,4 +1,6 @@
+import { agentCreationRoute } from "@/core/agents/creation-route";
 /* Implementation note. */
+import { DepartmentScenarios } from "./department-scenarios";
 
 import {
   lazy,
@@ -36,6 +38,7 @@ import {
   RefreshCwIcon,
   RotateCcwIcon,
   SparklesIcon,
+  XIcon,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -77,6 +80,7 @@ import {
   writeTaskCollaboratorPreset,
 } from "@/core/collaboration/task-collaborator-preset";
 import { swallow } from "@/core/utils/log";
+import { serviceErrorMessage } from "@/core/utils/service-error";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 import {
@@ -486,7 +490,7 @@ export function AgentsTab({
           role="alert"
           className="flex items-center justify-between gap-3 rounded-lg border border-border-subtle bg-muted/20 px-3 py-2"
         >
-          <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+          <span className="flex min-w-0 items-center gap-2 text-ui text-muted-foreground">
             <AlertCircleIcon className="size-3.5 shrink-0" aria-hidden="true" />
             精选场景暂时不可用
           </span>
@@ -494,7 +498,7 @@ export function AgentsTab({
             type="button"
             size="sm"
             variant="ghost"
-            className="h-7 shrink-0 px-2 text-xs"
+            className="h-7 shrink-0 px-2 text-ui"
             onClick={onRetry}
           >
             {t.agentWorldUnified.retryAgents}
@@ -521,7 +525,7 @@ export function AgentsTab({
         >
           <Button
             type="button"
-            className="min-w-0 px-2 text-xs sm:px-4 sm:text-sm"
+            className="min-w-0 px-2 text-ui sm:px-4 sm:text-sm"
             onClick={onRetry}
           >
             {t.agentWorldUnified.retryAgents}
@@ -530,7 +534,7 @@ export function AgentsTab({
             <>
               <Button
                 type="button"
-                className="min-w-0 px-2 text-xs sm:px-4 sm:text-sm"
+                className="min-w-0 px-2 text-ui sm:px-4 sm:text-sm"
                 variant="outline"
                 onClick={onCreateAgent}
               >
@@ -586,7 +590,7 @@ export function AgentsTab({
                     onClick={() => onCategoryChange(category)}
                     aria-pressed={activeCategory === category}
                     className={cn(
-                      "h-8 shrink-0 rounded-md px-3 text-xs font-normal text-muted-foreground shadow-none",
+                      "h-8 shrink-0 rounded-md px-3 text-ui font-normal text-muted-foreground shadow-none",
                       activeCategory === category &&
                         "bg-muted font-medium text-foreground",
                     )}
@@ -599,12 +603,12 @@ export function AgentsTab({
           </div>
 
           {showManagementActions ? (
-            <div className="flex shrink-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground md:justify-end">
+            <div className="flex shrink-0 flex-wrap items-center gap-1.5 text-ui text-muted-foreground md:justify-end">
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                className="h-8 rounded-lg border-violet-500/25 bg-violet-500/5 px-2.5 text-xs font-medium text-violet-700 shadow-none hover:bg-violet-500/10 dark:text-violet-300"
+                className="h-8 rounded-lg border-primary/20 bg-primary/5 px-2.5 text-ui font-medium text-primary shadow-none hover:bg-primary/10"
                 onClick={() => setSmartTeamOpen(true)}
               >
                 <SparklesIcon className="mr-1.5 size-3.5" />
@@ -630,7 +634,7 @@ export function AgentsTab({
                 type="button"
                 size="sm"
                 variant="ghost"
-                className="h-8 rounded-lg border border-border bg-background px-2.5 text-xs font-medium text-muted-foreground shadow-none hover:bg-muted/45 hover:text-foreground"
+                className="h-8 rounded-lg border border-border bg-background px-2.5 text-ui font-medium text-muted-foreground shadow-none hover:bg-muted/45 hover:text-foreground"
                 disabled={installingAll || installableAgents.length === 0}
                 onClick={() => void handleInstallAll()}
                 title={
@@ -680,81 +684,20 @@ export function AgentsTab({
         onInstallChange={onInstallChange}
       />
 
-      {featuredScenarios.length > 0 ? (
-        <section aria-labelledby="featured-scenarios-title" className="pt-1">
-          <div className="mb-2 flex items-center justify-between">
-            <h3
-              id="featured-scenarios-title"
-              className="text-sm font-semibold text-foreground"
-            >
-              精选场景
-            </h3>
-            <span className="text-[11px] text-muted-foreground">
-              选择即组队
-            </span>
-          </div>
-          <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden">
-            {featuredScenarios.map((scenario) => (
-              <button
-                key={scenario.id}
-                type="button"
-                aria-label={`启动场景：${scenario.title}`}
-                onClick={() => launchScenario(scenario)}
-                className={cn(
-                  "group relative min-h-44 w-[280px] shrink-0 overflow-hidden rounded-2xl border border-border-subtle bg-gradient-to-br p-4 text-left shadow-none transition-[border-color,transform] hover:-translate-y-0.5 hover:border-border-default sm:w-[300px]",
-                  scenario.accent,
-                )}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h4 className="text-base font-semibold tracking-tight text-foreground">
-                      {scenario.title}
-                    </h4>
-                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                      {scenario.description}
-                    </p>
-                  </div>
-                  <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-background/70 text-muted-foreground transition-transform group-hover:translate-x-0.5">
-                    <ArrowRightIcon className="size-3.5" />
-                  </span>
-                </div>
-                <div className="mt-3 space-y-1.5">
-                  {scenario.members.slice(0, 3).map((member) => (
-                    <div
-                      key={member.id}
-                      className="flex items-center gap-2 text-xs font-medium text-foreground/90"
-                    >
-                      <span className="flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full border border-background/80 bg-background/70 text-[11px]">
-                        {member.avatar_url ? (
-                          <img
-                            src={member.avatar_url}
-                            alt=""
-                            className="size-full object-cover"
-                          />
-                        ) : (
-                          member.icon || "·"
-                        )}
-                      </span>
-                      <span className="truncate">{member.display_name}</span>
-                    </div>
-                  ))}
-                </div>
-                {scenario.members.length > 3 ? (
-                  <span className="absolute bottom-4 right-4 text-[11px] text-muted-foreground">
-                    +{scenario.members.length - 3} 位成员
-                  </span>
-                ) : null}
-              </button>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      <DepartmentScenarios additional={featuredScenarios.map(scenario => ({
+        id: scenario.id,
+        title: scenario.title,
+        roles: scenario.members.map(member => [member.name, member.display_name]),
+        flow: scenario.description,
+        output: "",
+        onLaunch: () => launchScenario(scenario),
+      }))} />
 
       {!sceneOnly ? (
         <>
           <div className="flex items-center justify-between pt-1">
-            <h3 className="text-sm font-semibold text-foreground">全部角色</h3>
-            <span className="text-[11px] text-muted-foreground">
+            <h3 className="text-sm font-semibold text-foreground">全部智能体</h3>
+            <span className="text-ui-caption text-muted-foreground">
               {visibleAgents.length} 位
             </span>
           </div>
@@ -899,7 +842,7 @@ function HubPluginConfigDialog({
               <div key={key} className="space-y-1">
                 <Label htmlFor={`cfg-${key}`}>{prop.title || key}</Label>
                 {prop.description && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-ui text-muted-foreground">
                     {prop.description}
                   </p>
                 )}
@@ -1123,7 +1066,7 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
     <div className="flex flex-col gap-4">
       <Tabs defaultValue="local">
         <TabsList variant="line" className="mb-1">
-          <TabsTrigger value="local" className="h-8 gap-1.5 px-3 text-xs">
+          <TabsTrigger value="local" className="h-8 gap-1.5 px-3 text-ui">
             {t.agentWorldUnified.enabledTab}
           </TabsTrigger>
         </TabsList>
@@ -1183,7 +1126,7 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
               type="button"
               variant="outline"
               size="sm"
-              className="h-9 rounded-lg px-3 text-xs"
+              className="h-9 rounded-lg px-3 text-ui"
               onClick={openCreatePluginChat}
             >
               <PlusIcon className="mr-1.5 size-3.5" />
@@ -1209,7 +1152,7 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
                   ? t.plugins.emptyTitle
                   : t.plugins.noMatches}
               </p>
-              <p className="mt-1 text-xs text-muted-foreground/60">
+              <p className="mt-1 text-ui text-muted-foreground/60">
                 {pluginEntries.length === 0
                   ? t.plugins.emptyHint
                   : t.plugins.tryDifferentQuery}
@@ -1271,10 +1214,11 @@ export function resolveHubMarketRoute(search: string): {
   }
   if (tab === "plugins" || tab === "packs") {
     const view = new URLSearchParams(search).get("view");
+    if (view === "remote") return { section: "agents", applicationView: "all" };
     return {
       section: "applications",
       applicationView:
-        view === "installed" || view === "all" || view === "remote"
+        view === "installed" || view === "all"
           ? view
           : "featured",
     };
@@ -1315,6 +1259,11 @@ export function AgentWorldUnified() {
 
   // State
   const [searchQuery, setSearchQuery] = useState("");
+  const matchingApps = WORKBENCH_BUILTIN_APPS.filter((app) =>
+    `${app.id} ${app.name} ${app.description}`
+      .toLowerCase()
+      .includes(searchQuery.trim().toLowerCase()),
+  );
   const marketRoute = useMemo(
     () => resolveHubMarketRoute(location.search),
     [location.search],
@@ -1331,6 +1280,13 @@ export function AgentWorldUnified() {
     null,
   );
   const [hubSmartTeamOpen, setHubSmartTeamOpen] = useState(false);
+  const [remoteAgentsOpen, setRemoteAgentsOpen] = useState(false);
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("view") === "remote" || params.get("talent") === "remote") {
+      setRemoteAgentsOpen(true);
+    }
+  }, [location.search]);
   const hudOnly = new URLSearchParams(location.search).get("hud") === "1";
   const requestedAgentName =
     new URLSearchParams(location.search).get("agent")?.trim() || "";
@@ -1343,6 +1299,9 @@ export function AgentWorldUnified() {
     Set<string>
   >(new Set());
   const [workbenchPackageLoading, setWorkbenchPackageLoading] = useState(false);
+  const [workbenchPackageError, setWorkbenchPackageError] = useState<
+    string | null
+  >(null);
   const [workbenchPackageMutating, setWorkbenchPackageMutating] = useState<
     Set<string>
   >(new Set());
@@ -1394,8 +1353,10 @@ export function AgentWorldUnified() {
       );
       setRuntimeWorkbenchStatuses(new Map(runtimeStatuses));
       await syncWorkbenchAvailability({ installed, runtimeStatuses });
+      setWorkbenchPackageError(null);
     } catch (error) {
       swallow(error);
+      setWorkbenchPackageError(serviceErrorMessage(error));
     } finally {
       setWorkbenchPackageLoading(false);
     }
@@ -1421,6 +1382,7 @@ export function AgentWorldUnified() {
       );
       try {
         if (operation === "install") {
+          const wasInstalled = installedWorkbenchPackages.has(app.packageId);
           const result = await installCloudPlugin(app.cloudId, {
             restoreData: options.restoreData,
             recoveryId: options.recoveryId,
@@ -1437,7 +1399,8 @@ export function AgentWorldUnified() {
             });
           }
           setModuleAvailable(app.moduleId, true);
-          setModuleEnabled(app.moduleId, true, activeAgentId);
+          if (!wasInstalled)
+            setModuleEnabled(app.moduleId, true, activeAgentId);
           setRestoreWorkbenchApp(null);
           toast.success(
             result.data?.status === "restored"
@@ -1519,16 +1482,25 @@ export function AgentWorldUnified() {
         });
       }
     },
-    [activeAgentId, refreshWorkbenchPackages, workbenchPackageStatuses],
+    [
+      activeAgentId,
+      installedWorkbenchPackages,
+      refreshWorkbenchPackages,
+      workbenchPackageStatuses,
+    ],
   );
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const nextRoute = resolveHubMarketRoute(location.search);
     setActiveMarket(nextRoute.section);
-    if (params.get("connect") === "opencode") {
+    if (
+      ["opencode", "opencode-zen", "opencode-go"].includes(
+        params.get("connect") || "",
+      )
+    ) {
       setActiveMarket("applications");
-      setSearchQuery("OpenCode Zen");
+      setSearchQuery("OpenCode");
     }
   }, [location.search]);
 
@@ -1643,7 +1615,12 @@ export function AgentWorldUnified() {
     [location.search, navigate],
   );
 
-  const searchPlaceholder = "搜索角色、应用或 Skills…";
+  const searchPlaceholder =
+    activeMarket === "agents"
+      ? "搜索智能体…"
+      : activeMarket === "skills"
+        ? "搜索技能名称、用途或标签…"
+        : "搜索应用与插件…";
 
   return (
     <div className="relative flex size-full flex-col px-2 pb-2 pt-2 md:px-3">
@@ -1661,7 +1638,7 @@ export function AgentWorldUnified() {
       ) : null}
       {/* Main Content */}
       {!hudOnly && (
-        <div className="relative flex-1 overflow-y-auto px-3 py-3 md:px-4 md:py-4">
+        <div className="relative flex-1 overflow-y-auto px-3 py-4 md:px-5 md:py-5">
           <Tabs
             value={activeMarket}
             onValueChange={(value) =>
@@ -1670,7 +1647,7 @@ export function AgentWorldUnified() {
           >
             <header
               data-testid="hub-market-navigation"
-              className="mb-4 flex items-center justify-between gap-3 border-b border-border-subtle"
+              className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3"
             >
               <h1 className="sr-only">HUB</h1>
               <div className="relative max-w-full after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:w-7 after:bg-gradient-to-l after:from-background after:to-transparent md:after:hidden">
@@ -1678,21 +1655,21 @@ export function AgentWorldUnified() {
                   variant="line"
                   className="mb-0 w-fit justify-start gap-1 overflow-x-auto pr-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:pr-0"
                 >
-                  <TabsTrigger value="agents" className="h-9 px-3 text-xs">
-                    角色
+                  <TabsTrigger value="agents" className="h-9 px-3 text-ui">
+                    智能体
                   </TabsTrigger>
                   <TabsTrigger
                     value="applications"
-                    className="h-9 px-3 text-xs"
+                    className="h-9 px-3 text-ui"
                   >
                     应用
                   </TabsTrigger>
-                  <TabsTrigger value="skills" className="h-9 px-3 text-xs">
-                    Skills
+                  <TabsTrigger value="skills" className="h-9 px-3 text-ui">
+                    技能
                   </TabsTrigger>
                 </TabsList>
               </div>
-              <div className="relative w-full max-w-[320px]">
+              <div className="relative w-full sm:max-w-[320px]">
                 <SearchIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   data-testid="agents-search-input"
@@ -1700,19 +1677,33 @@ export function AgentWorldUnified() {
                   placeholder={searchPlaceholder}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-8 rounded-lg border-border-default bg-background pl-8 text-xs shadow-none"
+                  className="h-9 rounded-lg border-border-default bg-card pl-8 pr-9 text-ui shadow-none"
                 />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    aria-label="清空搜索"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-1 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <XIcon className="size-3.5" />
+                  </button>
+                )}
               </div>
             </header>
 
             <TabsContent value="agents" className="mt-0">
-              <h2 className="sr-only">角色</h2>
-              <div className="mb-2 flex justify-end gap-1.5">
+              <h2 className="sr-only">智能体</h2>
+              <div className="mb-2 flex flex-wrap justify-end gap-1.5">
+                <Button size="sm" variant="ghost" className="h-8 text-ui text-muted-foreground"
+                  onClick={() => setRemoteAgentsOpen(true)}>
+                  连接外部智能体
+                </Button>
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-8 rounded-md border-violet-500/25 bg-violet-500/5 px-2.5 text-xs text-violet-700 shadow-none hover:bg-violet-500/10 dark:text-violet-300"
+                  className="h-8 rounded-md border-primary/20 bg-primary/5 px-2.5 text-ui text-primary shadow-none hover:bg-primary/10"
                   onClick={() => setHubSmartTeamOpen(true)}
                 >
                   <SparklesIcon className="mr-1.5 size-3.5" />
@@ -1724,7 +1715,7 @@ export function AgentWorldUnified() {
                       type="button"
                       size="sm"
                       variant="ghost"
-                      className="h-8 shrink-0 rounded-md px-2.5 text-xs text-muted-foreground shadow-none"
+                      className="h-8 shrink-0 rounded-md px-2.5 text-ui text-muted-foreground shadow-none"
                     >
                       添加
                       <ChevronDownIcon className="ml-1 size-3.5" />
@@ -1732,7 +1723,7 @@ export function AgentWorldUnified() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-44">
                     <DropdownMenuItem
-                      onSelect={() => navigate("/workspace/agents/new")}
+                      onSelect={() => navigate(agentCreationRoute())}
                     >
                       <BotIcon className="size-4" />
                       创建 AI 成员
@@ -1751,10 +1742,22 @@ export function AgentWorldUnified() {
                 onSelectAgent={handleSelectAgent}
                 onInstallChange={handleInstallChange}
                 onRetry={() => void fetchAgents()}
-                onCreateAgent={() => navigate("/workspace/agents/new")}
+                onCreateAgent={() => navigate(agentCreationRoute())}
                 showManagementActions={false}
                 sceneOnly
               />
+
+              <Dialog open={remoteAgentsOpen} onOpenChange={setRemoteAgentsOpen}>
+                <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-3xl">
+                  <DialogHeader>
+                    <DialogTitle>外部智能体</DialogTitle>
+                    <DialogDescription>连接运行在其他平台的智能体，让它们参与智能体协作。支持 A2A 协议。</DialogDescription>
+                  </DialogHeader>
+                  <div className="min-h-0 overflow-y-auto">
+                    <A2AAgentsPanel className="rounded-xl border border-border-subtle" />
+                  </div>
+                </DialogContent>
+              </Dialog>
 
               <SmartTeamDialog
                 open={hubSmartTeamOpen}
@@ -1772,13 +1775,11 @@ export function AgentWorldUnified() {
                     id="remote-role-directory-title"
                     className="text-sm font-semibold text-foreground"
                   >
-                    远端角色
+                    智能体目录
                   </h3>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    角色与角色团统一从云端目录按需添加，不占用主角身份。
-                  </p>
                 </div>
                 <WorkBuddyCloudStorePanel
+                  digitalEmployeesOnly
                   embedded
                   showTypeFilter={false}
                   showTeamFilter
@@ -1793,15 +1794,38 @@ export function AgentWorldUnified() {
                 <h2 id="application-library-title" className="sr-only">
                   应用中心
                 </h2>
-                <div
-                  className={cn(
-                    "mb-6",
-                    marketRoute.applicationView === "remote" && "hidden",
+                <div className="mb-6">
+                  <h3 className="mb-2 text-sm font-semibold">本机应用</h3>
+                  {workbenchPackageError ? (
+                    <div
+                      role="alert"
+                      className="mb-3 rounded-lg border border-border bg-muted/40 px-3 py-2 text-ui text-muted-foreground"
+                    >
+                      应用安装状态未读取：{workbenchPackageError}
+                      <Button
+                        size="sm"
+                        variant="link"
+                        disabled={workbenchPackageLoading}
+                        onClick={() => void refreshWorkbenchPackages()}
+                      >
+                        重试
+                      </Button>
+                    </div>
+                  ) : null}
+                  {matchingApps.length === 0 && (
+                    <p className="py-4 text-sm text-muted-foreground">
+                      没有与“{searchQuery}”匹配的应用。
+                      <button
+                        type="button"
+                        className="ml-2 text-primary underline"
+                        onClick={() => setSearchQuery("")}
+                      >
+                        清除搜索
+                      </button>
+                    </p>
                   )}
-                >
-                  <h3 className="mb-2 text-sm font-semibold">应用</h3>
                   <div className="grid gap-x-8 sm:grid-cols-2">
-                    {WORKBENCH_BUILTIN_APPS.map((app) => {
+                    {matchingApps.map((app) => {
                       const Icon = BUILTIN_APP_ICONS[app.icon];
                       const isInSidebar = enabledModuleIdSet.has(app.moduleId);
                       const isCore = app.delivery === "core";
@@ -1856,7 +1880,9 @@ export function AgentWorldUnified() {
                             type="button"
                             disabled={isMutating}
                             onClick={() => {
-                              if (isInstalled && isRuntimeEnabled) {
+                              if (workbenchPackageError) {
+                                navigate(app.workspaceRoute);
+                              } else if (isInstalled && isRuntimeEnabled) {
                                 navigate(app.workspaceRoute);
                               } else if (
                                 isInstalled &&
@@ -1883,7 +1909,7 @@ export function AgentWorldUnified() {
                               <span className="block text-sm font-semibold text-foreground">
                                 {app.name}
                               </span>
-                              <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                              <span className="mt-0.5 block truncate text-ui text-muted-foreground">
                                 {app.description}
                               </span>
                               {isBroken || isIncompatible ? (
@@ -1917,11 +1943,8 @@ export function AgentWorldUnified() {
                                 <button
                                   type="button"
                                   className="absolute right-2 top-1/2 grid size-8 -translate-y-1/2 place-items-center text-muted-foreground opacity-70 transition-colors hover:text-foreground group-hover:opacity-100"
-                                  aria-label={
-                                    isInSidebar
-                                      ? `从侧栏移除${app.name}`
-                                      : `将${app.name}添加到侧栏`
-                                  }
+                                  aria-label={`管理${app.name}`}
+                                  title={`管理${app.name}`}
                                 >
                                   <MoreHorizontalIcon className="size-4" />
                                 </button>
@@ -2001,7 +2024,11 @@ export function AgentWorldUnified() {
                                   ? `从侧栏移除${app.name}`
                                   : `将${app.name}添加到侧栏`
                               }
-                              disabled={isMutating || workbenchPackageLoading}
+                              disabled={
+                                isMutating ||
+                                workbenchPackageLoading ||
+                                Boolean(workbenchPackageError)
+                              }
                               onClick={() => {
                                 if (isInSidebar) {
                                   setModuleEnabled(
@@ -2020,13 +2047,15 @@ export function AgentWorldUnified() {
                               ) : (
                                 <CloudDownloadIcon className="size-3.5" />
                               )}
-                              {isInSidebar
-                                ? "移除"
-                                : isMutating
-                                  ? "安装中"
-                                  : recoveries.length > 0
-                                    ? "恢复"
-                                    : "安装"}
+                              {workbenchPackageError
+                                ? "状态未读取"
+                                : isInSidebar
+                                  ? "移除"
+                                  : isMutating
+                                    ? "安装中"
+                                    : recoveries.length > 0
+                                      ? "恢复"
+                                      : "安装"}
                             </button>
                           )}
                         </div>
@@ -2038,16 +2067,12 @@ export function AgentWorldUnified() {
                   <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                       <h3 className="text-sm font-semibold">
-                        {marketRoute.applicationView === "remote"
-                          ? "远程 Agent"
-                          : pluginDirectoryView === "featured"
+                        {pluginDirectoryView === "featured"
                             ? "推荐插件"
                             : "插件"}
                       </h3>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {marketRoute.applicationView === "remote"
-                          ? "连接兼容 A2A 的外部智能体，并管理可恢复的远程任务。"
-                          : pluginDirectoryView === "featured"
+                      <p className="mt-1 text-ui text-muted-foreground">
+                        {pluginDirectoryView === "featured"
                             ? "精选内置能力，安装后即可为对话、创作和工程任务补充工具。"
                             : "插件、连接器与 MCP；安装状态直接显示在各项中。"}
                       </p>
@@ -2062,7 +2087,6 @@ export function AgentWorldUnified() {
                           ["featured", "推荐"],
                           ["all", "全部"],
                           ["installed", "已安装"],
-                          ["remote", "远程 Agent"],
                         ] as const
                       ).map(([view, label]) => (
                         <button
@@ -2072,7 +2096,7 @@ export function AgentWorldUnified() {
                           aria-selected={marketRoute.applicationView === view}
                           onClick={() => navigateToApplicationView(view)}
                           className={cn(
-                            "h-7 rounded-md px-3 text-xs transition-colors",
+                            "h-7 rounded-md px-3 text-ui transition-colors",
                             marketRoute.applicationView === view
                               ? "bg-background font-medium text-foreground shadow-sm"
                               : "text-muted-foreground hover:text-foreground",
@@ -2083,28 +2107,7 @@ export function AgentWorldUnified() {
                       ))}
                     </div>
                   </div>
-                  {marketRoute.applicationView === "featured" ? (
-                    <div className="relative mb-4 overflow-hidden rounded-xl border border-primary/15 bg-gradient-to-br from-primary/[0.09] via-background to-violet-500/[0.08] p-4">
-                      <div className="pointer-events-none absolute -right-8 -top-10 size-36 rounded-full bg-primary/10 blur-3xl" />
-                      <div className="relative flex items-start gap-3">
-                        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                          <SparklesIcon className="size-4" />
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-semibold">
-                            从这些能力开始
-                          </h4>
-                          <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
-                            模型接入、网页操作、文档、表格、演示和可视化均由内置插件提供；需要账号的插件会在安装后引导连接。
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
-                  {marketRoute.applicationView === "remote" ? (
-                    <A2AAgentsPanel className="min-h-[calc(100dvh-10rem)] rounded-xl border border-border-subtle" />
-                  ) : (
-                    <CapabilityMarketPanel
+                  <CapabilityMarketPanel
                       searchQuery={searchQuery}
                       view={pluginDirectoryView}
                       featuredIds={DEFAULT_FEATURED_APP_IDS}
@@ -2114,7 +2117,6 @@ export function AgentWorldUnified() {
                       showToolbar={false}
                       compact
                     />
-                  )}
                 </div>
               </section>
             </TabsContent>
@@ -2122,9 +2124,12 @@ export function AgentWorldUnified() {
             <TabsContent value="skills" className="mt-0">
               <section aria-labelledby="skills-library-title">
                 <h2 id="skills-library-title" className="sr-only">
-                  Skills
+                  技能
                 </h2>
-                <CloudSkillsPanel searchQuery={searchQuery} />
+                <CloudSkillsPanel
+                  searchQuery={searchQuery}
+                  onClearSearch={() => setSearchQuery("")}
+                />
               </section>
             </TabsContent>
           </Tabs>
@@ -2154,7 +2159,7 @@ export function AgentWorldUnified() {
               }
             }}
             onSelectAgent={handleSwitchAgent}
-            onCreateAgent={() => navigate("/workspace/agents/new?return=hud")}
+            onCreateAgent={() => navigate(agentCreationRoute({ returnTo: "hud" }))}
           />
         </Suspense>
       ) : null}
@@ -2176,7 +2181,7 @@ export function AgentWorldUnified() {
             <span className="font-medium text-foreground">
               可恢复内容已保留
             </span>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            <p className="mt-1 text-ui leading-5 text-muted-foreground">
               恢复操作不会覆盖现有作品；若目标位置已有新数据，系统会安全中止。
             </p>
           </div>
@@ -2235,7 +2240,7 @@ export function AgentWorldUnified() {
               <span className="block text-sm font-semibold">
                 保留作品（推荐）
               </span>
-              <span className="mt-1 block text-xs text-muted-foreground">
+              <span className="mt-1 block text-ui text-muted-foreground">
                 以后重新安装即可继续使用现有项目。
               </span>
             </button>
@@ -2252,7 +2257,7 @@ export function AgentWorldUnified() {
               <span className="block text-sm font-semibold">
                 移入可恢复回收站
               </span>
-              <span className="mt-1 block text-xs text-muted-foreground">
+              <span className="mt-1 block text-ui text-muted-foreground">
                 不永久删除；重新安装时可以恢复。
               </span>
             </button>

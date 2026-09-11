@@ -1,0 +1,5 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/knowledge".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
++				46 text 把项目整理成 Wiki 自动梳理模块、关键流程和依赖关系，生成可搜索、可引用的结构化知识页。
++				47 button 生成 Wiki
+The focused UI element is 45 tab (selected, settable, boolean) Wiki, Value: 1, ID: radix-_r_n6_-trigger-wiki

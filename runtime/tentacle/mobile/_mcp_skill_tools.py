@@ -20,29 +20,17 @@ logger = logging.getLogger(__name__)
 
 
 def _find_skills_roots() -> list[Path]:
-    """定位所有 SKILL.md 根目录（mobile + ios）.
-
-    返回顺序固定：先 mobile，再 ios。每个候选根都按
-    ``相对本文件 → 相对当前工作目录`` 的顺序探测。
-    """
-    here = Path(__file__).resolve().parent
-    pairs = [
-        (here / "skills", Path.cwd() / "runtime" / "tentacle" / "mobile" / "skills"),
-        (here.parent / "ios" / "skills", Path.cwd() / "runtime" / "tentacle" / "ios" / "skills"),
-    ]
-    roots: list[Path] = []
-    for local, cwd in pairs:
-        if local.is_dir():
-            roots.append(local)
-        elif cwd.is_dir():
-            roots.append(cwd)
-    return roots
+    """Only expose tool manifests from enabled Android/iOS plugins."""
+    from runtime.tentacle.device_plugins import device_plugin_tools_root
+    return [root for platform in ("android", "ios")
+            if (root := device_plugin_tools_root(platform)).is_dir()]
 
 
 def _find_skills_root() -> Path:
-    """定位 runtime/tentacle/mobile/skills 目录（向后兼容）."""
+    """Return the active Android manifest path for legacy callers."""
+    from runtime.tentacle.device_plugins import device_plugin_tools_root
     roots = _find_skills_roots()
-    return roots[0] if roots else Path(__file__).resolve().parent / "skills"
+    return roots[0] if roots else device_plugin_tools_root("android")
 
 
 def _parse_skill_md(skill_md_path: Path) -> dict[str, Any] | None:

@@ -65,9 +65,9 @@ export const PERSONA_WORKSPACE_PRESETS: Readonly<
     ...BASE_PRESET,
     id: "office-coordination",
     direction: "办公与项目协调",
-    workbenchLabel: "项目协作台",
-    workbenchSummary: "把群聊中的计划、里程碑和交付收敛到同一个项目上下文。",
-    workbenchLanes: ["计划", "里程碑", "交付"],
+    workbenchLabel: "工作台首页",
+    workbenchSummary: "查看协作能力与全部项目；当前项目的进度、里程碑和成员请在「项目」面板中管理。",
+    workbenchLanes: ["任务协调", "资料整理", "交付跟进"],
     primaryAction: { label: "查看全部项目", to: "/workspace/projects" },
     workbench: "office",
   },
@@ -76,7 +76,7 @@ export const PERSONA_WORKSPACE_PRESETS: Readonly<
     id: "software-development",
     direction: "软件研发",
     themeId: "kane",
-    defaultWorkbenchTab: "terminal",
+    defaultWorkbenchTab: "agent",
     workbenchLabel: "开发工作台",
     workbenchSummary: "聚合代码执行、变更审阅和可运行预览。",
     workbenchLanes: ["终端", "变更", "预览"],
@@ -102,6 +102,10 @@ export const PERSONA_WORKSPACE_PRESETS: Readonly<
     workbenchLabel: "增长工作台",
     workbenchSummary: "从洞察、内容到投放复盘组织增长任务。",
     workbenchLanes: ["洞察", "内容", "复盘"],
+    primaryAction: {
+      label: "创建增长任务",
+      to: "/workspace/realtime/new?agent=vibe_selling",
+    },
     workbench: "growth",
   },
   ecommerce_mind: {
@@ -113,6 +117,10 @@ export const PERSONA_WORKSPACE_PRESETS: Readonly<
     workbenchLabel: "电商运营台",
     workbenchSummary: "围绕商品、渠道和履约组织电商经营工作。",
     workbenchLanes: ["商品", "渠道", "履约"],
+    primaryAction: {
+      label: "创建经营分析任务",
+      to: "/workspace/realtime/new?agent=ecommerce_mind",
+    },
     workbench: "commerce",
   },
   market_researcher: {

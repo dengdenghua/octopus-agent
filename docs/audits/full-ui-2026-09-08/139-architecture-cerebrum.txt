@@ -1,0 +1,16 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/architecture".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
++					145 heading 🧠 Cerebrum · 中枢脑, Value: 1
++					146 heading 职责, Value: 2
++					147 heading 不做, Value: 2
++					148 heading 输入输出, Value: 2
++					149 heading 接口（草案）, Value: 2
++					150 container
++						151 button
++						152 button
++					153 heading 进化关联, Value: 2
++					154 heading 模型策略, Value: 2
++					155 heading 结构图, Value: 2
++					156 text MERMAID
++					157 button Copy Mermaid source
+The focused UI element is 58 button 🧠 Cerebrum · 中枢脑, Help: docs/architecture/organs/cerebrum.md

@@ -1,0 +1,27 @@
+{
+  "id": "mvp_dev_expert_team_team_lead",
+  "templateId": "mvp-dev-expert-team:mvp-dev-expert-team-team-lead",
+  "templateVersion": "2.1.0",
+  "source_kind": "agent-pack-import",
+  "managed_by": "agent-pack",
+  "source_pack_root": "C:\\Users\\Administrator\\AppData\\Local\\Temp\\wb-bundle-m2ap9hnf\\unpack",
+  "source_plugin": "mvp-dev-expert-team",
+  "source_agent_path": "C:\\Users\\Administrator\\AppData\\Local\\Temp\\wb-bundle-m2ap9hnf\\unpack\\agents\\mvp-dev-expert-team-team-lead.md",
+  "name": "Mvp Dev Expert Team Team Lead",
+  "icon": "Agent",
+  "description": "Project Director of the MVP Dev Expert Team. Orchestrates 7 domain experts through a 6-phase lifecycle. Enforces phase gates, manages information flow via SendMessage, resolves cross-expert conflicts, and reports real-time progress. Never writes expert output directly - coordinates, validates, assembles.",
+  "avatar": "avatar.svg",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "pack:mvp-dev-expert-team",
+  "category": "researcher",
+  "tags": [
+    "finance",
+    "research",
+    "market",
+    "analysis"
+  ]
+}

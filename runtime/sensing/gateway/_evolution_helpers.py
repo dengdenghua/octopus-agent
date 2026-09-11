@@ -147,7 +147,7 @@ def _resolve_api_base_url(value: str | None, *, request: Request | None) -> str:
         from_request = _normalize_api_base_url(str(request.base_url))
         if from_request:
             return from_request
-    return "http://127.0.0.1:8000"
+    return "http://127.0.0.1:8310"
 
 
 def _normalize_api_base_url(value: str | None) -> str:

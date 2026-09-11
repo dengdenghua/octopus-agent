@@ -6,7 +6,9 @@ type PickDirectoryResponse = components["schemas"]["FsPickDirectoryResponse"];
 
 export async function pickLocalDirectory(
   defaultPath = "",
+  options: { signal?: AbortSignal } = {},
 ): Promise<string | null> {
+  options.signal?.throwIfAborted();
   if (window.octopus?.dialog?.open) {
     const result = await window.octopus.dialog.open({
       title: "选择工作区文件夹",
@@ -15,6 +17,7 @@ export async function pickLocalDirectory(
       properties: ["openDirectory", "createDirectory"],
       defaultPath,
     });
+    options.signal?.throwIfAborted();
     return result.canceled ? null : result.filePaths[0] || null;
   }
 
@@ -23,7 +26,12 @@ export async function pickLocalDirectory(
   const query = params.toString();
   const response = await fetch(
     `${getBackendBaseURL()}/api/fs/pick-directory${query ? `?${query}` : ""}`,
-    { headers: authHeaders() },
+    {
+      headers: authHeaders(),
+      signal: options.signal
+        ? AbortSignal.any([options.signal, AbortSignal.timeout(30_000)])
+        : AbortSignal.timeout(30_000),
+    },
   );
   if (!response.ok) {
     throw new Error(`Folder picker request failed (${response.status})`);

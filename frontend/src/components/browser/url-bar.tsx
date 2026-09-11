@@ -879,12 +879,13 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
       <button
         onClick={toggleCopilot}
         className={cn(
-          "ml-1 flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-colors",
+          "ml-1 flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           state.copilotOpen
-            ? "border-primary/25 bg-primary/10 text-primary"
-            : "border-border-subtle bg-background/65 text-muted-foreground hover:border-primary/20 hover:bg-primary/5 hover:text-foreground",
+            ? "text-primary"
+            : "text-muted-foreground hover:text-foreground",
         )}
         title={ub.aiAssistant}
+        aria-pressed={state.copilotOpen}
       >
         <SparklesIcon className="size-3.5" />
         <span>AI</span>

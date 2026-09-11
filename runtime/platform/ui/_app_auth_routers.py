@@ -66,6 +66,14 @@ def mount_auth_routers(
     """Mount the oct and local-auth account routers."""
     app = ctx.app
     stack = ctx.stack
+    if ctx.identity_store is not None:
+        from runtime.adapters.integrations.social_auth import create_social_auth_router
+        from runtime.platform.process.paths import app_paths
+        app.include_router(create_social_auth_router(
+            identity_store=ctx.identity_store, jwt_secret=ctx.jwt_secret,
+            jwt_issuer=ctx.jwt_issuer, jwt_audience=ctx.jwt_audience,
+            data_dir=app_paths().data_dir,
+        ))
 
     if oct_config is not None and getattr(oct_config, "enabled", False):
         # oct 账号网关（octopus 自己的，octopus.aurest.ai）。

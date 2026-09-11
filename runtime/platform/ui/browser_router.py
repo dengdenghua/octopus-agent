@@ -25,6 +25,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.responses import FileResponse, Response
+from runtime.platform.ui._browser_thread_route import BrowserThreadRoute
 from starlette.requests import HTTPConnection
 
 from runtime.platform.process.paths import app_paths
@@ -87,7 +88,9 @@ def create_browser_router(
             jwt_audience=jwt_audience,
         )
 
-    router = APIRouter(tags=["browser"], dependencies=[Depends(_auth_dep)])
+    router = APIRouter(
+        tags=["browser"], dependencies=[Depends(_auth_dep)], route_class=BrowserThreadRoute
+    )
     browser_config_state: dict[str, Any] = {
         "max_open_tabs": 20,
         "max_saved_tabs": 10,

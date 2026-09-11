@@ -202,12 +202,12 @@ export function CreateProjectDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] gap-0 overflow-hidden p-0 sm:max-w-[var(--dialog-lg)]">
-        <DialogHeader className="px-6 pt-6 pb-4">
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden overflow-y-clip p-0 sm:max-w-[var(--dialog-lg)]">
+        <DialogHeader className="shrink-0 px-6 pt-6 pb-4 pr-14">
           <DialogTitle>{t.createProjectDialog.title}</DialogTitle>
           <DialogDescription>{t.createProjectDialog.hint}</DialogDescription>
         </DialogHeader>
-        <div className="flex min-h-0 flex-col gap-4 overflow-y-auto border-y px-6 py-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain border-y px-6 py-4">
           <div className="space-y-2">
             <Label htmlFor="create-project-name">
               {t.createProjectDialog.placeholder}
@@ -426,7 +426,7 @@ export function CreateProjectDialog({
             </div>
           )}
         </div>
-        <DialogFooter className="px-6 py-4">
+        <DialogFooter className="shrink-0 px-6 py-4">
           <Button variant="outline" onClick={() => handleOpenChange(false)}>
             {t.createProjectDialog.cancel}
           </Button>

@@ -16,6 +16,7 @@ and delegates to them.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -77,6 +78,15 @@ def _build_endpoints(ctx: _ConfigCtx) -> None:
     _register_local_models(router, ctx)
     _register_system(router, ctx)
     _register_coder_codex(router, ctx)
+
+    @router.get("/api/config/opencode/status", tags=["config"])
+    async def opencode_status(request: Request) -> dict[str, Any]:
+        from runtime.execution.opencode_backend import inspect_readiness
+        from runtime.safety.auth.scope import scope_from_request
+        from runtime.execution.engine_observations import engine_observations
+
+        scope = scope_from_request(request)
+        return {**await asyncio.to_thread(inspect_readiness, scope), **engine_observations(scope, "opencode")}
 
 
 __all__ = ["_ConfigCtx", "_build_endpoints"]

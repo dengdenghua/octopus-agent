@@ -17,12 +17,40 @@ function StoreHarness() {
       <button onClick={() => openTab("https://example.com/path")}>open</button>
       <button onClick={() => activeTab && closeTab(activeTab.id)}>close</button>
       <button onClick={() => restoreClosedTab()}>restore</button>
+      <button
+        onClick={() =>
+          openTab("https://example.com/task", {
+            taskPreview: { threadId: "task-1", sessionId: "session-1" },
+          })
+        }
+      >
+        task
+      </button>
+      <div data-testid="task-session">{activeTab?.taskPreview?.sessionId}</div>
     </div>
   );
 }
 
 describe("browser tab recovery", () => {
   beforeEach(() => window.localStorage.clear());
+
+  it("reuses a task session tab and preserves its identity after closing and restoring", () => {
+    renderWithProviders(
+      <BrowserStoreProvider>
+        <StoreHarness />
+      </BrowserStoreProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "task", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "open", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "task", exact: true }));
+    expect(screen.getByTestId("open-count")).toHaveTextContent("3");
+    expect(screen.getByTestId("task-session")).toHaveTextContent("session-1");
+    fireEvent.click(screen.getByRole("button", { name: "close", exact: true }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "restore", exact: true }),
+    );
+    expect(screen.getByTestId("task-session")).toHaveTextContent("session-1");
+  });
 
   it("keeps recently closed tabs and restores the latest one", () => {
     renderWithProviders(

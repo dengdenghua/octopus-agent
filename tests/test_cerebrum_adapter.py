@@ -15,7 +15,10 @@ import pytest_asyncio
 
 from runtime.core.cerebrum.planner import Rule, StaticPlanner
 from runtime.tentacle.coordinator import TentacleCoordinator
-from runtime.tentacle.mobile.cerebrum_adapter import CerebrumDecisionAdapter
+from runtime.tentacle.mobile.cerebrum_adapter import (
+    CerebrumDecisionAdapter,
+    make_stack_decision_engine,
+)
 from runtime.tentacle.mobile.device import MobileDevice
 
 # ── fixtures ──────────────────────────────────────────────
@@ -73,6 +76,32 @@ async def mock_device():
 
 
 # ── 单元测试：适配器 ──────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_stack_binding_defers_planner_and_preserves_device_calls(
+    planner_with_rules, mock_device
+):
+    accesses = []
+
+    class Host:
+        @property
+        def planner(self):
+            accesses.append("planner")
+            return planner_with_rules
+
+    decide = make_stack_decision_engine(Host())
+    assert accesses == []
+    calls = await decide("打开微信", mock_device)
+    assert accesses == ["planner"]
+    assert [call.tool for call in calls] == ["android.open_app", "android.wait"]
+    assert all(call.tentacle_id == mock_device.tentacle_id for call in calls)
+    assert calls[0].args["package"] == "com.tencent.mm"
+
+
+@pytest.mark.asyncio
+async def test_stack_binding_without_planner_keeps_empty_decision(mock_device):
+    assert await make_stack_decision_engine(None)("打开微信", mock_device) == []
 
 
 @pytest.mark.asyncio

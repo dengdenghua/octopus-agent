@@ -1,11 +1,10 @@
+import { WORKBENCH_BUILTIN_APPS } from "@/core/workbench/apps";
 import { useCallback, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import {
   BotIcon,
-  BrainIcon,
   DatabaseIcon,
-  DnaIcon,
   CompassIcon,
   MessageSquareIcon,
   MessageSquarePlusIcon,
@@ -146,36 +145,26 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
   const [renameValue, setRenameValue] = useState("");
   const activeAgentId = useActiveAgentId();
   const workspaceDestinations = [
+    ...WORKBENCH_BUILTIN_APPS.map((app) => ({
+      label: app.name,
+      to: app.workspaceRoute,
+      icon: CompassIcon,
+      active: pathname === app.workspaceRoute.split("?")[0],
+    })),
     {
       label: t.sidebar.navHR,
       to: "/workspace/agents?surface=chat",
       icon: BotIcon,
       active: pathname.startsWith("/workspace/agents"),
     },
-    {
-      label: t.sidebar.navIntelligence,
-      to: "/workspace/intelligence?surface=chat",
-      icon: BrainIcon,
-      active: pathname.startsWith("/workspace/intelligence"),
-    },
+
     {
       label: t.sidebar.navAssistant,
       to: "/workspace/realtime/octopus-assistant?agent=octopus",
       icon: UserRoundPenIcon,
       active: pathname.includes("octopus-assistant"),
     },
-    {
-      label: t.sidebar.navEvolution,
-      to: "/workspace/evolution?surface=chat",
-      icon: DnaIcon,
-      active: pathname.startsWith("/workspace/evolution"),
-    },
-    {
-      label: t.sidebar.navCommunity,
-      to: "/workspace/community",
-      icon: CompassIcon,
-      active: pathname.startsWith("/workspace/community"),
-    },
+
     {
       label: t.sidebar.navDatabase,
       to: "/workspace/storage?surface=company&library=docs",

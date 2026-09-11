@@ -67,6 +67,10 @@ jobs:
         working-directory: frontend
         run: pnpm codex:prepare:linux
 
+      - name: Prepare pinned OpenCode Linux runtime
+        working-directory: frontend
+        run: pnpm opencode:prepare:linux
+
       - name: Verify pinned Codex before packaging
         run: |
           set -euo pipefail
@@ -162,7 +166,7 @@ jobs:
         working-directory: frontend
         run: pnpm electron:build:linux
 
-      - name: Verify packaged backend and Codex are present and runnable
+      - name: Verify packaged backend and engines are present and runnable
         run: |
           set -euo pipefail
           appimage=$(ls "$PWD/frontend/release/"EchoAI-Setup-Linux-*.AppImage)
@@ -178,10 +182,15 @@ jobs:
           backend="$resources/backend/octopus-backend"
           codex="$resources/codex"
           codex_bin="$codex/bin/codex"
+          opencode="$resources/opencode/opencode"
 
           test -f "$backend" || { echo "Packaged backend is missing: $backend"; exit 1; }
           test -f "$codex_bin" || { echo "Packaged Codex is missing: $codex_bin"; exit 1; }
           test -f "$codex/octopus-codex-bundle.json" || { echo "Packaged Codex manifest is missing"; exit 1; }
+          test -x "$opencode" || { echo "Packaged OpenCode is missing or not executable: $opencode"; exit 1; }
+          node -e 'const m=require(process.argv[1]);m.requirePackagedOpenCode(process.argv[2],"linux","x64");' \
+            "$PWD/frontend/electron/opencode-runtime.cjs" "$resources"
+          [[ "$($opencode --version)" == *"1.18.29"* ]] || { echo "Packaged OpenCode version check failed"; exit 1; }
 
           packaged_licenses=(
             "LICENSE"
@@ -219,6 +228,7 @@ jobs:
           OCTOPUS_DATA_DIR="$smoke_root/data" \
           OCTOPUS_RESOURCES_DIR="$smoke_root/resources" \
           OCTOPUS_CODEX_EXECUTABLE="$codex_bin" \
+          OCTOPUS_OPENCODE_BIN="$opencode" \
            "$backend" serve --config "$config" --host 127.0.0.1 --port "$backend_port" \
             >"$smoke_root/backend.stdout.log" 2>"$smoke_root/backend.stderr.log" &
           backend_pid=$!

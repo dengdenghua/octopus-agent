@@ -95,6 +95,26 @@ test("desktop shell boots: window, preload bridge, workbench root", async () => 
     expect(listing.ok).toBe(true);
     expect(Array.isArray(listing.items)).toBe(true);
 
+    // The automation PiP uses a read-only native thumbnail instead of adding
+    // screenshot commands to the browser/desktop control queue. Exercise the
+    // preload → main-process capture path on Windows, where the feature ships.
+    if (process.platform === "win32") {
+      const preview = await win.evaluate(() =>
+        window.octopus?.desktop.captureAutomationPreview({
+          kind: "desktop_window",
+          id: "echo-desktop-shell",
+          title: document.title || "Echo",
+          appName: "Echo",
+          width: 640,
+          height: 360,
+        }),
+      );
+      expect(preview.ok).toBe(true);
+      expect(preview.dataUrl).toMatch(/^data:image\/png;base64,/);
+      expect(preview.width).toBeGreaterThan(0);
+      expect(preview.height).toBeGreaterThan(0);
+    }
+
     // Site permissions are persisted by the main process, not renderer
     // localStorage. Verify the preload bridge can remember and revoke an
     // exact-origin decision inside this isolated temporary profile.

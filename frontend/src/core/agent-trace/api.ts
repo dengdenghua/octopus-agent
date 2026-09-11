@@ -1717,7 +1717,7 @@ export async function rerunBrowserDesktopRepairRecipeEvidence(options: {
     "/api/evolution/browser-desktop-repair-recipes/verifications/rerun",
     {
       item_id: options.itemId,
-      api_base_url: options.apiBaseUrl ?? "http://127.0.0.1:8000",
+      api_base_url: options.apiBaseUrl ?? "http://127.0.0.1:8310",
       promote_source_cases: options.promoteSourceCases ?? false,
       actor: options.actor ?? "operator_panel",
     },
@@ -1733,7 +1733,7 @@ export async function rerunBrowserDesktopRepairRecipeEvidenceBatch(options?: {
   return postJson<BrowserDesktopRepairRecipeRerunBatchResult>(
     "/api/evolution/browser-desktop-repair-recipes/verifications/rerun-batch",
     {
-      api_base_url: options?.apiBaseUrl ?? "http://127.0.0.1:8000",
+      api_base_url: options?.apiBaseUrl ?? "http://127.0.0.1:8310",
       promote_source_cases: options?.promoteSourceCases ?? false,
       actor: options?.actor ?? "operator_panel",
       limit: options?.limit ?? 20,

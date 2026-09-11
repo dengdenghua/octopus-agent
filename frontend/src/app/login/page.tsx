@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowRightIcon,
   FingerprintIcon,
+  GithubIcon,
   KeyRoundIcon,
   MailIcon,
   UserCircle2Icon,
@@ -21,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { ErrorState } from "@/components/ui/state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type AuthProviderInfo, getAuthProviderInfo } from "@/core/auth/api";
+import { getBackendBaseURL } from "@/core/config";
 import {
   authReturnToFromSearch,
   registerPathWithReturnTo,
@@ -334,9 +336,11 @@ function EmailLoginForm({ returnTo }: { returnTo: string }) {
 }
 
 function LocalLoginForm({
+  passwordOnlyUsername,
   passwordRequired,
   returnTo,
 }: {
+  passwordOnlyUsername?: string | null;
   passwordRequired: boolean;
   returnTo: string;
 }) {
@@ -349,7 +353,7 @@ function LocalLoginForm({
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const trimmedUsername = username.trim();
+    const trimmedUsername = passwordOnlyUsername || username.trim();
     if (!trimmedUsername || (passwordRequired && !password)) {
       toast.error(t.auth.errors.fillRequired);
       return;
@@ -373,25 +377,29 @@ function LocalLoginForm({
 
   return (
     <form onSubmit={onSubmit} className="echo-login-form space-y-5">
-      <div className="rounded-xl border border-border/50 bg-muted/30 px-4 py-3 text-xs text-muted-foreground/80">
-        {t.loginPage.localBanner}
-      </div>
-      <div className="space-y-2.5">
-        <Label htmlFor="local-username" className="text-sm font-medium">
-          {t.registerPage.usernameLabel}
-        </Label>
-        <div className="relative">
-          <UserCircle2Icon className="pointer-events-none absolute left-4 top-1/2 size-[18px] -translate-y-1/2 text-muted-foreground/50" />
-          <Input
-            id="local-username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder={t.registerPage.usernamePlaceholder}
-            autoComplete="username"
-            className="echo-login-input h-12 rounded-xl border-border/60 bg-card/50 pl-11 text-base transition-colors focus:border-primary/40 focus:bg-card"
-          />
-        </div>
-      </div>
+      {!passwordOnlyUsername && (
+        <>
+          <div className="rounded-xl border border-border/50 bg-muted/30 px-4 py-3 text-xs text-muted-foreground/80">
+            {t.loginPage.localBanner}
+          </div>
+          <div className="space-y-2.5">
+            <Label htmlFor="local-username" className="text-sm font-medium">
+              {t.registerPage.usernameLabel}
+            </Label>
+            <div className="relative">
+              <UserCircle2Icon className="pointer-events-none absolute left-4 top-1/2 size-[18px] -translate-y-1/2 text-muted-foreground/50" />
+              <Input
+                id="local-username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder={t.registerPage.usernamePlaceholder}
+                autoComplete="username"
+                className="echo-login-input h-12 rounded-xl border-border/60 bg-card/50 pl-11 text-base transition-colors focus:border-primary/40 focus:bg-card"
+              />
+            </div>
+          </div>
+        </>
+      )}
       {passwordRequired && (
         <div className="space-y-2.5">
           <Label htmlFor="local-password" className="text-sm font-medium">
@@ -593,6 +601,29 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const returnTo = authReturnToFromSearch(location.search);
+  const [socialProviders, setSocialProviders] = useState<
+    Record<string, boolean>
+  >({});
+  useEffect(() => {
+    let active = true;
+    fetch(`${getBackendBaseURL()}/api/auth/social/providers`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (active && data?.providers)
+          setSocialProviders(
+            Object.fromEntries(
+              data.providers.map((p: { id: string; enabled: boolean }) => [
+                p.id,
+                p.enabled,
+              ]),
+            ),
+          );
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
   const { authError, authStatus, isLoading, isAuthenticated, retryAuth } =
     useAuth();
   const { t } = useI18n();
@@ -749,12 +780,60 @@ export default function LoginPage() {
                 进入 ECHO
               </CardTitle>
               <CardDescription className="text-[15px] text-muted-foreground/80">
-                {hasOct
-                  ? "用一封验证码，唤醒你的 ECHO 身份"
-                  : "登录你的 ECHO 身份"}
+                选择一种方式，登录你的 ECHO 账号
               </CardDescription>
             </CardHeader>
             <CardContent className="px-8 pb-7 pt-0">
+              {!backendUnavailable && providersReady && (
+                <div className="mb-5 space-y-3">
+                  {(["google", "github"] as const).map((provider) => (
+                    <Button
+                      key={provider}
+                      variant="outline"
+                      className="relative h-12 w-full justify-center gap-3 rounded-xl text-sm font-medium"
+                      disabled={!socialProviders[provider]}
+                      title={
+                        !socialProviders[provider]
+                          ? "此登录方式尚未启用"
+                          : undefined
+                      }
+                      onClick={() => {
+                        window.location.assign(
+                          `${getBackendBaseURL()}/api/auth/social/${provider}/start?return_to=${encodeURIComponent(returnTo)}`,
+                        );
+                      }}
+                    >
+                      {provider === "github" ? (
+                        <GithubIcon className="size-5" />
+                      ) : (
+                        <span
+                          aria-hidden="true"
+                          className="text-xl font-bold text-blue-600"
+                        >
+                          G
+                        </span>
+                      )}
+                      使用 {provider === "google" ? "Google" : "GitHub"}{" "}
+                      账号继续
+                      {!socialProviders[provider] && (
+                        <span className="ml-auto text-xs font-normal text-muted-foreground">
+                          暂未启用
+                        </span>
+                      )}
+                    </Button>
+                  ))}
+                  {new URLSearchParams(location.search).has("social_error") && (
+                    <p role="alert" className="text-sm text-destructive">
+                      第三方登录未完成，请重试或使用邮箱登录。
+                    </p>
+                  )}
+                  <div className="flex items-center gap-3 pt-2 text-xs text-muted-foreground">
+                    <span className="h-px flex-1 bg-border" />
+                    或使用其他邮箱
+                    <span className="h-px flex-1 bg-border" />
+                  </div>
+                </div>
+              )}
               {backendUnavailable ? (
                 <ErrorState
                   className="min-h-40 rounded-xl border border-destructive/20 bg-destructive/5"
@@ -768,7 +847,12 @@ export default function LoginPage() {
                   {t.common.loading}
                 </div>
               ) : hasOct && localProvider ? (
-                <Tabs defaultValue="email" className="w-full">
+                <Tabs
+                  defaultValue={
+                    localProvider.password_only_username ? "local" : "email"
+                  }
+                  className="w-full"
+                >
                   <TabsList className="mb-6 grid h-11 w-full grid-cols-2 rounded-xl bg-muted/50 p-1">
                     <TabsTrigger
                       value="email"
@@ -780,7 +864,9 @@ export default function LoginPage() {
                       value="local"
                       className="rounded-lg text-sm font-medium data-[state=active]:bg-card data-[state=active]:shadow-sm"
                     >
-                      {localProvider.label ?? "本地账户"}
+                      {localProvider.password_only_username
+                        ? t.registerPage.passwordLabel
+                        : (localProvider.label ?? "本地账户")}
                     </TabsTrigger>
                   </TabsList>
                   <TabsContent value="email" className="mt-0">
@@ -788,6 +874,9 @@ export default function LoginPage() {
                   </TabsContent>
                   <TabsContent value="local" className="mt-0">
                     <LocalLoginForm
+                      passwordOnlyUsername={
+                        localProvider.password_only_username
+                      }
                       passwordRequired={
                         localProvider.password_required === true
                       }
@@ -799,6 +888,7 @@ export default function LoginPage() {
                 <EmailLoginForm returnTo={returnTo} />
               ) : localProvider ? (
                 <LocalLoginForm
+                  passwordOnlyUsername={localProvider.password_only_username}
                   passwordRequired={localProvider.password_required === true}
                   returnTo={returnTo}
                 />
@@ -822,7 +912,7 @@ export default function LoginPage() {
 
               <div className="echo-login-security-note">
                 <FingerprintIcon className="size-3.5" />
-                验证码由 verify@echo-age.com 安全发送
+                Google、GitHub 或邮箱，选择你习惯的登录方式
               </div>
             </CardContent>
           </Card>

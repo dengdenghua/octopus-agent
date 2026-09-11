@@ -1,0 +1,165 @@
+Browser tab: 4, Title: "设计画布 - Echo", URL: "http://localhost:3310/#/workspace/design".
+0 AXWebArea 设计画布 - Echo, URL: localhost:3310/#/workspace/design
+	1 container root
+		2 container
+			3 button 返回桌面
+			4 button 切换全屏
+			5 tab group Workspace surface
+				39 tab (selected, settable, boolean) Description: Echo, Value: 1
+				7 tab (selectable, settable, boolean) Description: AI 浏览器, Value: 0
+			8 button (expanded) Description: 收起侧栏 (Ctrl/⌘+B), Secondary Actions: Collapse
+			9 button 新建任务
+			10 content list
+				11 link Description: HUB, Value: localhost:3310/#/workspace/agents?surface=chat
+				12 link Description: 助手, Value: localhost:3310/#/workspace/realtime/octopus-assistant?agent=octopus
+				13 link Description: 订阅, Value: localhost:3310/#/workspace/intelligence?surface=chat
+				14 link Description: 项目管理, Value: localhost:3310/#/workspace/projects
+				15 link Description: 设计画布, Value: localhost:3310/#/workspace/design
+				16 link Description: 叙事工坊, Value: localhost:3310/#/workspace/narrative
+				17 link Description: 自进化, Value: localhost:3310/#/workspace/evolution?surface=chat
+			18 content list
+				19 link Description: 发现社区, Value: localhost:3310/#/workspace/community
+			20 content list
+				21 button (collapsed) Description: 展开本地数据库, Secondary Actions: Expand
+			22 content list
+				23 button 编辑侧栏
+			24 container
+				25 button (expanded) Description: 收起项目, Secondary Actions: Collapse
+				26 button 选择项目空间
+			27 container
+				28 button (expanded) Description: 收起对话, Secondary Actions: Collapse
+				29 button Description: 对话 · 新建任务, Help: 新建任务
+			30 pop up button (collapsed) Description: Raven, ID: radix-_r_1a_, Secondary Actions: Expand, Help: Raven · 现实职业是企业流程自动化专家，通过视觉理解操作 ERP、CRM、表格、浏览器和遗留系统；在 ECHO 世界中是远程接管手 Night Crow。两种身份共享屏幕观察、设备控制与精细操作能力。
+				31 text Raven
+				32 text Lv.
+				33 text 1
+				34 text ⭐
+			35 button 设置
+			40 container 设计画布
+				41 AXWebArea 设计画布, URL: localhost:3310/api/workbench-packages/design/assets/dist/index.html?octopus_host_path=%2Fworkspace%2Fdesign&octopus_host_origin=http%3A%2F%2Flocalhost%3A3310
+					42 container root
+						43 container
+							44 text Echo Design
+							45 container
+								46 button 创作首页
+								47 button 创作画布
+								48 button 资产中心
+								49 button Skill
+								50 button ComfyUI
+							51 container
+								52 button Echo 创作基座已就绪
+								53 heading Echo Design, Value: 1
+									54 text Echo Design
+								55 text 属于你的多模态 Agent 团队 描述你要生成的内容，或查看
+								56 button Design 使用指南
+								57 text ·
+								58 button 模型使用指南
+								59 text entry area (settable)
+								60 button 添加文件
+								61 button (collapsed) 模型, Secondary Actions: Expand
+								62 button Skill
+								63 button (disabled) 开始制作
+								64 button (collapsed) Description: 选择本地创作项目, Secondary Actions: Expand
+								65 button 精选
+								66 button 官方 Skill
+								67 button 特效包装
+								68 button 红人带货
+								69 button 影视片头
+								70 button MV
+								71 button 二次元PV
+								72 button 品牌广告
+								73 button UI动效
+								74 button 短剧漫剧
+								75 container
+									76 text 工作流
+									77 button 使用模板
+									78 button 预览 AI 漫剧分阶段制作
+								79 text AI 漫剧分阶段制作
+								80 text 从剧本、锚点和分镜到镜头与成片，支持逐阶段审核、续跑和局部重试。
+								81 text Echo Design
+								82 container
+									83 text 示例预览
+									84 button 使用提示词
+									85 button 预览 产品发布视觉套件
+								86 text 产品发布视觉套件
+								87 text 从卖点、主视觉到横竖版短片，完成一套统一的发布内容。
+								88 text Echo Design
+								89 container
+									90 text 示例预览
+									91 button 使用提示词
+									92 button 预览 手绘实拍融合短片
+								93 text 手绘实拍融合短片
+								94 text 让实拍空间与手绘线条发生接触、变形和节奏化响应。
+								95 text Echo Design
+								96 container
+									97 text 示例预览
+									98 button 使用提示词
+									99 button 预览 复古拼贴音乐 MV
+								100 text 复古拼贴音乐 MV
+								101 text 用纸张纹理、海报墙与卡点剪辑建立完整的音乐视觉系统。
+								102 text Echo Design
+								103 container
+									104 text 示例预览
+									105 button 使用提示词
+									106 button 预览 数字产品电影感演示
+								107 text 数字产品电影感演示
+								108 text 把真实界面、交互路径和动效参考组织成可审片的产品宣传片。
+								109 text Echo Design
+								110 container
+									111 text 示例预览
+									112 button 使用提示词
+									113 button 预览 美妆达人种草短片
+								114 text 美妆达人种草短片
+								115 text 围绕真实使用过程组织口播、产品特写、字幕与转化节奏。
+								116 text Echo Design
+								117 container
+									118 text 示例预览
+									119 button 使用提示词
+									120 button 预览 未来档案电影片头
+								121 text 未来档案电影片头
+								122 text 以档案排版、扫描纹理和空间镜头建立克制的悬疑开场。
+								123 text Echo Design
+								124 container
+									125 text 示例预览
+									126 button 使用提示词
+									127 button 预览 角色觉醒动画 PV
+								128 text 角色觉醒动画 PV
+								129 text 围绕角色能力与情绪转折建立统一的分镜、色彩和音乐动机。
+								130 text Echo Design
+								131 container
+									132 text 示例预览
+									133 button 使用提示词
+									134 button 预览 便携科技产品短广告
+								135 text 便携科技产品短广告
+								136 text 用极简空间、结构拆解和生活场景呈现产品的核心卖点。
+								137 text Echo Design
+								138 container
+									139 text 示例预览
+									140 button 使用提示词
+									141 button 预览 角色一致性分镜
+								142 text 角色一致性分镜
+								143 text 锁定人物外观、服装与空间关系，生成可继续制作的连续镜头。
+								144 text Echo Design
+								145 container
+									146 text 示例预览
+									147 button 使用提示词
+									148 button 预览 舞者轨迹视觉包装
+								149 text 舞者轨迹视觉包装
+								150 text 让几何框线、粒子与排版跟随舞者动作和节拍响应。
+								151 text Echo Design
+								152 container
+									153 text 示例预览
+									154 button 使用提示词
+									155 button 预览 城市旅行品牌短片
+								156 text 城市旅行品牌短片
+								157 text 把地点、人物和路线组织成具有品牌识别度的旅行叙事。
+								158 text Echo Design
+								159 container
+									160 text 示例预览
+									161 button 使用提示词
+									162 button 预览 智能工作台交互演示
+								163 text 智能工作台交互演示
+								164 text 准确展示拖拽、编排、协作和结果预览的完整界面路径。
+								165 text Echo Design
+						166 container Notifications alt+T
+		38 container Notifications alt+T

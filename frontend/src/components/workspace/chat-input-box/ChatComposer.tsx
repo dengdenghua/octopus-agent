@@ -1,3 +1,4 @@
+import { getLocalSettings } from "@/core/settings/local";
 import {
   BookOpenIcon,
   ExternalLinkIcon,
@@ -5,7 +6,6 @@ import {
   FlagIcon,
   FolderKanbanIcon,
   ImageIcon,
-  LightbulbIcon,
   ListTodoIcon,
   Loader2Icon,
   MonitorIcon,
@@ -118,6 +118,7 @@ export function ChatComposer({
   modelName,
   mode = "react",
   threadId,
+  draftStorageKey = threadId,
   mentionMembers,
   responseModeControl,
   automationTarget,
@@ -137,7 +138,6 @@ export function ChatComposer({
   isCompressingContext = false,
   onCompressContext,
   allowAgentModes = false,
-  showInspirationToggle = false,
   permissionMode,
   reasoningEffort,
   modelProfileControl = false,
@@ -172,25 +172,45 @@ export function ChatComposer({
     () =>
       // A per-thread draft survives thread switches and reloads. defaultValue
       // (external injection, e.g. "retry this message") wins when present.
-      defaultValue || (loadComposerDraft(threadId) ?? ""),
+      defaultValue || (loadComposerDraft(draftStorageKey) ?? ""),
   );
   // Restore the stored draft when the composer moves to a different thread
   // (the component is reused across navigation).
-  const prevDraftThreadRef = useRef(threadId);
+  const prevDraftThreadRef = useRef(draftStorageKey);
   useLayoutEffect(() => {
-    if (prevDraftThreadRef.current === threadId) return;
+    if (prevDraftThreadRef.current === draftStorageKey) return;
     // The debounced persistence effect is cancelled by navigation. Flush the
     // old value synchronously before restoring the destination thread so a
     // quick switch cannot lose the user's last 300 ms of typing.
     saveComposerDraft(prevDraftThreadRef.current, draft);
-    prevDraftThreadRef.current = threadId;
-    setDraft(loadComposerDraft(threadId) ?? "");
-  }, [draft, threadId]);
+    prevDraftThreadRef.current = draftStorageKey;
+    setDraft(loadComposerDraft(draftStorageKey) ?? "");
+  }, [draft, draftStorageKey]);
   // Persist the draft (debounced) so a reload never loses half-typed text.
   useEffect(() => {
-    const timer = setTimeout(() => saveComposerDraft(threadId, draft), 300);
+    const timer = setTimeout(
+      () => saveComposerDraft(draftStorageKey, draft),
+      300,
+    );
     return () => clearTimeout(timer);
-  }, [threadId, draft]);
+  }, [draftStorageKey, draft]);
+  const committedDraftRef = useRef({ threadId: draftStorageKey, draft });
+  useLayoutEffect(() => {
+    committedDraftRef.current = { threadId: draftStorageKey, draft };
+  }, [draftStorageKey, draft]);
+  useEffect(() => {
+    // Navigation and page closure can cancel the debounce before it writes.
+    // Flush the latest committed value, including an empty draft after Send.
+    const flush = () => {
+      const current = committedDraftRef.current;
+      saveComposerDraft(current.threadId, current.draft);
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, []);
   const [researchUrlText, setResearchUrlText] = useState("");
   const [researchTextTitle, setResearchTextTitle] = useState("");
   const [researchTextBody, setResearchTextBody] = useState("");
@@ -1204,6 +1224,9 @@ export function ChatComposer({
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      // IME owns candidate navigation and confirmation, including when a
+      // slash/mention menu is open. Some IMEs expose only keyCode 229.
+      if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
       if (e.key === "Backspace" && visibleDraft.length === 0) {
         const lastRef = composerRefs[composerRefs.length - 1];
         if (lastRef) {
@@ -1226,6 +1249,9 @@ export function ChatComposer({
       }
       if (
         e.key === "Enter" &&
+        (getLocalSettings().display.send_shortcut !== "modifier_enter" ||
+          e.ctrlKey ||
+          e.metaKey) &&
         !e.shiftKey &&
         !e.nativeEvent.isComposing &&
         !e.defaultPrevented
@@ -1250,10 +1276,10 @@ export function ChatComposer({
       data-testid="chat-composer"
       className={cn(
         "group relative",
-        "rounded-xl border border-border-subtle bg-background/90 shadow-none backdrop-blur-sm",
+        "rounded-2xl border border-border bg-card shadow-[var(--shadow-xs)]",
         "transition-[background-color,border-color,box-shadow] duration-base ease-out",
         "hover:border-border-default",
-        "focus-within:border-primary/30 focus-within:shadow-[0_0_0_3px_rgba(138,127,255,0.08)]",
+        "focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/8",
         className,
       )}
     >
@@ -1320,10 +1346,11 @@ export function ChatComposer({
         onRetryUpload={attachmentUploads.retry}
         t={t}
       />
+      <div className="flex min-w-0 items-start">
       {composerRefs.length > 0 ? (
         <div
           data-testid="composer-capability-rail"
-          className="flex min-h-8 items-center gap-1.5 overflow-x-auto px-3 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex max-w-[45%] shrink-0 items-center gap-1.5 overflow-x-auto pl-3 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {composerRefs.map((ref) => {
             const key = `${ref.type}:${ref.id}`;
@@ -1370,7 +1397,7 @@ export function ChatComposer({
           })}
         </div>
       ) : null}
-      <div className="relative">
+      <div className="composer-editor relative min-w-0 flex-1">
         {activeComposerMode ? (
           <span
             data-testid="composer-command-prefix"
@@ -1413,7 +1440,7 @@ export function ChatComposer({
           ref={textareaRef}
           autoFocus={autoFocus}
           disabled={isBusy}
-          placeholder={placeholder ?? t.inputBox.placeholder}
+          placeholder={composerRefs.length > 0 ? "" : (placeholder ?? t.inputBox.placeholder)}
           aria-label={placeholder ?? t.inputBox.placeholder}
           value={visibleDraft}
           onChange={(e) => setVisibleDraft(e.target.value)}
@@ -1425,14 +1452,15 @@ export function ChatComposer({
           }}
           rows={1}
           className={cn(
-            "min-h-11 max-h-40 w-full resize-none overflow-y-auto bg-transparent pb-1.5 pt-2.5 text-sm leading-snug outline-none [field-sizing:content] placeholder:text-muted-foreground/70 disabled:opacity-60",
+            "min-h-14 max-h-40 w-full resize-none overflow-y-auto bg-transparent pb-2 pt-3 text-ui-body leading-relaxed outline-none [field-sizing:content] placeholder:text-muted-foreground disabled:opacity-60",
             activeComposerMode === "project"
               ? "pl-[7.5rem] pr-3"
               : activeComposerMode
                 ? "pl-[5.25rem] pr-3"
-                : "px-3",
+                : composerRefs.length > 0 ? "pl-1.5 pr-3" : "px-3",
           )}
         />
+      </div>
       </div>
       {isDeepResearchMode && researchConfigOpen && (
         <ResearchSourcePicker
@@ -1500,7 +1528,7 @@ export function ChatComposer({
           if (imageInputRef.current) imageInputRef.current.value = "";
         }}
       />
-      <div className="composer-footer flex min-h-9 flex-wrap items-center justify-between gap-1 px-2 pb-1.5 pt-0.5 sm:gap-2">
+      <div className="composer-footer flex min-h-10 flex-wrap items-center justify-between gap-1 px-2 pb-2 pt-1 sm:gap-2">
         <div className="flex min-w-0 max-w-full flex-wrap items-center gap-0.5">
           <DropdownMenu
             open={toolsMenuOpen}
@@ -1872,6 +1900,7 @@ export function ChatComposer({
               <PermissionIndicator
                 mode={resolvedPermissionMode}
                 onModeChange={(nextMode) => onPermissionModeChange?.(nextMode)}
+                disabled={disabled || status === "streaming"}
                 compact
               />
             </div>
@@ -1923,69 +1952,57 @@ export function ChatComposer({
             <div className="composer-footer__response contents">
               {responseModeControl}
             </div>
-          ) : showInspirationToggle ? (
-            <button
-              type="button"
-              data-testid="chat-mode-toggle"
-              disabled={disabled || status === "streaming"}
-              onClick={() =>
-                onModeChange?.(mode === "chat" ? "react" : "chat", draft)
-              }
-              className={cn(
-                "flex size-[42px] items-center justify-center rounded-lg text-xs font-medium transition-all duration-base sm:size-8",
-                mode === "chat"
-                  ? "bg-primary/10 text-primary hover:bg-primary/15"
-                  : "border border-transparent text-muted-foreground hover:border-border-default hover:bg-muted/60 hover:text-foreground",
-                "disabled:cursor-not-allowed disabled:opacity-45",
-              )}
-              title={t.inputBox.chatModeDescription}
-              aria-label={t.inputBox.chatModeDescription}
-              aria-pressed={mode === "chat"}
-            >
-              <span className="relative flex size-4 items-center justify-center">
-                <LightbulbIcon className="size-4" />
-                <ZapIcon
-                  className={cn(
-                    "absolute left-1/2 top-[46%] size-2.5 -translate-x-1/2 -translate-y-1/2",
-                    mode === "chat" ? "fill-current" : "",
-                  )}
-                  strokeWidth={2.4}
-                />
-              </span>
-            </button>
           ) : null}
           <div className="composer-footer__secondary contents">
             <EvolutionIndicator compact quiet />
           </div>
-          {executionEngineControl}
-          {modelProfileControl ? (
-            <div className="composer-footer__model contents">
-              <CoderEngineControl
-                systemModels={pickerModels}
-                disabled={disabled || status === "streaming"}
-                executionEngine={executionEngine}
-                value={modelName}
-                onChange={onModelChange}
-                onEffectiveModelChange={onModelSwitchNotice}
-                reasoningEffort={reasoningEffort}
-                onReasoningEffortChange={onReasoningEffortChange}
+          <div
+            data-testid="composer-runtime-controls"
+            className="flex min-w-0 max-w-[min(58vw,20rem)] items-center"
+          >
+            {executionEngineControl}
+            {executionEngineControl ? (
+              <span
+                className="mx-0.5 h-3.5 w-px shrink-0 bg-border/70"
+                aria-hidden="true"
               />
-            </div>
-          ) : (
-            <div className="composer-footer__model contents">
-              <ModelPicker
-                models={pickerModels}
-                // Pass the raw modelName so the picker sees the "auto"
-                // sentinel — selectedModel falls back to pickerModels[0]
-                // when name doesn't match, which would mask the auto state.
-                value={modelName ?? selectedModel?.name}
-                onChange={applyNativeModelChange}
-                reasoningEffort={reasoningEffort}
-                reasoningEffortDisabled={disabled || status === "streaming"}
-                onReasoningEffortChange={onReasoningEffortChange}
-              />
-            </div>
-          )}
+            ) : null}
+            {modelProfileControl && executionEngine !== "opencode" ? (
+              <div className="composer-footer__model min-w-0">
+                <CoderEngineControl
+                  systemModels={pickerModels}
+                  disabled={disabled || status === "streaming"}
+                  executionEngine={executionEngine}
+                  value={modelName}
+                  onChange={onModelChange}
+                  onEffectiveModelChange={onModelSwitchNotice}
+                  reasoningEffort={reasoningEffort}
+                  onReasoningEffortChange={onReasoningEffortChange}
+                />
+              </div>
+            ) : (
+              <div className="composer-footer__model min-w-0">
+                <ModelPicker
+                  models={pickerModels}
+                  engineSource={
+                    executionEngine === "opencode" ? "opencode" : undefined
+                  }
+                  // Pass the raw modelName so the picker sees the "auto"
+                  // sentinel — selectedModel falls back to pickerModels[0]
+                  // when name doesn't match, which would mask the auto state.
+                  value={modelName ?? selectedModel?.name}
+                  onChange={applyNativeModelChange}
+                  reasoningEffort={reasoningEffort}
+                  reasoningEffortDisabled={disabled || status === "streaming"}
+                  onReasoningEffortChange={
+                    executionEngine === "opencode"
+                      ? undefined
+                      : onReasoningEffortChange
+                  }
+                />
+              </div>
+            )}
+          </div>
           {status === "streaming" && sendableDraftText ? (
             <>
               <button

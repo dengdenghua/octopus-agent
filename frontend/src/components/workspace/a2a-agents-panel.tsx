@@ -73,7 +73,13 @@ interface TaskResult {
   }>;
   artifacts: Array<{
     name?: string;
-    parts: Array<{ type: string; text?: string }>;
+    parts: Array<{
+      type: string;
+      text?: string;
+      raw?: string;
+      filename?: string;
+      media_type?: string;
+    }>;
   }>;
 }
 
@@ -102,11 +108,14 @@ const api = {
     return res.json();
   },
 
-  async registerAgent(url: string): Promise<RemoteAgent> {
+  async registerAgent(url: string, bearerToken?: string): Promise<RemoteAgent> {
     const res = await fetch(`${getBackendBaseURL()}/api/a2a/agents/register`, {
       method: "POST",
       headers: jsonAuthHeaders(),
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({
+        url,
+        ...(bearerToken ? { bearer_token: bearerToken } : {}),
+      }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -242,6 +251,7 @@ export function A2AAgentsPanel({ className }: { className?: string }) {
                 type="button"
                 className="text-muted-foreground hover:text-foreground rounded p-1 transition-colors"
                 onClick={fetchAgents}
+                aria-label={t.a2a.refresh}
                 disabled={loading}
               >
                 <RefreshCwIcon
@@ -257,6 +267,9 @@ export function A2AAgentsPanel({ className }: { className?: string }) {
                 type="button"
                 className="text-muted-foreground hover:text-foreground rounded p-1 transition-colors"
                 onClick={() => setShowRegister(!showRegister)}
+                aria-label={
+                  showRegister ? t.common.cancel : t.a2a.registerAgent
+                }
               >
                 {showRegister ? (
                   <XIcon className="size-3.5" />
@@ -301,7 +314,10 @@ export function A2AAgentsPanel({ className }: { className?: string }) {
           onRefresh={fetchAgents}
         />
       ) : agents.length === 0 ? (
-        <EmptyState />
+        <EmptyState
+          onRegister={() => setShowRegister(true)}
+          showAction={!showRegister}
+        />
       ) : (
         <div className="flex-1 space-y-2 overflow-y-auto px-3 py-3">
           {agents.map((agent) => (
@@ -330,6 +346,7 @@ function RegisterForm({
 }) {
   const { t } = useI18n();
   const [url, setUrl] = useState("");
+  const [bearerToken, setBearerToken] = useState("");
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -340,7 +357,7 @@ function RegisterForm({
     setRegistering(true);
     setError(null);
     try {
-      await api.registerAgent(url.trim());
+      await api.registerAgent(url.trim(), bearerToken.trim() || undefined);
       onRegistered();
     } catch (err) {
       swallow(err);
@@ -378,6 +395,17 @@ function RegisterForm({
           {t.a2a.connect}
         </button>
       </div>
+      <label className="mt-2 block text-xs text-muted-foreground">
+        访问凭证（受邀热点需要）
+        <input
+          type="password"
+          autoComplete="off"
+          value={bearerToken}
+          onChange={(e) => setBearerToken(e.target.value)}
+          disabled={registering}
+          className="mt-1 block w-full rounded border bg-background px-3 py-1.5"
+        />
+      </label>
       {error && <p className="mt-1.5 text-xs text-destructive">{error}</p>}
     </form>
   );
@@ -387,7 +415,13 @@ function RegisterForm({
 // Empty state
 // ---------------------------------------------------------------------------
 
-function EmptyState() {
+function EmptyState({
+  onRegister,
+  showAction,
+}: {
+  onRegister: () => void;
+  showAction: boolean;
+}) {
   const { t } = useI18n();
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 py-12">
@@ -400,6 +434,15 @@ function EmptyState() {
       <p className="text-muted-foreground/60 text-center text-xs leading-relaxed whitespace-pre-line">
         {t.a2a.noAgentsDesc}
       </p>
+      {showAction && (
+        <button
+          type="button"
+          onClick={onRegister}
+          className="mt-1 rounded-md border bg-background px-4 py-2 text-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {t.a2a.registerAgent}
+        </button>
+      )}
     </div>
   );
 }
@@ -526,6 +569,12 @@ function AgentDetailView({
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
+
+  useEffect(() => {
+    if (!sending) return;
+    const timer = setInterval(() => void fetchTasks(), 2000);
+    return () => clearInterval(timer);
+  }, [sending, fetchTasks]);
 
   const handleHealthCheck = async () => {
     setChecking(true);
@@ -840,14 +889,46 @@ function AgentDetailView({
                     <span className="font-medium">
                       {artifact.name || `Artifact ${i + 1}`}
                     </span>
-                    {artifact.parts.map((part, j) => (
-                      <p
-                        key={j}
-                        className="text-muted-foreground mt-1 leading-relaxed"
-                      >
-                        {part.text || t.a2a.binaryContent}
-                      </p>
-                    ))}
+                    {artifact.parts.map((part, j) =>
+                      part.type === "file" && part.raw !== undefined ? (
+                        <button
+                          key={j}
+                          type="button"
+                          className="mt-1 block text-primary underline"
+                          onClick={() => {
+                            const bytes = Uint8Array.from(
+                              atob(part.raw!),
+                              (char) => char.charCodeAt(0),
+                            );
+                            const url = URL.createObjectURL(
+                              new Blob([bytes], {
+                                type: "application/octet-stream",
+                              }),
+                            );
+                            const link = document.createElement("a");
+                            link.href = url;
+                            link.download =
+                              (part.filename || artifact.name || "download")
+                                .split(/[\\/]/)
+                                .pop() || "download";
+                            link.click();
+                            setTimeout(() => URL.revokeObjectURL(url), 1000);
+                          }}
+                        >
+                          ↓{" "}
+                          {part.filename ||
+                            artifact.name ||
+                            t.a2a.binaryContent}
+                        </button>
+                      ) : (
+                        <p
+                          key={j}
+                          className="text-muted-foreground mt-1 leading-relaxed"
+                        >
+                          {part.text || t.a2a.binaryContent}
+                        </p>
+                      ),
+                    )}
                   </div>
                 ))}
               </div>
@@ -898,9 +979,14 @@ function AgentDetailView({
                       )}
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-medium">
+                      <button
+                        type="button"
+                        className="block max-w-full truncate text-left text-xs font-medium hover:underline"
+                        disabled={!task.result}
+                        onClick={() => setTaskResult(task.result)}
+                      >
                         {task.request.text || task.local_task_id}
-                      </p>
+                      </button>
                       <p className="text-muted-foreground mt-0.5 text-xs">
                         {task.status} ·{" "}
                         {task.remote_task_id.slice(0, 12) || "—"}

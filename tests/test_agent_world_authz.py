@@ -112,6 +112,8 @@ def test_agent_world_shared_content_mutations_reject_non_admin(
         ("DELETE", "/api/agent-market/store/demo/install", {}),
         ("POST", "/api/agent-market/cloud/store/demo/install", {}),
         ("POST", "/api/agent-market/cloud/skills/demo/install", {}),
+        ("POST", "/api/agent-market/cloud/skills/external-aaaaaaaaaaaaaaaaaaaaaaaa/install", {}),
+        ("POST", "/api/agent-market/cloud/skills/external-aaaaaaaaaaaaaaaaaaaaaaaa/install/stream", {}),
         ("POST", "/api/agent-market/cloud/plugins/demo-plugin/install", {}),
         ("DELETE", "/api/agent-market/cloud/plugins/demo-plugin/install", {}),
     )

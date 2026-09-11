@@ -135,7 +135,7 @@ describe("<WorkspaceLayout /> stub response banner", () => {
     );
   });
 
-  test("starts a fresh Design task in place and preserves its project scope", () => {
+  test("starts a general conversation from Design without inheriting canvas scope", () => {
     renderWithProviders(<WorkspaceLayout />, {
       initialRoute:
         "/workspace/design?thread=old&project=project-1&name=Launch&design_stage=storyboard",
@@ -147,11 +147,6 @@ describe("<WorkspaceLayout /> stub response banner", () => {
     });
 
     const location = screen.getByTestId("workspace-location").textContent || "";
-    expect(location).toContain("/workspace/design?");
-    expect(location).toContain("project=project-1");
-    expect(location).toContain("name=Launch");
-    expect(location).toContain("new_task=");
-    expect(location).not.toContain("thread=old");
-    expect(location).not.toContain("design_stage");
+    expect(location).toBe("/workspace/realtime/new");
   });
 });

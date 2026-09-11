@@ -50,6 +50,7 @@ from ._security_support import (
     _prepare_state_root,
     _read_owned_private_file,
 )
+from .tool_limits import MAX_RESPONSES_TOOLS, TOOL_CATALOG_MESSAGE
 from .types import CodexProviderProfile, ConfigurationError
 
 _AUTH_ENV_KEY: Literal["OCTOPUS_CODEX_PROXY_TOKEN"] = "OCTOPUS_CODEX_PROXY_TOKEN"
@@ -227,7 +228,8 @@ class ScopedResponsesProxy:
             )
             if trusted_tenant and trusted_tenant != scope.tenant_id:
                 raise ResponsesProxyError("trusted session tenant does not match proxy scope")
-        self._router = router
+        from runtime.execution.model_services import SharedExecutionRouter
+        self._router = SharedExecutionRouter(router)
         self.scope = scope
         self._trusted_session = trusted_session
         self._ttl_s = float(ttl_s)
@@ -1095,8 +1097,8 @@ def _convert_tools(raw_tools: Any) -> tuple[dict[str, _ToolProjection], list[Too
         return {}, []
     if not isinstance(raw_tools, Sequence) or isinstance(raw_tools, (str, bytes, bytearray)):
         raise _RequestRejected(400, "Responses tools must be a list")
-    if len(raw_tools) > 256:
-        raise _RequestRejected(400, "Responses tool catalog is too large")
+    if len(raw_tools) > MAX_RESPONSES_TOOLS:
+        raise _RequestRejected(400, TOOL_CATALOG_MESSAGE)
     projections: dict[str, _ToolProjection] = {}
     tools: list[ToolSpec] = []
     for raw_tool in raw_tools:
@@ -1205,6 +1207,28 @@ def _responses_sse(response: Mapping[str, Any]) -> bytes:
     ]
     sequence = 1
     for index, item in enumerate(cast(list[dict[str, Any]], response["output"])):
+        def emit(kind: str, **payload: Any) -> None:
+            nonlocal sequence
+            frames.append((kind, {"type": kind, "sequence_number": sequence, **payload}))
+            sequence += 1
+
+        initial = {**item, "status": "in_progress"}
+        if item.get("type") == "message":
+            initial["content"] = []
+        elif item.get("type") == "function_call":
+            initial["arguments"] = ""
+        emit("response.output_item.added", output_index=index, item=initial)
+        if item.get("type") == "message":
+            for content_index, part in enumerate(item.get("content", [])):
+                coordinates = {"output_index": index, "item_id": item["id"], "content_index": content_index}
+                emit("response.content_part.added", **coordinates, part={**part, "text": ""})
+                if part.get("type") == "output_text":
+                    emit("response.output_text.delta", **coordinates, delta=part.get("text", ""))
+                    emit("response.output_text.done", **coordinates, text=part.get("text", ""))
+                emit("response.content_part.done", **coordinates, part=part)
+        elif item.get("type") == "function_call":
+            emit("response.function_call_arguments.delta", output_index=index, item_id=item["id"], delta=item.get("arguments", ""))
+            emit("response.function_call_arguments.done", output_index=index, item_id=item["id"], arguments=item.get("arguments", ""))
         frames.append(
             (
                 "response.output_item.done",

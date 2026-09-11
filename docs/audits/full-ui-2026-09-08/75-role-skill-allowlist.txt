@@ -1,0 +1,772 @@
+Browser tab: 4, Title: "HUB - Echo", URL: "http://localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator".
+0 AXWebArea HUB - Echo, URL: localhost:3310/#/workspace/agents?hud=1&surface=chat&agent=desktop_operator
+	1 container
+		2 container Notifications alt+T
+		3 container Arms · Raven, ID: radix-_r_mh_
+			4 container
+				5 heading Arms · Raven, Value: 2, ID: radix-_r_mi_
+					6 text Arms · Raven
+				7 text 编辑此 agent 可用的 arm(能力组)· 保存后后端热重载,无需重启
+			8 container
+				9 text 勾选这个 agent 能使用的 arm · 每个 arm 附带一组 skill(白名单) · 原子层 skill 对所有 agent 默认放行,不受此处控制。
+				10 tab group
+					11 tab (selectable, settable, boolean) ARM 能力臂, Value: 0, ID: radix-_r_ms_-trigger-arms
+					12 tab (selected, settable, boolean) Skill 白名单, Value: 1, ID: radix-_r_ms_-trigger-skills
+					13 tab (selectable, settable, boolean) 权限, Value: 0, ID: radix-_r_ms_-trigger-permissions
+					14 tab (selectable, settable, boolean) 路由与预算, Value: 0, ID: radix-_r_ms_-trigger-routing
+				15 container Description: Skill 白名单, ID: radix-_r_ms_-content-skills
+					16 text private_skills
+					17 text Skill 商城
+					18 text 浏览所有 ARM 暴露的 skill，并按需加入此 Agent 的私有白名单。
+					19 text 0 个已选择
+					20 text field (settable)
+					21 button 全部
+					22 button 已选择
+					23 button 未选择
+					24 text SKILL 商城
+					25 text 173/173 个可见
+					26 button 全部来源 173
+						27 text 全部来源
+						28 text 173
+					29 button browse 1
+						30 text browse
+						31 text 1
+					32 button browse 1
+						33 text browse
+						34 text 1
+					35 button comm 1
+						36 text comm
+						37 text 1
+					38 button file 1
+						39 text file
+						40 text 1
+					41 button file 7
+						42 text file
+						43 text 7
+					44 button file 3
+						45 text file
+						46 text 3
+					47 button memory 1
+						48 text memory
+						49 text 1
+					50 button other 10
+						51 text other
+						52 text 10
+					53 button research 127
+						54 text research
+						55 text 127
+					56 button research 6
+						57 text research
+						58 text 6
+					59 button research 15
+						60 text research
+						61 text 15
+					62 button 自定义 22
+						63 text 自定义
+						64 text 22
+					65 text 全部
+					66 text 173
+					67 text 已选择
+					68 text 0
+					69 button 启用全部
+					70 button 禁用全部
+					71 button 启用当前
+					72 button 禁用当前
+					73 container
+						74 switch Description: 为当前角色授权 ad-creative, Value: 0
+						75 text ad-creative
+						76 text 当前角色未选择
+						77 text When the user wants to generate, iterate, or scale ad creative — headlines, descriptions, primary text, or full ad variations — for any paid advertising platform. Also use when the user mentions 'ad copy variations,' 'ad creative,' 'generate headlines,' 'RSA headlines,' 'bulk ad copy,' 'ad iterations,' 'creative testing,' 'ad performance optimization,' 'write me some ads,' 'Facebook ad copy,' 'Google ad headlines,' 'LinkedIn ad text,' or 'I need more ad variations.' Use this whenever someone needs to produce ad copy at scale or iterate on existing ads.
+						78 switch Description: 为当前角色授权 agent-generator, Value: 0
+						79 text agent-generator
+						80 text 当前角色未选择
+						81 text Generate a complete Octopus Agent from a short natural-language brief. Use when creating, bootstrapping, or refining an Agent from a one-line description, role idea, use case, or persona concept; expands the brief into SOUL, ARM/tool groups, private_skills whitelist, permissions, behavior boundaries, default workflow, and setup_agent-ready configuration.
+						82 switch Description: 为当前角色授权 agent-visual-kit, Value: 0
+						83 text agent-visual-kit
+						84 text 当前角色未选择
+						85 text Metaskill workflow for generating Octopus Agent character artwork. Use when creating or regenerating Agent portraits, three-view character sheets, transparent-background standees, separate close-up avatars, or visual assets from HUD character profile data; constrains prompt assembly, generation, post-processing, quality checks, and retry reasons.
+						86 switch Description: 为当前角色授权 agnes-image-generate, Value: 0
+						87 text agnes-image-generate
+						88 text 当前角色未选择
+						89 text 使用火山引擎(火山方舟)或 Agnes AI 网关从文字描述生成图像。默认火山 doubao-seedream-5.0-lite（文生图+图生图），未配置火山 key 时自动回退 Agnes agnes-image-2.5-flash。当用户需要生成图片、插画或封面时调用此技能。
+						90 switch Description: 为当前角色授权 agnes-video-generate, Value: 0
+						91 text agnes-video-generate
+						92 text 当前角色未选择
+						93 text 使用火山引擎(火山方舟, doubao-seedance-1.5-pro)或 Agnes AI 网关异步提交视频生成任务。默认 wait=true 阻塞到完成并返回 video_url；也可 wait=false 立即返回 task_id，用 agnes-video-poll 查询进度。支持文字到视频、图像到视频(首帧/首尾帧)。
+						94 switch Description: 为当前角色授权 agnes-video-poll, Value: 0
+						95 text agnes-video-poll
+						96 text 当前角色未选择
+						97 text 查询视频生成任务的状态（火山 doubao-seedance 或 Agnes）。配合 agnes-video-generate（wait=false 异步提交）使用——后者返回 task_id 后，模型可在后续轮次用 task_id 调用本技能查看进度或获取 video_url。
+						98 switch Description: 为当前角色授权 api-and-interface-design, Value: 0
+						99 text api-and-interface-design
+						100 text 当前角色未选择
+						101 text Guides stable API and interface design. Use when designing APIs, module boundaries, or any public interface. Use when creating REST or GraphQL endpoints, defining type contracts between modules, or establishing boundaries between frontend and backend.
+						102 switch Description: 为当前角色授权 api-shape-explorer, Value: 0
+						103 text api-shape-explorer
+						104 text 当前角色未选择
+						105 text Generate multiple radically different interface designs for a module using parallel sub-agents. Use when user wants to design an API, explore interface options, compare module shapes, or mentions "design it twice".
+						106 switch Description: 为当前角色授权 ask_user_question, Value: 0
+						107 text ask_user_question
+						108 text 当前角色未选择
+						109 text 用途: 暂停并以结构化卡片向用户提一个 2-6 选项的问题, 仅用于【多个并列方案的产品决策】——选项之间是真正的取舍, 且用户最有资格拍板。例: 用哪个数据库、用哪个框架、走哪种部署方式。 何时不用 (重要): - 开放任务的方向/范围澄清 (如 '你想调研哪方面'、'聚焦哪个领域') ——不要用本工具反问。先按最合理的理解做一轮, 并在开头一句话亮明假设 ('我按 X 理解, 不对请说'), 让用户在看到产出后纠偏, 而不是上来就问。 - 单一文件改动、信息查询: 用 web_search / read_file。 - yes/no 工具批准: 用 request_approval。 关键参数: question (字符串, 非空); options (2-6 字符串列表, 每项是一个互斥的具体方案); allow_other (默认 True, 允许用户填自定义答案)。 示例: ask_user_question({"question":"用哪个数据库?","options":["PostgreSQL","SQLite","MySQL"]})
+						110 switch Description: 为当前角色授权 audit-xls, Value: 0
+						111 text audit-xls
+						112 text 当前角色未选择
+						113 text Audit a spreadsheet for formula accuracy, errors, and common mistakes. Scopes to a selected range, a single sheet, or the entire model (including financial-model integrity checks like BS balance, cash tie-out, and logic sanity). Triggers on "audit this sheet", "check my formulas", "find formula errors", "QA this spreadsheet", "sanity check this", "debug model", "model check", "model won't balance", "something's off in my model", "model review".
+						114 switch Description: 为当前角色授权 auto-stat-test, Value: 0
+						115 text auto-stat-test
+						116 text 当前角色未选择
+						117 text 自动执行统计检验，根据数据特征（组数、正态性、配对设计）智能选择 t 检验、卡方检验、ANOVA、Mann-Whitney U 等合适方法，并输出包含 p 值、效应量和通俗中文解读的完整报告。当用户需要进行假设检验、组间比较、显著性分析，或提及 t 检验、卡方、方差分析、p 值、配对检验、非参数检验等关键词时触发。
+						118 switch Description: 为当前角色授权 backend-building, Value: 0
+						119 text backend-building
+						120 text 当前角色未选择
+						121 text Backend building that grafts tRPC + Drizzle ORM + Hono onto an existing webapp-building frontend. Supports incremental features (db, auth). Use when the user needs a backend, API, database, server, authentication, or wants to add tRPC/Drizzle to their webapp-building project. Requires webapp-building first.
+						122 switch Description: 为当前角色授权 bb_claim, Value: 0
+						123 text bb_claim
+						124 text 当前角色未选择
+						125 text Claim a blackboard slot for the current agent. Once claimed, only the claiming agent can write that key — siblings can still read it. Use to avoid two parallel sub-agents stomping each other's coordination slot (e.g. `bb_claim(key='owner')`). Args: {key: string}.
+						126 switch Description: 为当前角色授权 bb_pin, Value: 0
+						127 text bb_pin
+						128 text 当前角色未选择
+						129 text Seal a blackboard key as an immutable snapshot. After pinning, no further writes to that key are accepted. Use to lock a final decision so parallel workers can't overwrite it. Args: {key: string}.
+						130 switch Description: 为当前角色授权 bb_save, Value: 0
+						131 text bb_save
+						132 text 当前角色未选择
+						133 text Persist a LARGE value as a file artifact and return a reference (path + hash). Use this instead of bb_write when the payload is bigger than a small coordination fact — the blackboard is for tiny facts, big payloads live in files. Args: {key: string, value: any JSON-serializable}.
+						134 switch Description: 为当前角色授权 brand-name-forge, Value: 0
+						135 text brand-name-forge
+						136 text 当前角色未选择
+						137 text A systematic brand naming workshop that generates 8 distinct name candidates using classic methods like portmanteau and metaphor, each with meaning, rationale, and domain suggestions. Triggered when a user needs to name a product, service, or company, or asks for brand name ideas, brainstorming, or naming help.
+						138 switch Description: 为当前角色授权 break-trace, Value: 0
+						139 text break-trace
+						140 text 当前角色未选择
+						141 text Root-cause a reconciliation break to its source transaction or posting — follow the audit trail from the break row back to the originating entry on each side and state what differs and why. Use after gl-recon has classified a break.
+						142 switch Description: 为当前角色授权 browse, Value: 0
+						143 text browse
+						144 text 当前角色未选择
+						145 text Automate browser interactions via CLI commands to navigate web pages, extract data, take screenshots, fill forms, and interact with web apps. Supports remote sessions with CAPTCHA solving and anti-bot stealth for scraping protected sites. Trigger when the user asks to browse websites, scrape data, or automate clicks on any page.
+						146 switch Description: 为当前角色授权 browser-testing-with-devtools, Value: 0
+						147 text browser-testing-with-devtools
+						148 text 当前角色未选择
+						149 text Tests in real browsers. Use when building or debugging anything that runs in a browser. Use when you need to inspect the DOM, capture console errors, analyze network requests, profile performance, or verify visual output with real runtime data via Chrome DevTools MCP.
+						150 switch Description: 为当前角色授权 business-plan-ppt, Value: 0
+						151 text business-plan-ppt
+						152 text 当前角色未选择
+						153 text 创建专业精美的投资路演PPT和商业计划书，风格参照中国创业公司融资路演材料，默认输出18页、白色背景搭配藏青色点缀的PPTX格式，也可导出PDF，支持中英文内容。当用户需要为投资人制作路演PPT、撰写商业计划书或融资方案、生成包含市场分析和财务预测的公司概览幻灯片，或提及创业融资/投资备忘录演示文稿时触发。
+						154 switch Description: 为当前角色授权 call_agent_graph, Value: 0
+						155 text call_agent_graph
+						156 text 当前角色未选择
+						157 text Run a DAG of subagents where one lane CONSUMES another lane's output. Declare each node's `depends_on`; independent nodes run concurrently and the runtime derives the execution order. Use it when call_agent_parallel is not enough because a later step needs an earlier step's result: - two investigations in parallel, then one node that reconciles both; - find → verify → write-up, where each stage reads the last; - a diamond: split into lanes, then fold back into one answer. A node prompt may reference an upstream output: {node_id.output} — that node's full reply text {node_id.output.field} — a field, when that node used output_schema The substitution happens SERVER-SIDE, so upstream text never passes through your context — that is the point of using a graph instead of running lanes yourself and pasting results into the next prompt. Prefer call_agent_parallel when lanes are independent (cheaper, one layer). Prefer run_pipeline when many ITEMS each need the same stage chain. Use this when the TOPOLOGY itself has a join. Args: {nodes: list[{id: str, prompt: str, depends_on?: list[str], agent_id?: str, output_schema?: object, isolate?: bool, when?: object}] (up to 12), default_agent_id?: str (default researcher), timeout_s?: int (per-subagent, default 900), resume_token?: str (from a previous run's return)}. `isolate: true` gives that node its own git worktree — set it on nodes that EDIT FILES so concurrent writers in the same layer cannot collide. The node's diff comes back for review; nothing is auto-merged. Returns: {ok, nodes:{id:{id, agent_id, output, ok, error?, skipped?}}, order:[[id,...],...] (execution layers), terminal:[str] (leaf outputs), layers_run, success_count, failure_count, total}. Cycles and unknown depends_on are rejected before any spawn. A node whose upstream failed is skipped and reported, not run with an unresolved placeholder. Conditional branches: `when` is a bounded data-only expression over explicit dependency output, e.g. `{ref:'judge.output.approved', op:'eq', value:true}`. Operators: eq/ne/truthy/falsy/in/not_in/contains/gt/gte/lt/lte; combine with `all`, `any`, or `not`. A false branch is skipped without spending a spawn. Arbitrary code, back-edges and unbounded loops are rejected. Budget: one graph costs ONE against the 5/turn delegation cap; per-node spawns are charged against the internal spawn budget. Resume: pass the returned `resume_token` back to re-run the same graph without respawning completed nodes - unchanged nodes replay their recorded result (0 spawns), a node whose prompt/role/schema changed respawns, and failed or empty nodes always re-run. The token is in-memory only (not valid across process restarts) and an unknown token is an error, not a cold run.
+						158 switch Description: 为当前角色授权 call_agent_vote, Value: 0
+						159 text call_agent_vote
+						160 text 当前角色未选择
+						161 text Verification gate — spawn N INDEPENDENT voters on the SAME question and tally a MAJORITY verdict (with confidence + dissent). This is the adversarial-verify / judge-panel pattern: confirm or refute a claim with independent judgment instead of trusting one agent. Use it for decisions that matter: 'is this bug real?', 'does this patch actually fix it?', 'is this answer correct?', 'which option is safer: A or B?'. A natural pairing is call_agent_parallel (gather candidate answers) → call_agent_vote (adjudicate them). Each voter runs in its own context and must emit `VERDICT: <choice>` then `REASON: <one line>`. Unparseable replies count as abstentions; a split returns verdict=null with tie=true (no decision — you break it or escalate). Args: {question: string (the claim / question to judge), n?: int 2-5 voters (default 3 · odd avoids ties), choices?: list[string] a fixed ballot e.g. ["yes","no"] (omit for a free-form verdict), agent_id?: voter role (default reviewer), timeout_s?: int}. Returns: {ok, verdict (null on tie / no-verdict), confidence (0-1), unanimous, tie, tie_between, tally:{choice:count}, votes:[{verdict, reason, codename, abstained}], votes_cast, abstentions, note, honesty_warning}. Budget: each voter is one delegation against the 5/turn cap, so a 3-voter vote uses 3. Reserve it for decisions worth the spend.
+						162 switch Description: 为当前角色授权 chart-image, Value: 0
+						163 text chart-image
+						164 text 当前角色未选择
+						165 text Generate publication-quality PNG chart images from data, supporting line, bar, area, candlestick, pie, and heatmap charts. Triggers when the user asks to visualize data, create a graph, plot a time series, or generate a chart for a report, alert, or dashboard. Runs as a lightweight, headless Node.js process without a browser.
+						166 switch Description: 为当前角色授权 claim-extract, Value: 0
+						167 text claim-extract
+						168 text 当前角色未选择
+						169 text Extract independent claims and a plain-language summary from a patent record. Reads the patent's full text (PDF/HTML/abstract+claims), identifies independent vs dependent claims, and writes a one-paragraph plain-language summary into the PatentRecord's keyClaimsSummary field. Required prerequisite for fto-compare — comparison without populated claims yields no useful signal.
+						170 switch Description: 为当前角色授权 client-report, Value: 0
+						171 text client-report
+						172 text 当前角色未选择
+						173 text Generate professional client-facing performance reports with portfolio returns, allocation breakdowns, and market commentary. Suitable for quarterly or annual distribution. Triggers on "client report", "performance report", "quarterly report for [client]", "generate reports", or "client statement".
+						174 switch Description: 为当前角色授权 client-review, Value: 0
+						175 text client-review
+						176 text 当前角色未选择
+						177 text Prepare for client review meetings with portfolio performance summary, allocation analysis, talking points, and action items. Pulls together account data into a concise meeting-ready format. Use before quarterly reviews, annual checkups, or ad-hoc client meetings. Triggers on "client review", "meeting prep for [client]", "quarterly review", "prep for [client name]", or "client meeting".
+						178 switch Description: 为当前角色授权 clip_studio.project_get, Value: 0
+						179 text clip_studio.project_get
+						180 text 当前角色未选择
+						181 text 读取本地 AI 剪辑工坊项目。参数 project_id 必填；view 可选 summary/tracks/clips/full，默认 clips。返回轨道、片段、字幕与时长。
+						182 switch Description: 为当前角色授权 cn-finance-data, Value: 0
+						183 text cn-finance-data
+						184 text 当前角色未选择
+						185 text 通过 Tushare Pro 获取中国金融市场数据，覆盖 A 股、港股、美股、基金、期货、债券等 220+ 个数据接口，可查询股票行情、财务报表、指数成分、GDP/CPI 等宏观经济指标。当用户请求金融数据查询、股票历史行情、财务指标分析、宏观数据获取，或提及 Tushare、数据接口、量化数据源等关键词时触发。
+						186 switch Description: 为当前角色授权 code-arch-optimizer, Value: 0
+						187 text code-arch-optimizer
+						188 text 当前角色未选择
+						189 text 探索代码库，识别架构摩擦点，并通过“加深浅模块”来提升可测试性，最终输出包含多种接口设计方案的详细重构建议与GitHub Issue RFC。当用户希望改进架构、寻找重构机会、合并紧耦合模块，或让代码库更易于AI导航和理解时触发。
+						190 switch Description: 为当前角色授权 code-mentor, Value: 0
+						191 text code-mentor
+						192 text 当前角色未选择
+						193 text Comprehensive AI programming tutor offering interactive lessons, code reviews, debugging help, algorithm practice, and project guidance for Python and JavaScript. Triggers when users ask to learn a language, debug code, review their work, practice algorithms, prepare for interviews, or build a project.
+						194 switch Description: 为当前角色授权 code-quality, Value: 0
+						195 text code-quality
+						196 text 当前角色未选择
+						197 text 代码质量技能，包含代码审查、重构、性能优化、最佳实践检查。在代码审查或重构时调用。
+						198 switch Description: 为当前角色授权 code-vuln-audit, Value: 0
+						199 text code-vuln-audit
+						200 text 当前角色未选择
+						201 text Scan code for security issues: dependency vulnerabilities (npm/pip audit), secret leaks (regex and entropy analysis), and OWASP anti-patterns like SQL injection, XSS, or command injection. Use when the user mentions security scans, vulnerability detection, secret leaks, API keys, OWASP, npm audit, pip-audit, hardcoded passwords, or code security checks.
+						202 switch Description: 为当前角色授权 comfyui_bridge.status, Value: 0
+						203 text comfyui_bridge.status
+						204 text 当前角色未选择
+						205 text 探测本机 ComfyUI 是否在线并返回 system_stats。不访问远程地址。
+						206 switch Description: 为当前角色授权 competitive-seo-intel, Value: 0
+						207 text competitive-seo-intel
+						208 text 当前角色未选择
+						209 text 深入分析竞争对手的SEO与GEO策略，涵盖关键词排名、内容打法、外链画像、技术SEO评估及AI引用模式，识别超越对手的市场机会，并提供竞品分析模板、战斗卡片等参考。当用户询问“分析竞品SEO”、“竞争对手为什么排名更高”、“竞品关键词和外链分析”或“内容策略对比”时触发。如需专项分析，可使用content-gap-analysis进行内容差距分析，或使用backlink-analyzer进行外链深度分析。
+						210 switch Description: 为当前角色授权 comps-analysis, Value: 0
+						211 text comps-analysis
+						212 text 当前角色未选择
+						213 text Prompt skill from comps-analysis.
+						214 switch Description: 为当前角色授权 crawl_site, Value: 0
+						215 text crawl_site
+						216 text 当前角色未选择
+						217 text Purpose: crawl from a seed URL with a bounded queue, URL de-dupe, domain limits, optional robots.txt checks, delay, HTML link discovery, main-content extraction, and JSONL output. Use this for small-to-medium site discovery jobs, not for high-volume distributed scraping. Key args: start_url required; max_pages default 20; max_depth default 2; same_domain default true; allowed_domains optional; include_patterns / exclude_patterns optional regex or literal filters; respect_robots default true; delay_ms default 250; render_mode is http|auto|browser (default http; auto retries likely JS apps with Playwright); browser_wait_ms default 500; output_path optional .jsonl; sandbox_dir optional. Example: crawl_site({"start_url":"https://example.com/docs","max_pages":30,"max_depth":2})
+						218 switch Description: 为当前角色授权 creative-3d-animation, Value: 0
+						219 text creative-3d-animation
+						220 text 当前角色未选择
+						221 text 把故事创意转成角色、场景、镜头、动作与合成一致的 3D 动画短片制作方案。
+						222 switch Description: 为当前角色授权 creative-anime-pv, Value: 0
+						223 text creative-anime-pv
+						224 text 当前角色未选择
+						225 text 为动画、游戏或虚拟 IP 设计短篇 PV，包括卖点提炼、分镜、节奏、音乐方向与生成执行清单。
+						226 switch Description: 为当前角色授权 creative-anime-style-forge, Value: 0
+						227 text creative-anime-style-forge
+						228 text 当前角色未选择
+						229 text 将角色与场景锻造成一致的原创动画视觉体系，覆盖线条、比例、上色、材质和镜头规则。
+						230 switch Description: 为当前角色授权 creative-audiobook, Value: 0
+						231 text creative-audiobook
+						232 text 当前角色未选择
+						233 text 将书稿组织为多角色有声书制作包，覆盖脚本清理、选角、表演、环境声、章节与质检。
+						234 switch Description: 为当前角色授权 creative-beat-sync-edit, Value: 0
+						235 text creative-beat-sync-edit
+						236 text 当前角色未选择
+						237 text 按音乐结构、拍点与情绪变化设计镜头卡点、速度变化和声音衔接。
+						238 switch Description: 为当前角色授权 creative-brand-film, Value: 0
+						239 text creative-brand-film
+						240 text 当前角色未选择
+						241 text 把品牌策略和产品卖点转成可执行的品牌宣传片、产品广告与多渠道视觉资产。
+						242 switch Description: 为当前角色授权 creative-brand-flow-mg, Value: 0
+						243 text creative-brand-flow-mg
+						244 text 当前角色未选择
+						245 text 基于品牌标志、IP 与主题制作流线引导、节点连接和标志收束的 MG 动效。
+						246 switch Description: 为当前角色授权 creative-broll-planner, Value: 0
+						247 text creative-broll-planner
+						248 text 当前角色未选择
+						249 text 把口播逐字稿拆成可审片的 B-roll 镜头、素材来源、时长和覆盖关系。
+						250 switch Description: 为当前角色授权 creative-character-performance, Value: 0
+						251 text creative-character-performance
+						252 text 当前角色未选择
+						253 text 根据角色图、剧本与情绪设计自然的微表情、视线、呼吸和肢体表演提示。
+						254 switch Description: 为当前角色授权 creative-cinematic-shot-cards, Value: 0
+						255 text creative-cinematic-shot-cards
+						256 text 当前角色未选择
+						257 text 为叙事场景生成可执行的电影镜头卡与角色卡，明确机位、焦段、调度、光线和连续性。
+						258 switch Description: 为当前角色授权 creative-cinematic-style-extractor, Value: 0
+						259 text creative-cinematic-style-extractor
+						260 text 当前角色未选择
+						261 text 从电影名称、剧照或参考片段提炼可复用的构图、镜头、光色、材质和声音规则，并生成原创执行方案。
+						262 switch Description: 为当前角色授权 creative-comfyui-workflow, Value: 0
+						263 text creative-comfyui-workflow
+						264 text 当前角色未选择
+						265 text 使用 Octopus ComfyUI 工作流桥接诊断、编辑、保存和运行本机节点工作流，并核对真实生成结果；适用于文生图、图生图、放大和用户已安装扩展支持的图像、视频或音频流程。
+						266 switch Description: 为当前角色授权 creative-course-landing-page, Value: 0
+						267 text creative-course-landing-page
+						268 text 当前角色未选择
+						269 text 将课程定位、学习成果和课程结构设计成信息清楚、可转化且可实现的技能课程详情页。
+						270 switch Description: 为当前角色授权 creative-digital-product-film, Value: 0
+						271 text creative-digital-product-film
+						272 text 当前角色未选择
+						273 text 把真实产品页面、交互路径和动效参考转成准确呈现界面的电影感数字产品宣传片。
+						274 switch Description: 为当前角色授权 creative-director-stage, Value: 0
+						275 text creative-director-stage
+						276 text 当前角色未选择
+						277 text 使用 Octopus 3D 导演台编排角色、场景、机位、姿态、走位和运镜；适用于分镜预演、镜头构图和生成视频前的空间验证。
+						278 switch Description: 为当前角色授权 creative-documentary, Value: 0
+						279 text creative-documentary
+						280 text 当前角色未选择
+						281 text 将主题研究、采访与素材组织为事实可追溯的纪录片结构、旁白和镜头计划。
+						282 switch Description: 为当前角色授权 creative-dodge-game-video, Value: 0
+						283 text creative-dodge-game-video
+						284 text 当前角色未选择
+						285 text 从角色参考图制作四向躲闪关键帧、游戏反馈和短时反应挑战视频。
+						286 switch Description: 为当前角色授权 creative-dotmatrix-brand-motion, Value: 0
+						287 text creative-dotmatrix-brand-motion
+						288 text 当前角色未选择
+						289 text 根据品牌标志、名称与标语设计点阵字形系统、横版品牌图和动态字效。
+						290 switch Description: 为当前角色授权 creative-dreamcore-space, Value: 0
+						291 text creative-dreamcore-space
+						292 text 当前角色未选择
+						293 text 设计梦核、阈限空间与超现实后室场景，控制空间规则、情绪线索、镜头漫游和声音氛围。
+						294 switch Description: 为当前角色授权 creative-dual-player-intro, Value: 0
+						295 text creative-dual-player-intro
+						296 text 当前角色未选择
+						297 text 根据两位玩家名称、角色参考和游戏世界观设计双人游戏菜单开场、选角确认与短视频生成方案。
+						298 switch Description: 为当前角色授权 creative-dynamic-poster, Value: 0
+						299 text creative-dynamic-poster
+						300 text 当前角色未选择
+						301 text 将静态海报转为文字清晰、主体关系稳定且可循环的一镜到底动态海报。
+						302 switch Description: 为当前角色授权 creative-ecommerce-images, Value: 0
+						303 text creative-ecommerce-images
+						304 text 当前角色未选择
+						305 text 从真实商品素材规划平台合规的电商主图、卖点图、场景图和细节图组。
+						306 switch Description: 为当前角色授权 creative-editor-export, Value: 0
+						307 text creative-editor-export
+						308 text 当前角色未选择
+						309 text 将时间线工程整理为可迁移的剪辑交付包，包含媒体、字幕、代理、命名与兼容性检查。
+						310 switch Description: 为当前角色授权 creative-education-video, Value: 0
+						311 text creative-education-video
+						312 text 当前角色未选择
+						313 text 把知识目标转成讲解脚本、图解、示例、练习和理解验证，适合课程与科普视频。
+						314 switch Description: 为当前角色授权 creative-film-score, Value: 0
+						315 text creative-film-score
+						316 text 当前角色未选择
+						317 text 为角色、场景和叙事段落设计主题动机、配器、速度、动态与音乐进出点。
+						318 switch Description: 为当前角色授权 creative-fpv-video, Value: 0
+						319 text creative-fpv-video
+						320 text 当前角色未选择
+						321 text 设计连续沉浸的第一视角或 FPV 穿越路线、速度曲线、空间节点与一镜到底提示。
+						322 switch Description: 为当前角色授权 creative-h3-prompt-director, Value: 0
+						323 text creative-h3-prompt-director
+						324 text 当前角色未选择
+						325 text 把零散的视频目标、参考素材和限制整理成可控的多模态视频生成指令，适合 H3 类视频模型或兼容模型。
+						326 switch Description: 为当前角色授权 creative-image-inpaint, Value: 0
+						327 text creative-image-inpaint
+						328 text 当前角色未选择
+						329 text 根据遮罩或区域描述完成局部重绘，保持透视、光线、材质、边缘与未编辑区域稳定。
+						330 switch Description: 为当前角色授权 creative-image-remix, Value: 0
+						331 text creative-image-remix
+						332 text 当前角色未选择
+						333 text 从参考图提取构图、光线、材质与色彩关系，生成保持目标内容原创的新图方案。
+						334 switch Description: 为当前角色授权 creative-intentional-lowpoly-film, Value: 0
+						335 text creative-intentional-lowpoly-film
+						336 text 当前角色未选择
+						337 text 将人物或场景转成有控制的早期低模、笨拙绑定和生硬运镜短片，同时保持主体可识别与审美一致。
+						338 switch Description: 为当前角色授权 creative-koc-video, Value: 0
+						339 text creative-koc-video
+						340 text 当前角色未选择
+						341 text 为 KOC、口播和电商短视频设计开场钩子、自然脚本、镜头、B-roll 与平台版本。
+						342 switch Description: 为当前角色授权 creative-lighting-studio, Value: 0
+						343 text creative-lighting-studio
+						344 text 当前角色未选择
+						345 text 为人物、产品与场景设计有动机的光线方向、软硬、比例、色温和空间层次。
+						346 switch Description: 为当前角色授权 creative-line-explainer, Value: 0
+						347 text creative-line-explainer
+						348 text 当前角色未选择
+						349 text 把教材、知识主题或抽象概念转成线条人物、图标和关系图驱动的科普视频。
+						350 switch Description: 为当前角色授权 creative-lip-makeup-ad, Value: 0
+						351 text creative-lip-makeup-ad
+						352 text 当前角色未选择
+						353 text 为唇部彩妆与近景美妆产品设计人物、产品、道具互动自然的横屏或竖屏广告。
+						354 switch Description: 为当前角色授权 creative-liveaction-drawing-reveal, Value: 0
+						355 text creative-liveaction-drawing-reveal
+						356 text 当前角色未选择
+						357 text 让真实照片或视频先自然运动，再由绘制动作把主体显影为手绘层并保持空间一致。
+						358 switch Description: 为当前角色授权 creative-localization-dubbing, Value: 0
+						359 text creative-localization-dubbing
+						360 text 当前角色未选择
+						361 text 将短剧或视频本地化为目标语言，保持角色音色、语气、时长、口型与字幕同步。
+						362 switch Description: 为当前角色授权 creative-microdrama-writer, Value: 0
+						363 text creative-microdrama-writer
+						364 text 当前角色未选择
+						365 text 从选题和人物关系开发可连续生产的微短剧剧集，覆盖钩子、冲突、反转、集尾与制作约束。
+						366 switch Description: 为当前角色授权 creative-multi-angle-render, Value: 0
+						367 text creative-multi-angle-render
+						368 text 当前角色未选择
+						369 text 从单张或少量参考建立主体结构假设并生成前后左右、俯仰与三分之四视角。
+						370 switch Description: 为当前角色授权 creative-multiboard, Value: 0
+						371 text creative-multiboard
+						372 text 当前角色未选择
+						373 text 将故事拆成多宫格分镜整图，保持镜头顺序、角色一致、空间方向和阅读节奏。
+						374 switch Description: 为当前角色授权 creative-music-video, Value: 0
+						375 text creative-music-video
+						376 text 当前角色未选择
+						377 text 从歌曲结构设计 MV 的表演、空间、造型、剪辑、动态字幕与生成路线。
+						378 switch Description: 为当前角色授权 creative-paper-collage, Value: 0
+						379 text creative-paper-collage
+						380 text 当前角色未选择
+						381 text 将文案或知识主题转成纸张拼贴、分层布景与触感声音统一的讲解动画。
+						382 switch Description: 为当前角色授权 creative-paper-stopmotion-explainer, Value: 0
+						383 text creative-paper-stopmotion-explainer
+						384 text 当前角色未选择
+						385 text 把知识主题转成纸偶、分层布景、逐帧动作和实物音效统一的定格科普视频制作包。
+						386 switch Description: 为当前角色授权 creative-pixel-block-art, Value: 0
+						387 text creative-pixel-block-art
+						388 text 当前角色未选择
+						389 text 将图像或概念转换为可搭建的体素/方块画，控制网格、调色板、轮廓与材料数量。
+						390 switch Description: 为当前角色授权 creative-podcast-kit, Value: 0
+						391 text creative-podcast-kit
+						392 text 当前角色未选择
+						393 text 将播客录音或转录稿整理为节目说明、章节、短视频切片、文章与社媒内容包。
+						394 switch Description: 为当前角色授权 creative-product-ad, Value: 0
+						395 text creative-product-ad
+						396 text 当前角色未选择
+						397 text 从产品图片与卖点制作极简、可信、可转化的产品广告镜头与多渠道变体。
+						398 switch Description: 为当前角色授权 creative-promo-video, Value: 0
+						399 text creative-promo-video
+						400 text 当前角色未选择
+						401 text 把产品或服务简介转成可执行的宣传视频方案，覆盖受众、卖点、证据、镜头与多渠道版本。
+						402 switch Description: 为当前角色授权 creative-silkscreen-film, Value: 0
+						403 text creative-silkscreen-film
+						404 text 当前角色未选择
+						405 text 将主题转成丝印装饰插画、有限色版、颗粒套印与同步音效统一的短片。
+						406 switch Description: 为当前角色授权 creative-sleep-audio, Value: 0
+						407 text creative-sleep-audio
+						408 text 当前角色未选择
+						409 text 设计助眠冥想、环境声与轻声引导音频，控制节奏、动态、循环与刺激性。
+						410 switch Description: 为当前角色授权 creative-storyboard-assets, Value: 0
+						411 text creative-storyboard-assets
+						412 text 当前角色未选择
+						413 text 把剧本与参考图整理为角色、场景、道具和镜头统一的综合设定板。
+						414 switch Description: 为当前角色授权 creative-title-sequence, Value: 0
+						415 text creative-title-sequence
+						416 text 当前角色未选择
+						417 text 设计电影、短剧或节目片头，包括叙事母题、字体系统、演职员表、转场和视效节奏。
+						418 switch Description: 为当前角色授权 creative-toy-grid-poster, Value: 0
+						419 text creative-toy-grid-poster
+						420 text 当前角色未选择
+						421 text 将角色参考制作成身份一致的 3D 潮玩六宫格动态海报，适合 IP 提案和社媒展示。
+						422 switch Description: 为当前角色授权 creative-ui-motion, Value: 0
+						423 text creative-ui-motion
+						424 text 当前角色未选择
+						425 text 将产品界面和功能流程转成品牌一致的 UI 动效广告、功能演示与动态分镜。
+						426 switch Description: 为当前角色授权 creative-video-deconstruct, Value: 0
+						427 text creative-video-deconstruct
+						428 text 当前角色未选择
+						429 text 逆向拆解参考视频的镜头、节奏、视觉技术、声音、制作难度与可复用创作规则。
+						430 switch Description: 为当前角色授权 creative-video-editor, Value: 0
+						431 text creative-video-editor
+						432 text 当前角色未选择
+						433 text 在 Octopus AI 剪辑工坊中读取和修改多轨视频项目，并对节奏、转场、字幕、调色、效果、关键帧、变速和成片导出做基于真实画面的编辑判断；适用于剪辑、时间线诊断、视觉复核与可撤销批量编辑。
+						434 switch Description: 为当前角色授权 creative-visual-direction, Value: 0
+						435 text creative-visual-direction
+						436 text 当前角色未选择
+						437 text 为图像、视频和动态设计建立统一的构图、色彩、材质、字体、光线与运动语言。
+						438 switch Description: 为当前角色授权 creative-voice-design, Value: 0
+						439 text creative-voice-design
+						440 text 当前角色未选择
+						441 text 用角色背景、表演意图和声学参数设计可试听的原创音色方向。
+						442 switch Description: 为当前角色授权 creative-vox-explainer, Value: 0
+						443 text creative-vox-explainer
+						444 text 当前角色未选择
+						445 text 把主题、文章或报告转成带旁白、字幕、图解和拼贴节奏的高密度科普短片。
+						446 switch Description: 为当前角色授权 creative-zodiac-english-series, Value: 0
+						447 text creative-zodiac-english-series
+						448 text 当前角色未选择
+						449 text 围绕十二生肖或其他文化角色体系设计儿童英语故事、儿歌、重复句型和连续剧集资产。
+						450 switch Description: 为当前角色授权 cross-platform-adapter, Value: 0
+						451 text cross-platform-adapter
+						452 text 当前角色未选择
+						453 text Adapts and repurposes content (blog posts, articles, reports, newsletters) for LinkedIn, Twitter/X, WeChat Official Accounts, Zhihu, and Slack — adjusting tone, length, formatting, and language to match each platform's norms, including English-Chinese cross-language adaptation. Use when a user wants to repurpose, cross-post, adapt, or convert existing content for different platforms.
+						454 switch Description: 为当前角色授权 data-viz-renderer, Value: 0
+						455 text data-viz-renderer
+						456 text 当前角色未选择
+						457 text Generate self-contained HTML/SVG infographics from JSON data, including stat cards, bar charts, flow diagrams, and mixed dashboards. Offers 8 color palettes and built-in icons with no external dependencies. Triggered when users request data visualization, infographics, charts, or dashboards.
+						458 switch Description: 为当前角色授权 database-scout, Value: 0
+						459 text database-scout
+						460 text 当前角色未选择
+						461 text Explore SQLite and PostgreSQL databases: list tables, inspect schemas (columns/types/constraints), preview data, generate Mermaid ER diagrams, and run safe read-only queries. Triggered by requests to explore a database, view table structures, describe tables, generate diagrams, or query data, and by keywords like database exploration, schema, ER diagram, or SQL query.
+						462 switch Description: 为当前角色授权 deck-refresh, Value: 0
+						463 text deck-refresh
+						464 text 当前角色未选择
+						465 text Updates a presentation with new numbers — quarterly refreshes, earnings updates, comp rolls, rebased market data. Use whenever the user asks to "update the deck with Q4 numbers", "refresh the comps", "roll this forward", "swap in the new earnings", "change all the $485M to $512M", or any request to swap figures across an existing deck without rebuilding it.
+						466 switch Description: 为当前角色授权 deep-module-refactor, Value: 0
+						467 text deep-module-refactor
+						468 text 当前角色未选择
+						469 text Explore a codebase to find opportunities for architectural improvement, focusing on making the codebase more testable by deepening shallow modules. Use when user wants to improve architecture, find refactoring opportunities, consolidate tightly-coupled modules, or make a codebase more AI-navigable.
+						470 switch Description: 为当前角色授权 deep-probe, Value: 0
+						471 text deep-probe
+						472 text 当前角色未选择
+						473 text 对用户的方案或设计进行连环追问，逐一排查决策树的每个分支，直到双方达成共识。当用户希望压力测试某个方案、被深度质询设计思路，或提到“帮我审一下”、“追问一下”、“挑挑毛病”等关键词时触发。
+						474 switch Description: 为当前角色授权 deep-research-swarm, Value: 0
+						475 text deep-research-swarm
+						476 text 当前角色未选择
+						477 text Multi-agent deep research orchestration with adaptive routing. Use this skill whenever comprehensive, multi-dimensional, evidence-backed investigation is required — competitive intelligence, market analysis, controversy investigation, policy evaluation, academic landscape review, risk assessment, file-based analysis, or any task demanding cross-verified, multi-source findings. **Route Classification** (Phase 0 auto-determines): - **Route A — Wide Search**: Broad/exploratory topics where search breadth is critical (e.g., industry landscape, trend survey, competitive mapping, "help me research industry XX"). First deploy multi-agent wide exploration to maximize coverage, then multi-agent deep dive per dimension. Two-stage parallel swarm. - **Route B — Focused Search**: Specific questions with clear dimensions or a narrow topic. Standard pipeline: landscape scan → decompose → parallel deep dive. - **Route C — File-Only Research**: User uploads files and explicitly requests analysis based solely on file content (signals: "based on these files only", "analyze only the uploaded documents", "no external search", "just based on these files"). NO external search — multi-file deep analysis, cross-file insight extraction, then handoff to writing skill. - **Route D — File-Augmented Research**: User uploads files as reference or starting point, but does not restrict to file content only (signals: "refer to these files", "combine with files", "help me complete this", "based on this, write...", or simply no explicit restriction). Primarily analyze files, supplement with professional external sources for additional context and verification, then synthesize and write. Trigger Rule: When the user uses terms such as: - research, investigation, in-depth analysis, comprehensive analysis - trend analysis, comparative analysis, comparison, evaluation, assessment - future prediction, forecasting, industry outlook, market outlook Or when the user uploads files requesting research/analysis/report generation. You MUST load the `deep-research` capability skill before proceeding. Do NOT use for: simple factual lookup, single-source Q&A.
+						478 switch Description: 为当前角色授权 director_stage.scene_get, Value: 0
+						479 text director_stage.scene_get
+						480 text 当前角色未选择
+						481 text 读取 3D 导演台场景。参数 scene_id 必填；view 可选 summary/entities/timeline/full。返回角色、相机、姿态和时间线路径。
+						482 switch Description: 为当前角色授权 docx, Value: 0
+						483 text docx
+						484 text 当前角色未选择
+						485 text Comprehensive document creation, editing, and analysis with support for tracked changes, comments, formatting preservation, and text extraction. When Octopus needs to work with professional documents (.docx files) for: (1) Creating new documents, (2) Modifying or editing content, (3) Working with tracked changes, (4) Adding comments, or any other document tasks
+						486 switch Description: 为当前角色授权 earnings-analysis, Value: 0
+						487 text earnings-analysis
+						488 text 当前角色未选择
+						489 text Create professional equity research earnings update reports (8-12 pages, 3,000-5,000 words) analyzing quarterly results for companies already under coverage. Fast-turnaround format focusing on beat/miss analysis, key metrics, updated estimates, and revised thesis. Includes 1-3 summary tables and 8-12 charts. Use when user requests "earnings update", "quarterly update", "earnings analysis", "Q1/Q2/Q3/Q4 results", or post-earnings report.
+						490 switch Description: 为当前角色授权 earnings-preview, Value: 0
+						491 text earnings-preview
+						492 text 当前角色未选择
+						493 text Build pre-earnings analysis with estimate models, scenario frameworks, and key metrics to watch. Use before a company reports quarterly earnings to prepare positioning notes, set up bull/bear scenarios, and identify what will move the stock. Triggers on "earnings preview", "what to watch for [company] earnings", "pre-earnings", "earnings setup", or "preview Q[X] for [company]".
+						494 switch Description: 为当前角色授权 email-manager, Value: 0
+						495 text email-manager
+						496 text 当前角色未选择
+						497 text 收发和管理邮件，支持查看未读邮件、搜索邮件、下载附件、发送带附件的邮件，并提供交互式配置向导。兼容Gmail、Outlook、163.com、126.com、QQ邮箱等主流服务商。当用户需要收发邮件、查看收件箱、搜索特定邮件、管理附件，或提及配置邮箱时触发。
+						498 switch Description: 为当前角色授权 email-to-calendar, Value: 0
+						499 text email-to-calendar
+						500 text 当前角色未选择
+						501 text Extract calendar events and deadlines from emails and create calendar entries. Two modes: monitor your inbox directly, or process emails you forward to a dedicated address. Trigger when a user asks to scan emails for events, mentions an event in an email, or wants to add something from an email to their calendar.
+						502 switch Description: 为当前角色授权 equity-research, Value: 0
+						503 text equity-research
+						504 text 当前角色未选择
+						505 text Generate comprehensive equity research snapshots combining analyst consensus estimates, company fundamentals, historical prices, and macroeconomic context. Use when researching stocks, comparing estimates to actuals, analyzing company financials, assessing equity valuations, or building investment cases.
+						506 switch Description: 为当前角色授权 fast-browser-use, Value: 0
+						507 text fast-browser-use
+						508 text 当前角色未选择
+						509 text Fastest browser automation with anti-bot bypass and DOM extraction. Navigate pages, capture screenshots, manage sessions, and harvest data from infinite scroll via Chrome DevTools Protocol. Runs 10x faster than Puppeteer. Trigger for any web scraping, automated browsing, data extraction, or screenshot task.
+						510 switch Description: 为当前角色授权 find-skills, Value: 0
+						511 text find-skills
+						512 text 当前角色未选择
+						513 text Helps users discover and install agent skills when they ask questions like "how do I do X", "find a skill for X", "is there a skill that can...", or express interest in extending capabilities. This skill should be used when the user is looking for functionality that might exist as an installable skill.
+						514 switch Description: 为当前角色授权 format_code, Value: 0
+						515 text format_code
+						516 text 当前角色未选择
+						517 text Run formatter (auto-detects ruff format/prettier). Default check-only.
+						518 switch Description: 为当前角色授权 frontend-app-builder, Value: 0
+						519 text frontend-app-builder
+						520 text 当前角色未选择
+						521 text Use for new frontend applications, dashboards, games, creative websites, hero sections, and visually driven UI from scratch, or when the user explicitly asks for a redesign/restyle/modernization. Builds from clean, airy, high-taste, readable image-generated concept design with section-specific references, faithful implementation, and browser testing.
+						522 switch Description: 为当前角色授权 frontend-design, Value: 0
+						523 text frontend-design
+						524 text 当前角色未选择
+						525 text 前端设计技能，包含 UI/UX 设计原则、响应式设计、设计系统构建。在设计界面或实现设计时调用。
+						526 switch Description: 为当前角色授权 frontend-ui-engineering, Value: 0
+						527 text frontend-ui-engineering
+						528 text 当前角色未选择
+						529 text Builds production-quality UIs. Use when building or modifying user-facing interfaces. Use when creating components, implementing layouts, managing state, or when the output needs to look and feel production-quality rather than AI-generated.
+						530 switch Description: 为当前角色授权 fto-compare, Value: 0
+						531 text fto-compare
+						532 text 当前角色未选择
+						533 text Compare a new product feature description against a list of patent records and produce per-pair FTO risk hypotheses. Returns a similarity matrix with risk levels, claim-overlap reasoning, and design-around suggestions. Used after patent-search has narrowed the corpus to high-relevance candidates and claim-extract has populated keyClaimsSummary.
+						534 switch Description: 为当前角色授权 gantt-chart-builder, Value: 0
+						535 text gantt-chart-builder
+						536 text 当前角色未选择
+						537 text 根据任务列表和依赖关系生成交互式HTML甘特图，支持关键路径分析（CPM），可视化项目时间线、依赖关系和可延迟的浮动时间。当用户提到甘特图、项目时间线、关键路径、任务排期、项目进度图、依赖关系可视化、工期计算或直接说“帮我排一下项目时间”、“生成一个项目进度图”、“分析一下哪些任务是关键路径”时触发。
+						538 switch Description: 为当前角色授权 general-writing, Value: 0
+						539 text general-writing
+						540 text 当前角色未选择
+						541 text General writing skill — covers fiction, fanfiction, poetry, lyrics, drama, screenplay, essay, game writing, murder mystery, TRPG scenarios, letters, and all other writing genres. Routes to genre-specific sub-skills for execution. Do NOT use for: industry reports, market analysis, policy briefs, consulting deliverables, white papers, technical reports (use report-writing); academic papers, surveys, empirical research, literature reviews (use paper-writing).
+						542 switch Description: 为当前角色授权 github.pr_summary, Value: 0
+						543 text github.pr_summary
+						544 text 当前角色未选择
+						545 text 查看并摘要某个 GitHub PR 的元信息:标题 / 状态 / 增删行数 / 评论数 / 评审状态 / 改动文件数 / 作者 / 链接 / 创建与更新时间。参数:pr_number 必填(整数或 '#123' 形式),repo 可选('owner/name',缺省用当前仓库)。适用于'看下这个 PR'、'PR 123 改了啥'、'这个 PR 评审过了吗'。
+						546 switch Description: 为当前角色授权 gitlab-cli-skills, Value: 0
+						547 text gitlab-cli-skills
+						548 text 当前角色未选择
+						549 text GitLab personal access token with 'api' scope. Used by automation scripts (e.g. post-inline-comment.py) to post MR comments via the REST API. If not set, scripts fall back to reading the token from glab CLI config (~/.config/glab-cli/config.yml).
+						550 switch Description: 为当前角色授权 history_read, Value: 0
+						551 text history_read
+						552 text 当前角色未选择
+						553 text Read the message transcript of one past conversation thread. Use after `history_search` gives you a thread_id. Args: {thread_id: string (required), limit?: int (default 50, max 100 — most recent N messages)}. Returns {thread_id, title, count, total_messages, messages: [{role, content, truncated}]}. Long messages are clipped; `truncated: true` marks them.
+						554 switch Description: 为当前角色授权 history_search, Value: 0
+						555 text history_search
+						556 text 当前角色未选择
+						557 text Search your PAST CONVERSATIONS (other threads) by keyword and/or date range. CALL THIS WHEN the user refers to something discussed 'before', 'last time', 'the other day', or in a named past session — you cannot see other threads otherwise. Distinct from `recall`, which reads saved MEMORY.md facts; this reads the actual chat transcripts. Args: {query?: string (case-insensitive substring over title + message bodies; omit to list by date alone), start_date?: 'YYYY-MM-DD' or ISO, end_date?: 'YYYY-MM-DD' or ISO (inclusive), days_back?: int (shortcut for start_date = N days ago), limit?: int (default 20, max 100), include_current?: bool (default false — the thread you're already in is excluded)}. Returns {count, threads: [{thread_id, title, snippet, created_at, updated_at, message_count}]}. Follow up with `history_read` on a thread_id to read the full transcript.
+						558 switch Description: 为当前角色授权 http-load-tester, Value: 0
+						559 text http-load-tester
+						560 text 当前角色未选择
+						561 text HTTP 阶梯式并发压测工具，自动执行多级并发压力测试，采集 p50/p90/p99 延迟百分位数，分析性能拐点（如延迟激增、吞吐饱和或错误率飙升），并输出结构化报告与最优并发建议。使用纯 Python 标准库，零外部依赖。当用户提及 HTTP 压测、基准测试、ab、wrk、并发测试、阶梯压测、延迟百分位、p99、拐点分析、性能测试、QPS、RPS 或容量规划等关键词或场景时触发。
+						562 switch Description: 为当前角色授权 incident-retrospective, Value: 0
+						563 text incident-retrospective
+						564 text 当前角色未选择
+						565 text 线上事故复盘与结构化 Blameless Postmortem 撰写工具，遵循 SRE 最佳实践。帮助用户撰写专业的事故复盘报告，通过六步 SOP 引导完成从时间线梳理、5 Whys 根因分析到制定 SMART 改进措施的全过程，输出格式化的复盘文档。当用户需要撰写事故复盘、进行根因分析（RCA）、创建 blameless postmortem、分析线上故障、制定改进措施（action items）或总结事故教训时触发，常见于提到 postmortem、事故复盘、故障分析、RCA、5 Whys、incident review、故障报告等关键词的场景。
+						566 switch Description: 为当前角色授权 interface-design-lab, Value: 0
+						567 text interface-design-lab
+						568 text 当前角色未选择
+						569 text 为模块生成多种截然不同的接口设计方案，通过并行探索产出多个接口签名、使用示例和封装说明，并详细对比其简洁性、通用性、深度与易用性。当用户需要设计API、探索接口方案、对比模块形态，或明确提及“设计两次”原则、并行设计、接口形态比较时触发。
+						570 switch Description: 为当前角色授权 interview-simulator, Value: 0
+						571 text interview-simulator
+						572 text 当前角色未选择
+						573 text 模拟真实面试官进行追问训练，覆盖行为面试、技术面试和案例面试三大场景，每次训练包含3-5轮循序渐进的追问，并基于STAR框架对用户回答进行结构化诊断与优化，输出综合评分和改进建议。当用户希望练习面试、提及行为面试/技术面试/案例面试等关键词、或直接给出面试问题或回答内容时触发。
+						574 switch Description: 为当前角色授权 kubectl, Value: 0
+						575 text kubectl
+						576 text 当前角色未选择
+						577 text Execute kubectl commands to manage Kubernetes clusters — query pods and deployments, deploy applications, debug containers with logs and exec, update configurations, and monitor cluster health. Use when working with Kubernetes, asking for pod status, container logs, deployment updates, cluster diagnostics, or any kubectl operation.
+						578 switch Description: 为当前角色授权 landing-page-scaffold, Value: 0
+						579 text landing-page-scaffold
+						580 text 当前角色未选择
+						581 text Generate a self-contained landing page HTML prototype with five standard sections (Hero → Social Proof → Features → Pricing → CTA), outputting a single inlined HTML file ready to preview in any browser. Triggered when the user asks to build, generate, or scaffold a landing page, wireframe, or marketing page prototype, or mentions specific sections like hero, pricing, or CTA.
+						582 switch Description: 为当前角色授权 legal-contract-gen, Value: 0
+						583 text legal-contract-gen
+						584 text 当前角色未选择
+						585 text 通过交互式问答生成常用法律文书初稿，支持NDA（保密协议）、服务协议、隐私政策、合作框架协议等类型。当用户提到NDA、保密协议、服务协议、隐私政策、合同模板、法律文书、合作协议，或相应的英文术语（如terms of service、privacy policy、service agreement、non-disclosure agreement、contract template、legal document）时触发。
+						586 switch Description: 为当前角色授权 legal-risk-analyzer, Value: 0
+						587 text legal-risk-analyzer
+						588 text 当前角色未选择
+						589 text 法律风险评估助手，基于“严重性 × 发生概率”的框架评估法律风险，提供风险评分、等级（绿/黄/橙/红）及具体行动建议（从接受监控到上报法务负责人或聘请外部律师）。适用于用户询问合同风险、交易风险、问题分级、或是否需要上报高级法务/外部律师等场景，当用户提及风险评估、风险等级、法律风险分析或类似关键词时触发。
+						590 switch Description: 为当前角色授权 lint_check, Value: 0
+						591 text lint_check
+						592 text 当前角色未选择
+						593 text Run linter (auto-detects ruff/eslint). Returns diagnostics plus safe-fix diff; pass fix=true to apply safe fixes.
+						594 switch Description: 为当前角色授权 localization-toolkit, Value: 0
+						595 text localization-toolkit
+						596 text 当前角色未选择
+						597 text This skill should be used when setting up, auditing, or enforcing internationalization/localization in UI codebases (React/TS, i18next or similar, JSON locales), including installing/configuring the i18n framework, replacing hard-coded strings, ensuring en-US/zh-CN coverage, mapping error codes to localized messages, and validating key parity, pluralization, and formatting.
+						598 switch Description: 为当前角色授权 log-diagnostic, Value: 0
+						599 text log-diagnostic
+						600 text 当前角色未选择
+						601 text 分析日志文件的错误模式，支持JSON、syslog、Nginx等常见格式，自动检测并输出错误聚类、频率统计和时间分布报告，用于排查问题、定位高发时段。当用户上传.log文件并要求排查错误、分析错误分布、定位高发时段，或提及错误统计、日志分析等关键词时触发。
+						602 switch Description: 为当前角色授权 mx2025.recent_messages, Value: 0
+						603 text mx2025.recent_messages
+						604 text 当前角色未选择
+						605 text 读取本机萌侠连接器已采集的最新消息。参数:limit 可选(1-500,默认100),query 可选(按老师名或正文搜索),room_id 可选(限定对话)。返回内容含老师/对话标题、消息正文、发布时间、消息类型和是否已同步云端。适用于分析老师观点、调研纪要、小作文、竞价观点和最近消息。
+						606 switch Description: 为当前角色授权 narrative_studio.continuity, Value: 0
+						607 text narrative_studio.continuity
+						608 text 当前角色未选择
+						609 text Check Narrative Studio candidates for timeline, character-state, world-rule, relationship, and foreshadow continuity against cited project sources. # Continuity review Compare the target candidate with the branch's source-cited context pack. Check chronology, identity, location, knowledge, inventory, relationships, promises, world rules, planted clues, and state transitions. Separate a sourced contradiction from an inference or an unresolved question, and include the relevant source refs in every finding. Return a candidate review or proposed state-change record only. Do not rewrite source facts as canon, vote on a review, clear a blocker, or create a CanonCommit. If context is truncated or lacks the necessary source, state that limitation rather than claiming certainty.
+						610 switch Description: 为当前角色授权 narrative_studio.editorial_readiness, Value: 0
+						611 text narrative_studio.editorial_readiness
+						612 text 当前角色未选择
+						613 text Prepare an evidence-based editorial recommendation for a Narrative Studio candidate without exercising human canon-governance authority. # Canon readiness review Assess whether a candidate is ready for human governance. Summarize scope, revision, supporting source refs, continuity findings, unresolved blockers, and a recommendation of `ready_for_human_review`, `revise`, or `insufficient_evidence`. Distinguish editorial preference from a factual or policy blocker. This skill has no governance authority. It must not submit or alter votes, mark review requests resolved, remove blockers, create a CanonCommit, or describe a candidate as canon. Only an authenticated human governance path with explicit confirmation may perform those actions.
+						614 switch Description: 为当前角色授权 narrative_studio.narrative_authoring, Value: 0
+						615 text narrative_studio.narrative_authoring
+						616 text 当前角色未选择
+						617 text Develop outlines, scenes, and chapters in Narrative Studio when the requested output must remain a reviewable candidate. # Narrative authoring Use the project's selected branch and a bounded context pack as the source of truth. Preserve the requested voice, point of view, tense, language, and target length. Treat world facts and earlier chapter state as constraints, and cite their source refs in the candidate's supporting notes when available. Create or revise only candidate artifacts. Never label prose as approved canon, cast governance votes, resolve blocking reviews, or create a CanonCommit. Surface contradictions or missing evidence for human review instead of silently inventing a resolution.
+						618 switch Description: 为当前角色授权 narrative_studio.project_create, Value: 0
+						619 text narrative_studio.project_create
+						620 text 当前角色未选择
+						621 text 创建一个叙事项目和默认 main 候选分支。参数 title 必填；可选 id、premise、language=zh|en|bilingual。此技能不创建或晋升正典。
+						622 switch Description: 为当前角色授权 okr-planner, Value: 0
+						623 text okr-planner
+						624 text 当前角色未选择
+						625 text OKR 制定/拆解/复盘教练。当用户提到以下场景时触发：OKR、目标管理、关键结果、OKR制定、OKR拆解、OKR复盘、OKR检查、OKR对齐、季度目标、objectives and key results、目标拆解、KR制定、OKR评分、OKR改进。即使用户只是说'帮我写个OKR''这个OKR写得好不好''帮我复盘一下这个季度的OKR''目标怎么拆解'，也应触发。
+						626 switch Description: 为当前角色授权 paper_trading.quote, Value: 0
+						627 text paper_trading.quote
+						628 text 当前角色未选择
+						629 text 查询模拟炒股(paper_trading)插件里某个 A 股的当前模拟报价(现价/涨跌幅/昨收)。参数 code 必填,如 '600519'。纯模拟数据,不连真实行情。
+						630 switch Description: 为当前角色授权 paper-writing, Value: 0
+						631 text paper-writing
+						632 text 当前角色未选择
+						633 text End-to-end academic paper creation — outline design, structured content writing, review, and assembly. Covers survey papers, empirical research, technical papers, case studies, literature reviews, and any formal academic writing requiring methodology sections, contribution positioning, and rigorous citation. Outputs are delivered in Markdown (`.md`) format. Do NOT use for: industry reports, consulting deliverables, policy briefs (use report-writing).
+						634 switch Description: 为当前角色授权 pipeline-blueprint, Value: 0
+						635 text pipeline-blueprint
+						636 text 当前角色未选择
+						637 text Provide CI/CD best practices and pipeline templates for GitHub Actions and GitLab CI, recommending configurations based on project type (frontend, backend, fullstack, library, monorepo, mobile). Trigger when users ask about setting up CI/CD, automating builds, improving pipelines, or mention keywords like GitHub Actions, GitLab CI, pipeline templates, or deployment automation.
+						638 switch Description: 为当前角色授权 pricing-advisor, Value: 0
+						639 text pricing-advisor
+						640 text 当前角色未选择
+						641 text 设计与优化SaaS产品的定价体系，包括套餐结构、价值指标、定价页面及涨价策略，输出具体的定价方案与实施建议。当用户需要从零搭建定价模型、重构现有定价、规划涨价路径、或提升定价页转化率时触发，例如询问“SaaS如何定价”、“优化定价套餐”、“设计涨价策略”或提及“定价模型”、“价值指标”、“转化率”等关键词。
+						642 switch Description: 为当前角色授权 product-spec-writer, Value: 0
+						643 text product-spec-writer
+						644 text 当前角色未选择
+						645 text Transform one-line product ideas into complete PRD documents with user stories, feature lists, MoSCoW prioritization, and acceptance criteria. Trigger when users ask to 'write a PRD', 'turn this idea into a spec', 'flesh out requirements', or mention product requirements, user stories, feature breakdowns, or acceptance criteria.
+						646 switch Description: 为当前角色授权 project-sizing-guide, Value: 0
+						647 text project-sizing-guide
+						648 text 当前角色未选择
+						649 text Software project effort estimation assistant. Outputs three-point estimates (optimistic/most-likely/pessimistic values with confidence intervals), T-shirt sizes, or Function Point Analysis (FPA) counts. Triggered when users ask 'how long will this feature take,' need to assess project workload, perform PERT estimation, T-shirt sizing, FPA, sprint planning, or quote-based effort breakdowns.
+						650 switch Description: 为当前角色授权 py-perf-analyzer, Value: 0
+						651 text py-perf-analyzer
+						652 text 当前角色未选择
+						653 text 定位 Python 脚本的性能瓶颈，集成 cProfile、tracemalloc 和 line_profiler，一键执行 CPU 热点函数、内存分配或逐行耗时分析，并可输出 JSON 报告。当用户提到优化脚本、分析性能、定位 CPU 或内存热点、进行逐行分析，或询问代码为什么慢、如何加速、内存泄漏等问题时触发。
+						654 switch Description: 为当前角色授权 r2-upload, Value: 0
+						655 text r2-upload
+						656 text 当前角色未选择
+						657 text Upload files to Cloudflare R2, AWS S3, or any S3-compatible storage (like MinIO) and generate secure, time-limited presigned download links with configurable expiration, typically set to 5 minutes. Use when the user needs to upload a file to cloud storage and get a shareable link, or mentions R2, S3, presigned URLs, temporary links, or file uploads with expiration.
+						658 switch Description: 为当前角色授权 repo-audit, Value: 0
+						659 text repo-audit
+						660 text 当前角色未选择
+						661 text Deep analysis of Git history: identify frequently changed hotspot files, analyze code ownership by contributor, and scan for leaked secrets. Triggered when users ask about Git analysis, code hotspots, who owns what code, secret scanning, security audits of commit history, or optimizing code review assignments.
+						662 switch Description: 为当前角色授权 report-writing, Value: 0
+						663 text report-writing
+						664 text 当前角色未选择
+						665 text End-to-end long-form report creation — outline design, multi-chapter content writing, review, and assembly. Covers industry research, market analysis, policy briefs, technical reports, consulting deliverables, and any structured long-form non-fiction requiring research, argumentation, and citations. Outputs are delivered in Markdown (`.md`) format. Do NOT use for: academic papers (use paper-writing), creative fiction, blog posts, or short-form content under 2000 words.
+						666 switch Description: 为当前角色授权 resume-craft, Value: 0
+						667 text resume-craft
+						668 text 当前角色未选择
+						669 text 优化简历，基于目标岗位JD进行关键词匹配分析，用STAR法则量化改写经历描述，并进行ATS友好度检查，最终输出一份针对性强、通过率高的优化简历。当用户请求优化、修改、润色简历，提到JD匹配、关键词、STAR法则、ATS，或询问“帮我改一下简历”、“这份简历能不能优化”、“简历怎么过ATS”等具体问题时触发。
+						670 switch Description: 为当前角色授权 route-to-openapi, Value: 0
+						671 text route-to-openapi
+						672 text 当前角色未选择
+						673 text Generates RESTful API documentation (OpenAPI 3.0 / Swagger spec) by scanning route definitions in code for Flask, FastAPI, Express, Gin, and other frameworks. Trigger when users ask about API documentation, OpenAPI, Swagger, endpoint docs, generating docs from code, or extracting endpoints.
+						674 switch Description: 为当前角色授权 run_orchestration, Value: 0
+						675 text run_orchestration
+						676 text 当前角色未选择
+						677 text Run a DETERMINISTIC multi-round discovery loop end-to-end in one call: fan out N workers per round, split their findings (one per line), de-duplicate against everything seen so far, and loop until no new findings arrive (or the round budget runs out) — optionally vote-verifying each finding. The control flow (looping, dedup, stop-when-dry) is code, not the model, so nothing is skipped. Use it for EXHAUSTIVE discovery where one pass isn't enough: 'find all the edge cases', 'enumerate every place X happens', 'gather everything known about Y'. This is the loop the flat per-turn cap normally forbids — it runs inside a bounded spawn budget instead. Args: {goal: string (what to discover), n?: int 1-6 workers/round (default 3), rounds?: int 1-5 (default 2), patience?: int 0-3 dry rounds tolerated before stopping (default 1), verify?: bool (default false — vote-verify each finding), synthesize?: bool (default false — fold the confirmed findings into ONE coherent answer via a final synthesizer; returned in `synthesis`), choices?: [keep,drop]-style ballot for verify, max_spawns?: int total spawn budget (auto-sized, capped at 48), agent_id?: worker role, or a LIST of roles rotated across workers for diverse lenses, e.g. [researcher, explorer, critic] (default researcher)}. Returns: {ok, goal, collected:[...], confirmed:[...] (== collected unless verify), count, rounds_run, fresh_per_round:[...], verified, unverified, synthesis (str, '' unless synthesize), shared (bool — findings published to the turn blackboard), inherited (int — findings seeded from siblings' blackboard entries), stopped_reason (rounds|dry|budget|cap), budget_used, max_spawns, failures (list of {role, error, error_type} — de-duplicated sub-agent failure summaries, empty when every worker succeeded), failure_count (int — raw total of failed sub-agent runs), note (str — a warning when any sub-agent failed; '' otherwise)}. Coordination: findings are auto-shared on the turn's blackboard, so a sibling agent or a later orchestration on the same goal builds on them instead of re-discovering — enforced by the harness, no manual bb_write needed. Budget: one orchestration costs ONE against the 5/turn delegation cap; its internal fan-outs/votes draw from the bounded spawn budget, not the turn cap. Reserve it for genuinely multi-round work.
+						678 switch Description: 为当前角色授权 run_pipeline, Value: 0
+						679 text run_pipeline
+						680 text 当前角色未选择
+						681 text Process a list of items through ORDERED STAGES without waiting for all items to complete each stage before advancing — item A can be in stage 3 while item B is still in stage 1. Use it when: - You have N independent items (files, URLs, tasks) that each need the SAME sequence of specialist passes (find → review → fix, or extract → classify → summarise). - Stages are sequential PER ITEM (each stage needs the previous output for that item), but items themselves are independent. - You want true pipeline throughput: wall-clock = max(slowest item chain), not sum of slowest-per-stage. Stage prompt templates use: {item} — the original item value {prev} — previous stage's output for this item (empty for stage 0) {stage0_output}, {stage1_output}, ... — any earlier stage's output A failed stage halts that item's chain; remaining stages for that item are skipped. Other items continue. Args: {items: list[str|dict] (up to 16), stages: list[{prompt_template: str, agent_id?: str}] (up to 4 stages), default_agent_id?: str (used when stage omits agent_id, default researcher), timeout_s?: int (per-subagent, default 900)}. Returns: {ok, results:[{item, stages:[{stage, agent_id, output, ok}], final_output, ok}], success_count, failure_count, total, stages_run}. Budget: one pipeline costs ONE against the 5/turn delegation cap; item × stage spawn budget is managed internally.
+						682 switch Description: 为当前角色授权 run_tests, Value: 0
+						683 text run_tests
+						684 text 当前角色未选择
+						685 text Run project tests (auto-detects pytest/vitest/npm test). Tests have no default wall-clock limit, stream progress while running, and remain cancellable; pass a positive timeout_s only for an explicit deadline.
+						686 switch Description: 为当前角色授权 rust-browser-pilot, Value: 0
+						687 text rust-browser-pilot
+						688 text 当前角色未选择
+						689 text 基于 Rust 的高性能浏览器自动化工具，通过 Chrome DevTools 协议直接驱动浏览器，执行 DOM 提取、页面截图、表单填写、会话管理和站点地图分析等操作。启动速度和内存效率远超 Puppeteer 与 Selenium，非常适合网页抓取、自动化测试和需要复杂交互的场景。当用户需要自动化浏览器任务、提及网页抓取、自动化测试、DOM 提取、页面截图、表单填写、会话管理、站点地图分析，或比较 Puppeteer/Selenium 性能时触发。
+						690 switch Description: 为当前角色授权 seedance-video-generate, Value: 0
+						691 text seedance-video-generate
+						692 text 当前角色未选择
+						693 text 使用火山引擎 Seedance 模型从文字提示、图像或参考素材生成视频。支持多种视频风格、时长和分辨率。当用户需要生成视频内容、动画、广告片或任何动态视觉内容时调用此技能。
+						694 switch Description: 为当前角色授权 seedream-image-generate, Value: 0
+						695 text seedream-image-generate
+						696 text 当前角色未选择
+						697 text 使用火山引擎 Seedream 模型从文字描述生成高质量图像，支持多种艺术风格和宽高比。当用户需要生成图片、插画、设计素材或任何视觉内容时调用此技能。
+						698 switch Description: 为当前角色授权 seo-audit, Value: 0
+						699 text seo-audit
+						700 text 当前角色未选择
+						701 text When the user wants to audit, review, or diagnose SEO issues on their site. Also use when the user mentions "SEO audit," "technical SEO," "why am I not ranking," "SEO issues," "on-page SEO," "meta tags review," "SEO health check," "my traffic dropped," "lost rankings," "not showing up in Google," "site isn't ranking," "Google update hit me," "page speed," "core web vitals," "crawl errors," or "indexing issues." Use this even if the user just says something vague like "my SEO is bad" or "help with SEO" — start with an audit.
+						702 switch Description: 为当前角色授权 smart-web-scraper, Value: 0
+						703 text smart-web-scraper
+						704 text 当前角色未选择
+						705 text 基于 Playwright 智能爬取网页内容，内置绕过 Cloudflare 等反爬机制的能力，提供简单模式和隐身模式两种方案以应对不同反爬强度，输出网页标题、文本内容和截图。当用户需要抓取动态网页、获取被保护网站的数据，或提到爬虫、反爬虫、Cloudflare、网页截图、JavaScript渲染等关键词时触发。
+						706 switch Description: 为当前角色授权 speech-synthesis, Value: 0
+						707 text speech-synthesis
+						708 text 当前角色未选择
+						709 text 将文本转换为高质量语音，支持多语言、多种音色，可调节语速、音调和音量，并生成字幕，输出MP3音频文件。当你需要朗读文本（比如文章、消息）、为视频或演示文稿生成配音，或直接提到“TTS”、“文字转语音”、“配音”、“朗读”时，就会使用这个技能。
+						710 switch Description: 为当前角色授权 sql-insight, Value: 0
+						711 text sql-insight
+						712 text 当前角色未选择
+						713 text Translate natural language to SQL, optimize query performance, and interpret EXPLAIN plans for SQLite and PostgreSQL. Triggered when users ask to convert questions into SQL, improve slow queries, tune indexes, analyze execution plans, or mention keywords like NL2SQL, query tuning, or full table scan.
+						714 switch Description: 为当前角色授权 sunlight-analysis, Value: 0
+						715 text sunlight-analysis
+						716 text 当前角色未选择
+						717 text 生成太阳轨迹图，计算实时太阳位置，分析建筑阴影投射范围与全年日照时数，并提供热舒适度评估，适用于建筑设计与场地环境分析。当用户询问太阳位置、请求绘制太阳轨迹、分析建筑阴影、计算全年日照时间、评估热舒适度或进行地形阴影分析时触发。
+						718 switch Description: 为当前角色授权 terraform-deploy-pitfalls, Value: 0
+						719 text terraform-deploy-pitfalls
+						720 text 当前角色未选择
+						721 text Operational traps for Terraform provisioners, multi-environment isolation, and zero-to-deployment reliability. Covers provisioner timing races, SSH connection conflicts, DNS record duplication, volume permissions, database bootstrap gaps, snapshot cross-contamination, Cloudflare credential format errors, hardcoded domains in Caddyfiles/compose, and init-data-only-on-first-boot pitfalls. Activate when writing null_resource provisioners, creating multi-environment Terraform setups, debugging containers that are Restarting/unhealthy after terraform apply, setting up fresh instances with cloud-init, or any IaC code that SSHs into remote hosts. Also activate when the user mentions terraform plan/apply errors, provisioner failures, infrastructure drift, TLS certificate errors, or Caddy/gateway configuration.
+						722 switch Description: 为当前角色授权 test-driven-dev, Value: 0
+						723 text test-driven-dev
+						724 text 当前角色未选择
+						725 text Test-driven development with red-green-refactor loop. Use when user wants to build features or fix bugs using TDD, mentions "red-green-refactor", wants integration tests, or asks for test-first development.
+						726 switch Description: 为当前角色授权 tournament, Value: 0
+						727 text tournament
+						728 text 当前角色未选择
+						729 text Attempt the SAME goal N independent times, each in its OWN isolated git worktree (no collisions), then have an independent panel VOTE on which result is best — best-of-N with a judge. Builds on octopus's worktree isolation (the candidates) plus call_agent_vote (the judge); selection is deterministic code. NEVER auto-applies: the winning diff and durable patch reference are returned for review and an explicit application decision. Each candidate starts from the approved project's working files, including uncommitted changes. Use it when one attempt is unreliable and the solution space is wide, so divergent tries help: 'implement X — try a few approaches and keep the best', 'refactor this several ways and pick the cleanest'. Costly (N full coding sub-agents + voters) — reserve it for genuinely high-value or ambiguous work. Args: {goal: string (what each candidate should accomplish), n?: int 2-5 candidates (default 3), agent_id?: worker role (default worktree_writer), judge_n?: int 2-5 voters (default 3), repo_root?: path (must match the host-approved project), input_files?: list[str], output_files?: list[str], max_workers?: int (default 4), timeout_s?: int (per child; the parent deadline still applies)}. Returns: {ok, goal, decided_by (judge|only_candidate|judge_abstained|none), candidate_count, viable_count, winner:{id, files, diff, worktree}, candidates:[{id, ok, viable, files, error, worktree?}], selection_id, spawns_used, retry_allowed:false, note}. Failed candidates retain their patch or retained_workspace coordinates. Producers and read-only judges share the spawn budget, deadline and cancellation. Do not automatically repeat a tournament after a partial or interrupted run.
+						730 switch Description: 为当前角色授权 typescript-best-practices, Value: 0
+						731 text typescript-best-practices
+						732 text 当前角色未选择
+						733 text TypeScript 最佳实践技能，包含类型安全、泛型、类型推断、严格模式配置。在编写 TypeScript 代码或类型定义时调用。
+						734 switch Description: 为当前角色授权 ui-blueprint, Value: 0
+						735 text ui-blueprint
+						736 text 当前角色未选择
+						737 text 从参考 UI 截图或设计稿中提取完整的设计系统，生成包含配色、字体、组件和间距规范的设计文档，并最终产出可直接用于实现、风格一致的 MVP 界面提示词。当用户提供 UI 截图并希望提取设计规范、构建设计系统文档、或需要基于参考风格创建新界面时触发。
+						738 switch Description: 为当前角色授权 verdict_repair, Value: 0
+						739 text verdict_repair
+						740 text 当前角色未选择
+						741 text Run a task through a CLOSED quality loop in one call: a worker produces a result, an independent panel VOTES pass/fail on it, and a rejection drives a corrected re-attempt that is FED the reviewers' critique — produce → judge → rewrite → re-judge, bounded. The loop (stop-on-pass, bound, feeding the critique forward) is deterministic code, not the model, so a FAIL actually triggers a fix instead of just shipping. Use it when correctness matters more than speed and a single attempt isn't trustworthy: 'write this function AND make sure it's right', 'draft the migration and have it reviewed until it passes', 'answer this, but verify before returning'. Args: {task: string (what to accomplish), agent_id?: worker role (default general), judge_n?: int 2-5 voters on the gate (default 3), max_repairs?: int 0-4 corrective re-attempts (default 2), choices?: [accept,reject]-style ballot where the FIRST label means accept (default [pass,fail])}. Returns: {ok, task, passed (bool — did it clear the gate), repaired (bool — only reached pass AFTER a repair), output (the accepted/best result), attempts, verdict, confidence, rounds:[{attempt, passed, verdict, critique}], max_spawns}. Budget: one call costs ONE against the 5/turn delegation cap; its internal produce/judge fan-outs draw from a bounded spawn budget.
+						742 switch Description: 为当前角色授权 vibecoding-general-swarm, Value: 0
+						743 text vibecoding-general-swarm
+						744 text 当前角色未选择
+						745 text General-purpose coding orchestration. MANDATORY for ANY coding task not covered by vibecoding-webapp-swarm. Skip ONLY if the task matches vibecoding-webapp-swarm or is entirely non-coding.
+						746 switch Description: 为当前角色授权 vibecoding-webapp-swarm, Value: 0
+						747 text vibecoding-webapp-swarm
+						748 text 当前角色未选择
+						749 text Build any web-based project: websites, landing pages, web apps, dashboards, browser games, portfolios, and interactive experiences. Design-first React workflow. Skip if the user explicitly requests a non-React framework (Vue, Svelte, Angular, vanilla HTML) or the task is unrelated to web UI (CLI tools, scripts, data pipelines).
+						750 switch Description: 为当前角色授权 web-security-audit, Value: 0
+						751 text web-security-audit
+						752 text 当前角色未选择
+						753 text 基于 OWASP Top 10 (2021) 标准提供代码安全审查，逐项检查 SQL 注入、XSS、SSRF、访问控制、加密失败等常见漏洞，并给出具体的漏洞代码示例与修复方案。当用户需要代码安全审查、安全加固、渗透测试辅助，或提及 OWASP、安全检查、SQL 注入、XSS、代码审计、安全清单等关键词时触发此技能。
+						754 switch Description: 为当前角色授权 webapp-building, Value: 0
+						755 text webapp-building
+						756 text 当前角色未选择
+						757 text Tools for building modern React webapps with TypeScript, Tailwind CSS and shadcn/ui. Best suited for applications with complex UI components and state management. Supports optional templates for specialized requirement.
+						758 switch Description: 为当前角色授权 whale_eye.read, Value: 0
+						759 text whale_eye.read
+						760 text 当前角色未选择
+						761 text 读图并输出中文判读。把一张截图(本地图片路径 image,或 url 由本工具截图)交给 agnes 视觉模型做 UI 视觉回归:检查布局溢出/重叠/错位、文案截断、对比度/样式问题、加载态等。返回中文判读文本,agent 据此判断页面渲染是否正常。纯文本模型用它'看'图。
+						762 switch Description: 为当前角色授权 whatsapp-integration, Value: 0
+						763 text whatsapp-integration
+						764 text 当前角色未选择
+						765 text WhatsApp integration for sending messages, managing contacts, and interacting with chats and groups. Use when the user wants to send a WhatsApp message, check a contact, read a chat, or perform any other action related to WhatsApp data.
+				766 button (disabled) 重置
+				767 button (disabled) 保存并热重载
+			768 button 关闭
+
+The focused UI element is 12 tab (selected, settable, boolean) Skill 白名单, Value: 1, ID: radix-_r_ms_-trigger-skills

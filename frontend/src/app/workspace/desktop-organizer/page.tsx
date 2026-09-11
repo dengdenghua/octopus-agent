@@ -106,7 +106,11 @@ export default function DesktopOrganizerPage() {
                     ? t.desktopOrganizerPage.enabledOn
                     : t.desktopOrganizerPage.enabledOff}
                 </span>
-                <Switch checked={enabled} onCheckedChange={updateEnabled} />
+                <Switch
+                  aria-label={t.desktopOrganizerPage.title}
+                  checked={enabled}
+                  onCheckedChange={updateEnabled}
+                />
               </div>
             </div>
 
@@ -177,7 +181,9 @@ export default function DesktopOrganizerPage() {
             <div className="flex flex-wrap gap-3">
               {enabled ? (
                 <Button asChild>
-                  <Link to="/desktop">{t.desktopOrganizerPage.openAssistant}</Link>
+                  <Link to="/desktop">
+                    {t.desktopOrganizerPage.openAssistant}
+                  </Link>
                 </Button>
               ) : (
                 <Button disabled>{t.desktopOrganizerPage.openAssistant}</Button>

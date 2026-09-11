@@ -1,0 +1,11 @@
+Browser tab: 4, Title: "订阅 - Echo", URL: "http://localhost:3310/#/workspace/intelligence?surface=chat".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+~								50 tab (selectable, settable, boolean) 执行历史, Value: 0, ID: radix-_r_0_-trigger-history
+~								52 tab (selected, settable, boolean) 面板, Value: 1, ID: radix-_r_0_-trigger-panels
+~							91 container Description: 面板, ID: radix-_r_0_-content-panels
++								92 container
++									93 heading 运行诊断, Value: 3
++										94 text 运行诊断
++									95 text 运行诊断 查看当前部署的运行状态、服务连接与诊断记录。
++									96 link Description: 打开运行诊断, Value: localhost:3310/workspace/observability
+The focused UI element is 52 tab (selected, settable, boolean) 面板, Value: 1, ID: radix-_r_0_-trigger-panels

@@ -1,3 +1,4 @@
+import { ImageWithFallback } from "@/components/ui/image-with-fallback";
 import {
   Component,
   useCallback,
@@ -89,9 +90,9 @@ function useColumnCount(minWidth = MIN_COLUMN_WIDTH) {
   return { ref, count };
 }
 
-/** 估算卡片高度（封面 3:4 竖图 + 信息区，供瀑布流排序）。 */
+/** 估算卡片高度（限高的 16:10 封面 + 信息区，供瀑布流排序）。 */
 function estimateHeight(colW: number): number {
-  return colW * (4 / 3) + INFO_EXTRA_HEIGHT;
+  return Math.min(colW * (10 / 16), 288) + INFO_EXTRA_HEIGHT;
 }
 
 /**
@@ -208,7 +209,7 @@ export function CommunityFeed({
   }, [onLoadMore, hasMore, posts.length]);
 
   const columns = useMemo(() => {
-    // 封面为 3:4 竖图，列高按实际列宽估算，保证瀑布流各列均衡。
+    // 按封面实际宽高比和高度上限估算，保证瀑布流各列均衡。
     const colW = ref.current?.clientWidth
       ? ref.current.clientWidth / count
       : MIN_COLUMN_WIDTH;
@@ -249,13 +250,20 @@ export function CommunityFeed({
 
   if (error && posts.length === 0) {
     return (
-      <div role="alert" className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-destructive/30 bg-destructive/5 px-6 text-center">
+      <div
+        role="alert"
+        className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-destructive/30 bg-destructive/5 px-6 text-center"
+      >
         <MessageCircleIcon className="size-6 text-destructive/70" />
         <div>
           <p className="text-sm font-medium">社区内容加载失败</p>
           <p className="mt-1 text-xs text-muted-foreground">{error}</p>
         </div>
-        {onRetry && <Button size="sm" variant="outline" onClick={onRetry}>重试</Button>}
+        {onRetry && (
+          <Button size="sm" variant="outline" onClick={onRetry}>
+            重试
+          </Button>
+        )}
       </div>
     );
   }
@@ -407,7 +415,7 @@ function ImageLightbox({
           </button>
         </>
       )}
-      <img
+      <ImageWithFallback
         key={images[index]}
         src={images[index]}
         alt="查看大图"
@@ -514,15 +522,18 @@ export function CommunityPostCard({
         className,
       )}
     >
-      {/* 封面（小红书式 3:4 竖图） */}
+      {/* 封面保持紧凑比例，优先露出标题与摘要。 */}
       <div
-        className="relative aspect-[3/4] w-full overflow-hidden"
+        className={cn(
+          "relative w-full overflow-hidden",
+          hasImageCover ? "aspect-[16/10] max-h-72" : "h-28",
+        )}
         style={{
           background: `linear-gradient(135deg, ${post.coverGradient.join(", ")})`,
         }}
       >
         {hasImageCover && (
-          <img
+          <ImageWithFallback
             src={post.coverUrl}
             alt={post.title}
             loading="lazy"

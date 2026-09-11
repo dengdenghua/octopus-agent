@@ -516,7 +516,7 @@ export function RuntimeSelfCheckPanel({ baseUrl }: RuntimeSelfCheckPanelProps) {
                             ? t.runtimeSelfCheckPanel.passed
                             : t.runtimeSelfCheckPanel.failed}
                         </Badge>
-                        {check.severity && (
+                        {!check.passed && check.severity && (
                           <Badge variant="outline">{check.severity}</Badge>
                         )}
                         <code className="text-sm font-semibold">
@@ -646,11 +646,7 @@ function SurfaceRow({
         <div className="flex max-w-[22rem] flex-wrap gap-1">
           {enabledCapabilities.length > 0 ? (
             enabledCapabilities.map(([name]) => (
-              <Badge
-                key={name}
-                variant="outline"
-                className="font-mono text-xs"
-              >
+              <Badge key={name} variant="outline" className="font-mono text-xs">
                 {name}
               </Badge>
             ))

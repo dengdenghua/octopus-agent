@@ -908,6 +908,19 @@ function turnToMessages(turn: Turn): Message[] {
   appendInterruptedTurnReceipt(out, turn);
   appendFailedTurnReceipt(out, turn);
   attachGroundingToNarrativeAnchor(out, turn.grounding);
+  // A tool-only AI record can anchor the grouped assistant header. Carry
+  // the same observed engine there as on the final prose and error receipt.
+  if (turn.execution) {
+    for (const message of out) {
+      if (message.type === "ai") {
+        message.additional_kwargs = {
+          ...message.additional_kwargs,
+          execution_engine: turn.execution.engine,
+          execution: turn.execution,
+        };
+      }
+    }
+  }
   return out;
 }
 

@@ -1,0 +1,105 @@
+- button "返回桌面":
+- button "切换全屏":
+- tablist "Workspace surface":
+  - tab "Echo" [selected]:
+    - generic: Echo
+  - tab "AI 浏览器":
+- button "收起侧栏 (Ctrl/⌘+B)" [expanded]:
+- button "新建任务":
+  - generic: 新建任务
+- list:
+  - link "HUB":
+    - /url: "#/workspace/agents?surface=chat"
+    - generic: HUB
+  - link "助手":
+    - /url: "#/workspace/realtime/octopus-assistant?agent=octopus"
+    - generic: 助手
+  - link "设计画布":
+    - /url: "#/workspace/design"
+    - generic: 设计画布
+- list
+- list:
+  - button "展开本地数据库":
+    - generic: 本地数据库
+- list:
+  - button "编辑侧栏":
+- button "收起项目" [expanded]:
+  - generic: 项目
+- button "选择项目空间":
+- button "echo agent 1":
+  - generic: echo agent
+  - generic: "1"
+- button "更多：echo agent":
+- button "收起对话" [expanded]:
+  - generic: 对话
+- button "对话 · 新建任务":
+- button "Kane":
+  - generic: Kane
+- button "设置":
+- main:
+  - heading "SpinalCord 反射" [level=1]
+  - paragraph: 反射规则监控 · 命中率/趋势/A-B 变体/覆盖率 · 实时刷新（2 秒）
+  - link "编辑规则":
+    - /url: "#/workspace/reflex/edit"
+    - text: 编辑规则
+  - button "重新加载":
+    - text: 重新加载
+  - button "重新加载 + 重置"
+  - alert:
+    - generic: 反射数据暂时无法加载。
+    - button "重试"
+  - text: 尝试
+  - generic: —
+  - text: 命中
+  - generic: —
+  - text: 命中率
+  - generic: —
+  - text: 规则
+  - generic: —
+  - text: 过期（24 小时）
+  - generic: —
+  - text: 上小时命中
+  - generic: —
+  - generic: 反射命中 · 最近 60 分钟 · 粒度 1 分钟
+  - generic: 反射趋势暂时无法加载。
+  - text: RecipeForge · 提示词进化
+  - generic: 第 7 条反射路径
+  - generic: 当前已应用的附录
+  - generic: 状态不可用
+  - alert:
+    - generic: 附录状态暂时无法加载；现有设置没有改变。
+    - button "重试"
+  - generic: 迭代次数
+  - spinbutton "迭代次数": "8"
+  - generic: 评估任务 / 次迭代
+  - spinbutton "评估任务 / 次迭代": "4"
+  - generic: Optimizer
+  - combobox "Optimizer":
+    - option "native_gepa" [selected]
+    - option "dspy_gepa"
+    - option "external_gepa"
+  - button "为失败的配方自动提案":
+    - text: 为失败的配方自动提案
+  - button "运行 Forge":
+    - text: 运行 Forge
+  - text: Canary / 回滚
+  - button "刷新"
+  - alert: Canary 状态暂时无法加载；现有数据没有改变。
+  - generic: 活跃 — · 已回滚 — · 总计 —
+  - generic: Canary 状态暂时无法加载；现有数据没有改变。
+  - generic: 规则
+  - table:
+    - rowgroup:
+      - row "规则 类型 模式 / 类型 优先级 尝试 命中 比率 最后":
+        - columnheader "规则"
+        - columnheader "类型"
+        - columnheader "模式 / 类型"
+        - columnheader "优先级"
+        - columnheader "尝试"
+        - columnheader "命中"
+        - columnheader "比率"
+        - columnheader "最后"
+    - rowgroup:
+      - row "规则数据暂时无法加载。":
+        - cell "规则数据暂时无法加载。"
+- region "Notifications alt+T"

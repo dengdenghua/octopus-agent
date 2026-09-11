@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   listCloudStoreExperts: vi.fn(),
   listCloudStoreCategories: vi.fn(),
   installCloudExpert: vi.fn(),
+  deleteAgent: vi.fn(),
+  listAgents: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
@@ -18,6 +20,8 @@ vi.mock("@/core/agents/agent-world-api", () => ({
   listCloudStoreCategories: mocks.listCloudStoreCategories,
   installCloudExpert: mocks.installCloudExpert,
 }));
+
+vi.mock("@/core/agents/api", () => ({ deleteAgent: mocks.deleteAgent, listAgents: mocks.listAgents }));
 
 vi.mock("sonner", () => ({
   toast: mocks.toast,
@@ -45,7 +49,7 @@ const experts = Array.from({ length: 70 }, (_, i) => ({
 /** 卡片标题元素 = [data-slot="card-title"] 文本恰为「专家 N」。 */
 function cardTitles(): HTMLElement[] {
   return Array.from(
-    document.querySelectorAll('[data-slot="card-title"]'),
+    document.querySelectorAll('[data-slot="card"] button[aria-label] > span:first-child'),
   ).filter((el) =>
     /^专家 \d+$/.test((el.textContent || "").trim()),
   ) as HTMLElement[];
@@ -153,18 +157,23 @@ describe("WorkBuddyCloudStorePanel", () => {
     ).getAllByRole("button");
     expect(
       categoryButtons.slice(0, 2).map((button) => button.textContent),
-    ).toEqual(["全部", "专家团"]);
+    ).toEqual(["全部", "已添加"]);
     const teamFilter = screen.getByRole("button", { name: "专家团" });
     expect(teamFilter).toHaveAttribute("aria-pressed", "false");
 
+    await user.click(screen.getByRole("button", { name: "已添加", exact: true }));
+    expect(screen.getByRole("button", { name: "已添加", exact: true })).toHaveAttribute("aria-pressed", "true");
     await user.click(teamFilter);
     await waitFor(() => expect(cardTitles()).toHaveLength(7));
     expect(screen.queryByText("专家 1")).not.toBeInTheDocument();
     expect(teamFilter).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "已添加", exact: true })).toHaveAttribute("aria-pressed", "false");
 
+    await user.click(screen.getByRole("button", { name: "已添加", exact: true }));
     await user.click(screen.getByRole("button", { name: "研究" }));
     await screen.findByText("专家 1");
     expect(teamFilter).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "已添加", exact: true })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("点击卡片打开详情弹窗,展示 quick_prompts 与安装入口", async () => {
@@ -178,62 +187,41 @@ describe("WorkBuddyCloudStorePanel", () => {
     expect(screen.getByText("开场提问 5")).toBeInTheDocument();
     expect(screen.getByText(/第 5 位专家的简介/)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /安装此专家/ }),
+      screen.getByRole("button", { name: /添加到我的智能体/ }),
     ).toBeInTheDocument();
   });
 
-  it("已安装专家显示「已安装」且按钮禁用", async () => {
+  it("已添加专家提供可用的管理入口", async () => {
     renderWithProviders(<WorkBuddyCloudStorePanel />, { locale: "zh-CN" });
 
     await screen.findByText("专家 0");
 
-    // expert-0 / expert-1 已安装 → 卡片内按钮为「已安装」且 disabled
-    const installedButtons = screen
-      .getAllByRole("button", { name: /^已安装$/ })
-      .filter((b) => (b as HTMLButtonElement).disabled);
-    expect(installedButtons.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole("button", { name: "管理专家 0" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "管理专家 1" })).toBeEnabled();
   });
 
-  it("安装走确认流:显示分步进度,成功后 toast 成功提示", async () => {
-    const user = userEvent.setup();
-    const onInstalled = vi.fn();
-    // 用可控 promise 模拟真实下载耗时,让进度弹窗可被断言
-    let resolveInstall!: (v: unknown) => void;
-    mocks.installCloudExpert.mockReturnValue(
-      new Promise((res) => {
-        resolveInstall = res;
-      }),
-    );
-    renderWithProviders(
-      <WorkBuddyCloudStorePanel onInstalled={onInstalled} />,
-      {
-        locale: "zh-CN",
-      },
-    );
-
+  it("routes template creation to the unified page without importing immediately", async () => {
+    renderWithProviders(<WorkBuddyCloudStorePanel />, { locale: "zh-CN" });
     await screen.findByText("专家 3");
-
-    // 卡片内「安装」按钮(专家 3 未安装)
-    const card = cardOf("专家 3");
-    const installBtn = within(card).getByRole("button", { name: /^安装$/ });
-    await user.click(installBtn);
-
-    // 分步进度弹窗
-    expect(await screen.findByText(/下载 bundle/)).toBeInTheDocument();
-    expect(screen.getByText(/解压校验/)).toBeInTheDocument();
-    expect(screen.getByText(/导入为本地 Agent/)).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(mocks.installCloudExpert).toHaveBeenCalledWith("wb_expert-3");
-    });
-
-    // 完成安装 → toast 成功提示
-    resolveInstall({ installed: true, agent_id: "wb_expert-3" });
-    await waitFor(() => {
-      expect(mocks.toast.success).toHaveBeenCalledWith(
-        "专家「专家 3」安装成功",
-      );
-    });
-    expect(onInstalled).toHaveBeenCalledWith(experts[3]);
+    await userEvent.click(within(cardOf("专家 3")).getByRole("button", { name: /^添加$/ }));
+    expect(window.location.hash).toBe("#/workspace/agents/new?cloudExpert=wb_expert-3");
+    expect(mocks.installCloudExpert).not.toHaveBeenCalled();
   });
+
+ it("卸载已安装专家后详情恢复安装入口", async () => {
+   mocks.listAgents.mockResolvedValue([{ name: "expert_1" }]);
+   mocks.deleteAgent.mockResolvedValue(undefined);
+   const user = userEvent.setup();
+   renderWithProviders(<WorkBuddyCloudStorePanel />, { locale: "zh-CN" });
+   await screen.findByText("专家 1");
+   await user.click(cardOf("专家 1"));
+   await user.click(screen.getByRole("button", { name: "更多智能体操作" }));
+   await user.click(screen.getByRole("menuitem", { name: "移除智能体" }));
+   expect(mocks.deleteAgent).not.toHaveBeenCalled();
+   const confirmation = screen.getByRole("dialog", { name: "移除“专家 1”？" });
+   await user.click(within(confirmation).getByRole("button", { name: "移除智能体", exact: true }));
+   await waitFor(() => expect(mocks.deleteAgent).toHaveBeenCalledWith("expert_1"));
+   expect(await screen.findByRole("button", { name: /添加到我的智能体/ })).toBeInTheDocument();
+ });
+
 });

@@ -299,6 +299,21 @@ class AuthOrchestrator:
         if conn.auth_mode == "none":
             return {"connected": True, "next_action": "connected", "message": "该连接器无需认证。"}
 
+        if conn.id == "opencode-zen" and not tokens and self._credentials.get_secret(conn.id, "api_key"):
+            return {"connected": True, "next_action": "connected", "message": "已复用保存的 OpenCode Key。"}
+
+        if conn.id == "opencode-go":
+            shared_key = (tokens or {}).get("api_key") or (tokens or {}).get("access_token")
+            if not shared_key and not self._credentials.get_secret("opencode-zen", "api_key"):
+                shared_key = self._credentials.get_secret(conn.id, "api_key")
+            if shared_key:
+                self._credentials.set_secret("opencode-zen", "api_key", shared_key)
+            if shared_key or self._credentials.get_secret("opencode-zen", "api_key"):
+                self._credentials.begin_auth_generation(conn.id, {"shared_api_key": "opencode-zen"})
+                self._credentials.delete_secret(conn.id, "api_key")
+                self._credentials.delete_secret(conn.id, "access_token")
+                return {"connected": True, "next_action": "connected", "message": "已复用 OpenCode Key，Go 与 Zen 共用凭据。"}
+
         if tokens:
             flow_key = self._device_flow_key(conn.id)
             guard = _device_flow_guard(flow_key)

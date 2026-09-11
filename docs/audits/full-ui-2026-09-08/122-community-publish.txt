@@ -1,0 +1,20 @@
+Browser tab: 4, Title: "发现社区 - Echo", URL: "http://localhost:3310/#/workspace/community".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 174-175, 177-189
+~							173 container
++								174 text 发布灵感
++								175 button 关闭
++								176 text field (settable)
++								177 text entry area (settable)
++								178 text field (settable)
++								179 text 选择分类
++								180 button 职场
++								181 button 效率
++								182 button 生活
++								183 button 学习
++								184 button 购物
++								185 button 科技
++								186 button 游戏
++								187 text 0 /60
++								188 button (disabled) 发布
+The focused UI element is 50 button 发布

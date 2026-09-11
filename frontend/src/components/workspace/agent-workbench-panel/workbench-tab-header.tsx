@@ -1,4 +1,5 @@
-import { memo } from "react";
+import { memo, useContext, type CSSProperties } from "react";
+import { WorkbenchHeaderSlot } from "../workbench-header-slot";
 
 import { CheckIcon, LayoutGridIcon, XIcon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -15,6 +16,7 @@ import {
 import { MainComputerStatusButton } from "./main-computer-status-button";
 import type { AgentRunState } from "../agent-run-status";
 import { Tooltip } from "../tooltip";
+import { useElectronTitleBar } from "@/components/electron-title-bar";
 
 export type WorkbenchTab = {
   id: AgentWorkbenchTabId;
@@ -54,9 +56,30 @@ function WorkbenchTabHeaderImpl({
   mainRunStatusLabel?: string;
 }) {
   const { t } = useI18n();
+  const setHeaderSlot = useContext(WorkbenchHeaderSlot);
+  const { controlsSide } = useElectronTitleBar();
   return (
-    <header className="relative shrink-0 border-b border-border-default px-2.5 py-1.5">
-      <div className="flex items-center gap-2.5">
+    <header
+      data-slot="workbench-tab-header"
+      className="relative shrink-0 border-b border-border-default px-2.5 py-1.5"
+      style={
+        {
+          paddingRight:
+            controlsSide === "right"
+              ? "calc(var(--window-controls-safe-inset, 138px) + 0.625rem)"
+              : undefined,
+          WebkitAppRegion: controlsSide === "right" ? "drag" : undefined,
+        } as CSSProperties
+      }
+    >
+      <div
+        className="flex items-center gap-2.5"
+        style={
+          controlsSide === "right"
+            ? ({ WebkitAppRegion: "no-drag" } as CSSProperties)
+            : undefined
+        }
+      >
         <MainComputerStatusButton
           active={mainButton.active}
           label={mainButton.label}
@@ -95,10 +118,10 @@ function WorkbenchTabHeaderImpl({
               <div
                 key={id}
                 className={cn(
-                  "group inline-flex h-8 max-w-[11rem] shrink-0 items-center rounded-lg border border-transparent text-sm font-medium shadow-none transition-colors",
+                  "group inline-flex h-8 max-w-[11rem] shrink-0 items-center border-b-2 border-transparent text-sm font-medium transition-colors",
                   active
-                    ? "border-border-subtle bg-background text-foreground"
-                    : "text-muted-foreground hover:border-border-subtle hover:bg-background/45 hover:text-foreground",
+                    ? "border-foreground/75 text-foreground"
+                    : "text-muted-foreground hover:bg-muted/35 hover:text-foreground",
                 )}
               >
                 <button
@@ -159,6 +182,9 @@ function WorkbenchTabHeaderImpl({
             })}
           </DropdownMenuContent>
         </DropdownMenu>
+        {setHeaderSlot && (
+          <div ref={setHeaderSlot} className="flex shrink-0 items-center" />
+        )}
         {onClose ? (
           <Tooltip content={t.collab.workbench.closeTitle}>
             <button

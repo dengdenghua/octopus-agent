@@ -15,6 +15,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from runtime.execution.model_services import native_model_services
 from runtime.platform import feature_flags
 from runtime.platform.process.paths import app_paths
 
@@ -128,31 +129,16 @@ def wire_stack(
         # composes a system prompt from role persona + caller
         # conversation + caller memory and runs one LLM turn.
         try:
-            if getattr(stack, "is_llm_planner", False):
-                router = getattr(stack.planner, "router", None)
-                default_model = getattr(stack.planner, "planner_model", None)
-                if router is not None:
-                    from runtime.execution.suckers.ephemeral_agents import (
-                        set_ephemeral_role_runner,
-                    )
-                    from runtime.execution.suckers.ephemeral_runner import (
-                        make_llm_ephemeral_runner,
-                    )
+            from runtime.execution.ephemeral_roles import make_host_ephemeral_runner
+            from runtime.execution.suckers.ephemeral_agents import set_ephemeral_role_runner
 
-                    # Pass `registry` so ephemeral sub-agents get a
-                    # mini agentic tool loop (web_search / bb_write /
-                    # read_file etc.) instead of being single-shot
-                    # opinion boxes. Required for the parallel-swarm
-                    # pattern to actually work — siblings need
-                    # `bb_write` to drop findings on the shared
-                    # blackboard for lead to synthesize.
-                    set_ephemeral_role_runner(
-                        make_llm_ephemeral_runner(
-                            router,
-                            registry=stack.executor.registry,
-                            default_model=default_model,
-                        ),
-                    )
+            set_ephemeral_role_runner(make_host_ephemeral_runner(stack))
+            if getattr(stack, "is_llm_planner", False):
+                router, default_model = native_model_services(stack)
+                if router is not None:
+                    from runtime.execution.auxiliary_models import AuxiliaryModelRouter
+
+                    auxiliary_router = AuxiliaryModelRouter(stack, router)
                     # Wire the same router into the deep evolution
                     # module so `deep_reflect` and `deep_evolve`
                     # skills can fire LLM judgments. Same router
@@ -164,7 +150,7 @@ def wire_stack(
                         )
 
                         set_evolve_router(
-                            router,
+                            auxiliary_router,
                             default_model=default_model,
                         )
                     except (
@@ -203,7 +189,7 @@ def wire_stack(
                         )
 
                         set_skill_router(
-                            router,
+                            auxiliary_router,
                             default_model=default_model,
                         )
                     except (

@@ -1508,7 +1508,7 @@ describe("useThreadStreamRealtime permissions", () => {
     expect(onStart).not.toHaveBeenCalledWith("new");
   });
 
-  it.each(["auto", "octopus", "codex"] as const)(
+  it.each(["auto", "octopus", "codex", "opencode"] as const)(
     "sends %s engine preference without changing sandbox permissions",
     async (executionEngine) => {
       const startTurn = mockRealtime();

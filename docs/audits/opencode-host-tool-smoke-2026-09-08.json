@@ -1,0 +1,54 @@
+{
+  "model": "big-pickle",
+  "account_key_supplied": false,
+  "tool_ceiling": [
+    "read_file"
+  ],
+  "events": [
+    {
+      "type": "tool_start",
+      "tool_name": "read_file",
+      "tool_call_id": "call_9329a2d34a70485b82113b2e",
+      "input_preview": {
+        "path": "verification.txt"
+      }
+    },
+    {
+      "type": "tool_end",
+      "tool_name": "read_file",
+      "tool_call_id": "call_9329a2d34a70485b82113b2e",
+      "success": true,
+      "status": "success",
+      "output_preview": "{\"path\": \"D:\\\\echo agent\\\\.codex-run\\\\host-tool-smoke-eagwa06u\\\\workspace\\\\verification.txt\", \"size\": 22, \"truncated\": false, \"content\": \"ECHO_READ_718cfcdd3c03\"}"
+    },
+    {
+      "type": "text_delta",
+      "delta": "ECHO_READ_718cfcdd3c03",
+      "start_new_segment": false
+    },
+    {
+      "type": "react_completed",
+      "success": true,
+      "terminated_reason": "completed",
+      "completion_receipt": {
+        "engine": "opencode",
+        "model": "big-pickle",
+        "cost": 0,
+        "tokens": {
+          "total": 2955,
+          "input": 165,
+          "output": 38,
+          "reasoning": 0,
+          "cache": {
+            "write": 0,
+            "read": 2752
+          }
+        }
+      }
+    }
+  ],
+  "content_verified": true,
+  "file_unchanged": true,
+  "read_tool_succeeded": true,
+  "seconds": 16.857
+}

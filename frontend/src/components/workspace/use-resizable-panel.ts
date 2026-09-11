@@ -74,6 +74,9 @@ export interface UseResizablePanelOptions {
   clamp: (px: number) => number;
   /** Fallback px used when no stored width and the CSS default is unparseable. */
   fallbackPx: number;
+  /** Return true to handle a drag as a layout transition and retain its prior width. */
+  onDragMove?: (unclampedWidth: number) => void;
+  onDragEnd?: (unclampedWidth: number) => boolean;
 }
 
 export interface ResizablePanelController {
@@ -99,6 +102,8 @@ export function useResizablePanel({
   viewportWidth,
   clamp,
   fallbackPx,
+  onDragEnd,
+  onDragMove,
 }: UseResizablePanelOptions): ResizablePanelController {
   // Lazy init from localStorage so a previously-dragged width persists
   // across reloads / remounts (SSR-safe — returns null on the server).
@@ -113,6 +118,12 @@ export function useResizablePanel({
   // them through a ref so they clamp against the current viewport state.
   const clampRef = useRef(clamp);
   clampRef.current = clamp;
+  const onDragMoveRef = useRef(onDragMove);
+  onDragMoveRef.current = onDragMove;
+  const onDragEndRef = useRef(onDragEnd);
+  onDragEndRef.current = onDragEnd;
+  const customWidthRef = useRef(customWidth);
+  customWidthRef.current = customWidth;
 
   // Resize drag handling. ``latest`` mirrors the most recent width in a ref
   // (the document-level mouseup listener captures a stale closure, so it
@@ -121,10 +132,15 @@ export function useResizablePanel({
     startX: number;
     startWidth: number;
     latest: number;
+    rawWidth: number;
+    priorWidth: number | null;
+    priorCursor: string;
+    priorUserSelect: string;
     raf: number | null;
   } | null>(null);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0 || resizeRef.current) return;
     e.preventDefault();
     const aside = (e.target as HTMLElement).parentElement;
     if (!aside) return;
@@ -133,6 +149,10 @@ export function useResizablePanel({
       startX: e.clientX,
       startWidth: rect.width,
       latest: rect.width,
+      rawWidth: rect.width,
+      priorWidth: customWidthRef.current,
+      priorCursor: document.body.style.cursor,
+      priorUserSelect: document.body.style.userSelect,
       raf: null,
     };
     document.body.style.cursor = "col-resize";
@@ -144,7 +164,9 @@ export function useResizablePanel({
       if (!resizeRef.current) return;
       // Right-docked panel with a left-edge handle: dragging left widens.
       const delta = resizeRef.current.startX - e.clientX;
-      const newWidth = clampRef.current(resizeRef.current.startWidth + delta);
+      resizeRef.current.rawWidth = resizeRef.current.startWidth + delta;
+      onDragMoveRef.current?.(resizeRef.current.rawWidth);
+      const newWidth = clampRef.current(resizeRef.current.rawWidth);
       resizeRef.current.latest = newWidth;
       // Throttle React state updates to animation frames to avoid
       // triggering reconciliation on every mousemove event.
@@ -166,18 +188,48 @@ export function useResizablePanel({
         }
         // Persist only at drag-end (not per mousemove) to avoid thrashing
         // localStorage.
-        writeStoredWidth(storageKey, resizeRef.current.latest);
+        if (onDragEndRef.current?.(resizeRef.current.rawWidth)) {
+          setCustomWidth(resizeRef.current.priorWidth);
+        } else {
+          writeStoredWidth(storageKey, resizeRef.current.latest);
+        }
+        document.body.style.cursor = resizeRef.current.priorCursor;
+        document.body.style.userSelect = resizeRef.current.priorUserSelect;
         resizeRef.current = null;
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
       }
+    };
+
+    const cancelDrag = () => {
+      const drag = resizeRef.current;
+      if (!drag) return;
+      if (drag.raf) cancelAnimationFrame(drag.raf);
+      setCustomWidth(drag.priorWidth);
+      onDragMoveRef.current?.(drag.startWidth);
+      document.body.style.cursor = drag.priorCursor;
+      document.body.style.userSelect = drag.priorUserSelect;
+      resizeRef.current = null;
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !resizeRef.current) return;
+      event.preventDefault();
+      cancelDrag();
     };
 
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
+    document.addEventListener("keydown", handleEscape);
+    window.addEventListener("blur", cancelDrag);
     return () => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("blur", cancelDrag);
+      if (resizeRef.current) {
+        if (resizeRef.current.raf) cancelAnimationFrame(resizeRef.current.raf);
+        document.body.style.cursor = resizeRef.current.priorCursor;
+        document.body.style.userSelect = resizeRef.current.priorUserSelect;
+        resizeRef.current = null;
+      }
     };
   }, [storageKey]);
 

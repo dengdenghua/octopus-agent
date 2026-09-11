@@ -67,9 +67,7 @@ export default function CommunityPage() {
   // 个人主页 / 订阅：页面级状态
   const [activePost, setActivePost] = useState<CommunityPost | null>(null);
   const [favorites, setFavorites] = useState<string[]>(() => readFavorites());
-  const [following, setFollowing] = useState<string[]>(() =>
-    readFollowing(),
-  );
+  const [following, setFollowing] = useState<string[]>(() => readFollowing());
   const [subTopics, setSubTopics] = useState<string[]>(() =>
     readSubscribedTopics(),
   );
@@ -82,10 +80,9 @@ export default function CommunityPage() {
       setViewMode(mode);
       setQuery("");
       setActivePost(null);
-      setSearchParams(
-        mode === "market" ? { view: "market" } : {},
-        { replace: true },
-      );
+      setSearchParams(mode === "market" ? { view: "market" } : {}, {
+        replace: true,
+      });
     },
     [setSearchParams],
   );
@@ -149,7 +146,8 @@ export default function CommunityPage() {
         setHasMore(res.hasMore);
       })
       .catch((error) => {
-        if (!cancelled) setLoadError(error instanceof Error ? error.message : "内容加载失败");
+        if (!cancelled)
+          setLoadError(error instanceof Error ? error.message : "内容加载失败");
       })
       .finally(() => {
         window.clearTimeout(timeout);
@@ -219,16 +217,11 @@ export default function CommunityPage() {
     setSubAuthors(() => readSubscribedAuthors());
   }, []);
 
-  const handleCommentAdded = useCallback(
-    (postId: string, count: number) => {
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === postId ? { ...p, commentsCount: count } : p,
-        ),
-      );
-    },
-    [],
-  );
+  const handleCommentAdded = useCallback((postId: string, count: number) => {
+    setPosts((prev) =>
+      prev.map((p) => (p.id === postId ? { ...p, commentsCount: count } : p)),
+    );
+  }, []);
 
   const isFavorite = useCallback(
     (id: string) => favorites.includes(id),
@@ -249,8 +242,8 @@ export default function CommunityPage() {
           ) : (
             <>
               {/* 顶栏 */}
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col items-start justify-between gap-3 lg:flex-row lg:items-center">
+                <div className="flex shrink-0 items-center gap-2">
                   <div
                     className={cn(
                       "flex size-6 items-center justify-center rounded-md",
@@ -276,7 +269,7 @@ export default function CommunityPage() {
                         type="button"
                         onClick={() => switchView(v.key)}
                         className={cn(
-                          "flex items-center gap-1.5 rounded px-3 py-1 text-xs font-medium transition-colors",
+                          "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded px-3 py-1 text-xs font-medium transition-colors",
                           viewMode === v.key
                             ? v.key === "market"
                               ? "bg-rose-500 text-white"
@@ -290,10 +283,10 @@ export default function CommunityPage() {
                     ))}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex w-full min-w-0 items-center gap-2 lg:w-auto">
                   {!isMarket && (
                     <>
-                      <div className="relative w-56">
+                      <div className="relative min-w-0 flex-1 lg:w-56 lg:flex-none">
                         <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
                         <input
                           type="text"
@@ -629,8 +622,15 @@ function PublishModal({
             <XIcon className="size-4" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+          <label
+            htmlFor="community-post-title"
+            className="mb-1.5 block text-xs font-medium"
+          >
+            标题
+          </label>
           <input
+            id="community-post-title"
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -638,20 +638,34 @@ function PublishModal({
             maxLength={60}
             className="w-full rounded-md border border-border-default bg-background/60 px-3 py-2 text-sm outline-none placeholder:text-muted-foreground/60 focus:border-primary/50 focus:ring-2 focus:ring-primary/10"
           />
+          <label
+            htmlFor="community-post-content"
+            className="mb-1.5 mt-4 block text-xs font-medium"
+          >
+            内容（可选）
+          </label>
           <textarea
+            id="community-post-content"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="详细描述你的灵感 / 用法（可选）…"
             rows={5}
-            className="mt-3 w-full resize-none rounded-md border border-border-default bg-background/60 px-3 py-2 text-sm outline-none placeholder:text-muted-foreground/60 focus:border-primary/50 focus:ring-2 focus:ring-primary/10"
+            className="w-full resize-none rounded-md border border-border-default bg-background/60 px-3 py-2 text-sm outline-none placeholder:text-muted-foreground/60 focus:border-primary/50 focus:ring-2 focus:ring-primary/10"
           />
+          <label
+            htmlFor="community-post-tag"
+            className="mb-1.5 mt-4 block text-xs font-medium"
+          >
+            标签（可选）
+          </label>
           <input
+            id="community-post-tag"
             type="text"
             value={tag}
             onChange={(e) => setTag(e.target.value)}
             placeholder="标签（可选），如：自动化"
             maxLength={12}
-            className="mt-3 w-full rounded-md border border-border-default bg-background/60 px-3 py-2 text-sm outline-none placeholder:text-muted-foreground/60 focus:border-primary/50 focus:ring-2 focus:ring-primary/10"
+            className="w-full rounded-md border border-border-default bg-background/60 px-3 py-2 text-sm outline-none placeholder:text-muted-foreground/60 focus:border-primary/50 focus:ring-2 focus:ring-primary/10"
           />
           <div className="mt-3">
             <p className="mb-1.5 text-xs text-muted-foreground">选择分类</p>
@@ -663,6 +677,7 @@ function PublishModal({
                     key={c.key}
                     type="button"
                     onClick={() => setTopic(c.key)}
+                    aria-pressed={isActive}
                     className={cn(
                       "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                       isActive

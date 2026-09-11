@@ -693,7 +693,8 @@ def register_prompt_market_skills(
     # fallbacks; the latter only fill missing names. The bounded force=False
     # refresh then writes missing directories for the next construction and
     # never changes this live registry's capability set.
-    if not bundled_available and skills_lockfile.is_file():
+    refresh_deadline = _prompt_refresh_deadline(refresh_deadline_s)
+    if not bundled_available and skills_lockfile.is_file() and refresh_deadline > 0:
         _bootstrap_prompt_catalog_synchronously(skills_lockfile, external_skills_dir)
 
     external_count = 0
@@ -723,13 +724,24 @@ def register_prompt_market_skills(
                 external_count,
             )
 
-    registered = external_count + bundled_count
+    # Cloud-installed skills live in mutable app data, not resources/skills/public.
+    # Keep built-in names authoritative; install only adds missing capabilities.
+    from runtime.platform.process.paths import app_paths
+
+    installed_count = register_market_skills(
+        registry,
+        all_skills_dir=app_paths().data_dir / "skills",
+        respect_enabled_flag=False,
+        verify_tests=False,
+        skip_registered_directories=True,
+    )
+    registered = external_count + bundled_count + installed_count
     if registered:
         if bundled_available and skills_lockfile.is_file():
             _refresh_prompt_catalog_with_deadline(
                 skills_lockfile,
                 external_skills_dir,
-                deadline_s=_prompt_refresh_deadline(refresh_deadline_s),
+                deadline_s=refresh_deadline,
             )
         return registered
 

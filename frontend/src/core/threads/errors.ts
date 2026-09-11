@@ -1,3 +1,17 @@
+/** Translate known execution failures, including wrappers in saved history. */
+export function publicExecutionErrorMessage(message: string): string {
+  if (/model is unavailable|model_unavailable|model_not_found/i.test(message)) {
+    return "所选模型当前不可用，请在输入框选择其他模型后重试。";
+  }
+  if (/free tier can only be used in opencode/i.test(message)) {
+    return "当前 Zen 免费模型仅支持 OpenCode 引擎，请在输入框切换引擎后重试。";
+  }
+  if (message.includes("Responses tool catalog is too large")) {
+    return "当前任务加载的工具过多，已超过执行接口上限。请减少启用的插件或工具后重试。";
+  }
+  return message;
+}
+
 function readErrorMessage(error: unknown): string | null {
   if (typeof error === "string" && error.trim()) {
     return error;
@@ -38,5 +52,5 @@ export function getStreamErrorMessage(
     return streamEndpointUnavailableMessage;
   }
 
-  return message;
+  return publicExecutionErrorMessage(message);
 }

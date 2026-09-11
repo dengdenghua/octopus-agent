@@ -66,6 +66,7 @@ export default function SandboxSettingsPage() {
   const context = settings.context as typeof settings.context & {
     sandbox_mode?: string;
     approval_policy?: string;
+    approvals_reviewer?: string;
     network_access?: unknown;
     guardian_review_enabled?: boolean;
     guardian_review_model?: string;
@@ -114,13 +115,17 @@ export default function SandboxSettingsPage() {
           ...context,
           permission_mode: next,
           approval_policy: fullAccess ? "never" : "on-request",
+          approvals_reviewer: next === "acceptEdits" ? "auto_review" : "user",
           ...(fullAccess
             ? {
                 execution_environment: "local" as const,
                 sandbox_mode: "full" as const,
                 network_access: "full" as const,
               }
-            : {}),
+            : {
+                execution_environment: "sandbox" as const,
+                sandbox_mode: "sandbox" as const,
+              }),
         } as Partial<typeof settings.context>);
         toast.success(copy.toastPermissionSwitched(label));
       } catch {

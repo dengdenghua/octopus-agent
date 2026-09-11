@@ -61,6 +61,7 @@ function isBrowser(): boolean {
 export interface LocalSettings {
   notification: {
     enabled: boolean;
+    only_when_unfocused?: boolean;
   };
   context: Omit<
     AgentThreadContext,
@@ -91,6 +92,7 @@ export interface LocalSettings {
   };
   display: {
     chat_font_size: "small" | "medium" | "large";
+    send_shortcut?: "enter" | "modifier_enter";
     conversation_detail_level: "low" | "medium" | "high";
   };
   session: {

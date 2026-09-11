@@ -17,6 +17,11 @@ the Octopus analogue — a small, OPT-IN reviewer that:
 Trust boundary mirrors codex policy_template "Evidence Handling": only the
 user's request counts as authorization; tool outputs / unknown content are
 untrusted and cannot expand it.
+
+The canonical ``Approve for me`` mode reuses the reviewer machinery through
+``AutoReviewApprovalProvider``. Unlike the optional tighten-only guardian,
+that provider reviews every escalation and fails closed when review is
+unavailable.
 """
 
 from __future__ import annotations
@@ -26,9 +31,29 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
+
+from runtime.safety.approval.approval_gate import (
+    ApprovalDecision,
+    ApprovalProvider,
+    ApprovalRequest,
+    DenialCircuitBreaker,
+    assess_approval_risk,
+)
 
 _logger = logging.getLogger(__name__)
+
+
+def approval_router_for_stack(stack: Any) -> Any:
+    """Resolve the host's reviewer without depending on a native planner.
+
+    An explicitly unset service disables model review. Legacy embedders that
+    have not adopted this field retain their existing planner router.
+    """
+    if hasattr(stack, "approval_router"):
+        return stack.approval_router
+    return getattr(getattr(stack, "planner", None), "router", None)
+
 
 _GUARDIAN_SYSTEM_PROMPT = """\
 你是一名安全评审者。你将评估一个编码代理计划执行的动作,并给出裁决。
@@ -76,6 +101,10 @@ class GuardianReviewerConfig:
     # model. Guarantees the reviewer never invents a model the user may
     # not have installed.
     default_model: str | None = None
+    # Codex-style auto-review evaluates every request that reached the
+    # sandbox boundary.  The older opt-in guardian keeps its high/critical
+    # only behavior unless this flag is explicitly enabled by server code.
+    review_all_risks: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,7 +135,7 @@ class GuardianReviewer:
     def should_review(self, risk_level: str, thread_id: str) -> bool:
         if not self._config.enabled:
             return False
-        if risk_level not in ("high", "critical"):
+        if not self._config.review_all_risks and risk_level not in ("high", "critical"):
             return False
         with self._lock:
             return self._turn_counts.get(thread_id, 0) < self._config.per_turn_limit
@@ -154,7 +183,26 @@ class GuardianReviewer:
                 max_tokens=600,
             )
             start = time.monotonic()
-            response = self._router.call(request)
+            timeout_s = float(self._config.timeout_s)
+            if timeout_s > 0:
+                import concurrent.futures
+                import contextvars
+
+                pool = concurrent.futures.ThreadPoolExecutor(
+                    max_workers=1,
+                    thread_name_prefix="approval-review",
+                )
+                future = pool.submit(contextvars.copy_context().run, self._router.call, request)
+                try:
+                    response = future.result(timeout=timeout_s)
+                except concurrent.futures.TimeoutError:
+                    future.cancel()
+                    _logger.warning("guardian review timed out for %s", tool_name)
+                    return None
+                finally:
+                    pool.shutdown(wait=False, cancel_futures=True)
+            else:
+                response = self._router.call(request)
             verdict = self._parse(response.text)
             if verdict is None:
                 _logger.warning("guardian review produced no parseable verdict for %s", tool_name)
@@ -253,5 +301,74 @@ def decide_with_guardian(
     return rule_engine_action, f"guardian-allow: {verdict.reason}"
 
 
-# Keep the file importable without the heavy deps at module load.
-from typing import Literal  # noqa: E402
+class AutoReviewApprovalProvider(ApprovalProvider):
+    """Route an eligible approval request to a separate reviewer agent.
+
+    This mirrors Codex's ``approvals_reviewer = "auto_review"`` behavior for
+    native Echo tools and for Echo dynamic tools called by the Codex engine.
+    Reviewer failure does not become permission: it returns a distinct denial
+    so the working agent can choose a safer path or ask the user in prose.
+    """
+
+    def __init__(
+        self,
+        router: Any,
+        *,
+        user_intent: str,
+        default_model: str | None = None,
+        per_turn_limit: int = 50,
+        timeout_s: float = 15.0,
+    ) -> None:
+        self._reviewer = GuardianReviewer(
+            router,
+            GuardianReviewerConfig(
+                enabled=True,
+                per_turn_limit=per_turn_limit,
+                timeout_s=timeout_s,
+                default_model=default_model,
+                review_all_risks=True,
+            ),
+        )
+        self._user_intent = user_intent
+        self._breaker = DenialCircuitBreaker(limit=3)
+
+    def request(
+        self,
+        req: ApprovalRequest,
+        *,
+        timeout: float = 120.0,  # noqa: ARG002
+    ) -> ApprovalDecision:
+        risk = assess_approval_risk(req.tool_name, req.args_preview)
+        key = (req.thread_id, req.tool_name, req.args_preview[:500])
+        if self._breaker.is_open(key):
+            return ApprovalDecision(
+                approved=False,
+                reason="automatic review stopped after repeated denials",
+            )
+        verdict = self._reviewer.review(
+            thread_id=req.thread_id,
+            tool_name=req.tool_name,
+            args_preview=req.args_preview,
+            user_intent=self._user_intent,
+            rule_engine_risk=risk.level,
+            rule_engine_categories=risk.categories,
+        )
+        if verdict is None:
+            return ApprovalDecision(
+                approved=False,
+                reason="automatic review was unavailable or timed out",
+            )
+        if verdict.outcome == "deny":
+            self._breaker.note_denial(key)
+            return ApprovalDecision(approved=False, reason=f"auto-review: {verdict.reason}")
+        self._breaker.note_clear(key)
+        return ApprovalDecision(approved=True, reason=f"auto-review: {verdict.reason}")
+
+
+__all__ = [
+    "AutoReviewApprovalProvider",
+    "GuardianReviewer",
+    "GuardianReviewerConfig",
+    "GuardianVerdict",
+    "decide_with_guardian",
+]

@@ -1,0 +1,30 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/channels".
+0 AXWebArea Echo, URL: localhost:3310/#/workspace/channels
+	1 container
+		2 container Notifications alt+T
+		3 container 设置 飞书 机器人, ID: radix-_r_qa_
+			4 heading 设置 飞书 机器人, Value: 2, ID: radix-_r_qb_
+				5 text 设置 飞书 机器人
+			6 container radix-_r_qc_
+				7 text 凭证会保存到本地 channel_credentials.json (不上云)。
+				8 link Description: 如何接入?, Value: docs.octopus.ai/channels/feishu
+			9 container
+				10 text App ID *
+			11 text field (settable) App ID*, ID: channel-feishu-app_id
+			12 text 飞书开放平台 · 自建应用 · 凭证页的 App ID。
+			13 container
+				14 text App Secret *
+			15 container
+				16 text field (settable) App Secret*
+				17 button 显示
+			18 container
+				19 text Verification Token *
+			20 container
+				21 text field (settable) Verification Token*
+				22 button 显示
+			23 text 事件订阅页的 Verification Token,每条 event payload 会带它。
+			24 button 取消
+			25 button 保存并连接
+			26 button 关闭
+
+The focused UI element is 11 text field (settable) App ID*, ID: channel-feishu-app_id

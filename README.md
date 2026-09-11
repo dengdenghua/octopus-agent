@@ -19,10 +19,10 @@ python -m runtime bugfix-demo
 pip install -e ".[dev,serve,web]"
 python -m runtime quickstart --non-interactive
 python -m runtime status
-python -m runtime ui --port 8000
+python -m runtime ui --port 8310
 ```
 
-打开 <http://127.0.0.1:8000>。
+打开 <http://127.0.0.1:8310>。
 
 前端开发：
 

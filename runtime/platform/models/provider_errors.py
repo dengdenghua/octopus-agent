@@ -5,6 +5,7 @@ from __future__ import annotations
 from .llm import LLMResponseFormatError
 
 MODEL_UNAVAILABLE_MESSAGE = "当前模型服务已将所选模型标记为不可用，请切换模型后重试。"
+OPENCODE_REQUIRED_MESSAGE = "当前 Zen 免费模型仅支持 OpenCode 引擎，请在输入框切换引擎后重试。"
 PROVIDER_HTTP_MESSAGES = {
     400: "模型服务拒绝了请求，请检查模型配置或切换模型后重试（HTTP 400）。",
     401: "模型服务凭据无效，请在插件设置中重新连接（HTTP 401）。",
@@ -31,10 +32,15 @@ class ModelProviderHTTPError(LLMResponseFormatError):
             marker in lowered
             for marker in ("model is unavailable", "model_unavailable", "model_not_found")
         )
+        self.opencode_required = (
+            status_code == 400 and "free tier can only be used in opencode" in lowered
+        )
 
     def public_failure(self) -> tuple[int, str]:
         if self.model_unavailable:
             return 400, MODEL_UNAVAILABLE_MESSAGE
+        if self.opencode_required:
+            return 400, OPENCODE_REQUIRED_MESSAGE
         if self.status_code in PROVIDER_HTTP_MESSAGES:
             return self.status_code, PROVIDER_HTTP_MESSAGES[self.status_code]
         return 502, "Echo model request failed"

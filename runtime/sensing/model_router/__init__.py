@@ -1,38 +1,87 @@
-from .actor_context import current_actor
-from .capability_probe import (
-    clear_capability_cache,
-    get_cached_capabilities,
-    probe_provider,
-)
-from .credential_pool import AllKeysExhausted, CredentialPool, KeyStats, PoolReport
-from .dispatch_router import ModelDispatchRouter
-from .gemini_router import GeminiModelRouter, GeminiRouterError
-from .models import (
-    EventType,
-    LLMResponseFormatError,
-    Message,
-    MockModelRouter,
-    ModelRequest,
-    ModelResponse,
-    ModelRouter,
-    ModelStreamEvent,
-    ModelStrength,
-)
-from .multi_router import DispatchRecord, MultiModelRouter, RouteAttempt
-from .ollama_router import OllamaModelRouter, OllamaRouterError
-from .openai_router import OpenAIModelRouter, OpenAIRouterError
-from .pooled_router import PooledModelRouter
-from .prompt_cache import (
-    MAX_BREAKPOINTS,
-    MIN_CACHE_CHARS,
-    budget_breakpoints,
-    estimate_cache_savings,
-    mark_cache_breakpoint,
-    prepare_cached_system,
-    prepare_cached_tools,
-)
-from .provider import Provider, ProviderCapabilities
-from .selector import DefaultModelSelector
+"""Public model interfaces; provider implementations load on first access."""
+
+from __future__ import annotations
+
+from importlib import import_module
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .actor_context import current_actor
+    from .capability_probe import (
+        clear_capability_cache,
+        get_cached_capabilities,
+        probe_provider,
+    )
+    from .credential_pool import AllKeysExhausted, CredentialPool, KeyStats, PoolReport
+    from .dispatch_router import ModelDispatchRouter
+    from .gemini_router import GeminiModelRouter, GeminiRouterError
+    from .models import (
+        EventType,
+        LLMResponseFormatError,
+        Message,
+        MockModelRouter,
+        ModelRequest,
+        ModelResponse,
+        ModelRouter,
+        ModelStreamEvent,
+        ModelStrength,
+    )
+    from .multi_router import DispatchRecord, MultiModelRouter, RouteAttempt
+    from .ollama_router import OllamaModelRouter, OllamaRouterError
+    from .openai_router import OpenAIModelRouter, OpenAIRouterError
+    from .pooled_router import PooledModelRouter
+    from .prompt_cache import (
+        MAX_BREAKPOINTS,
+        MIN_CACHE_CHARS,
+        budget_breakpoints,
+        estimate_cache_savings,
+        mark_cache_breakpoint,
+        prepare_cached_system,
+        prepare_cached_tools,
+    )
+    from .provider import Provider, ProviderCapabilities
+    from .selector import DefaultModelSelector
+
+_EXPORTS = {
+    "current_actor": ("actor_context", "current_actor"),
+    "clear_capability_cache": ("capability_probe", "clear_capability_cache"),
+    "get_cached_capabilities": ("capability_probe", "get_cached_capabilities"),
+    "probe_provider": ("capability_probe", "probe_provider"),
+    "AllKeysExhausted": ("credential_pool", "AllKeysExhausted"),
+    "CredentialPool": ("credential_pool", "CredentialPool"),
+    "KeyStats": ("credential_pool", "KeyStats"),
+    "PoolReport": ("credential_pool", "PoolReport"),
+    "ModelDispatchRouter": ("dispatch_router", "ModelDispatchRouter"),
+    "GeminiModelRouter": ("gemini_router", "GeminiModelRouter"),
+    "GeminiRouterError": ("gemini_router", "GeminiRouterError"),
+    "EventType": ("models", "EventType"),
+    "LLMResponseFormatError": ("models", "LLMResponseFormatError"),
+    "Message": ("models", "Message"),
+    "MockModelRouter": ("models", "MockModelRouter"),
+    "ModelRequest": ("models", "ModelRequest"),
+    "ModelResponse": ("models", "ModelResponse"),
+    "ModelRouter": ("models", "ModelRouter"),
+    "ModelStreamEvent": ("models", "ModelStreamEvent"),
+    "ModelStrength": ("models", "ModelStrength"),
+    "DispatchRecord": ("multi_router", "DispatchRecord"),
+    "MultiModelRouter": ("multi_router", "MultiModelRouter"),
+    "RouteAttempt": ("multi_router", "RouteAttempt"),
+    "OllamaModelRouter": ("ollama_router", "OllamaModelRouter"),
+    "OllamaRouterError": ("ollama_router", "OllamaRouterError"),
+    "OpenAIModelRouter": ("openai_router", "OpenAIModelRouter"),
+    "OpenAIRouterError": ("openai_router", "OpenAIRouterError"),
+    "PooledModelRouter": ("pooled_router", "PooledModelRouter"),
+    "MAX_BREAKPOINTS": ("prompt_cache", "MAX_BREAKPOINTS"),
+    "MIN_CACHE_CHARS": ("prompt_cache", "MIN_CACHE_CHARS"),
+    "budget_breakpoints": ("prompt_cache", "budget_breakpoints"),
+    "estimate_cache_savings": ("prompt_cache", "estimate_cache_savings"),
+    "mark_cache_breakpoint": ("prompt_cache", "mark_cache_breakpoint"),
+    "prepare_cached_system": ("prompt_cache", "prepare_cached_system"),
+    "prepare_cached_tools": ("prompt_cache", "prepare_cached_tools"),
+    "Provider": ("provider", "Provider"),
+    "ProviderCapabilities": ("provider", "ProviderCapabilities"),
+    "DefaultModelSelector": ("selector", "DefaultModelSelector"),
+}
 
 __all__ = [
     "AllKeysExhausted",
@@ -74,3 +123,17 @@ __all__ = [
     "prepare_cached_tools",
     "probe_provider",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    target = _EXPORTS.get(name)
+    if target is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module, symbol = target
+    value = getattr(import_module(f".{module}", __name__), symbol)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(__all__))

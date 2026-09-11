@@ -12,6 +12,7 @@ describe("permissionRuntimeConfig", () => {
     expect(permissionRuntimeConfig(undefined)).toEqual({
       mode: "default",
       approvalPolicy: "on-request",
+      approvalReviewer: "user",
       sandboxPolicy: {
         type: "workspaceWrite",
         networkAccess: false,
@@ -26,6 +27,7 @@ describe("permissionRuntimeConfig", () => {
     expect(permissionRuntimeConfig("bypassPermissions")).toEqual({
       mode: "bypassPermissions",
       approvalPolicy: "never",
+      approvalReviewer: "user",
       sandboxPolicy: {
         type: "dangerFullAccess",
         // Full access is the one mode that defaults to network allowed.
@@ -41,6 +43,7 @@ describe("permissionRuntimeConfig", () => {
     expect(permissionRuntimeConfig("plan")).toEqual({
       mode: "plan",
       approvalPolicy: "on-request",
+      approvalReviewer: "user",
       sandboxPolicy: {
         type: "workspaceWrite",
         networkAccess: false,
@@ -51,16 +54,17 @@ describe("permissionRuntimeConfig", () => {
     });
   });
 
-  it("maps acceptEdits to local execution with confirm-on-request", () => {
+  it("maps legacy acceptEdits to Codex-style automatic review", () => {
     expect(permissionRuntimeConfig("acceptEdits")).toEqual({
       mode: "acceptEdits",
       approvalPolicy: "on-request",
+      approvalReviewer: "auto_review",
       sandboxPolicy: {
         type: "workspaceWrite",
         networkAccess: false,
       },
-      execution_environment: "local",
-      sandbox_mode: "full",
+      execution_environment: "sandbox",
+      sandbox_mode: "sandbox",
       planningMode: false,
     });
   });

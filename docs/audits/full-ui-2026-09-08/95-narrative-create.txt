@@ -1,0 +1,21 @@
+Browser tab: 4, Title: "叙事工坊 - Echo", URL: "http://localhost:3310/#/workspace/narrative".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
+Removed element IDs: 66-77
+~							60 container 新建叙事项目
+~								61 heading 新建叙事项目, Value: 2, ID: narrative-modal-title
+~									62 text 新建叙事项目
+~								63 text 题材无关的项目容器，可从零创作或导入任意世界包。
+~								65 container
++									66 text 项目名称
++									67 text field (settable) 项目名称
++									68 text 故事前提
++									69 text entry area (settable) 故事前提
++									70 text 创作语言
++									71 pop up button (collapsed, settable) 创作语言, Value: 中文, Secondary Actions: Expand
++										72 menu
++											73 (selected) 中文
++											74 English
++											75 中英双语
++									76 button 取消
++									77 button 创建
+The focused UI element is 67 text field (settable) 项目名称

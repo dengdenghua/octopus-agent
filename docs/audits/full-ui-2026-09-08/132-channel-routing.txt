@@ -1,0 +1,536 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/channels".
+0 AXWebArea Echo, URL: localhost:3310/#/workspace/channels
+	1 container
+		2 container Notifications alt+T
+		3 container 为「Telegram」选择响应对象, ID: radix-_r_np_
+			4 heading 为「Telegram」选择响应对象, Value: 2, ID: radix-_r_nq_
+				5 text 为「Telegram」选择响应对象
+			6 text 可交给一个智能体直接处理，也可由整个 AI 团队并行协作后汇总回复。
+			7 text field (settable)
+			8 container
+				9 text 单个智能体
+				10 content list
+					11 button Zero aoi
+						12 text Zero
+						13 text aoi
+					14 button Kane coder
+						15 text Kane
+						16 text coder
+					17 button 坤候底 · 逆向投资人 contrarian-investor
+						18 text 坤候底 · 逆向投资人
+						19 text contrarian-investor
+					20 button Raven desktop_operator
+						21 text Raven
+						22 text desktop_operator
+					23 button Eve / Siren echo_eve
+						24 text Eve / Siren
+						25 text echo_eve
+					26 button Kane / Paladin echo_kane
+						27 text Kane / Paladin
+						28 text echo_kane
+					29 button Leon / Chronos echo_leon
+						30 text Leon / Chronos
+						31 text echo_leon
+					32 button Luna / Dream Walker echo_luna
+						33 text Luna / Dream Walker
+						34 text echo_luna
+					35 button Mira Voss / Glass Vein echo_mira_voss
+						36 text Mira Voss / Glass Vein
+						37 text echo_mira_voss
+					38 button Noah / Probability echo_noah
+						39 text Noah / Probability
+						40 text echo_noah
+					41 button Raven / Night Crow echo_raven
+						42 text Raven / Night Crow
+						43 text echo_raven
+					44 button Shion / Virus Queen echo_shion
+						45 text Shion / Virus Queen
+						46 text echo_shion
+					47 button Zero / White Ghost echo_zero
+						48 text Zero / White Ghost
+						49 text echo_zero
+					50 button Shion ecommerce_mind
+						51 text Shion
+						52 text ecommerce_mind
+					53 button 固件通 embedded_firmware_engineer
+						54 text 固件通
+						55 text embedded_firmware_engineer
+					56 button 钊审财 · 财报研究员 fundamental-researcher
+						57 text 钊审财 · 财报研究员
+						58 text fundamental-researcher
+					59 button Eve general
+						60 text Eve
+						61 text general
+					62 button 星望远 · 产业策略师 industry-strategist
+						63 text 星望远 · 产业策略师
+						64 text industry-strategist
+					65 button Noah market_researcher
+						66 text Noah
+						67 text market_researcher
+					68 button E Echo octopus
+						69 text E
+						70 text Echo
+						71 text octopus
+					72 button 吴八哥 senior_developer
+						73 text 吴八哥
+						74 text senior_developer
+					75 button SEO 内容营销团队 seo_content_team_lead
+						76 text SEO 内容营销团队
+						77 text seo_content_team_lead
+					78 button 磊追浪 · 短线冲浪手 shortterm-surfer
+						79 text 磊追浪 · 短线冲浪手
+						80 text shortterm-surfer
+					81 button 洲四方 · 信号派首席 signal-chief
+						82 text 洲四方 · 信号派首席
+						83 text signal-chief
+					84 button 腾讯自选股股票投研专家团 stock_partner_lead
+						85 text 腾讯自选股股票投研专家团
+						86 text stock_partner_lead
+					87 button 声 声学工程师分身 twin_acoustic_engineer
+						88 text 声
+						89 text 声学工程师分身
+						90 text twin_acoustic_engineer
+					91 button 声 声学-结构专家分身 twin_acoustic_structure_expert
+						92 text 声
+						93 text 声学-结构专家分身
+						94 text twin_acoustic_structure_expert
+					95 button A AI 工程师分身 twin_ai_engineer
+						96 text A
+						97 text AI 工程师分身
+						98 text twin_ai_engineer
+					99 button A AI 硬件系统专家分身 twin_ai_hardware_system_expert
+						100 text A
+						101 text AI 硬件系统专家分身
+						102 text twin_ai_hardware_system_expert
+					103 button A AI 产品经理分身 twin_ai_product_manager
+						104 text A
+						105 text AI 产品经理分身
+						106 text twin_ai_product_manager
+					107 button 算 算法工程师分身 twin_algorithm_engineer
+						108 text 算
+						109 text 算法工程师分身
+						110 text twin_algorithm_engineer
+					111 button A Android 系统工程师分身 twin_android_system_engineer
+						112 text A
+						113 text Android 系统工程师分身
+						114 text twin_android_system_engineer
+					115 button 天 天线工程师分身 twin_antenna_engineer
+						116 text 天
+						117 text 天线工程师分身
+						118 text twin_antenna_engineer
+					119 button 音 音频工程师分身 twin_audio_engineer
+						120 text 音
+						121 text 音频工程师分身
+						122 text twin_audio_engineer
+					123 button 审 审计分身 twin_audit
+						124 text 审
+						125 text 审计分身
+						126 text twin_audit
+					127 button 电 电池工程师分身 twin_battery_engineer
+						128 text 电
+						129 text 电池工程师分身
+						130 text twin_battery_engineer
+					131 button 蓝 蓝牙工程师分身 twin_bluetooth_engineer
+						132 text 蓝
+						133 text 蓝牙工程师分身
+						134 text twin_bluetooth_engineer
+					135 button B BSP 工程师分身 twin_bsp_engineer
+						136 text B
+						137 text BSP 工程师分身
+						138 text twin_bsp_engineer
+					139 button 经 经营助理 / 总经理助理分身 twin_business_assistant
+						140 text 经
+						141 text 经营助理 / 总经理助理分身
+						142 text twin_business_assistant
+					143 button C CAE 仿真工程师分身 twin_cae
+						144 text C
+						145 text CAE 仿真工程师分身
+						146 text twin_cae
+					147 button 摄 摄像头工程师分身 twin_camera_engineer
+						148 text 摄
+						149 text 摄像头工程师分身
+						150 text twin_camera_engineer
+					151 button 蜂 蜂窝通信工程师分身 twin_cellular_engineer
+						152 text 蜂
+						153 text 蜂窝通信工程师分身
+						154 text twin_cellular_engineer
+					155 button C CMF 设计师分身 twin_cmf_designer
+						156 text C
+						157 text CMF 设计师分身
+						158 text twin_cmf_designer
+					159 button 通 通信协议工程师分身 twin_communication_protocol_engineer
+						160 text 通
+						161 text 通信协议工程师分身
+						162 text twin_communication_protocol_engineer
+					163 button 连 连接器工程师分身 twin_connector_engineer
+						164 text 连
+						165 text 连接器工程师分身
+						166 text twin_connector_engineer
+					167 button D DFM/DFx 专家分身 twin_dfm_dfx_expert
+						168 text D
+						169 text DFM/DFx 专家分身
+						170 text twin_dfm_dfx_expert
+					171 button 显 显示工程师分身 twin_display_engineer
+						172 text 显
+						173 text 显示工程师分身
+						174 text twin_display_engineer
+					175 button 显 显示测试工程师分身 twin_display_test_engineer
+						176 text 显
+						177 text 显示测试工程师分身
+						178 text twin_display_test_engineer
+					179 button 电 电气工程师分身 twin_electrical_engineer
+						180 text 电
+						181 text 电气工程师分身
+						182 text twin_electrical_engineer
+					183 button 电 电子工程师分身 twin_electronics
+						184 text 电
+						185 text 电子工程师分身
+						186 text twin_electronics
+					187 button 嵌 嵌入式工程师分身 twin_embedded
+						188 text 嵌
+						189 text 嵌入式工程师分身
+						190 text twin_embedded
+					191 button 嵌 嵌入式-硬件联调专家分身 twin_embedded_hardware_debug_expert
+						192 text 嵌
+						193 text 嵌入式-硬件联调专家分身
+						194 text twin_embedded_hardware_debug_expert
+					195 button E EMC/EMI 工程师分身 twin_emc_emi_engineer
+						196 text E
+						197 text EMC/EMI 工程师分身
+						198 text twin_emc_emi_engineer
+					199 button 工 工厂交付专家分身 twin_factory_delivery_expert
+						200 text 工
+						201 text 工厂交付专家分身
+						202 text twin_factory_delivery_expert
+					203 button F FAE 应用工程师分身 twin_fae
+						204 text F
+						205 text FAE 应用工程师分身
+						206 text twin_fae
+					207 button 失 失效分析工程师 / FA分身 twin_failure_analysis_engineer
+						208 text 失
+						209 text 失效分析工程师 / FA分身
+						210 text twin_failure_analysis_engineer
+					211 button 财 财务分身 twin_finance
+						212 text 财
+						213 text 财务分身
+						214 text twin_finance
+					215 button 固 固件工程师分身 twin_firmware_engineer
+						216 text 固
+						217 text 固件工程师分身
+						218 text twin_firmware_engineer
+					219 button 创 创始人/CEO 分身 twin_founder
+						220 text 创
+						221 text 创始人/CEO 分身
+						222 text twin_founder
+					223 button G GNSS/GPS 工程师分身 twin_gnss_gps_engineer
+						224 text G
+						225 text GNSS/GPS 工程师分身
+						226 text twin_gnss_gps_engineer
+					227 button 硬 硬件质量闭环专家分身 twin_hardware_quality_closed_loop_expert
+						228 text 硬
+						229 text 硬件质量闭环专家分身
+						230 text twin_hardware_quality_closed_loop_expert
+					231 button 硬 硬件系统架构专家分身 twin_hardware_system_architect
+						232 text 硬
+						233 text 硬件系统架构专家分身
+						234 text twin_hardware_system_architect
+					235 button 硬 硬件系统工程师分身 twin_hardware_system_engineer
+						236 text 硬
+						237 text 硬件系统工程师分身
+						238 text twin_hardware_system_engineer
+					239 button 硬 硬件技术员分身 twin_hardware_technician
+						240 text 硬
+						241 text 硬件技术员分身
+						242 text twin_hardware_technician
+					243 button 硬 硬件测试工程师分身 twin_hardware_test_engineer
+						244 text 硬
+						245 text 硬件测试工程师分身
+						246 text twin_hardware_test_engineer
+					247 button 医 医疗健康协作分身 twin_health
+						248 text 医
+						249 text 医疗健康协作分身
+						250 text twin_health
+					251 button 人 人力资源分身 twin_hr
+						252 text 人
+						253 text 人力资源分身
+						254 text twin_hr
+					255 button 硬 硬件工程师分身 twin_hw_engineer
+						256 text 硬
+						257 text 硬件工程师分身
+						258 text twin_hw_engineer
+					259 button 硬 硬件产品经理分身 twin_hw_product
+						260 text 硬
+						261 text 硬件产品经理分身
+						262 text twin_hw_product
+					263 button 图 图像质量工程师 / IQ Engineer分身 twin_image_quality_engineer
+						264 text 图
+						265 text 图像质量工程师 / IQ Engineer分身
+						266 text twin_image_quality_engineer
+					267 button 工 工业设计师分身 twin_industrial_design
+						268 text 工
+						269 text 工业设计师分身
+						270 text twin_industrial_design
+					271 button 红 红外工程师分身 twin_infrared_engineer
+						272 text 红
+						273 text 红外工程师分身
+						274 text twin_infrared_engineer
+					275 button 注 注塑工程师分身 twin_injection_molding_engineer
+						276 text 注
+						277 text 注塑工程师分身
+						278 text twin_injection_molding_engineer
+					279 button 投 投融资分析师分身 twin_investment
+						280 text 投
+						281 text 投融资分析师分身
+						282 text twin_investment
+					283 button 律 律师分身 twin_lawyer
+						284 text 律
+						285 text 律师分身
+						286 text twin_lawyer
+					287 button 法 法务合规分身 twin_legal
+						288 text 法
+						289 text 法务合规分身
+						290 text twin_legal
+					291 button 激 激光/雷达工程师分身 twin_lidar_tof_engineer
+						292 text 激
+						293 text 激光/雷达工程师分身
+						294 text twin_lidar_tof_engineer
+					295 button L Linux 驱动工程师分身 twin_linux_driver_engineer
+						296 text L
+						297 text Linux 驱动工程师分身
+						298 text twin_linux_driver_engineer
+					299 button 机 机器视觉算法工程师分身 twin_machine_vision_algorithm_engineer
+						300 text 机
+						301 text 机器视觉算法工程师分身
+						302 text twin_machine_vision_algorithm_engineer
+					303 button 生 生产制造工程师分身 twin_manufacturing
+						304 text 生
+						305 text 生产制造工程师分身
+						306 text twin_manufacturing
+					307 button 材 材料工程师分身 twin_materials_engineer
+						308 text 材
+						309 text 材料工程师分身
+						310 text twin_materials_engineer
+					311 button 机 机械工程师分身 twin_mechanical_engineer
+						312 text 机
+						313 text 机械工程师分身
+						314 text twin_mechanical_engineer
+					315 button 机 机电一体化专家分身 twin_mechatronics_expert
+						316 text 机
+						317 text 机电一体化专家分身
+						318 text twin_mechatronics_expert
+					319 button N NPI 量产导入分身 twin_npi
+						320 text N
+						321 text NPI 量产导入分身
+						322 text twin_npi
+					323 button 护 护理协作分身 twin_nurse
+						324 text 护
+						325 text 护理协作分身
+						326 text twin_nurse
+					327 button 运 运营管理分身 twin_operations
+						328 text 运
+						329 text 运营管理分身
+						330 text twin_operations
+					331 button 光 光学工程师分身 twin_optical
+						332 text 光
+						333 text 光学工程师分身
+						334 text twin_optical
+					335 button 光 光机工程师分身 twin_opto_mechanical_engineer
+						336 text 光
+						337 text 光机工程师分身
+						338 text twin_opto_mechanical_engineer
+					339 button 光 光机系统专家分身 twin_opto_mechanical_system_expert
+						340 text 光
+						341 text 光机系统专家分身
+						342 text twin_opto_mechanical_system_expert
+					343 button 光 光电工程师分身 twin_optoelectronic_engineer
+						344 text 光
+						345 text 光电工程师分身
+						346 text twin_optoelectronic_engineer
+					347 button P PCB 工程师分身 twin_pcb_engineer
+						348 text P
+						349 text PCB 工程师分身
+						350 text twin_pcb_engineer
+					351 button P PCB Layout 工程师分身 twin_pcb_layout_engineer
+						352 text P
+						353 text PCB Layout 工程师分身
+						354 text twin_pcb_layout_engineer
+					355 button P PMO 经理分身 twin_pmo_manager
+						356 text P
+						357 text PMO 经理分身
+						358 text twin_pmo_manager
+					359 button 电 电源工程师分身 twin_power_engineer
+						360 text 电
+						361 text 电源工程师分身
+						362 text twin_power_engineer
+					363 button 电 电源完整性工程师 / PI分身 twin_power_integrity_engineer
+						364 text 电
+						365 text 电源完整性工程师 / PI分身
+						366 text twin_power_integrity_engineer
+					367 button 电 电源-热专家分身 twin_power_thermal_expert
+						368 text 电
+						369 text 电源-热专家分身
+						370 text twin_power_thermal_expert
+					371 button 售 售前解决方案专家分身 twin_presales_solution_expert
+						372 text 售
+						373 text 售前解决方案专家分身
+						374 text twin_presales_solution_expert
+					375 button 工 工艺工程师分身 twin_process
+						376 text 工
+						377 text 工艺工程师分身
+						378 text twin_process
+					379 button 采 采购经理 / Buyer分身 twin_procurement_manager_buyer
+						380 text 采
+						381 text 采购经理 / Buyer分身
+						382 text twin_procurement_manager_buyer
+					383 button 产 产品经理分身 twin_product
+						384 text 产
+						385 text 产品经理分身
+						386 text twin_product
+					387 button 产 产品合规认证专家分身 twin_product_compliance_certification_expert
+						388 text 产
+						389 text 产品合规认证专家分身
+						390 text twin_product_compliance_certification_expert
+					391 button 产 产品设计工程师分身 twin_product_design_engineer
+						392 text 产
+						393 text 产品设计工程师分身
+						394 text twin_product_design_engineer
+					395 button 产 产品完整性工程师分身 twin_product_integrity_engineer
+						396 text 产
+						397 text 产品完整性工程师分身
+						398 text twin_product_integrity_engineer
+					399 button 项 项目经理分身 twin_project
+						400 text 项
+						401 text 项目经理分身
+						402 text twin_project
+					403 button 样 样机工程师 / Prototype Engineer分身 twin_prototype_engineer
+						404 text 样
+						405 text 样机工程师 / Prototype Engineer分身
+						406 text twin_prototype_engineer
+					407 button 心 心理咨询师分身 twin_psychology
+						408 text 心
+						409 text 心理咨询师分身
+						410 text twin_psychology
+					411 button 质 质量工程师分身 twin_quality
+						412 text 质
+						413 text 质量工程师分身
+						414 text twin_quality
+					415 button 可 可靠性工程师分身 twin_reliability
+						416 text 可
+						417 text 可靠性工程师分身
+						418 text twin_reliability
+					419 button 射 射频工程师分身 twin_rf
+						420 text 射
+						421 text 射频工程师分身
+						422 text twin_rf
+					423 button 射 射频-结构专家分身 twin_rf_structure_expert
+						424 text 射
+						425 text 射频-结构专家分身
+						426 text twin_rf_structure_expert
+					427 button 机 机器人系统专家分身 twin_robotics_system_expert
+						428 text 机
+						429 text 机器人系统专家分身
+						430 text twin_robotics_system_expert
+					431 button 销 销售与商务分身 twin_sales
+						432 text 销
+						433 text 销售与商务分身
+						434 text twin_sales
+					435 button 传 传感器工程师分身 twin_sensor_engineer
+						436 text 传
+						437 text 传感器工程师分身
+						438 text twin_sensor_engineer
+					439 button 信 信号完整性工程师 / SI分身 twin_signal_integrity_engineer
+						440 text 信
+						441 text 信号完整性工程师 / SI分身
+						442 text twin_signal_integrity_engineer
+					443 button 智 智能硬件产品架构专家分身 twin_smart_hardware_product_architect
+						444 text 智
+						445 text 智能硬件产品架构专家分身
+						446 text twin_smart_hardware_product_architect
+					447 button 智 智能制造自动化专家分身 twin_smart_manufacturing_automation_expert
+						448 text 智
+						449 text 智能制造自动化专家分身
+						450 text twin_smart_manufacturing_automation_expert
+					451 button 结 结构工程师分身 twin_structural_engineer
+						452 text 结
+						453 text 结构工程师分身
+						454 text twin_structural_engineer
+					455 button 供 供应商质量专家分身 twin_supplier_quality_expert
+						456 text 供
+						457 text 供应商质量专家分身
+						458 text twin_supplier_quality_expert
+					459 button 供 供应链与采购分身 twin_supply_chain
+						460 text 供
+						461 text 供应链与采购分身
+						462 text twin_supply_chain
+					463 button 供 供应链工程专家分身 twin_supply_chain_engineering_expert
+						464 text 供
+						465 text 供应链工程专家分身
+						466 text twin_supply_chain_engineering_expert
+					467 button 税 税务分身 twin_tax
+						468 text 税
+						469 text 税务分身
+						470 text twin_tax
+					471 button 技 技术项目经理 / TPM分身 twin_technical_program_manager
+						472 text 技
+						473 text 技术项目经理 / TPM分身
+						474 text twin_technical_program_manager
+					475 button 测 测试工程师分身 twin_test_engineer
+						476 text 测
+						477 text 测试工程师分身
+						478 text twin_test_engineer
+					479 button 热 热设计工程师分身 twin_thermal_design_engineer
+						480 text 热
+						481 text 热设计工程师分身
+						482 text twin_thermal_design_engineer
+					483 button 热 热仿真工程师分身 twin_thermal_simulation_engineer
+						484 text 热
+						485 text 热仿真工程师分身
+						486 text twin_thermal_simulation_engineer
+					487 button 热 热-结构联合专家分身 twin_thermal_structure_expert
+						488 text 热
+						489 text 热-结构联合专家分身
+						490 text twin_thermal_structure_expert
+					491 button 热 热测试工程师分身 twin_thermal_test_engineer
+						492 text 热
+						493 text 热测试工程师分身
+						494 text twin_thermal_test_engineer
+					495 button 模 模具工程师分身 twin_tooling_engineer
+						496 text 模
+						497 text 模具工程师分身
+						498 text twin_tooling_engineer
+					499 button 触 触控工程师分身 twin_touch_engineer
+						500 text 触
+						501 text 触控工程师分身
+						502 text twin_touch_engineer
+					503 button 用 用户研究员分身 twin_user_researcher
+						504 text 用
+						505 text 用户研究员分身
+						506 text twin_user_researcher
+					507 button 振 振动工程师分身 twin_vibration_engineer
+						508 text 振
+						509 text 振动工程师分身
+						510 text twin_vibration_engineer
+					511 button 视 视觉工程师分身 twin_vision_engineer
+						512 text 视
+						513 text 视觉工程师分身
+						514 text twin_vision_engineer
+					515 button W Wi-Fi 工程师分身 twin_wifi_engineer
+						516 text W
+						517 text Wi-Fi 工程师分身
+						518 text twin_wifi_engineer
+					519 button 无 无线通信工程师分身 twin_wireless_communication_engineer
+						520 text 无
+						521 text 无线通信工程师分身
+						522 text twin_wireless_communication_engineer
+					523 button 文衡价 · 估值分析师 valuation-analyst
+						524 text 文衡价 · 估值分析师
+						525 text valuation-analyst
+					526 button Luna vibe_selling
+						527 text Luna
+						528 text vibe_selling
+					529 button 小台 workspace_builder
+						530 text 小台
+						531 text workspace_builder
+			532 button 关闭
+
+The focused UI element is 7 text field (settable)

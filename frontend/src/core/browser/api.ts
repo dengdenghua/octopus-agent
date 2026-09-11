@@ -237,6 +237,35 @@ export async function getRelayStatus(): Promise<RelayStatus> {
   return (await res.json()) as RelayStatus;
 }
 
+export async function captureBrowserRelayPreview(target: {
+  id: string;
+  title: string;
+  url?: string;
+}): Promise<{ dataUrl: string }> {
+  const res = await fetch(`${getBackendBaseURL()}/api/browser/relay/command`, {
+    method: "POST",
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify({
+      action: "screenshot",
+      target_tab_id: target.id,
+      target_tab_title: target.title,
+      target_tab_url: target.url || "",
+      timeout_seconds: 4,
+      lease_seconds: 5,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to capture browser preview: ${res.statusText}`);
+  }
+  const payload = (await res.json()) as {
+    dataUrl?: string;
+    data?: string;
+  };
+  const dataUrl = payload.dataUrl || payload.data || "";
+  if (!dataUrl) throw new Error("Browser preview returned no image");
+  return { dataUrl };
+}
+
 export async function openExtensionFolder(): Promise<{
   opened: boolean;
   path: string;

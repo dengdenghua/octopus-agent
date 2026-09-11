@@ -1,3 +1,4 @@
+import { ImageWithFallback } from "@/components/ui/image-with-fallback";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronLeftIcon,
@@ -150,7 +151,7 @@ export function CommunityPostDetail({
             }}
           >
             {hasImageCover && (
-              <img
+              <ImageWithFallback
                 key={images[imageIndex]}
                 src={images[imageIndex]}
                 alt={post.title}

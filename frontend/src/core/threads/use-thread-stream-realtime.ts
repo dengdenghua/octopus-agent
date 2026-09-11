@@ -133,7 +133,7 @@ export type UseThreadStreamRealtimeResult = readonly [
   LiveToolEvent[],
   {
     pendingApprovals: PendingApproval[];
-    resolveApproval: (requestId: string | number, accept: boolean) => void;
+    resolveApproval: (requestId: string | number, accept: boolean, preparedRoles?: Record<string, string>) => void;
     hasMoreTurns: boolean;
     loadOlderTurns: () => Promise<void>;
   },
@@ -1696,6 +1696,7 @@ export function useThreadStreamRealtime(
                 explicitCodeMode ??
                 (shouldDefaultCodeCapability ? "solo" : undefined),
               permission_mode: permissionRuntime.mode,
+              approvals_reviewer: permissionRuntime.approvalReviewer,
               sandbox_mode: permissionRuntime.sandbox_mode,
               execution_environment: permissionRuntime.execution_environment,
             }),
@@ -1715,6 +1716,7 @@ export function useThreadStreamRealtime(
             input: text,
             executionEngine:
               rawContext.execution_engine_preference === "codex" ||
+              rawContext.execution_engine_preference === "opencode" ||
               rawContext.execution_engine_preference === "octopus"
                 ? rawContext.execution_engine_preference
                 : "auto",
@@ -1795,6 +1797,7 @@ export function useThreadStreamRealtime(
       context,
       threadEpoch,
       permissionRuntime.mode,
+      permissionRuntime.approvalReviewer,
       permissionRuntime.planningMode,
       permissionRuntime.sandbox_mode,
       permissionRuntime.execution_environment,

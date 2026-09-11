@@ -22,9 +22,11 @@ export function creativeCanvasStorageKey(
   baseKey: string,
   personaId: string,
   projectId: string | null,
+  taskId?: string | null,
 ): string {
   const room = projectId ? `project:${projectId}` : "room";
-  return `${baseKey}:creation:${safePersonaId(personaId)}:${room}`;
+  const scope = `${baseKey}:creation:${safePersonaId(personaId)}:${room}`;
+  return taskId ? `${scope}:task:${encodeURIComponent(taskId)}` : scope;
 }
 
 export function readLocalCreativeProjects(

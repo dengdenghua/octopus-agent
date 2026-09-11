@@ -101,6 +101,7 @@ export function TaskCollaboratorControl({
   const controlTitle = labelPrefix
     ? `${labelPrefix} 成员`
     : t.chatInputBox.collaborators;
+  const controlAccessibleLabel = `${controlTitle}，${countLabel}`;
   const q = query.trim().toLowerCase();
   const availableAgents = useMemo(
     () =>
@@ -157,14 +158,14 @@ export function TaskCollaboratorControl({
           type="button"
           data-slot="task-collaborator-trigger"
           className={cn(
-            "group inline-flex h-[42px] max-w-[11rem] items-center gap-1.5 rounded-md px-2.5 text-xs font-medium shadow-none transition-all duration-base sm:h-8 sm:px-2",
+            "group inline-flex h-[42px] items-center gap-1.5 rounded-md px-2 text-xs font-medium shadow-none transition-all duration-base sm:h-8",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
             isTeamDraft
               ? "bg-transparent text-foreground hover:bg-muted/55"
               : "bg-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground",
           )}
-          title={controlTitle}
-          aria-label={controlTitle}
+          title={controlAccessibleLabel}
+          aria-label={controlAccessibleLabel}
           aria-busy={disabled}
           disabled={disabled}
         >
@@ -173,15 +174,12 @@ export function TaskCollaboratorControl({
           ) : (
             <UserIcon className="size-4 shrink-0" />
           )}
-          <span
-            data-slot="task-collaborator-label"
-            className="hidden min-w-0 truncate sm:inline"
-          >
+          <span data-slot="task-collaborator-label" className="sr-only">
             {controlLabel}
           </span>
           <span
             className={cn(
-              "mr-1 inline-flex shrink-0 items-center gap-1 px-0.5 text-xs transition-all duration-base",
+              "inline-flex min-w-3.5 shrink-0 items-center justify-center gap-1 text-xs tabular-nums transition-all duration-base",
               isTeamDraft
                 ? "bg-transparent font-semibold text-primary"
                 : hasOnlineMembers
@@ -192,7 +190,7 @@ export function TaskCollaboratorControl({
             {hasOnlineMembers && (
               <span className="size-1.5 rounded-full bg-success" />
             )}
-            {hasOnlineMembers ? `${onlineCount}/${totalCount}` : countLabel}
+            {hasOnlineMembers ? `${onlineCount}/${totalCount}` : totalCount}
           </span>
         </button>
       </DropdownMenuTrigger>

@@ -149,6 +149,30 @@ def verify_skill_release(catalog_path: Path, archive_path: Path) -> dict[str, in
             expected.add(name)
             if f"skills/{name}/SKILL.md" not in names:
                 raise ValueError(f"catalog skill is missing from content archive: {name}")
+            if row.get("package_url"):
+                import hashlib
+                from urllib.parse import urlsplit
+
+                filename = Path(urlsplit(str(row["package_url"])).path).name
+                package = archive_path.parent / filename
+                if not package.is_file():
+                    raise ValueError(f"individual skill package missing: {name}")
+                if hashlib.sha256(package.read_bytes()).hexdigest() != row.get("package_sha256"):
+                    raise ValueError(f"individual skill checksum mismatch: {name}")
+                if package.stat().st_size != row.get("package_bytes"):
+                    raise ValueError(f"individual skill size mismatch: {name}")
+                with tarfile.open(package, "r:gz") as single:
+                    prefix = f"skills/{name}/"
+                    expected_files = {item for item in names if item.startswith(prefix)}
+                    if set(single.getnames()) != expected_files:
+                        raise ValueError(f"individual skill contents mismatch: {name}")
+                    for member in single.getmembers():
+                        if not member.isfile() or ".." in Path(member.name).parts:
+                            raise ValueError(f"unsafe individual skill member: {name}")
+                        original = archive.extractfile(member.name)
+                        actual = single.extractfile(member)
+                        if original is None or actual is None or original.read() != actual.read():
+                            raise ValueError(f"individual skill file mismatch: {member.name}")
         packaged = {
             parts[1]
             for member_name in names

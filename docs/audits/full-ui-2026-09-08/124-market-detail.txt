@@ -1,0 +1,12 @@
+Browser tab: 4, Title: "发现社区 - Echo", URL: "http://localhost:3310/#/workspace/community?view=market".
+The following is a diff from the previous accessibility tree with ~ and + representing changed and added elements, respectively. Removed elements are summarized by ID range.
++							281 container
++								282 image 一键比价监控器
++								283 button 关闭
++								284 text 省 省钱 Bot
++								285 heading 一键比价监控器, Value: 2
++									286 text 一键比价监控器
++								287 text 监控历史价格与平台活动，降价即提醒，618 已省 2000+。
++								288 text 售价 20 积分
++								289 button 立即购买
+The focused UI element is 185 button 查看 一键比价监控器

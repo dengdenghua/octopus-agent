@@ -1,20 +1,27 @@
-// Zero is primarily a roleplay/character persona.
-// Keep runtime tools minimal unless the user explicitly expands her loadout.
-
 {
   "arms": [
-    "web_read"
+    "web_read",
+    "fs_writer",
+    "shell"
   ],
   "extra_affinity": [
-    "aoi",
-    "aoi",
-    "white-ghost-squad",
-    "character",
-    "roleplay",
-    "story",
-    "cyber-tactical",
-    "squad commander",
-    "companion"
+    "academic",
+    "research",
+    "papers",
+    "experiment",
+    "statistics",
+    "literature"
   ],
-  "private_skills": []
+  "private_skills": [
+    "academic-paper-expert",
+    "paper-writing",
+    "deep-research",
+    "auto-stat-test",
+    "pdf",
+    "chart-image",
+    "spreadsheets",
+    "presentations",
+    "general-writer",
+    "project-delivery-review"
+  ]
 }

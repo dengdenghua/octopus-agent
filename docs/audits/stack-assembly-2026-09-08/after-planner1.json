@@ -1,0 +1,13 @@
+{
+  "sample": "after-planner1",
+  "import_seconds": 0.6860490000108257,
+  "assembly_seconds": 0.6743626999959815,
+  "total_seconds": 1.3604117000068072,
+  "rss_mib": 91.71875,
+  "scratch_directory": "D:\\echo agent\\.codex-run\\stack-profile-cegnitj5",
+  "module_count": 1041,
+  "skill_count": 329,
+  "member_engine": "opencode",
+  "native_planner_created": false,
+  "scope": "complete library stack assembly, not web app lifespan or desktop launch"
+}

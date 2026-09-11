@@ -1,0 +1,38 @@
+Browser tab: 4, Title: "Echo", URL: "http://localhost:3310/#/workspace/channels".
+0 AXWebArea Echo, URL: localhost:3310/#/workspace/channels
+	1 container
+		2 container Notifications alt+T
+		3 container 设置 IRC 机器人, ID: radix-_r_pi_
+			4 heading 设置 IRC 机器人, Value: 2, ID: radix-_r_pj_
+				5 text 设置 IRC 机器人
+			6 container radix-_r_pk_
+				7 text 凭证会保存到本地 channel_credentials.json (不上云)。
+				8 link Description: 如何接入?, Value: docs.octopus.ai/channels/irc
+			9 container
+				10 text IRC Server *
+			11 text field (settable) IRC Server*, ID: channel-irc-server
+			12 container
+				13 text Port *
+			14 text field (settable) Port*, ID: channel-irc-port
+			15 container
+				16 text Nickname *
+			17 text field (settable) Nickname*, ID: channel-irc-nickname
+			18 container
+				19 text Channels *
+			20 text field (settable) Channels*, ID: channel-irc-channels
+			21 text Comma-separated IRC channels
+			22 text Server Password
+			23 container
+				24 text field (settable) Server Password
+				25 button 显示
+			26 text TLS
+			27 pop up button (collapsed, settable) Description: TLS, Value: 启用 TLS, ID: channel-irc-use_tls, Secondary Actions: Expand
+				28 menu
+					29 (selected) 启用 TLS
+					30 关闭 TLS
+			31 text Enabled by default; enter false only for a trusted local server
+			32 button 取消
+			33 button 保存并连接
+			34 button 关闭
+
+The focused UI element is 11 text field (settable) IRC Server*, ID: channel-irc-server

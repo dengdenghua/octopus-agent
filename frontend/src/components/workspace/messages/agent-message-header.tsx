@@ -78,7 +78,7 @@ export function AgentMessageHeader({
       {role === "tl" && (
         <Badge
           variant="outline"
-          className="border-success/50 bg-success/10 text-success px-1.5 py-0 text-xs leading-4 dark:text-success"
+          className="border-border bg-muted/60 text-muted-foreground px-1.5 py-0 text-xs leading-4"
         >
           TL
         </Badge>
