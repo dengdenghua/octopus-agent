@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from runtime.platform.integrity.chain import GENESIS, seal_step
 from runtime.platform.io.sqlite import connect_closing
 from runtime.projectos._store_helpers import (
     _MAX_NAME_LENGTH,
@@ -89,6 +90,32 @@ ProjectDeleteInProgressError = _ProjectDeleteInProgressError
 ProjectDeletedError = _ProjectDeletedError
 ProjectThreadBoundError = _ProjectThreadBoundError
 ProjectThreadDeletingError = _ProjectThreadDeletingError
+
+
+def _migrate_project_event_seal_columns(conn: sqlite3.Connection) -> None:
+    """Backfill the tamper-evident seal columns on older databases.
+
+    ``seq`` is the per-project monotonic counter the chain folds in — without
+    it, deleting a middle row would go undetected because the remaining rows
+    re-seal consistently. Sealed rows keep their original seq; legacy unsealed
+    rows (seq=0) are left alone and verified as a gap-free prefix failure.
+    """
+    columns = {
+        str(row[1]) for row in conn.execute("PRAGMA table_info(project_events)").fetchall()
+    }
+    if "seq" not in columns:
+        conn.execute("ALTER TABLE project_events ADD COLUMN seq INTEGER NOT NULL DEFAULT 0")
+        # Legacy rows get their insertion order (rowid is monotonic on this
+        # append-only table); new rows take MAX(seq)+1 per project from here on.
+        conn.execute("UPDATE project_events SET seq = rowid WHERE seq = 0")
+    if "seal_prev" not in columns:
+        conn.execute(
+            "ALTER TABLE project_events ADD COLUMN seal_prev TEXT NOT NULL DEFAULT ''"
+        )
+    if "seal" not in columns:
+        conn.execute("ALTER TABLE project_events ADD COLUMN seal TEXT NOT NULL DEFAULT ''")
+
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, doc TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS milestones (
@@ -116,7 +143,10 @@ CREATE TABLE IF NOT EXISTS project_events (
     project_id TEXT NOT NULL,
     kind TEXT NOT NULL,
     payload TEXT NOT NULL,
-    created_at REAL NOT NULL
+    created_at REAL NOT NULL,
+    seq INTEGER NOT NULL DEFAULT 0,
+    seal_prev TEXT NOT NULL DEFAULT '',
+    seal TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_ms_project ON milestones(project_id);
 CREATE INDEX IF NOT EXISTS idx_task_ms ON tasks(milestone_id);
@@ -151,6 +181,7 @@ class ProjectStore(
         with self._lock, connect_closing(str(self._db)) as conn:
             conn.executescript(_SCHEMA)
             ensure_project_delete_schema(conn)
+            _migrate_project_event_seal_columns(conn)
             conn.execute("BEGIN IMMEDIATE")
             conn.execute(
                 "INSERT OR IGNORE INTO thread_project_generations(thread_id, generation) "
@@ -447,15 +478,35 @@ class ProjectStore(
                 )
             if self._project_doc_for_scope(conn, project, scope) is None:
                 raise PermissionError("project belongs to another tenant or does not exist")
+            last = conn.execute(
+                "SELECT seq, seal FROM project_events "
+                "WHERE project_id=? ORDER BY seq DESC LIMIT 1",
+                (project,),
+            ).fetchone()
+            seq = (int(last[0]) + 1) if last else 1
+            prev_seal = str(last[1]) if last and last[1] else GENESIS
+            event["seq"] = seq
+            event["seal_prev"] = prev_seal
+            event["seal"] = seal_step(
+                prev_seal,
+                scope=project,
+                seq=seq,
+                record_id=event["id"],
+                payload=json.dumps(event["payload"], ensure_ascii=False),
+                ts=event["created_at"],
+            )
             conn.execute(
-                "INSERT INTO project_events(id, project_id, kind, payload, created_at) "
-                "VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO project_events(id, project_id, kind, payload, created_at, "
+                "seq, seal_prev, seal) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     event["id"],
                     event["project_id"],
                     event["kind"],
                     json.dumps(event["payload"], ensure_ascii=False),
                     event["created_at"],
+                    seq,
+                    event["seal_prev"],
+                    event["seal"],
                 ),
             )
         return event
@@ -476,9 +527,9 @@ class ProjectStore(
             ):
                 return []
             rows = conn.execute(
-                "SELECT id, project_id, kind, payload, created_at "
+                "SELECT id, project_id, kind, payload, created_at, seq, seal_prev, seal "
                 "FROM project_events WHERE project_id=? "
-                "ORDER BY created_at DESC, id DESC LIMIT ?",
+                "ORDER BY created_at DESC, seq DESC, id DESC LIMIT ?",
                 (project, bounded_limit),
             ).fetchall()
         events = []
@@ -491,12 +542,54 @@ class ProjectStore(
                         "kind": _require_kind(row[2]),
                         "payload": _json_dict(json.loads(row[3]), label="event payload"),
                         "created_at": float(row[4]),
+                        "seq": int(row[5] or 0),
+                        "seal_prev": str(row[6] or ""),
+                        "seal": str(row[7] or ""),
                     }
                 )
             except (TypeError, ValueError, json.JSONDecodeError):
                 continue
         events.reverse()
         return events
+
+    def verify_event_chain(
+        self,
+        project_id: str,
+        *,
+        scope: TenantScope | None = None,
+    ) -> dict[str, Any]:
+        """Recompute the tamper-evident seal over one project's event history.
+
+        The chain covers rows written after the seal feature; legacy rows with
+        no seal are reported as an ``unsealed_prefix`` rather than silently
+        passing, so an auditor always knows exactly how far the guarantee goes.
+        """
+        from runtime.platform.integrity.chain import verify_chain
+
+        project = _require_id(project_id, label="project_id")
+        with self._lock, self._conn() as conn:
+            rows = conn.execute(
+                "SELECT seq, id, payload, created_at, seal_prev, seal "
+                "FROM project_events WHERE project_id=? ORDER BY seq ASC",
+                (project,),
+            ).fetchall()
+        sealed = [
+            {
+                "seq": int(r[0]),
+                "record_id": r[1],
+                "payload": str(r[2]),
+                "ts": float(r[3]),
+                "prev_seal": str(r[4]),
+                "seal": str(r[5]),
+            }
+            for r in rows
+            if r[0] and r[5]  # only sealed rows participate in the chain
+        ]
+        result = verify_chain(sealed, scope=project)
+        result["total_rows"] = len(rows)
+        result["sealed_rows"] = len(sealed)
+        result["unsealed_prefix"] = len(rows) - len(sealed)
+        return result
 
     def artifacts_for_project(
         self,

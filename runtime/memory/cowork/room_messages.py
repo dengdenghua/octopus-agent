@@ -27,6 +27,7 @@ from runtime.memory.cowork.ids import (
     require_cowork_id,
     require_message_text,
 )
+from runtime.platform.integrity.chain import GENESIS, canonical, seal_step, verify_chain
 from runtime.platform.io.sqlite import connect_closing
 
 # Server-resolved sender attribution (see ``group.sender_identity``). Empty on
@@ -112,6 +113,14 @@ class RoomMessageStore:
                     "ALTER TABLE room_messages "
                     "ADD COLUMN sender_driver TEXT NOT NULL DEFAULT ''"
                 )
+            if "seal_prev" not in columns:
+                conn.execute(
+                    "ALTER TABLE room_messages ADD COLUMN seal_prev TEXT NOT NULL DEFAULT ''"
+                )
+            if "seal" not in columns:
+                conn.execute(
+                    "ALTER TABLE room_messages ADD COLUMN seal TEXT NOT NULL DEFAULT ''"
+                )
             conn.executescript(_SCHEMA)
 
     @property
@@ -178,12 +187,31 @@ class RoomMessageStore:
                             "client_message_id already belongs to a different room message"
                         )
                     return int(existing[0])
+            # Seal into the room's hash chain: read the previous seal inside
+            # the write lock, fold it into this row. Concurrent appends are
+            # serialized by ``self._lock``, so prev/seq can never interleave.
+            last = conn.execute(
+                "SELECT seq, seal FROM room_messages "
+                "WHERE room_id = ? ORDER BY seq DESC LIMIT 1",
+                (room_id,),
+            ).fetchone()
+            prev_seal = str(last[1]) if last and last[1] else GENESIS
+            pending_seq = (int(last[0]) + 1) if last else 1
+            seal = seal_step(
+                prev_seal,
+                scope=room_id,
+                seq=pending_seq,
+                record_id=message_id or client_message_id or f"room:{room_id}:{pending_seq}",
+                payload=canonical(text),
+                ts=ts,
+            )
             cur = conn.execute(
                 "INSERT INTO room_messages("
                 "room_id, seq, message_id, client_message_id, "
-                "participant_id, display_name, sender_kind, sender_driver, text, ts) "
+                "participant_id, display_name, sender_kind, sender_driver, text, ts, "
+                "seal_prev, seal) "
                 "VALUES (?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM room_messages "
-                "WHERE room_id = ?), ?, ?, ?, ?, ?, ?, ?, ?) RETURNING seq",
+                "WHERE room_id = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING seq",
                 (
                     room_id,
                     room_id,
@@ -195,6 +223,8 @@ class RoomMessageStore:
                     driver,
                     text,
                     ts,
+                    prev_seal,
+                    seal,
                 ),
             )
             row = cur.fetchone()
@@ -275,6 +305,41 @@ class RoomMessageStore:
             }
             for r in rows
         ]
+
+    def verify_chain(self, room_id: str) -> dict[str, Any]:
+        """Recompute the room's tamper-evident seal over the full transcript.
+
+        Rows written before the seal feature carry an empty ``seal`` and are
+        reported as an ``unsealed_prefix`` — the guarantee is stated honestly
+        rather than stretched backwards over history that never had it.
+        """
+        room_id = require_cowork_id(room_id, label="room_id")
+        with self._lock, self._connect() as conn:
+            rows = conn.execute(
+                "SELECT seq, message_id, client_message_id, text, ts, seal_prev, seal "
+                "FROM room_messages WHERE room_id = ? ORDER BY seq ASC",
+                (room_id,),
+            ).fetchall()
+        sealed = []
+        for r in rows:
+            if not r[6]:  # unsealed legacy row
+                continue
+            record_id = str(r[1] or r[2] or f"room:{room_id}:{int(r[0])}")
+            sealed.append(
+                {
+                    "seq": int(r[0]),
+                    "record_id": record_id,
+                    "payload": canonical(str(r[3])),
+                    "ts": str(r[4]),
+                    "prev_seal": str(r[5]),
+                    "seal": str(r[6]),
+                }
+            )
+        result = verify_chain(sealed, scope=room_id)
+        result["total_rows"] = len(rows)
+        result["sealed_rows"] = len(sealed)
+        result["unsealed_prefix"] = len(rows) - len(sealed)
+        return result
 
     def record_receipt(
         self,
