@@ -383,7 +383,7 @@ describe("<ChatInputBox /> cowork materials", () => {
     expect(screen.getAllByRole("option")).toHaveLength(2);
     fireEvent.click(screen.getByRole("option", { name: /Design/ }));
 
-    expect(onStrategyChange).toHaveBeenLastCalledWith("uxui");
+    await waitFor(() => expect(onStrategyChange).toHaveBeenLastCalledWith("uxui"));
     expect(onSubmit).not.toHaveBeenCalled();
     expect(screen.queryByTestId("group-task-strategy-chip")).toBeNull();
     expect(screen.queryByTestId("group-task-strategy-indicator")).toBeNull();
@@ -501,7 +501,7 @@ describe("<ChatInputBox /> cowork materials", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps personal/project status visible in groups and hides only default permission chrome", () => {
+  it("keeps personal/project status visible in groups and hides only default permission chrome", async () => {
     const onGroupTaskStrategyChange = vi.fn();
     const group = renderWithProviders(
       <ChatInputBox
@@ -525,7 +525,7 @@ describe("<ChatInputBox /> cowork materials", () => {
     expect(screen.getByTitle("Personal space")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^General/ }));
     fireEvent.click(screen.getByRole("option", { name: /Design/ }));
-    expect(onGroupTaskStrategyChange).toHaveBeenCalledWith("uxui");
+    await waitFor(() => expect(onGroupTaskStrategyChange).toHaveBeenCalledWith("uxui"));
     expect(screen.queryByTestId("permission-mode-trigger")).toBeNull();
     group.unmount();
 

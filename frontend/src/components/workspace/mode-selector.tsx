@@ -147,20 +147,14 @@ function loadDetection(workspacePath: string): Promise<DetectResponse> {
 
 export async function persistModeSelection(
   mode: AgentModeName,
-  sessionId: string,
+  _sessionId: string,
   workspacePath: string,
 ): Promise<void> {
-  const canonicalMode = canonicalUserMode(mode);
-  const url = `${getBackendBaseURL()}/api/agent-modes/current`;
-  const response = await fetch(url, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ mode: canonicalMode, session_id: sessionId }),
-  });
-  if (!response.ok) {
-    throw new Error(`Mode update failed: ${response.status}`);
-  }
-  writeStoredModeOverride(workspacePath, canonicalMode);
+  // Mode is a local UI preference; task submissions carry their own mode.
+  // The legacy PUT endpoint only echoes its input and persists no state.
+  // Both workspace surfaces must save the preference before navigating,
+  // without making route changes depend on a backend round trip.
+  writeStoredModeOverride(workspacePath, canonicalUserMode(mode));
 }
 
 interface ModeSelectorProps {
@@ -683,7 +677,7 @@ function readStoredEntries(): Record<string, StoredModeEntry> {
 export function readStoredModeOverride(
   workspacePath: string,
 ): AgentModeName | null {
-  const entry = readStoredEntries()[workspacePath];
+  const entry = readStoredEntries()[workspacePath.trim() || PERSONAL_MODE_STORAGE_KEY];
   const mode = typeof entry === "string" ? entry : entry?.mode;
   return isValidMode(mode) ? canonicalUserMode(mode) : null;
 }
@@ -712,6 +706,7 @@ export function writeStoredModeOverride(
 ): void {
   if (typeof window === "undefined") return;
   try {
+    workspacePath = workspacePath.trim() || PERSONAL_MODE_STORAGE_KEY;
     const current = readStoredEntries();
     const existing = current[workspacePath];
     const existingIntensity =

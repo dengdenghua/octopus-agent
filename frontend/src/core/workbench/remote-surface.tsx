@@ -268,9 +268,19 @@ export function RemoteWorkbenchSurface({
     setManifest(null);
     setIssue(null);
     void (async () => {
+      // These reads are independent. Wait for all checks before mounting, but
+      // don't add their network latencies together on every mode switch.
+      const [installedResult, runtimeResult, manifestResult] = await Promise.allSettled([
+        fetchCloudInstalled(),
+        app.runtimePlugin
+          ? fetchRuntimePluginStatus(app.runtimePlugin)
+          : Promise.resolve(null),
+        fetchRemoteWorkbenchManifest(packageId, controller.signal),
+      ]);
+      if (controller.signal.aborted) return;
       try {
-        const installed = await fetchCloudInstalled();
-        if (controller.signal.aborted) return;
+        if (installedResult.status === "rejected") throw installedResult.reason;
+        const installed = installedResult.value;
         const packageStatus = installed.plugin_states?.[packageId];
         if (packageStatus?.lifecycle_state === "broken") {
           throw new RemoteWorkbenchLoadError(
@@ -310,8 +320,8 @@ export function RemoteWorkbenchSurface({
       }
       if (app.runtimePlugin) {
         try {
-          const status = await fetchRuntimePluginStatus(app.runtimePlugin);
-          if (controller.signal.aborted) return;
+          if (runtimeResult.status === "rejected") throw runtimeResult.reason;
+          const status = runtimeResult.value!;
           if (!status.installed) {
             throw new RemoteWorkbenchLoadError(
               "missing",
@@ -344,7 +354,8 @@ export function RemoteWorkbenchSurface({
           // package endpoint remains the authoritative compatibility fallback.
         }
       }
-      return fetchRemoteWorkbenchManifest(packageId, controller.signal);
+      if (manifestResult.status === "rejected") throw manifestResult.reason;
+      return manifestResult.value;
     })()
       .then((nextManifest) => {
         if (nextManifest) setManifest(nextManifest);

@@ -74,7 +74,7 @@ function manifestResponse() {
 
 describe("RemoteWorkbenchSurface", () => {
   beforeEach(() => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(manifestResponse()));
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => manifestResponse()));
     apiMocks.fetchRuntimePluginStatus.mockReset().mockResolvedValue({
       installed: true,
       enabled: true,
@@ -201,6 +201,24 @@ describe("RemoteWorkbenchSurface", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
+  it("starts independent reads together but waits for lifecycle checks before mounting", async () => {
+    let finishInstalled!: (value: unknown) => void;
+    apiMocks.fetchCloudInstalled.mockImplementationOnce(() => new Promise((resolve) => {
+      finishInstalled = resolve;
+    }));
+    renderSurface();
+    expect(apiMocks.fetchRuntimePluginStatus).toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalled();
+    expect(screen.queryByTitle("Narrative Studio")).not.toBeInTheDocument();
+    await act(async () => {
+      finishInstalled({ plugins: ["narrative_studio"], plugin_states: {
+        narrative_studio: { installed: true, enabled: false, lifecycle_state: "disabled" },
+      } });
+    });
+    expect(await screen.findByRole("heading", { name: "叙事工坊已停用" })).toBeInTheDocument();
+    expect(screen.queryByTitle("Narrative Studio")).not.toBeInTheDocument();
+  });
+
   it("offers one-click enable when the runtime is installed but disabled", async () => {
     apiMocks.fetchRuntimePluginStatus
       .mockReset()
@@ -219,7 +237,7 @@ describe("RemoteWorkbenchSurface", () => {
     expect(
       await screen.findByRole("heading", { name: "叙事工坊已停用" }),
     ).toBeInTheDocument();
-    expect(fetch).not.toHaveBeenCalled();
+    expect(screen.queryByTitle("Narrative Studio")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "启用应用" }));
     await waitFor(() =>

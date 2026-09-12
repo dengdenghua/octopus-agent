@@ -115,6 +115,8 @@ export interface ChatInputBoxProps {
    * server profile. */
   executionEngine?: "octopus" | "codex" | "opencode";
   executionEngineControl?: ReactNode;
+  workspaceControl?: ReactNode;
+  contextActions?: ReactNode;
   onPermissionModeChange?: (mode: PermissionMode) => void;
   onProjectAgentModeChange?: (mode: AgentModeName) => void;
   /** User-only companion to onProjectAgentModeChange. It fires after the
@@ -190,6 +192,8 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
     groupTaskStrategy = "auto",
     onGroupTaskStrategyChange,
     statusTrailing,
+    workspaceControl,
+    contextActions,
   } = props;
 
   const { t } = useI18n();
@@ -223,7 +227,7 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
   // directory before the picker appeared, so there was no inline way to choose
   // one. When the parent opts into the picker (``showWorkDirSelector``), show it
   // so picking a folder is the entry point into a project/code workflow.
-  const showWorkDirSegment = isProjectMode || hasWorkDir || showWorkDirSelector;
+  const showWorkDirSegment = Boolean(workspaceControl) || isProjectMode || hasWorkDir || showWorkDirSelector;
   // Personal and project workspaces share the same two work modes. A folder
   // changes scope only; it must not replace the mode selector with another
   // vocabulary or another backend contract.
@@ -275,7 +279,7 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
         <div
           data-testid="chat-status-strip"
           data-composer-context-strip={statusTrailing ? undefined : "true"}
-          className="flex min-h-8 items-center gap-2 overflow-x-auto px-2 pt-1.5 text-ui text-muted-foreground [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex min-h-8 flex-wrap items-center gap-x-2 px-2 pt-1.5 text-ui text-muted-foreground"
         >
           <div className="inline-flex max-w-full items-center gap-1.5 rounded-lg px-0.5 py-0.5">
             {showAgentSegment ? (
@@ -309,7 +313,8 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
             ) : null}
             {showWorkDirSegment ? (
               <>
-                <WorkDirSelector
+                <div className="composer-workspace-control">
+                {workspaceControl ?? <WorkDirSelector
                   designSpace={visibleProjectMode === "uxui"}
                   workDir={workDir ?? ""}
                   onWorkDirChange={onWorkDirChange}
@@ -317,7 +322,8 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
                   onOpenWorkDirInNewTask={onOpenWorkDirInNewTask}
                   variant="muted"
                   chromeless
-                />
+                />}
+                </div>
               </>
             ) : null}
             {showModeSegment ? (
@@ -358,6 +364,7 @@ function ChatInputBoxImpl(props: ChatInputBoxProps) {
               </>
             ) : null}
           </div>
+          {contextActions ? <div className="ml-auto flex items-center gap-1">{contextActions}</div> : null}
         </div>
       )}
     </>

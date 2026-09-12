@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("@/core/i18n/hooks", () => ({
@@ -136,69 +136,40 @@ describe("ModeSelector.onManualOverrideChange", () => {
     expect(screen.queryByText("审查")).not.toBeInTheDocument();
   });
 
-  it("persists a mode only after the server accepts it", async () => {
-    await persistModeSelection("audit", "s1", "/workspace/a");
-
-    expect(
-      JSON.parse(window.localStorage.getItem("octopus:modeOverride")!),
-    ).toEqual({
-      "/workspace/a": { mode: "develop" },
-    });
+  it("saves personal mode locally without a backend mutation", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    await persistModeSelection("audit", "new", "");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(JSON.parse(window.localStorage.getItem("octopus:modeOverride")!))
+      .toEqual({ __personal__: { mode: "develop" } });
   });
 
-  it("does not trigger a route-changing mode update while persistence is pending", async () => {
-    let finish!: (response: Response) => void;
-    const pending = new Promise<Response>((resolve) => {
-      finish = resolve;
+  it("switches immediately even while backend reads remain pending", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    const onUserModeChange = vi.fn(() => {
+      expect(JSON.parse(window.localStorage.getItem("octopus:modeOverride")!))
+        .toEqual({ __personal__: { mode: "uxui" } });
     });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() => pending),
-    );
-    const onModeChange = vi.fn();
-    const onUserModeChange = vi.fn();
     const user = userEvent.setup();
     render(
-      <ModeSelector
-        workDir=""
-        sessionId="new"
-        mode="develop"
-        onModeChange={onModeChange}
-        onUserModeChange={onUserModeChange}
-      />,
+      <ModeSelector workDir="" sessionId="new" mode="develop"
+        onModeChange={() => {}} onUserModeChange={onUserModeChange} />,
     );
-    onModeChange.mockClear();
     await user.click(screen.getByRole("button", { haspopup: "listbox" }));
     const design = (await screen.findAllByRole("option")).find((option) =>
       option.textContent?.includes("界面"),
     );
     await user.click(design!);
-    expect(onModeChange).not.toHaveBeenCalled();
-    expect(onUserModeChange).not.toHaveBeenCalled();
-    await act(async () => {
-      finish(new Response("{}", { status: 200 }));
-    });
-    expect(onModeChange).toHaveBeenCalledWith("uxui");
+    expect(onUserModeChange).toHaveBeenCalledOnce();
     expect(onUserModeChange).toHaveBeenCalledWith("uxui");
   });
 
-  it("rejects a failed server update without overwriting the saved mode", async () => {
-    window.localStorage.setItem(
-      "octopus:modeOverride",
-      JSON.stringify({ "/workspace/a": { mode: "develop" } }),
-    );
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response("failed", { status: 500 })),
-    );
-
-    await expect(
-      persistModeSelection("audit", "s1", "/workspace/a"),
-    ).rejects.toThrow("Mode update failed: 500");
-    expect(
-      JSON.parse(window.localStorage.getItem("octopus:modeOverride")!),
-    ).toEqual({
-      "/workspace/a": { mode: "develop" },
-    });
+  it("keeps workspace preferences separate when offline", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("offline"); }));
+    await persistModeSelection("uxui", "s1", "/workspace/a");
+    await persistModeSelection("develop", "new", "");
+    expect(JSON.parse(window.localStorage.getItem("octopus:modeOverride")!))
+      .toEqual({ "/workspace/a": { mode: "uxui" }, __personal__: { mode: "develop" } });
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

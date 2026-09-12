@@ -2349,3 +2349,36 @@
     }
   }
 }
+
+  /* Shared starting position in the content area below either 44px header. */
+  .workspace-start-position,
+  [data-workspace-start="true"] {
+    position: absolute;
+    inset-inline: 0;
+    top: clamp(48px, 40%, 360px);
+    bottom: auto;
+    padding-top: 0;
+    background: none;
+  }
+  .workspace-start-composer {
+    width: 100%;
+    max-width: 720px;
+    translate: none;
+    transform: none;
+  }
+  .workspace-start-heading {
+    height: 80px;
+    max-width: 720px;
+    padding: 0;
+    justify-content: flex-start;
+  }
+  .composer-workspace-control {
+    display: flex;
+    width: 104px;
+    min-width: 0;
+    flex-shrink: 0;
+  }
+  .composer-workspace-control > * {
+    width: 100%;
+    min-width: 0;
+  }

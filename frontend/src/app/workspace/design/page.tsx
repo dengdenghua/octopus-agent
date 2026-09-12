@@ -1238,12 +1238,41 @@ function DesignHomeView({
   onUseTemplate: (templateId: "ai-drama-series") => void;
   onOpenSkills: () => void;
 }) {
+  const navigate = useNavigate();
+  const navigateWorkspace = (href: string) => {
+    // Workbench frames cannot navigate the top window directly. Let the
+    // host validate the message and update its router instead.
+    if (window.parent !== window) {
+      window.parent.postMessage(
+        { type: "octopus.workbench.navigate", href },
+        workspaceHostOrigin(),
+      );
+    } else {
+      navigate(href);
+    }
+  };
   const [settings, setSetting] = useThreadSettings(threadId ?? "");
   const { plugins, isLoading: modelsLoading, error: pluginsError, refetch: refetchPlugins } = useHubPlugins();
   const { agents, isLoading: agentsLoading } = useAgents();
   const [prompt, setPrompt] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [category, setCategory] = useState("全部");
+  const [templatesVisible, setTemplatesVisible] = useState(() => {
+    try {
+      return window.localStorage.getItem("echo:design:templates-visible") !== "false";
+    } catch {
+      return true;
+    }
+  });
+  const toggleTemplates = () => {
+    const next = !templatesVisible;
+    setTemplatesVisible(next);
+    try {
+      window.localStorage.setItem("echo:design:templates-visible", String(next));
+    } catch {
+      // Collapsing still works when browser storage is unavailable.
+    }
+  };
   const [modelOpen, setModelOpen] = useState(false);
   const [guide, setGuide] = useState<"design" | "models" | null>(null);
   const [modelTab, setModelTab] = useState<DesignModelTab>("agent");
@@ -1415,22 +1444,13 @@ function DesignHomeView({
 
   return (
     <div className="relative h-full overflow-y-auto bg-background">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-10"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle, color-mix(in oklch, var(--foreground) 14%, transparent) 1px, transparent 1px)",
-          backgroundSize: "24px 24px",
-        }}
-      />
-      <div className="relative mx-auto w-full max-w-[1120px] px-4 pb-8 pt-5 sm:px-6 sm:pt-6">
-        <div className="text-center">
+      <div className="workspace-start-position mx-auto w-full max-w-[1120px] px-3 pb-8">
+        <div className="workspace-start-heading mx-auto text-center">
           <div className="inline-flex items-center gap-3">
             <span className="grid size-10 place-items-center rounded-xl bg-[#111] text-white shadow-sm dark:bg-white dark:text-black">
               <WandSparklesIcon className="size-5" />
             </span>
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">
+            <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.035em] sm:text-[32px]">
               Echo Design
             </h1>
           </div>
@@ -1439,12 +1459,29 @@ function DesignHomeView({
           </p>
         </div>
 
-        <div className="relative mx-auto mt-4 max-w-[760px]">
+        <div className="workspace-start-composer relative mx-auto">
           <ChatInputBox
             key={prompt}
             disabled={submitting}
             defaultValue={prompt}
             draftStorageKey="echo:design-home"
+            workspaceControl={spaceSelector}
+            showModeSelector
+            projectAgentMode="uxui"
+            codeModeUnlocked
+            onProjectAgentModeUserChange={(mode) => {
+              if (mode === "develop") navigateWorkspace("/workspace/realtime/new");
+            }}
+            contextActions={<>
+            <button type="button" className="h-8 rounded-md px-2 hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => { setModelOpen((value) => !value); void refetchPlugins(); }} aria-expanded={modelOpen}>创作插件</button>
+            <button type="button" className="h-8 rounded-md px-2 hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={onOpenSkills}>技能库</button>
+            <button type="button" onClick={toggleTemplates} aria-expanded={templatesVisible} aria-controls="design-home-templates" className="flex h-8 items-center gap-1.5 rounded-md px-2 hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              {templatesVisible ? "收起模板" : "展开模板"}
+              <span className="text-muted-foreground">{showcases.length}</span>
+              <ChevronDownIcon className="size-3" style={{ transform: templatesVisible ? "rotate(180deg)" : undefined }} />
+            </button>
+            </>}
+
             threadId={threadId}
             modelName={settings.context.model_name}
             permissionMode={normalizePermissionMode(settings.context.permission_mode)}
@@ -1461,15 +1498,6 @@ function DesignHomeView({
               return false;
             }}
           />
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 py-2 text-xs text-muted-foreground">
-            {spaceSelector}
-            <span className="h-3 w-px bg-border/35" aria-hidden="true" />
-
-
-            <button type="button" className="h-8 rounded-md px-2 hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => { setModelOpen((value) => !value); void refetchPlugins(); }} aria-expanded={modelOpen}>创作插件</button>
-            <button type="button" className="h-8 rounded-md px-2 hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={onOpenSkills}>技能库</button>
-            <span className="flex-1" />
-          </div>
           {modelOpen ? (
             <div className="absolute left-0 top-[calc(100%+8px)] z-50 w-[330px] overflow-hidden rounded-[16px] border border-border-default bg-background text-left shadow-[0_16px_40px_rgba(0,0,0,.16)]">
               <div className="flex h-10 items-center gap-1 px-3">
@@ -1577,13 +1605,14 @@ function DesignHomeView({
               </div>
               <p className="border-t border-border-subtle px-3 py-2 text-[9px] leading-4 text-muted-foreground">
                 按需选择已启用的创作插件，语言模型在输入框中选择。
-                <button type="button" className="ml-2 underline" onClick={() => { window.top!.location.href = `${workspaceShellBase()}#/workspace/agents?tab=plugins`; }}>管理插件</button>
+                <button type="button" className="ml-2 underline" onClick={() => navigateWorkspace("/workspace/agents?tab=plugins")}>管理插件</button>
               </p>
             </div>
           ) : null}
         </div>
 
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+        <div id="design-home-templates" hidden={!templatesVisible}>
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
           {categories.map((item) => (
             <button
               key={item}
@@ -1605,24 +1634,24 @@ function DesignHomeView({
           <span>选择模板开始 · 封面为流程示意</span>
           <span>{visible.length} 个模板</span>
         </div>
-        <div className="mt-3 grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))" }}>
+        <div className="mt-2 grid gap-x-5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 400px), 1fr))" }}>
           {visible.map((item) => (
-            <article key={item.title} className="overflow-hidden rounded-lg border border-border bg-card text-left transition-colors hover:border-primary/40">
-              <button type="button" onClick={() => setPreviewTitle(item.title)} aria-label={`预览 ${item.title}`} className="block h-32 w-full overflow-hidden border-b border-border/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
-                <TemplateCover category={item.category} title={item.title} />
+            <article key={item.title} className="flex min-w-0 items-center gap-2 border-b border-border/60 py-3 text-left">
+              <button type="button" onClick={() => setPreviewTitle(item.title)} aria-label={`预览 ${item.title}`} className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <span className="block shrink-0 overflow-hidden rounded-md" style={{ width: 60, height: 44 }}>
+                  <TemplateCover category={item.category} title={item.title} compact />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{item.title}</span>
+                  <span className="mt-1 block truncate text-xs text-muted-foreground">{item.description}</span>
+                </span>
               </button>
-              <div className="p-3">
-                <h2 className="truncate text-sm font-medium">{item.title}</h2>
-                <p className="mt-1 line-clamp-2 min-h-10 text-xs leading-5 text-muted-foreground">{item.description}</p>
-                <div className="mt-2 flex items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">{item.templateId ? "分阶段工作流" : item.category}</span>
-                  <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => item.templateId ? onUseTemplate(item.templateId) : setPrompt(item.prompt)}>
-                    {item.templateId ? "使用模板" : "使用提示词"}
-                  </Button>
-                </div>
-              </div>
+              <Button type="button" size="sm" variant="ghost" className="h-8 shrink-0 px-2 text-xs" aria-label={`使用${item.templateId ? "模板" : "提示词"}：${item.title}`} onClick={() => item.templateId ? onUseTemplate(item.templateId) : setPrompt(item.prompt)}>
+                使用
+              </Button>
             </article>
           ))}
+        </div>
         </div>
       </div>
       <Dialog
@@ -7682,7 +7711,7 @@ export default function DesignPage({
 
   return (
     <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-background">
-      <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-y-1 border-b border-border-subtle bg-background px-2.5 py-1 md:h-12 md:flex-nowrap md:py-0">
+      <header className="flex min-h-11 shrink-0 flex-wrap items-center gap-y-1 border-b border-border-subtle bg-background px-2.5 py-1 md:h-11 md:flex-nowrap md:py-0">
         <div className="ml-1 flex min-w-0 max-w-full items-center gap-2">
           <button
             type="button"

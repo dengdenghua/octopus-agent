@@ -10,7 +10,6 @@ import {
   GlobeIcon,
   KeyboardIcon,
   MessageSquarePlusIcon,
-  NetworkIcon,
   PlugIcon,
   RadarIcon,
   SettingsIcon,
@@ -150,13 +149,6 @@ export function CommandPalette() {
         label: t.sidebar.navMcp,
         icon: PlugIcon,
         keywords: "mcp integration",
-      },
-      {
-        id: "architecture",
-        to: "/workspace/architecture",
-        label: t.architecture.title,
-        icon: NetworkIcon,
-        keywords: "architecture docs design",
       },
       {
         id: "observability",

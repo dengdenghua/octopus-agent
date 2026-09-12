@@ -24,6 +24,7 @@ import type {
   CoworkSearchKind,
   CoworkSearchResponse,
 } from "./types";
+import type { CoworkTrustResponse } from "./trust";
 
 const BASE = () => `${getBackendBaseURL()}/api/cowork`;
 const COLLAB_BASE = () => `${getBackendBaseURL()}/api/collab`;
@@ -45,6 +46,15 @@ export async function getCoworkGroup(
     headers: authHeaders(),
   });
   return parseJson<CoworkGroupResponse>(res, "Load cowork group");
+}
+
+export async function getCoworkTrust(
+  threadId: string,
+): Promise<CoworkTrustResponse> {
+  const res = await fetch(`${BASE()}/${encodeURIComponent(threadId)}/trust`, {
+    headers: authHeaders(),
+  });
+  return parseJson<CoworkTrustResponse>(res, "Load cowork trust scores");
 }
 
 export async function inviteCoworkMember(

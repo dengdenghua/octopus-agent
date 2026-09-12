@@ -2457,3 +2457,54 @@ def test_legacy_project_mode_concurrent_attach_uses_one_cas_winner(
             and event["payload"]["winner_project_id"] == winner_id
             for event in orphan_events
         )
+
+
+def test_trust_endpoint_reports_scores_without_project(tmp_path) -> None:
+    """信任分端点：无绑定项目也能给出 roster 评分（外包进群前先看这一眼）。"""
+    from runtime.projectos.store import ProjectStore
+
+    group_store = GroupStore(base_dir=tmp_path / "groups")
+    for event in (
+        MemberEvent(action="invite", actor="local", target_id="outsource-ai"),
+        MemberEvent(
+            action="invite",
+            actor="local",
+            target_id="owner",
+            target_kind="human",
+        ),
+    ):
+        group_store.append("thread-trust", event)
+    # 接管历史：outsource-ai 被真人接管过一次
+    group_store.append(
+        "thread-trust",
+        MemberEvent(
+            action="drive",
+            actor="owner",
+            target_id="outsource-ai",
+            driver="human",
+        ),
+    )
+    project_store = ProjectStore(base_dir=tmp_path / "projects")
+    app = FastAPI()
+    app.include_router(
+        create_cowork_group_router(store=group_store, project_store=project_store)
+    )
+
+    response = TestClient(app).get("/api/cowork/thread-trust/trust")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["thread_id"] == "thread-trust"
+    assert body["basis"] == "sealed_events+review_chain"
+    assert body["weights"]["takeover_penalty"] > 0
+    scores = {entry["member_id"]: entry for entry in body["scores"]}
+    assert set(scores) == {"outsource-ai", "owner"}
+    # 无交付记录但被接管过：如实低于中立分，绝不冒充"无记录"
+    outsource = scores["outsource-ai"]
+    assert outsource["sample_size"] == 0
+    assert outsource["label"] != "无记录"
+    assert outsource["score"] < 70
+    assert outsource["components"]["takeover_count"] == 1
+    # 真人无任何信号：中立分
+    assert scores["owner"]["label"] == "无记录"
+    assert scores["owner"]["score"] == 70

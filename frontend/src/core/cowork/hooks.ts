@@ -6,6 +6,7 @@ import {
   getCollabSession,
   getCoworkGroup,
   getCoworkPresence,
+  getCoworkTrust,
   inviteCoworkMember,
   linkCoworkRoom,
   postCollabRoomMessage,
@@ -50,6 +51,8 @@ export const coworkQueryKeys = {
     ] as const,
   session: (threadId?: string | null) =>
     [...COWORK_KEY, "session", threadId ?? "none"] as const,
+  trust: (threadId?: string | null) =>
+    [...COWORK_KEY, "trust", threadId ?? "none"] as const,
 };
 
 export function useCoworkGroup(threadId?: string | null) {
@@ -235,6 +238,22 @@ export function useCollabSession(
       enabled ? collabSessionRefetchInterval(query.state.data, opts) : false,
     refetchIntervalInBackground: false,
     staleTime: 2000,
+  });
+}
+
+/**
+ * 成员信任分。信任随交付/接管事件缓变——两分钟刷新足够，
+ * 不跟 5s 的 session 轮询绑在一起。
+ */
+export function useCoworkTrust(threadId?: string | null, enabled = true) {
+  const active = enabled && Boolean(threadId && threadId !== "new");
+  return useQuery({
+    queryKey: coworkQueryKeys.trust(threadId),
+    queryFn: () => getCoworkTrust(threadId!),
+    enabled: active,
+    staleTime: 60_000,
+    refetchInterval: active ? 120_000 : false,
+    refetchIntervalInBackground: false,
   });
 }
 

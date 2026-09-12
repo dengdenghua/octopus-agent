@@ -588,6 +588,7 @@ export function ChatPageLayout({
           <div
             ref={inputOverlayRef}
             data-chat-input-overlay="true"
+            data-workspace-start={isNewThread && !fullWorkbench ? "true" : undefined}
             data-composer-placement={fullWorkbench ? "floating" : "docked"}
             data-composer-state={
               fullWorkbench && !composerExpanded ? "compact" : "expanded"

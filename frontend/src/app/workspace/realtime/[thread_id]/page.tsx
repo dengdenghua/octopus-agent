@@ -251,9 +251,11 @@ import {
   useEnsureCollabRoom,
   usePostCollabRoomMessage,
   useReplaceCoworkRoster,
+  useCoworkTrust,
   type CoworkMessageProjectActionInput,
   type CoworkRoomEntityRef,
   type CoworkRoomMessage,
+  type TrustScore,
 } from "@/core/cowork";
 import { currentActorId } from "@/core/auth/api";
 import { canAccessGlobalControlPlane } from "@/core/auth/control-plane-access";
@@ -1572,6 +1574,19 @@ function RealtimePageContent({
     (visibleCollaborationEnabled ||
       Boolean(collabSessionQuery.data?.room_id) ||
       Boolean(boundProjectQuery.data));
+  // 信任分：外包/外部成员进群前"这个人靠不靠谱"的一眼依据。
+  // 随交付/接管事件缓变，两分钟刷新足够。
+  const trustQuery = useCoworkTrust(
+    isNewThread ? null : threadId,
+    isGroupConversation,
+  );
+  const trustByMemberId = useMemo(() => {
+    const map = new Map<string, TrustScore>();
+    for (const score of trustQuery.data?.scores ?? []) {
+      map.set(score.member_id, score);
+    }
+    return map;
+  }, [trustQuery.data]);
   const groupPerspectiveAgentIds = useMemo(
     () => new Set(visibleCollaborationRoster.map((member) => member.agent_id)),
     [visibleCollaborationRoster],
@@ -1640,6 +1655,7 @@ function RealtimePageContent({
         description: profileDetails?.description ?? null,
         model: profileDetails?.model ?? null,
         toolGroups: profileDetails?.tool_groups ?? null,
+        trust: trustByMemberId.get(agent.agent_id) ?? null,
       });
     }
     for (const participant of collabSessionQuery.data?.room_participants ??
@@ -1672,6 +1688,7 @@ function RealtimePageContent({
         driver:
           participant.kind === "human" ? "human" : (participant.driver ?? undefined),
         accountableOwner: participant.accountable_owner ?? null,
+        trust: trustByMemberId.get(id) ?? null,
       });
     }
     return Array.from(seats.values());
@@ -1679,6 +1696,7 @@ function RealtimePageContent({
     collabSessionQuery.data?.room_participants,
     coworkCollaborationProfiles,
     visibleCollaborationRoster,
+    trustByMemberId,
   ]);
   const collaborationTeamName =
     boundProjectQuery.data?.project.name ||

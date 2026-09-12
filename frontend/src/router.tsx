@@ -103,9 +103,6 @@ const DesktopOrganizerPage = lazy(
 const AgentsPage = lazy(loadAgentsPage);
 const AgentsNewPage = lazy(() => import("./app/workspace/agents/new/page"));
 const ChannelsPage = lazy(() => import("./app/workspace/channels/page"));
-const ArchitecturePage = lazy(
-  () => import("./app/workspace/architecture/page"),
-);
 // Workspace-scoped observability surface: focused tabs for swarm
 // sub-agent tracing, blackboard snapshot, journal stream, 6-producer
 // regeneration summary, hemolymph compose-budget meter, and per-task
@@ -268,7 +265,7 @@ export function AppRouter() {
                   element={<Navigate to={LEGACY_REDIRECTS.store} replace />}
                 />
                 <Route path="channels" element={<ChannelsPage />} />
-                <Route path="architecture" element={<ArchitecturePage />} />
+                <Route path="architecture" element={<Navigate to="/workspace/realtime/new" replace />} />
                 <Route path="observability" element={<ObservabilityPage />} />
                 <Route
                   path="intelligence"

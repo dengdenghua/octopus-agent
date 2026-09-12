@@ -1,3 +1,4 @@
+import type { TrustScore } from "@/core/cowork/trust";
 import type { Translations } from "@/core/i18n/locales/types";
 
 import type { AgentTile, AgentWorkbenchTabId } from "../agent-workbench-utils";
@@ -21,6 +22,8 @@ export type WorkbenchRosterSeat = {
   description?: string | null;
   model?: string | null;
   toolGroups?: string[] | null;
+  /** 信任分（服务端从封签事件算出，见 runtime/memory/cowork/trust.py）。 */
+  trust?: TrustScore | null;
 };
 
 /**

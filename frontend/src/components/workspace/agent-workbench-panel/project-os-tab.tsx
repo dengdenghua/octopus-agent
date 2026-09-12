@@ -54,6 +54,7 @@ import { Progress } from "@/components/ui/progress";
 import { RoutedWebLink } from "@/components/ui/routed-web-link";
 import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
+import { trustBadgeClass, trustTooltip, type TrustScore } from "@/core/cowork/trust";
 import { cn } from "@/lib/utils";
 
 import { rosterSeatIdentityLabel, type WorkbenchRosterSeat } from "./helpers";
@@ -265,6 +266,7 @@ interface ProjectMemberView {
   avatarUrl?: string | null;
   status?: string;
   isOwner?: boolean;
+  trust?: TrustScore | null;
 }
 
 interface ProjectDecisionView {
@@ -895,6 +897,7 @@ export function ProjectOsTab({
         driver: seat.driver,
         accountableOwner: seat.accountableOwner,
         avatarUrl: seat.avatarUrl,
+        trust: seat.trust ?? null,
       });
     }
     for (const member of state.members ?? []) {
@@ -2153,6 +2156,17 @@ function MembersTab({
                     )}
                   >
                     {rosterSeatIdentityLabel(member)}
+                  </Badge>
+                ) : null}
+                {member.trust ? (
+                  <Badge
+                    className={cn(
+                      "h-4 cursor-help px-1 text-[8px] font-semibold",
+                      trustBadgeClass(member.trust.score),
+                    )}
+                    title={trustTooltip(member.trust)}
+                  >
+                    信任 {member.trust.score} · {member.trust.label}
                   </Badge>
                 ) : null}
               </div>

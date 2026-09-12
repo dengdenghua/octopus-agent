@@ -7,7 +7,6 @@ describe("workspace sidebar route activation", () => {
     expect(__testing.WORKSPACE_TOOL_ROUTES.map((route) => route.to)).toEqual([
       "/workspace/computer",
       "/workspace/desktop-organizer",
-      "/workspace/architecture",
       "/workspace/channels",
       "/workspace/observability",
       "/workspace/diagnostics",

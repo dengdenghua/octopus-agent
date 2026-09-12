@@ -3,4 +3,5 @@ export * from "./hooks";
 export * from "./mentions";
 export * from "./roster";
 export * from "./sync";
+export * from "./trust";
 export * from "./types";

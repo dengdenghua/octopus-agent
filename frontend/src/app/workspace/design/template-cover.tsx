@@ -2,9 +2,11 @@
 export function TemplateCover({
   category,
   title,
+  compact = false,
 }: {
   category: string;
   title: string;
+  compact?: boolean;
 }) {
   const storyboard = category === "漫剧短片";
   const product = category === "产品广告";
@@ -270,14 +272,14 @@ export function TemplateCover({
           </g>
         )}
       </svg>
-      <div
+      {!compact && <div
         className="absolute inset-x-3 bottom-1 flex justify-between text-[10px] text-muted-foreground"
         aria-hidden="true"
       >
         {steps.map((step) => (
           <span key={step}>{step}</span>
         ))}
-      </div>
+      </div>}
     </div>
   );
 }

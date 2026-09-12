@@ -347,6 +347,45 @@ def create_cowork_group_router(
             "responders": responders(state),
         }
 
+    @router.get("/api/cowork/{thread_id}/trust")
+    def get_trust(thread_id: str, request: Request) -> dict[str, Any]:
+        """闲鱼式成员信任分：交付记录（封签链）+ 接管历史 → 可解释分数。
+
+        信号全部来自已封签的事件源（成员时间线、任务审核链），评分权重
+        显式暴露在响应里。外包/外部成员进群前先看这一眼。"""
+        state = group_store.state(thread_id)
+        events = group_store.events(thread_id)
+        tasks: list[dict[str, Any]] = []
+        try:
+            project_store = _project_store()
+            principal = _principal(request)
+            if principal is not None:
+                from runtime.safety.auth.scope import scope_from_principal
+
+                scope = scope_from_principal(
+                    principal,
+                    allow_cross_tenant=bool(
+                        principal.roles.intersection({"admin", "operator"})
+                    ),
+                )
+                with_scope = getattr(project_store, "with_scope", None)
+                if callable(with_scope):
+                    project_store = with_scope(scope)
+            project = project_store.project_for_thread(thread_id)
+            if project is not None:
+                for milestone in project_store.milestones_for(project.id):
+                    tasks.extend(
+                        task.to_dict()
+                        for task in project_store.tasks_for_milestone(milestone.id)
+                    )
+        except Exception as exc:  # noqa: BLE001 — trust degrades to roster-only
+            _logger = __import__("logging").getLogger("octopus.cowork")
+            _logger.warning("trust report project read failed for %s: %s", thread_id, exc)
+        from runtime.memory.cowork.trust import trust_report
+
+        report = trust_report(state, tasks, events)
+        return {"thread_id": thread_id, **report}
+
     @router.get("/api/collab/{thread_id}")
     def get_session(thread_id: str, request: Request) -> dict[str, Any]:
         """Unified collaboration session — one read over roster/mode/room link,

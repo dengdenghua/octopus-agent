@@ -266,11 +266,6 @@ const WORKSPACE_TOOL_ROUTES: NavRoute[] = [
     icon: FolderIcon,
   },
   {
-    to: "/workspace/architecture",
-    labelKey: "navArchitecture",
-    icon: WorkflowIcon,
-  },
-  {
     to: "/workspace/channels",
     labelKey: "channels",
     icon: RssIcon,
