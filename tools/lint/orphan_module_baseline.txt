@@ -23,3 +23,8 @@ runtime/sensing/gateway/realtime_turn_support.py
 runtime/tentacle/dashboard_support.py
 runtime/tentacle/mobile/_mcp_sse.py
 runtime/tentacle/mobile/mcp_transports.py
+
+# Reached only through runtime/cli.py's string-keyed dispatch table
+# (importlib-resolved at runtime), so static imports never see them.
+runtime/cli_reflect.py
+runtime/cli_run.py

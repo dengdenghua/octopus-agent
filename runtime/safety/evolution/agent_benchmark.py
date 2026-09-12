@@ -368,6 +368,10 @@ BENCHMARK_CASES: tuple[AgentBenchmarkCase, ...] = (
         paths=(
             "runtime/sensing/gateway/realtime_turn_lifecycle.py",
             "runtime/sensing/gateway/realtime_turn_routing.py",
+            # The god-file split moved the turn dispatch (codex app server /
+            # group fanout / swarm mesh drive entrypoints) into this module;
+            # the _drive_* assertions below read it from here now.
+            "runtime/sensing/gateway/realtime_cerebrum.py",
             "runtime/core/cerebrum/react_loop.py",
             "runtime/core/cerebrum/react_guards.py",
             "tests/test_realtime_cerebrum.py",

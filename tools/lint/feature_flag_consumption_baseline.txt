@@ -3,3 +3,8 @@
 # Wired one up (or removed it)? Delete its line to lock the win.
 # A line for a flag read via a computed name / os.environ documents
 # that the flag bypasses the flag system — keep it, fix when able.
+
+# Read via the AUTO_SHADOW_FEATURE_FLAG constant in dual_helix_policy.py
+# (is_on() calls in dual_helix_shadow.py:103,175) - the constant indirection
+# is invisible to the static string scan, so document it here.
+evolution.dual_helix_shadow_auto

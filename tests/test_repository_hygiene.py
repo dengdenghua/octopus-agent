@@ -27,10 +27,13 @@ def _ignored_tracked_files(paths: list[str]) -> list[str]:
         proc = subprocess.run(
             ["git", "check-ignore", "--stdin", "--no-index"],
             cwd=ROOT,
-            input="\n".join(paths),
+            # Bytes, not text mode: on Windows a text-mode stdin translates
+            # "\n" to "\r\n", so every path git echoes back ends with a
+            # literal CR and check-ignore reports phantom matches like
+            # '".env.example\r"'. Linux CI never sees this, which is why the
+            # test passed there while Windows checkouts stayed red.
+            input="\n".join(paths).encode("utf-8"),
             capture_output=True,
-            text=True,
-            encoding="utf-8",
         )
     except FileNotFoundError as exc:  # pragma: no cover - git absent
         pytest.skip(f"git check-ignore unavailable ({exc})")
@@ -38,7 +41,8 @@ def _ignored_tracked_files(paths: list[str]) -> list[str]:
     # failure and must not be read as a clean bill of health.
     if proc.returncode not in (0, 1):
         pytest.fail(f"git check-ignore failed ({proc.returncode}): {proc.stderr.strip()}")
-    return [line.strip().replace("\\", "/") for line in proc.stdout.splitlines() if line.strip()]
+    stdout = proc.stdout.decode("utf-8")
+    return [line.strip().replace("\\", "/") for line in stdout.splitlines() if line.strip()]
 
 
 def _tracked_files() -> list[str]:

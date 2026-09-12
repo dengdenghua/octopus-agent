@@ -211,7 +211,10 @@ def _execute_subagent_task(
         if owner and stored_tenant:
             actor, tenant = owner, stored_tenant
         if workspace_root is not None:
-            from runtime.sensing.gateway.thread_workspace import verified_managed_workspace
+            # Import the definition, not the sensing.gateway re-export:
+            # memory must not reach up into sensing (import_direction),
+            # and the platform module owns this function anyway.
+            from runtime.platform.runtime_policy.workspaces import verified_managed_workspace
 
             workspace = verified_managed_workspace(
                 workspace_root,
