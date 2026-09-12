@@ -16,7 +16,7 @@
 | 它解决什么 | 把 agent 的规划、执行、记忆、安全、成本、审计、反思组织到一条可观测链路里 |
 | 它不是什么 | 不是 ChatGPT 替代品，不是只封装 LangChain，也不绑定某一个 LLM |
 | 核心依赖 | `pydantic>=2.12`，其余能力大多是 optional extras |
-| 成熟度 | Beta v0.2.0 |
+| 成熟度 | Beta v0.3.0 |
 | License | Apache-2.0 |
 
 ## 1. 安装

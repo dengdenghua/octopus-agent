@@ -1,8 +1,13 @@
-# Echo v0.2.0 Beta
+# Echo v0.3.0 Beta
 
 Echo is an Agent OS. It runs agents with planning, tool execution,
 memory, reflection, safety governance, browser/workspace access, and
 self-improvement loops.
+
+> Naming: the brand is **Echo**; the PyPI distribution is
+> `octopus-agent-runtime` (`pip install octopus-agent-runtime`); the
+> runtime entry point is `python -m runtime`, and the import package
+> is always `runtime`.
 
 The IDE, browser, desktop app, and extension are product surfaces. The core
 product is the Python runtime in `runtime/`.

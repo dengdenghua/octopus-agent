@@ -9,7 +9,7 @@ tier: "core"
 
 > 自动从仓库结构提取。Octopus · The Open-Source Multi-Agent AI Workspace.
 
-> v0.2.0 Beta · Apache-2.0
+> v0.3.0 Beta · Apache-2.0
 
 ## 仓库结构
 

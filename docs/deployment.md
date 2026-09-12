@@ -49,11 +49,11 @@ docker run --rm -p 127.0.0.1:8000:8000 \
 digest 部署：
 
 ```bash
-image=ghcr.io/dengdenghua/octopus-agent:v0.2.0
+image=ghcr.io/dengdenghua/octopus-agent:v0.3.0
 cosign verify \
-  --certificate-identity 'https://github.com/dengdenghua/octopus-agent/.github/workflows/release.yml@refs/tags/v0.2.0' \
+  --certificate-identity 'https://github.com/dengdenghua/octopus-agent/.github/workflows/release.yml@refs/tags/v0.3.0' \
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-  --certificate-github-workflow-sha '<v0.2.0 对应的已审核 commit SHA>' \
+  --certificate-github-workflow-sha '<v0.3.0 对应的已审核 commit SHA>' \
   "$image"
 docker buildx imagetools inspect "$image"
 # 生产实际使用 ghcr.io/dengdenghua/octopus-agent@sha256:<上一步已验签 digest>

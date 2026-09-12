@@ -1,7 +1,7 @@
-# Octopus-Agent · Code Wiki
+# Echo · Code Wiki
 
 > 本文档是对 octopus-agent 仓库的结构化代码百科，涵盖项目整体架构、主要模块职责、关键类与函数、依赖关系及运行方式。
-> 生成依据：仓库当前磁盘状态（v0.2.0，Beta）。所有目录与文件均以当前仓库实际结构为准。
+> 生成依据：仓库当前磁盘状态（v0.3.0，Beta）。所有目录与文件均以当前仓库实际结构为准。
 
 ---
 
@@ -42,7 +42,7 @@ Octopus-Agent 是一个**自托管、仿生内核的 Agent OS runtime**，用 Py
 | 解决什么 | 把 agent 的规划、执行、记忆、安全、成本、审计、反思组织到一条可观测链路里 |
 | 不是什么 | 不是 ChatGPT 替代品，不是 LangChain 封装，不绑定单一 LLM |
 | 核心依赖 | `pydantic>=2.12`，其余能力均为 optional extras |
-| 成熟度 | Beta v0.2.0 |
+| 成熟度 | Beta v0.3.0 |
 | License | Apache-2.0 |
 | Python | >=3.11 |
 

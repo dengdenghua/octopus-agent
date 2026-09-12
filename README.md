@@ -1,8 +1,10 @@
 # Echo
 
-> v0.2.0 Beta · Apache-2.0
+> v0.3.0 Beta · Apache-2.0
 
 Echo 是一个自托管的 **Agent OS** —— 以 `runtime/` 里的 Python 运行时为核心，跑通「规划 → 执行 → 观察 → 记忆 → 改进」的完整闭环：支持工具调用、记忆反思、安全治理、浏览器/桌面控制与自改进循环。
+
+> 命名口径：品牌名 **Echo**；PyPI 发行名 `octopus-agent-runtime`（`pip install octopus-agent-runtime`）；运行时入口为 `python -m runtime`，导入包名始终是 `runtime`。
 
 IDE、浏览器、桌面应用与扩展只是产品表层；核心产品是 `runtime/`。
 
