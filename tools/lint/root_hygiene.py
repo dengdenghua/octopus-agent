@@ -35,12 +35,28 @@ Run::
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+# Names that look like an environment variable somebody forgot to expand.
+#
+# A path built with a literal %VAR% (or $VAR) lands at the repository root as a
+# directory whose name is the unexpanded variable — the real target is
+# elsewhere on disk and the write should never have happened here. Such a tree
+# is invisible to every other guard: the files it contains are typically
+# gitignored (*.db, *.log), so `git status` stays quiet, and the tracked-only
+# scope below never sees an untracked directory either. The check therefore
+# scans the filesystem, not the index.
+UNEXPANDED_ENV_PATTERNS: tuple[str, ...] = (
+    r"%[A-Za-z_][A-Za-z0-9_()]*%",
+    r"\$\{[A-Za-z_][A-Za-z0-9_]*\}",
+    r"\$[A-Za-z_][A-Za-z0-9_]*",
+)
 
 # Files and directories that may legitimately live at the repository root.
 # Source of truth: ROOT_LAYOUT.md.
@@ -145,11 +161,20 @@ PATTERN_DENYLIST: tuple[str, ...] = (
 )
 
 
-def _list_root_entries() -> list[str]:
-    return sorted(p.name for p in REPO_ROOT.iterdir())
+def _list_root_entries(root: Path) -> list[str]:
+    return sorted(p.name for p in root.iterdir())
 
 
-def _git_tracked_root_entries() -> list[str] | None:
+def _unexpanded_env_entries(root: Path) -> list[str]:
+    """Root entries whose name is an unexpanded environment variable."""
+    leaked: list[str] = []
+    for name in _list_root_entries(root):
+        if any(re.fullmatch(pattern, name) for pattern in UNEXPANDED_ENV_PATTERNS):
+            leaked.append(name)
+    return leaked
+
+
+def _git_tracked_root_entries(root: Path) -> list[str] | None:
     """Return sorted names of git-tracked entries at the root.
 
     Returns ``None`` if git is unavailable or this is not a git checkout;
@@ -161,7 +186,7 @@ def _git_tracked_root_entries() -> list[str] | None:
     try:
         result = subprocess.run(
             ["git", "ls-files"],
-            cwd=REPO_ROOT,
+            cwd=root,
             check=True,
             capture_output=True,
             text=True,
@@ -196,7 +221,7 @@ def _violations(actual: list[str]) -> tuple[list[str], list[str]]:
     return extra, denied
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--strict",
@@ -215,7 +240,14 @@ def main() -> int:
         action="store_true",
         help="Print the allow-list and exit.",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help="Repository root to inspect. Defaults to this checkout; tests "
+        "point it at a throwaway directory.",
+    )
+    args = parser.parse_args(argv)
+    root = Path(args.repo_root).resolve() if args.repo_root else REPO_ROOT
 
     if args.print_allowlist:
         print(f"Root allow-list ({len(ROOT_ALLOWLIST)} entries):")
@@ -224,42 +256,59 @@ def main() -> int:
         return 0
 
     if args.scan_all:
-        actual = _list_root_entries()
+        actual = _list_root_entries(root)
         scope_label = "all root entries on disk"
     else:
-        tracked = _git_tracked_root_entries()
+        tracked = _git_tracked_root_entries(root)
         if tracked is None:
-            actual = _list_root_entries()
+            actual = _list_root_entries(root)
             scope_label = "all root entries on disk (git unavailable, fell back)"
         else:
-            on_disk = set(_list_root_entries())
+            on_disk = set(_list_root_entries(root))
             # Only flag entries that are tracked AND still on disk.
             # Tracked-but-deleted entries are an in-progress commit, not a
             # hygiene violation.
             actual = sorted(set(tracked) & on_disk)
             scope_label = "git-tracked root entries that still exist on disk"
     extra, denied = _violations(actual)
+    env_leaks = _unexpanded_env_entries(root)
 
-    if not extra:
+    if not extra and not env_leaks:
         print(f"OK · root is clean ({len(actual)} entries checked, all in allow-list).")
         print(f"Scope: {scope_label}.")
         return 0
 
-    print(f"Root hygiene issues found (scope: {scope_label}):")
-    if denied:
-        print("\n  Pattern denylist violations (should also be in .gitignore):")
-        for name in denied:
-            print(f"    - {name}")
-    non_denied = [n for n in extra if n not in set(denied)]
-    if non_denied:
+    if extra:
+        print(f"Root hygiene issues found (scope: {scope_label}):")
+        if denied:
+            print("\n  Pattern denylist violations (should also be in .gitignore):")
+            for name in denied:
+                print(f"    - {name}")
+        non_denied = [n for n in extra if n not in set(denied)]
+        if non_denied:
+            print(
+                "\n  Entries not in allow-list (consider moving under tools/, "
+                "scripts/, docs/, demos/, etc., or update ROOT_LAYOUT.md "
+                "and ROOT_ALLOWLIST):"
+            )
+            for name in non_denied:
+                print(f"    - {name}")
+
+    if env_leaks:
         print(
-            "\n  Entries not in allow-list (consider moving under tools/, "
-            "scripts/, docs/, demos/, etc., or update ROOT_LAYOUT.md "
-            "and ROOT_ALLOWLIST):"
+            "\n  Unexpanded environment variable names (a path was built without "
+            "expanding a\n  %VAR%/$VAR placeholder, so the write landed here "
+            "instead of its real target):"
         )
-        for name in non_denied:
+        for name in env_leaks:
             print(f"    - {name}")
-    print("\nTotal: {} extra entr{} at root.".format(len(extra), "y" if len(extra) == 1 else "ies"))
+
+    total = len(extra) + len(env_leaks)
+    print(
+        "\nTotal: {} extra entr{} at root.".format(
+            total, "y" if total == 1 else "ies"
+        )
+    )
 
     return 1 if args.strict else 0
 
