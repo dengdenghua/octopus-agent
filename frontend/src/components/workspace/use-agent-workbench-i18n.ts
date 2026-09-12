@@ -134,6 +134,7 @@ export function deriveAgentTilesFromEvents(
         event.subagentAvatar ??
         existing?.avatar ??
         avatarForRole(event.subAgentRole),
+      avatarUrl: event.subagentAvatarUrl ?? existing?.avatarUrl,
       codename: event.subagentCodename ?? existing?.codename,
       role: event.subAgentRole ?? existing?.role,
       roleDisplayName:

@@ -184,6 +184,10 @@ export interface LiveToolEvent {
   /** Emoji avatar derived from role. Falls back to 🐙 for unknown
    * roles. */
   subagentAvatar?: string;
+  /** Real avatar image URL from the agent market ("我的安装"), when the
+   * sub-agent's identity resolved to an installed role. Takes priority
+   * over the emoji ``subagentAvatar``. */
+  subagentAvatarUrl?: string;
   /** Authoritative role display name from the backend built-in role
    * catalog (``BUILTIN_ROLES``), e.g. "Code Reviewer". Absent for
    * free-form role labels the catalog doesn't recognise, in which case

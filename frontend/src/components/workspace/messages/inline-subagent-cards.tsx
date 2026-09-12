@@ -15,7 +15,10 @@ import { isTeammateToolName } from "@/components/workspace/messages/action-displ
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 import { emitAgentWorkbenchFocus } from "@/components/workspace/agent-workbench-events";
-import { isInternalAutoParallelFailure } from "@/components/workspace/agent-workbench-utils";
+import {
+  isInternalAutoParallelFailure,
+  subagentAvatarSrc,
+} from "@/components/workspace/agent-workbench-utils";
 
 type InlineSubagentStatus = "running" | "done" | "error" | "waiting";
 
@@ -26,6 +29,8 @@ export interface InlineSubagentInfo {
   name: string;
   role?: string;
   avatar?: string;
+  /** Market avatar URL ("我的安装"); takes priority over emoji `avatar`. */
+  avatarUrl?: string;
   status: InlineSubagentStatus;
   task: string;
   summary?: string;
@@ -299,6 +304,7 @@ export function deriveInlineSubagents(
         key,
       role: event.subAgentRole ?? existing?.role,
       avatar: event.subagentAvatar ?? existing?.avatar,
+      avatarUrl: event.subagentAvatarUrl ?? existing?.avatarUrl,
       status:
         existing?.status === "done" || existing?.status === "error"
           ? existing.status
@@ -936,6 +942,16 @@ function AgentAvatar({
   large?: boolean;
 }) {
   const className = large ? "size-8" : "size-4";
+  const marketAvatarSrc = subagentAvatarSrc(agent.avatarUrl);
+  if (marketAvatarSrc) {
+    return (
+      <img
+        alt=""
+        src={marketAvatarSrc}
+        className={cn(className, "rounded-md object-cover")}
+      />
+    );
+  }
   if (agent.avatar && isImageAvatar(agent.avatar)) {
     return (
       <img

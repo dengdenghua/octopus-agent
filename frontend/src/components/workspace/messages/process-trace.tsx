@@ -41,6 +41,7 @@ import {
   type ProcessTraceMode,
   shouldOpenProcessTraceByDefault,
 } from "./process-trace-visibility";
+import { subagentAvatarSrc } from "../agent-workbench-utils";
 
 type MessageAgentRow = {
   id: string;
@@ -51,6 +52,8 @@ type MessageAgentRow = {
   prompt?: string;
   role?: string;
   avatar?: string;
+  /** Market avatar URL; takes priority over emoji `avatar`. */
+  avatarUrl?: string;
   currentTool?: string;
   eventCount: number;
   /** Failure cause for a lane that ended in error. Without it a failed lane
@@ -333,7 +336,13 @@ function AgentClusterRow({
             agentRunPanelClass(agent.status),
           )}
         >
-          {agent.avatar ? (
+          {subagentAvatarSrc(agent.avatarUrl) ? (
+            <img
+              src={subagentAvatarSrc(agent.avatarUrl) as string}
+              alt=""
+              className="size-6 rounded-full object-cover"
+            />
+          ) : agent.avatar ? (
             <span className="text-base leading-none" aria-hidden="true">
               {agent.avatar}
             </span>
@@ -894,6 +903,7 @@ function deriveMessageAgentRows(events: LiveToolEvent[]): MessageAgentRow[] {
       prompt: prompt || existing?.prompt,
       role: event.subAgentRole ?? existing?.role,
       avatar: event.subagentAvatar ?? existing?.avatar,
+      avatarUrl: event.subagentAvatarUrl ?? existing?.avatarUrl,
       currentTool: event.name.replace(/[_-]+/g, " "),
       eventCount: (existing?.eventCount ?? 0) + 1,
       // Keep the first cause seen: later events for the same lane (a spawn

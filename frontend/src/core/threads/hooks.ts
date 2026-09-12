@@ -179,6 +179,8 @@ export function normalizeCustomToolEvent(
       stringValue(event.subagent_avatar) ??
       stringValue(event.subagentAvatar) ??
       stringValue(event.avatar),
+    subagentAvatarUrl:
+      stringValue(event.avatar_url) ?? stringValue(event.avatarUrl),
     thought: stringValue(event.thought),
     observation: stringValue(event.observation),
     capabilityDisabled: parseCapabilityDisabled(event.capability_disabled),

@@ -590,6 +590,46 @@ def call_subagent(
             _role_display_name, _role_description = _role_display
     except Exception:  # noqa: BLE001 — identity enrichment is best-effort
         pass
+    # ── Market identity (职位 + 头像来自角色市场"我的安装") ──
+    # Precedence: an installed market role is the most specific intent —
+    # it overrides the builtin catalog's display name and supplies a real
+    # avatar URL. When the requested lane id matches nothing (no registry
+    # definition, no builtin role, no market role) this is a brand-new
+    # position invented mid-flight: auto-promote it into the market
+    # ("我的安装") so the next dispatch starts from a first-class role.
+    _market_avatar_url = ""
+    _identity_source = ""
+    try:
+        from runtime.execution.subagents.market_bridge import (
+            auto_promote_if_unpositioned,
+            resolve_market_identity,
+        )
+
+        _market = resolve_market_identity(_requested_agent_id or _role_label)
+        if _market is None:
+            _market = resolve_market_identity(_role_label)
+        if _market is not None:
+            if _market.display_name:
+                _role_display_name = _market.display_name
+            _market_avatar_url = _market.avatar_url
+            _identity_source = "agent-market"
+        else:
+            _promoted = auto_promote_if_unpositioned(
+                name=_requested_agent_id or _role_label,
+                has_registry_definition=bool(
+                    _REGISTRY is not None and _REGISTRY.has(_requested_agent_id)
+                ),
+                has_builtin_display=bool(_role_display_name),
+                mission_preview=(
+                    prompt[:600] if isinstance(prompt, str) else ""
+                ),
+            )
+            if _promoted is not None:
+                _role_display_name = _promoted["display_name"]
+                _market_avatar_url = _promoted["avatar_url"]
+                _identity_source = "agent-market-auto"
+    except Exception:  # noqa: BLE001 — market identity is best-effort
+        pass
     _spawn_started_at = time.time()
 
     # ── Thread-scoped memory key ──
@@ -714,6 +754,8 @@ def call_subagent(
         "avatar": _avatar,
         "role_display_name": _role_display_name,
         "role_description": _role_description,
+        "avatar_url": _market_avatar_url,
+        "identity_source": _identity_source,
         "prompt_preview": (prompt[:MAX_SUBAGENT_MISSION_CHARS] if isinstance(prompt, str) else ""),
         "use_cheap_model": bool(use_cheap_model),
         "started_at": _spawn_started_at,
@@ -1422,6 +1464,8 @@ def call_subagent(
             "role": _role_label,
             "codename": _codename,
             "avatar": _avatar,
+            "avatar_url": _market_avatar_url,
+            "identity_source": _identity_source,
             "ok": ok,
             "duration_s": round(elapsed, 2),
             "iteration_count": _rounds_state["max_round"],
@@ -1674,6 +1718,8 @@ def call_subagent(
                         "role": _role_label,
                         "codename": _codename,
                         "avatar": _avatar,
+                        "avatar_url": _market_avatar_url,
+                        "identity_source": _identity_source,
                         "ok": False,
                         "duration_s": round(elapsed, 2),
                         "iteration_count": _rounds_state["max_round"],

@@ -44,6 +44,7 @@ import {
   agentEventGroupId,
   DIFF_TAB_LABEL,
   roleDescription,
+  subagentAvatarSrc,
 } from "./agent-workbench-utils";
 import {
   type AgentWorkbenchProcessEventSnapshot,
@@ -854,10 +855,18 @@ function SummaryAgentRow({ tile }: { tile: AgentTile }) {
         className="absolute inset-0 cursor-pointer rounded-lg"
       />
       <span
-        className="flex size-5 shrink-0 items-center justify-center rounded-md text-xs text-muted-foreground"
+        className="flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-md text-xs text-muted-foreground"
         style={hue != null ? { background: `hsl(${hue} 70% 92%)` } : undefined}
       >
-        {avatarEmoji ?? <BotIcon className="size-3" />}
+        {subagentAvatarSrc(tile.avatarUrl) ? (
+          <img
+            src={subagentAvatarSrc(tile.avatarUrl) as string}
+            alt=""
+            className="size-full object-cover"
+          />
+        ) : (
+          (avatarEmoji ?? <BotIcon className="size-3" />)
+        )}
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
@@ -1989,8 +1998,16 @@ export function AgentCreationCard({
                 </div>
                 <div className="mt-6 flex items-center gap-3 rounded-lg bg-muted/35 px-3 py-2">
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-background text-xl">
-                    {agent.avatar || (
-                      <BotIcon className="size-5 text-muted-foreground" />
+                    {subagentAvatarSrc(agent.avatarUrl) ? (
+                      <img
+                        src={subagentAvatarSrc(agent.avatarUrl) as string}
+                        alt=""
+                        className="size-full rounded-full object-cover"
+                      />
+                    ) : (
+                      agent.avatar || (
+                        <BotIcon className="size-5 text-muted-foreground" />
+                      )
                     )}
                   </span>
                   <div className="min-w-0">
@@ -2015,7 +2032,13 @@ export function AgentCreationCard({
                   {displayName}
                 </div>
                 <div className="mt-12 flex size-28 items-center justify-center rounded-lg border border-border bg-muted/20">
-                  {agent.avatar ? (
+                  {subagentAvatarSrc(agent.avatarUrl) ? (
+                    <img
+                      src={subagentAvatarSrc(agent.avatarUrl) as string}
+                      alt=""
+                      className="size-full rounded-lg object-cover"
+                    />
+                  ) : agent.avatar ? (
                     <span className="text-5xl" aria-hidden="true">
                       {agent.avatar}
                     </span>

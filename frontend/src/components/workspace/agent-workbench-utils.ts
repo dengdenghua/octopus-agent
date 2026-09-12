@@ -11,6 +11,7 @@ import {
   XCircleIcon,
 } from "lucide-react";
 
+import { getBackendBaseURL } from "@/core/config";
 import type { Translations } from "@/core/i18n/locales/types";
 import { deriveAgentPhases, type AgentPhaseStatus } from "./agent-phases";
 import type { LiveToolEvent } from "./live-tool-timeline";
@@ -34,6 +35,9 @@ export interface AgentTile {
   prompt?: string;
   /** Emoji avatar from sub-agent spawn event; falls back to BotIcon. */
   avatar?: string;
+  /** Real avatar image URL resolved from the agent market ("我的安装").
+   * Takes priority over the emoji {@link avatar} when present. */
+  avatarUrl?: string;
   /** Cute codename ("Spark-3a4") taking priority over agent_id. */
   codename?: string;
   /** Sub-agent role label ("researcher" / "critic" / ...). */
@@ -319,6 +323,16 @@ export function avatarForRole(
 ): string | undefined {
   if (!role || typeof role !== "string") return undefined;
   return ROLE_AVATAR[role.trim().toLowerCase()] ?? DEFAULT_AVATAR;
+}
+
+/** Market avatar URL → browser-loadable src (empty string → null).
+ * Market avatars are relative backend paths (/api/agents/<id>/avatar). */
+export function subagentAvatarSrc(
+  avatarUrl: string | undefined | null,
+): string | null {
+  const raw = (avatarUrl ?? "").trim();
+  if (!raw) return null;
+  return `${getBackendBaseURL()}${raw}`;
 }
 
 // Exported for tests. Not for product code — render through the panel.

@@ -89,6 +89,7 @@ export function busEventToLiveEvent(
         startedAt,
         lifecycle: "spawned",
         subagentAvatar: avatar,
+        subagentAvatarUrl: str(payload.avatar_url),
         input: {
           prompt_preview: str(payload.prompt_preview),
         },

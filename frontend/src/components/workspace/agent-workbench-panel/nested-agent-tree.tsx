@@ -1,7 +1,7 @@
 import { memo, useMemo } from "react";
 import { ChevronRightIcon, ChevronDownIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { AgentTile } from "../agent-workbench-utils";
+import { subagentAvatarSrc, type AgentTile } from "../agent-workbench-utils";
 
 interface AgentNode {
   tile: AgentTile;
@@ -127,7 +127,17 @@ function AgentNodeRow({
           <span className="w-4 flex-shrink-0" />
         )}
 
-        <span className="text-base flex-shrink-0">{node.tile.avatar ?? "🤖"}</span>
+        {subagentAvatarSrc(node.tile.avatarUrl) ? (
+          <img
+            src={subagentAvatarSrc(node.tile.avatarUrl) as string}
+            alt=""
+            className="size-4 flex-shrink-0 rounded-full object-cover"
+          />
+        ) : (
+          <span className="text-base flex-shrink-0">
+            {node.tile.avatar ?? "🤖"}
+          </span>
+        )}
 
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">

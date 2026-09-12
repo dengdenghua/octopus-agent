@@ -324,6 +324,8 @@ function mcpItemToLiveEvent(
       typeof args.role_description === "string"
         ? args.role_description
         : undefined;
+    const avatarUrl =
+      typeof args.avatar_url === "string" ? args.avatar_url : undefined;
     const agentId = canonicalSubagentId(args, {
       role,
       codename,
@@ -346,6 +348,7 @@ function mcpItemToLiveEvent(
       subAgentRole: role,
       subagentCodename: codename,
       subagentAvatar: avatar,
+      subagentAvatarUrl: avatarUrl,
       subagentRoleDisplayName: roleDisplayName,
       subagentRoleDescription: roleDescription,
       parentToolUseId,
@@ -420,6 +423,8 @@ function mcpItemToLiveEvent(
       subAgentRole: role,
       subagentCodename: codename,
       subagentAvatar: avatar,
+      subagentAvatarUrl:
+        typeof result.avatar_url === "string" ? result.avatar_url : undefined,
       parentToolUseId,
       iterationCount,
       filesTouched,

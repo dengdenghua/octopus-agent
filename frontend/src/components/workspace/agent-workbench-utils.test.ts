@@ -80,3 +80,19 @@ describe("agent workbench diff entries", () => {
     ]);
   });
 });
+
+describe("subagentAvatarSrc", () => {
+  test("returns null for empty/whitespace URLs (emoji fallback path)", async () => {
+    const { subagentAvatarSrc } = await import("./agent-workbench-utils");
+    expect(subagentAvatarSrc(undefined)).toBeNull();
+    expect(subagentAvatarSrc(null)).toBeNull();
+    expect(subagentAvatarSrc("")).toBeNull();
+    expect(subagentAvatarSrc("   ")).toBeNull();
+  });
+
+  test("prefixes a relative market avatar path with the backend base", async () => {
+    const { subagentAvatarSrc } = await import("./agent-workbench-utils");
+    const src = subagentAvatarSrc("/api/agents/incident-commander/avatar?v=1");
+    expect(src).toContain("/api/agents/incident-commander/avatar?v=1");
+  });
+});
