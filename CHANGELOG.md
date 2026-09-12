@@ -6,11 +6,13 @@ Versions follow [SemVer](https://semver.org/), pre-1.0 so breaking changes are a
 
 ---
 
-## [Unreleased] — 2026-08 · UI refactor + composition layer
+## [Unreleased]
+
+### 2026-08 · UI refactor + composition layer
 
 Non-breaking cleanup pass across frontend and runtime composition.
 
-### UI refactor (P3)
+#### UI refactor (P3)
 
 - Sidebar component extraction: `AvatarCell`,
   `ThreadRunStatusLight`, `RightPanelMenu`, sidebar routing helpers
@@ -19,23 +21,22 @@ Non-breaking cleanup pass across frontend and runtime composition.
   header.
 - Removed leftover `FileTextIcon` import.
 
-### Composition layer
+#### Composition layer
 
 - `feat(composition)`: PluginHub consumes ServiceBus.
 - `feat(composition)`: reference arm loads memory skill family.
 
-### Guards
+#### Guards
 
 - `fix(guards)`: reject control-tag leaks in final answers.
 
----
 
-## [Unreleased] — 2026-06 · repo hygiene + structural decoupling
+### 2026-06 · repo hygiene + structural decoupling
 
 Non-breaking cleanup pass: skill system migration, frontend decoupling,
 doc-code alignment, and dependency pruning.
 
-### Skill system migration (all_skills/ → skills/public/)
+#### Skill system migration (all_skills/ → skills/public/)
 
 - `runtime/execution/suckers/agent_doc_skills.py` · `builtins.py` ·
   `runtime/memory/skills_lib/agentskills.py` ·
@@ -44,14 +45,14 @@ doc-code alignment, and dependency pruning.
 - `tools/lint/skill_cross_dir_check.py` baseline ratcheted 47 → 4.
 - `skills/local/` retired (was empty after migration).
 
-### Frontend decoupling
+#### Frontend decoupling
 
 - `tests/test_webui_mount.py` — removed `TestFrontendArtifacts` class
   (hard lock on frontend build artifacts → soft coupling).
 - `tools/lint/protocol_method_drift.py` — returns 0 when frontend
   missing (skips instead of failing).
 
-### Protocols doc-code alignment
+#### Protocols doc-code alignment
 
 - 15 `protocols/*.md` files gained YAML frontmatter
   (`implementation_status: implemented | partial | spec_only | dormant`).
@@ -59,7 +60,7 @@ doc-code alignment, and dependency pruning.
 - `tools/lint/doc_claims_check.py` extended to validate frontmatter
   fields + protocol counts.
 
-### ADR renumbering
+#### ADR renumbering
 
 - `docs/adr/008-octopus-mobile.md` → `011-octopus-mobile.md` (008
   was shared with `008-constitution-profiles.md`).
@@ -67,46 +68,46 @@ doc-code alignment, and dependency pruning.
   tentacle module, arm presets).
 - `docs/adr/README.md` index补 ADR-010 + ADR-011.
 
-### Terminology
+#### Terminology
 
 - Hearts: "三心 HA 互备" → "双循环隔离 + 上下文泵" across roadmap +
   architecture docs (HA is a derived capability, not the primary
   responsibility).
 
-### Dependencies
+#### Dependencies
 
 - `bcrypt` moved from core `dependencies` to opt-in `[local-auth]`
   extra (only `local_auth` module, default-off, uses it).
 - `[langfuse]` extra removed (zero runtime imports; was dead weight
   in `[all]`).
 
-### i18n
+#### i18n
 
 - `ja.yaml` + `ko.yaml` — added missing `cli.help.lang` key (was 374
   keys vs en/zh-CN 375).
 - `tests/test_i18n_yaml.py` — added `TestLocaleParity` to prevent
   future key drift.
 
-### CI
+#### CI
 
 - `openapi-contract` job — added `pnpm install --frozen-lockfile`
   before `pnpm exec openapi-typescript` (was calling an uninstalled
   binary).
 
-### Roadmap accuracy
+#### Roadmap accuracy
 
 - IM integration task marked `[x]` (6 channels already shipped).
 - Hearts phase 4 description updated to match dual-cycle isolation
   model.
 
-### Retired artifacts
+#### Retired artifacts
 
 - 18 files + 1 stash + 6 one-off scripts removed (legacy root files,
   `scripts/refactor/` directory, orphan stash).
 - `docs/architecture.md` + `docs/biomimetic/` removed (superseded by
   `docs/architecture/` + `docs/vision/`).
 
-### Frontend style review
+#### Frontend style review
 
 10-commit sweep (`f5ba93762` → `3bf7687df`) covering sidebar nav,
 message area, file/artifact viewer, agent team flow, browser &
@@ -156,15 +157,14 @@ leftovers from the initial pass:
   — `text-[22px]` → `text-xl`, `text-[17px]` → `text-base`,
   `text-[7/8px]` × 4 → `text-[10px]`.
 
----
 
-## [Unreleased] — 2026-05 · multi-author audit sweep
+### 2026-05 · multi-author audit sweep
 
 Non-breaking cleanup pass across backend + frontend + infra after the
 project accumulated drift from multiple contributors / tools. Focus:
 correctness > style.
 
-### Security
+#### Security
 
 - **Rotated leaked credentials** · `data/custom_models.json` carried
   two real-shape API keys (Anthropic `sk-ant-api03-...` + OpenAI-shape
@@ -186,7 +186,7 @@ correctness > style.
   Paramiko path additionally loads `known_hosts` when provided so
   already-pinned hosts still fail-closed on mismatch.
 
-### Runtime hardening
+#### Runtime hardening
 
 - **`config.loader` env interpolation** · `${VAR}` now also matches
   bare `$VAR` form so `config.yaml: api_key: $ANTHROPIC_API_KEY` no
@@ -210,7 +210,7 @@ correctness > style.
 - **`metrics` histogram zip** · both `dict(zip(self.bucket_bounds, buckets))`
   sites now pass `strict=True` so bucket-length mismatches fail loudly.
 
-### Retired / deleted
+#### Retired / deleted
 
 - **Backend SSE proxy** · `runtime.sensing.gateway.remote_transport.stream_proxy`
   + `POST /api/remote-backends/{id}/stream` removed (no frontend callers;
@@ -227,7 +227,7 @@ correctness > style.
   `sys.exit(2)` stubs — the SSE endpoints they targeted are gone;
   harness will be re-enabled once a realtime-WS bench adapter lands.
 
-### Layout
+#### Layout
 
 - `config.yaml` (bio-named, 280 lines of `spinal_cord: / cerebrum: /
   ganglia: / ...` that pydantic silently dropped) moved to
@@ -244,7 +244,7 @@ correctness > style.
   the two `[thread_id]` / `new` children, `frontend/src/app/observability/`
   old page, `frontend/tmp-postcss-test.mjs`).
 
-### Docs / build
+#### Docs / build
 
 - **Docker image** · `Dockerfile` now COPYs `agents/`, `skills/`,
   `prompts/`, `protocols/`, `teams/`, `config.example.yaml` into the
@@ -267,7 +267,7 @@ correctness > style.
 - **`version_compat`** · `deploy/k8s/configmap.yaml` and
   `demos/demo_config.yaml` bumped from `"0.1"` to `"0.2"`.
 
-### Frontend
+#### Frontend
 
 - **`@codemirror/state` + `@codemirror/view`** added to
   `frontend/package.json` `dependencies` (were used by 5 editor files
@@ -287,13 +287,13 @@ correctness > style.
   `page-agent-bridge.ts` `parent` self-reference, `task-board/timeline-view.tsx`
   `_viewWidth: number` annotation.
 
-### Lint
+#### Lint
 
 - `ruff check runtime tests`: **389 → 31** (−92.0%). All remaining
   are pure readability (`SIM102` collapsible-if, `SIM103` needless-bool,
   one noqa'd `B023` loop-variable capture).
 
-### Tests
+#### Tests
 
 - pytest collection: **3488 tests + 1 collection error** → **3802
   tests · 0 errors**. Collection was blocked by
@@ -304,7 +304,7 @@ correctness > style.
   `/api/remote-backends/{id}/stream`; added no new tests (this pass
   was cleanup only).
 
-### Not done (tracked for follow-up)
+#### Not done (tracked for follow-up)
 
 - Three `/workspace/{chats,code,team}/[thread_id]` pages still call
   `useThreadStream` (which hits the retired SSE endpoints and throws).
@@ -318,16 +318,15 @@ correctness > style.
 - `pnpm install` in `frontend/` pending — that's what lands the
   codemirror / canvas-confetti types.
 
----
 
-## [Unreleased] — realtime WebSocket transport · item-oriented protocol
+### 2026-04/05 · realtime WebSocket transport · item-oriented protocol
 
 **Breaking: SSE + POST retired.** The `/api/threads/{id}/runs/stream`,
 `/runs/stream`, `/api/threads/{id}/runs/wait`, `/runs/wait`,
 `/api/threads/{id}/approve`, and `/api/runs/*` endpoints no longer exist.
 Clients must speak JSON-RPC 2.0 over the WebSocket at `/api/realtime`.
 
-### Added
+#### Added
 
 - **`runtime.protocol`** — JSON-RPC 2.0 envelope + closed `ClientMethod` /
   `ServerMethod` enums + discriminated-union `Item` / `Turn` models.
@@ -356,7 +355,7 @@ Clients must speak JSON-RPC 2.0 over the WebSocket at `/api/realtime`.
   frontend reducer tests. Full suites green.
 - `demos/realtime_echo.py` — runnable in-process smoke test.
 
-### Removed
+#### Removed
 
 - `runtime/sensing/siphon/run_registry.py` — SSE run-status registry.
 - `runtime/sensing/siphon/thread_compat_degraded_router.py` — no-stack
@@ -374,7 +373,7 @@ Clients must speak JSON-RPC 2.0 over the WebSocket at `/api/realtime`.
   `tests/test_react_self_evolution_e2e.py` — all exercised endpoints
   or helpers that no longer exist.
 
-### Changed
+#### Changed
 
 - `thread_compat_router.py`: **6766 → 3002 lines** (SSE paths excised;
   CRUD surface retained for thread sidebars and history replay).
@@ -386,7 +385,7 @@ Clients must speak JSON-RPC 2.0 over the WebSocket at `/api/realtime`.
 - `runtime.platform.ui.thread_routes.mount_thread_compat_routes` is a
   no-op when `stack is None` (realtime gateway covers that path).
 
-### Migration
+#### Migration
 
 Frontend callers that used to `POST /api/threads/{id}/runs/stream` and
 parse SSE frames should:
@@ -405,6 +404,123 @@ parse SSE frames should:
 TypeScript types, a stateless reducer, and a React hook for all of the
 above live in `frontend/src/core/realtime/`.
 
+
+### 2026-04-18 · 跨机生产就绪
+
+补齐上一版 ROADMAP 标记的全部"社区共创点"· **1885 → 2036 tests · 0 lint · 0 新硬依赖**。
+
+#### Added
+
+**跨机执行（Mantle 四档补齐）**
+- `runtime/mantle/ssh_mantle.py` · `SshBackend` · CLI 后端（OpenSSH）+ 可选 paramiko 后端
+- `runtime/mantle/k8s_mantle.py` · `K8sBackend` · `kubectl run --rm -i` ephemeral Pod + resource overrides
+- 30 + 24 tests
+
+**跨机 HA（Hearts Coordinator）**
+- `runtime/hearts/redis_coordinator.py` · `RedisCoordinator` · SET NX PX + Lua CAS + INCR fencing
+- `runtime/hearts/etcd_coordinator.py` · `EtcdCoordinator` · etcd v3 原生 lease + mod_revision 作 fencing token
+- 17 + 14 tests
+
+**Camouflage 自动汰劣闭环**
+- `runtime/camouflage/auto_retire.py` · `AutoRetireScheduler` · 周期/事件/强制三种触发模式
+- 新事件：`VariantRetired` / `VariantBoosted` / `EvolverStepTriggered`
+- 12 tests
+
+**Skin 环境感知层（19 器官最后一块）**
+- `runtime/skin/` · EnvSensor 协议 + SensorManager
+- `FileWatcherSensor`（watchdog 装了走 OS · 没装降级 polling）· `GitHookSensor`（git CLI polling）· `ProcessWatchSensor`（kill -0 / OpenProcess 跨平台）
+- 新事件：`FileChanged` / `DirectoryChanged` / `GitCommitDetected` / `ProcessStateChanged` / `EnvironmentPing`
+- 24 tests
+
+**IM channel 扩展**
+- `runtime/channels/dingtalk.py` · `DingTalkChannel` · HMAC-SHA256 加签模式 · 26 tests
+- 现在 6 个 channel：Slack / WeChat / Feishu / Telegram / Discord / **DingTalk**
+
+**文档 + 工具**
+- `mkdocs.yml` · mkdocs material 配置（加 extras `[docs]`）
+- `invariants-cheatsheet.md` · 30 条必背（10 LINT + 20 核心协议不变量）
+- `runtime/tour.py` + CLI 子命令 `octopus-agent tour` · 10 章 5 分钟 walkthrough · 每章真跑代码 + 结论
+- 4 tests for tour
+
+**pyproject extras**（全 opt-in soft-dep）
+- `[mantle-ssh]` paramiko · `[mantle-k8s]` kubernetes · `[hearts-redis]` redis · `[hearts-etcd]` etcd3 · `[skin]` watchdog · `[docs]` mkdocs
+
+#### Changed
+- ROADMAP / QUICKSTART / CONTRIBUTING 同步更新到"全部补齐 · 下一波留给社区" 口径
+- README.md · 测试计数 1708 → 2036
+
+
+### Core layer · 反思外环全闭合（0.1.0 前收尾）
+
+> 从 "MVP 能跑" 进化到 "反思 6/6 全闭环 + 9 CLI + Web UI + MCP 双模"。
+> 580 tests · 0 lint · 12.2k LoC。
+
+#### Added · 反思反哺闭环（从 MVP 的"只产不用"升级为"全闭环"）
+
+6/6 反思产出每条都有落地通路 · 可通过 `config.learn.*` 一键启用：
+
+- **SkillForge** → 直接写 `SkillRegistry`（由 `reflect` 触发）
+- **RuleExtractor** → `LLMPlanner.learn_from_journal()` · 注 "LEARNED MITIGATIONS" prompt 段
+- **MemoryConsolidator** → `LLMPlanner.learn_memories_from_journal()` · 注 "CONSOLIDATED MEMORIES"
+- **KGUpdater** → `LLMPlanner.learn_kg_from_journal()` + `attach_kg()` · 注 "RELATED FACTS"
+- **WorkflowRewriter** → `StaticPlanner.rewrite_from_journal()` · 经 `apply_proposals_to_rules` 落地 4 种 kind
+- **RecipeEvaluator** → `LLMPlanner.assess_recipe_from_journal()` · losing verdict 时注 "RECIPE SELF-ASSESSMENT" warning
+
+每条都进入 `LLMPlanner.recipe_hash()` · 配方身份随学习变化自动更新。
+
+#### Added · 新子命令 / 新模块
+
+- **`loop "<goal>" --config --journal --iterations N`** · 完整外环 CLI
+  - 每轮先全量反思 journal，再 plan+execute · 新事件写回 journal · 下一轮接续
+  - 端到端测试用 monkey-patch 证明 iter N 真看到 iter 1..N-1 的事件
+- **`ui --port 8000`** · 嵌入式 FastAPI dashboard · 6 API routes · 单页 vanilla JS
+- `runtime/ui/` · `create_app()` factory · 软依赖 fastapi/uvicorn
+- `runtime/suckers/browser_skills.py` · `browser_get` + `browser_extract`
+  · Playwright headless chromium · `cost_profile="high"`
+- `runtime/mcp_client/persistent_client.py` · `PersistentStdioMCPClient`
+  · 后台 asyncio 线程 + AsyncExitStack · 避免 per-call subprocess 成本
+
+#### Added · config 驱动的反思
+
+`config.learn.*` 新增 4 条入口，全部文件不存在时静默跳过（不 crash）：
+
+- `learn_memories_from_journal` + `learn_kg_from_journal` + `kg_max_triples`
+- `rewrite_from_journal` + `rewrite_min_confidence` + `rewrite_min_severity`
+- `assess_recipe_from_journal`
+
+原 `learn_from_journal`（rules）保留。example yaml 写齐所有字段。
+
+#### Added · 知识图与配方组件
+
+- `runtime/knowledge_graph/prompt.py` · `format_triples_for_prompt`
+  · confidence 降序 + 字符预算 + 最低置信过滤
+- `runtime/regeneration/workflow_applier.py` ·
+  `apply_proposals_to_rules()` + `ApplyResult` · 4 种 kind 全覆盖 +
+  confidence/severity 门槛 + 未知/重复/无效 skip
+
+#### Added · 测试基础设施
+
+- `tests/test_ui.py` (11) · FastAPI TestClient
+- `tests/test_browser_skills.py` (15) · 纯 fake Page · 无真 chromium 依赖
+- `tests/test_llm_planner_kg_integration.py` (16)
+- `tests/test_llm_planner_recipe_integration.py` (12)
+- `tests/test_workflow_applier.py` (24)
+- `tests/test_cli_loop.py` (8) · 含 "closure evidence" 三条强断言
+- 9 条 memory-injection 集成测试追加到 `test_llm_planner_rules_integration.py`
+
+#### Changed
+
+- `LLMPlanner` 构造签名加 `learned_memories_section` · 含 4 个可观察 counter
+- `LLMPlanner.recipe_hash` 纳入 memories / kg size / max_triples 指纹
+- `StaticPlanner` 新增 `apply_rewrite_proposals()` + `rewrite_from_journal()` 便捷接口
+- CLI `status` 增加 `playwright` / `fastapi` 能力探针
+- README / GETTING_STARTED · 9 子命令 · 反思 6/6 表
+
+#### Fixed
+
+- StdioMCPClient 死锁场景 · per-call subprocess 重启（历史）
+- `journal or InMemoryJournal()` · 空 `__len__` 导致 falsy 陷阱（历史）
+- KG conflict resolution · 多值 predicate 默认白名单避免误覆盖（历史）
 ---
 
 ## [0.2.0] — 2026-04-24 · Beta · 外部路线灵感落地 + ReAct/DAG 双路径可观测
@@ -467,52 +583,6 @@ above live in `frontend/src/core/realtime/`.
 - `runtime/core/ganglia/runtime.py` · 重复代码块 IndentationError(pre-existing)
 - `runtime/execution/suckers/layers.py` · `auto_regression_check` / `code_analyze` / `code_search` 加入 ATOMIC_SKILL_NAMES 防 `BASE_SKILL_IDS` drift
 - `.gitignore` 加 `.tmp_*` pattern(外部 review 指出根目录 8 个临时 JSON 残留 · 清理 + 收敛)
-
----
-
-## [Unreleased] — 2026-04-18 · 跨机生产就绪
-
-补齐上一版 ROADMAP 标记的全部"社区共创点"· **1885 → 2036 tests · 0 lint · 0 新硬依赖**。
-
-### Added
-
-**跨机执行（Mantle 四档补齐）**
-- `runtime/mantle/ssh_mantle.py` · `SshBackend` · CLI 后端（OpenSSH）+ 可选 paramiko 后端
-- `runtime/mantle/k8s_mantle.py` · `K8sBackend` · `kubectl run --rm -i` ephemeral Pod + resource overrides
-- 30 + 24 tests
-
-**跨机 HA（Hearts Coordinator）**
-- `runtime/hearts/redis_coordinator.py` · `RedisCoordinator` · SET NX PX + Lua CAS + INCR fencing
-- `runtime/hearts/etcd_coordinator.py` · `EtcdCoordinator` · etcd v3 原生 lease + mod_revision 作 fencing token
-- 17 + 14 tests
-
-**Camouflage 自动汰劣闭环**
-- `runtime/camouflage/auto_retire.py` · `AutoRetireScheduler` · 周期/事件/强制三种触发模式
-- 新事件：`VariantRetired` / `VariantBoosted` / `EvolverStepTriggered`
-- 12 tests
-
-**Skin 环境感知层（19 器官最后一块）**
-- `runtime/skin/` · EnvSensor 协议 + SensorManager
-- `FileWatcherSensor`（watchdog 装了走 OS · 没装降级 polling）· `GitHookSensor`（git CLI polling）· `ProcessWatchSensor`（kill -0 / OpenProcess 跨平台）
-- 新事件：`FileChanged` / `DirectoryChanged` / `GitCommitDetected` / `ProcessStateChanged` / `EnvironmentPing`
-- 24 tests
-
-**IM channel 扩展**
-- `runtime/channels/dingtalk.py` · `DingTalkChannel` · HMAC-SHA256 加签模式 · 26 tests
-- 现在 6 个 channel：Slack / WeChat / Feishu / Telegram / Discord / **DingTalk**
-
-**文档 + 工具**
-- `mkdocs.yml` · mkdocs material 配置（加 extras `[docs]`）
-- `invariants-cheatsheet.md` · 30 条必背（10 LINT + 20 核心协议不变量）
-- `runtime/tour.py` + CLI 子命令 `octopus-agent tour` · 10 章 5 分钟 walkthrough · 每章真跑代码 + 结论
-- 4 tests for tour
-
-**pyproject extras**（全 opt-in soft-dep）
-- `[mantle-ssh]` paramiko · `[mantle-k8s]` kubernetes · `[hearts-redis]` redis · `[hearts-etcd]` etcd3 · `[skin]` watchdog · `[docs]` mkdocs
-
-### Changed
-- ROADMAP / QUICKSTART / CONTRIBUTING 同步更新到"全部补齐 · 下一波留给社区" 口径
-- README.md · 测试计数 1708 → 2036
 
 ---
 
@@ -584,76 +654,3 @@ First coherent runtime. All MVP (TIERS.md) invariants守住；end-to-end pipelin
 - 多Arm并发 + Chromatophores未实现
 - CRDT / Boids / REM consolidation / KG upgrade 全部deferred
 
----
-
-## [Unreleased] — Core layer · 反思外环全闭合
-
-> 从 "MVP 能跑" 进化到 "反思 6/6 全闭环 + 9 CLI + Web UI + MCP 双模"。
-> 580 tests · 0 lint · 12.2k LoC。
-
-### Added · 反思反哺闭环（从 MVP 的"只产不用"升级为"全闭环"）
-
-6/6 反思产出每条都有落地通路 · 可通过 `config.learn.*` 一键启用：
-
-- **SkillForge** → 直接写 `SkillRegistry`（由 `reflect` 触发）
-- **RuleExtractor** → `LLMPlanner.learn_from_journal()` · 注 "LEARNED MITIGATIONS" prompt 段
-- **MemoryConsolidator** → `LLMPlanner.learn_memories_from_journal()` · 注 "CONSOLIDATED MEMORIES"
-- **KGUpdater** → `LLMPlanner.learn_kg_from_journal()` + `attach_kg()` · 注 "RELATED FACTS"
-- **WorkflowRewriter** → `StaticPlanner.rewrite_from_journal()` · 经 `apply_proposals_to_rules` 落地 4 种 kind
-- **RecipeEvaluator** → `LLMPlanner.assess_recipe_from_journal()` · losing verdict 时注 "RECIPE SELF-ASSESSMENT" warning
-
-每条都进入 `LLMPlanner.recipe_hash()` · 配方身份随学习变化自动更新。
-
-### Added · 新子命令 / 新模块
-
-- **`loop "<goal>" --config --journal --iterations N`** · 完整外环 CLI
-  - 每轮先全量反思 journal，再 plan+execute · 新事件写回 journal · 下一轮接续
-  - 端到端测试用 monkey-patch 证明 iter N 真看到 iter 1..N-1 的事件
-- **`ui --port 8000`** · 嵌入式 FastAPI dashboard · 6 API routes · 单页 vanilla JS
-- `runtime/ui/` · `create_app()` factory · 软依赖 fastapi/uvicorn
-- `runtime/suckers/browser_skills.py` · `browser_get` + `browser_extract`
-  · Playwright headless chromium · `cost_profile="high"`
-- `runtime/mcp_client/persistent_client.py` · `PersistentStdioMCPClient`
-  · 后台 asyncio 线程 + AsyncExitStack · 避免 per-call subprocess 成本
-
-### Added · config 驱动的反思
-
-`config.learn.*` 新增 4 条入口，全部文件不存在时静默跳过（不 crash）：
-
-- `learn_memories_from_journal` + `learn_kg_from_journal` + `kg_max_triples`
-- `rewrite_from_journal` + `rewrite_min_confidence` + `rewrite_min_severity`
-- `assess_recipe_from_journal`
-
-原 `learn_from_journal`（rules）保留。example yaml 写齐所有字段。
-
-### Added · 知识图与配方组件
-
-- `runtime/knowledge_graph/prompt.py` · `format_triples_for_prompt`
-  · confidence 降序 + 字符预算 + 最低置信过滤
-- `runtime/regeneration/workflow_applier.py` ·
-  `apply_proposals_to_rules()` + `ApplyResult` · 4 种 kind 全覆盖 +
-  confidence/severity 门槛 + 未知/重复/无效 skip
-
-### Added · 测试基础设施
-
-- `tests/test_ui.py` (11) · FastAPI TestClient
-- `tests/test_browser_skills.py` (15) · 纯 fake Page · 无真 chromium 依赖
-- `tests/test_llm_planner_kg_integration.py` (16)
-- `tests/test_llm_planner_recipe_integration.py` (12)
-- `tests/test_workflow_applier.py` (24)
-- `tests/test_cli_loop.py` (8) · 含 "closure evidence" 三条强断言
-- 9 条 memory-injection 集成测试追加到 `test_llm_planner_rules_integration.py`
-
-### Changed
-
-- `LLMPlanner` 构造签名加 `learned_memories_section` · 含 4 个可观察 counter
-- `LLMPlanner.recipe_hash` 纳入 memories / kg size / max_triples 指纹
-- `StaticPlanner` 新增 `apply_rewrite_proposals()` + `rewrite_from_journal()` 便捷接口
-- CLI `status` 增加 `playwright` / `fastapi` 能力探针
-- README / GETTING_STARTED · 9 子命令 · 反思 6/6 表
-
-### Fixed
-
-- StdioMCPClient 死锁场景 · per-call subprocess 重启（历史）
-- `journal or InMemoryJournal()` · 空 `__len__` 导致 falsy 陷阱（历史）
-- KG conflict resolution · 多值 predicate 默认白名单避免误覆盖（历史）
