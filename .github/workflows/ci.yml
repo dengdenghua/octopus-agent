@@ -2,10 +2,14 @@ name: CI
 
 on:
   push:
-    # Keep the long-lived hardening branch under the same release gates as main.
-    branches: [main, codex/production-hardening]
+    # Every codex/* working branch runs the same release gates as main.
+    # This used to name `codex/production-hardening` explicitly, which meant
+    # the branch people actually worked on (codex/unified-execution-runtime at
+    # the time of writing) got no CI at all while the list still read as if
+    # hardening was covered.
+    branches: [main, "codex/**"]
   pull_request:
-    branches: [main]
+    branches: [main, "codex/**"]
 
 permissions:
   contents: read
@@ -87,6 +91,15 @@ jobs:
       - name: Fixture visibility (no test input hidden by .gitignore)
         if: always() && matrix.python-version == '3.11.9'
         run: python -m tools.lint.fixture_visibility_check
+
+      - name: Untracked source files (no source file sitting outside git)
+        # Style/ratchet gate: must not mask pytest below (see note at job top).
+        # Closes the 2026-08-28 audit P0-1 ("26 runtime/ modules never added to
+        # git, 9 of them imported by tracked code"). The check existed and was
+        # wired into `make lint-untracked-sources`, but not into CI, so a clean
+        # clone could still break on a file that only existed on one machine.
+        if: always() && matrix.python-version == '3.11.9'
+        run: python -m tools.lint.untracked_source_check
 
       - name: Skill package dedup
         # Style/ratchet gate: must not mask pytest below (see note at job top).
