@@ -101,3 +101,30 @@ ALL_RULES.append(MyNewRule())
 - [ ] pyright plugin 版本（更强类型信息）
 - [ ] fix 模式（--fix 自动修正部分违规）
 - [x] 与 ruff / mypy 联合 pipeline（见 `.github/workflows/ci.yml`）
+
+---
+
+## 机械门禁与统一入口（`run_gates.py`）
+
+同目录还有九个**机械 ratchet 门禁**（逐文件脚本 + baseline 账本，只拦新增违规、
+不追既有债）：`untracked_source_check` / `god_file_check` / `import_direction_check` /
+`orphan_module_check` / `feature_flag_consumption_check` / `async_lock_check` /
+`async_blocking_check` / `root_hygiene` / `repo_url_check`。
+
+```bash
+# 一键跑全部九个（与 CI 同参数），出一张汇总表
+python tools/lint/run_gates.py
+
+# 选跑/跳过指定门禁；写 JSON 报告供 CI 消费
+python tools/lint/run_gates.py --only god_file_check,root_hygiene --json report.json
+```
+
+`--json` 输出逐门禁退出码、耗时与输出尾部，适合作为 workflow artifact。
+
+### 复用到其他仓库
+
+门禁代码仓库无关、baseline 仓库专属，因此采用**vendoring** 路径：拷走 `tools/lint/`，
+用每个 ratchet 的 `--write-baseline` 对当前树自举快照，再在 CI 里加一行
+`python tools/lint/run_gates.py --json gates-report.json`。详见
+`.github/workflows/mech-gates.yml`（本仓库自用的可复用 workflow，支持
+`workflow_call` / `workflow_dispatch`）。

@@ -1,0 +1,75 @@
+# Reusable workflow: run the nine mechanical gates via tools/lint/run_gates.py.
+#
+# Callable by other workflows/repos (workflow_call) and runnable manually
+# (workflow_dispatch). It always checks out THIS repository's code, so it
+# lints this repo. To gate a different repository, vendor tools/lint/ into
+# that repo instead (see tools/lint/README.md — baselines must belong to
+# the repo they freeze).
+#
+# Note: CI's lint-and-test job keeps one step per gate with individual
+# names/comments; this workflow is the single-command path for external
+# callers, scheduled runs, and local parity. Both share tools/lint/run_gates.py
+# as the gate-list source of truth going forward.
+
+name: Mechanical gates
+
+on:
+  workflow_call:
+    inputs:
+      gates:
+        description: "Comma-separated subset of gates to run (default: all nine)"
+        required: false
+        type: string
+        default: ""
+      skip:
+        description: "Comma-separated gate names to skip"
+        required: false
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      gates:
+        description: "Comma-separated subset of gates to run (default: all nine)"
+        required: false
+        type: string
+        default: ""
+      skip:
+        description: "Comma-separated gate names to skip"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    name: Mechanical gates
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11.9"
+
+      - name: Run gates
+        id: gates
+        run: |
+          ARGS=()
+          if [[ -n "${{ inputs.gates }}" ]]; then
+            ARGS+=(--only "${{ inputs.gates }}")
+          fi
+          if [[ -n "${{ inputs.skip }}" ]]; then
+            ARGS+=(--skip "${{ inputs.skip }}")
+          fi
+          python tools/lint/run_gates.py "${ARGS[@]}" --json gates-report.json
+
+      - name: Upload JSON report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: gates-report
+          path: gates-report.json
+          if-no-files-found: ignore
