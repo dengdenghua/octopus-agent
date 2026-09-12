@@ -414,6 +414,62 @@ def create_agent_world_router(
         agents.sort(key=lambda a: (a["is_official"], a["display_name"].lower()), reverse=True)
         return {"agents": agents[:limit], "total": len(agents), "page": 1, "page_size": limit}
 
+    @router.post("/api/agent-market/from-subagent")
+    def api_agent_market_from_subagent(body: dict[str, Any]) -> dict[str, Any]:
+        """把子 agent 定义晋升为角色市场岗位（进"我的安装"）。
+
+        使用过程中没有合适岗位时，运行中造出的子 agent 定义可以用这个
+        端点转正：写 profile.jsonc + 生成头像 + SOUL.md，立刻出现在
+        已安装角色列表，并且反向自动成为可派发的子 agent（market 桥）。
+        """
+        subagent_name = str(body.get("subagent") or body.get("name") or "").strip()
+        if not subagent_name:
+            raise HTTPException(400, "subagent name is required")
+        definition = None
+        try:
+            from runtime.execution.subagents import get_subagent_registry
+
+            registry = get_subagent_registry()
+            if registry is not None and registry.has(subagent_name):
+                definition = registry.get(subagent_name)
+        except Exception:  # noqa: BLE001 — registry is optional at this layer
+            definition = None
+        if definition is None:
+            try:
+                from runtime.execution.suckers.ephemeral_agents import BUILTIN_ROLES
+
+                role = BUILTIN_ROLES.get(subagent_name)
+            except Exception:  # noqa: BLE001
+                role = None
+            if role is not None:
+                from runtime.execution.subagents.registry import SubagentDefinition
+
+                definition = SubagentDefinition(
+                    name=role.id,
+                    description=role.description,
+                    system_prompt=role.system_prompt,
+                    tools=tuple(role.tool_allowlist),
+                    scope="builtin",
+                )
+        if definition is None:
+            raise HTTPException(404, f"subagent not found: {subagent_name}")
+        display_name = str(body.get("display_name") or "").strip()
+        if display_name:
+            from dataclasses import replace as _dc_replace
+
+            definition = _dc_replace(definition, display_name=display_name)
+        try:
+            from runtime.execution.subagents.market_bridge import (
+                promote_definition_to_market,
+            )
+
+            result = promote_definition_to_market(definition, default_agents_root())
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(500, f"promotion write failed: {exc}") from exc
+        return {**result, "source_subagent": definition.name}
+
     @router.get("/api/agent-market/store/{agent_id}")
     def api_agent_market_detail(agent_id: str) -> dict[str, Any]:
         try:

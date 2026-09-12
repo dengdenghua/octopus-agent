@@ -35,6 +35,10 @@ class SubagentDefinition:
     source_path: str = ""
     scope: str = "project"
     capabilities: tuple[str, ...] = ()
+    # 展示身份（职位 + 头像）。市场角色桥（market_bridge）会自动填上：
+    # 已安装角色是子 agent 展示身份的唯一来源，避免两套身份各造各的。
+    display_name: str = ""
+    avatar_url: str = ""
 
     def to_wire(self, *, include_prompt: bool = False) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -46,6 +50,8 @@ class SubagentDefinition:
             "source_path": self.source_path,
             "scope": self.scope,
             "capabilities": list(self.capabilities),
+            "display_name": self.display_name,
+            "avatar_url": self.avatar_url,
         }
         if include_prompt:
             out["system_prompt"] = self.system_prompt
@@ -188,6 +194,8 @@ def load_subagent_file(path: Path, *, scope: str) -> SubagentDefinition:
         source_path=str(path),
         scope=scope,
         capabilities=_coerce_capabilities(meta.get("capabilities")),
+        display_name=str(meta.get("display_name") or "").strip(),
+        avatar_url=str(meta.get("avatar_url") or "").strip(),
     )
 
 
@@ -205,6 +213,7 @@ def load_subagent_registry(
     *,
     project_root: Path | None = None,
     user_home: Path | None = None,
+    agents_root: Path | None = None,
 ) -> SubagentRegistry:
     if project_root is None:
         from runtime.platform.process.paths import project_root as _project_root
@@ -213,7 +222,14 @@ def load_subagent_registry(
     user_home = user_home or Path.home()
     registry = SubagentRegistry()
 
-    # Lower precedence first; project-level definitions override user-level.
+    # Lowest precedence first: the agent market's installed roles join the
+    # dispatchable pool without shadowing explicit user/project definitions
+    # of the same name — 市场角色自动成为子 agent，不用再单独造一份。
+    from runtime.execution.subagents.market_bridge import market_definitions
+
+    for definition in market_definitions(agents_root):
+        registry.register(definition)
+    # Lower precedence next; project-level definitions override user-level.
     for definition in _load_dir(user_home / ".claude" / "agents", scope="user"):
         registry.register(definition)
     for definition in _load_dir(project_root / ".claude" / "agents", scope="project"):

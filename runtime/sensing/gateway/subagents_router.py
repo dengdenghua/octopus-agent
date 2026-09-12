@@ -362,25 +362,49 @@ def create_subagents_router(
 
         return get_subagent_registry()
 
+    def _with_market_identity(item: dict[str, Any]) -> dict[str, Any]:
+        """给子 agent 条目补上角色市场的职位与头像（不另造身份）。"""
+        if item.get("display_name") and item.get("avatar_url"):
+            item.setdefault("identity_source", "definition")
+            return item
+        try:
+            from runtime.execution.subagents.market_bridge import (
+                resolve_market_identity,
+            )
+
+            identity = resolve_market_identity(str(item.get("name") or ""))
+        except Exception:  # noqa: BLE001 — identity is best-effort decoration
+            return item
+        if identity is None:
+            item.setdefault("identity_source", "builtin")
+            return item
+        item.setdefault("display_name", identity.display_name)
+        item.setdefault("avatar_url", identity.avatar_url)
+        item["market_agent_id"] = identity.agent_id
+        item["identity_source"] = "agent-market"
+        return item
+
     @router.get("/api/subagents")
     def list_subagents(request: Request) -> dict[str, Any]:
         _auth(request)  # AUTH-OK: actor-agnostic — subagent definitions are global
         reg = _registry()
         items: list[dict[str, Any]] = []
         if reg is not None:
-            items.extend(d.to_wire() for d in reg.all())
+            items.extend(_with_market_identity(d.to_wire()) for d in reg.all())
         from runtime.execution.suckers.ephemeral_agents import BUILTIN_ROLES
 
         for role in BUILTIN_ROLES.values():
             items.append(
-                {
-                    "name": role.id,
-                    "description": role.description,
-                    "tools": list(role.tool_allowlist),
-                    "model": None,
-                    "source_path": "",
-                    "scope": "builtin",
-                }
+                _with_market_identity(
+                    {
+                        "name": role.id,
+                        "description": role.description,
+                        "tools": list(role.tool_allowlist),
+                        "model": None,
+                        "source_path": "",
+                        "scope": "builtin",
+                    }
+                )
             )
         items.sort(key=lambda item: (item["scope"] != "project", item["name"]))
         return {"subagents": items}
@@ -440,7 +464,7 @@ def create_subagents_router(
         _auth(request)  # AUTH-OK: actor-agnostic — subagent definitions are global
         reg = _registry()
         if reg is not None and reg.has(name):
-            return reg.get(name).to_wire(include_prompt=True)
+            return _with_market_identity(reg.get(name).to_wire(include_prompt=True))
         from runtime.execution.suckers.ephemeral_agents import BUILTIN_ROLES
 
         role = BUILTIN_ROLES.get(name)
