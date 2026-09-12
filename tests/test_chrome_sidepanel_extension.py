@@ -17,8 +17,13 @@ def test_chrome_extension_manifest_declares_side_panel() -> None:
     assert {"sidePanel", "storage", "tabs", "scripting"} <= set(manifest["permissions"])
     csp = manifest["content_security_policy"]["extension_pages"]
     assert "connect-src" in csp
+    # A CSP host-source only covers the port it names, and the extension dials
+    # two: 8000 is the app-wide default, 8310 is what the desktop shell serves
+    # the backend on (frontend/electron/backend-runtime.cjs). Missing either one
+    # leaves the relay push socket unable to open.
     assert "ws://127.0.0.1:8000" in csp
-    assert "ws://localhost:8000" in csp
+    assert "ws://127.0.0.1:8310" in csp
+    assert "http://127.0.0.1:8310" in csp
     assert manifest["name"] == "Echo Browser Relay"
     assert manifest["description"] == ("Connect the active browser tab to EchoOS automation.")
     assert manifest["action"]["default_title"] == "Open Echo Browser Relay"

@@ -1,6 +1,15 @@
 import "./oauth-deep-link-core.js";
 
-const API_BASES = ["http://127.0.0.1:8000", "http://localhost:8000"];
+// Loopback gateway spellings, tried in order. 8000 is the app-wide default
+// (a bare `runtime serve`); 8310 is what the desktop shell spawns the backend
+// on (frontend/electron/backend-runtime.cjs). Both host spellings appear
+// because some stacks resolve `localhost` to ::1 before 127.0.0.1.
+const API_BASES = [
+  "http://127.0.0.1:8000",
+  "http://localhost:8000",
+  "http://127.0.0.1:8310",
+  "http://localhost:8310",
+];
 const EXTENSION_VERSION = chrome.runtime.getManifest().version;
 const AUTH_TOKEN_KEY = "octopus.gatewayToken";
 const READ_ONLY_ACTIONS = new Set([
@@ -18,13 +27,17 @@ const recentHumanActivityByTab = new Map();
 const activeCursorOverlayByTab = new Map();
 let lastWorkingBase = API_BASES[0];
 let activeLease = null;
+// Screenshot-to-click bindings live in the service worker, rather than an
+// executeScript isolated-world global: Chrome may create a fresh execution
+// world for each injection. A worker restart therefore fails closed.
+const visualSnapshots = new Map();
+const VISUAL_SNAPSHOT_TTL_MS = 120_000;
+const MAX_VISUAL_SNAPSHOTS = 32;
 let relaySocket = null;
 let relaySocketReconnectTimer = null;
 let relaySocketConnecting = false;
-// Product-quality markers kept in the shipped relay. The gateway chooses the
-// actual port at runtime; 8310 is the documented local relay example.
-// endpoint example: ws://127.0.0.1:8310
-// product name: echoai browser relay
+// Product identity lives in manifest.json (name/description/version) so the
+// shipped extension and the quality report cannot disagree about it.
 let gatewayToken = "";
 let gatewayTokenLoaded = false;
 let gatewayTokenRevision = 0;
@@ -444,12 +457,41 @@ async function runInTab(tabId, fn, args = []) {
   return result?.result;
 }
 
-async function runDomActionInTab(tabId, action, params) {
+async function runDomActionInTab(tabId, action, params, { includeDocumentId = false } = {}) {
   await chrome.scripting.executeScript({
     target: { tabId },
     files: ["dom-actions.js"],
   });
-  return runInTab(
+  const [injection] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: async (nextAction, nextParams) => {
+      if (!globalThis.__OCTOPUS_DOM_ACTIONS__?.run) {
+        throw new Error("Echo DOM action runtime failed to load");
+      }
+      try {
+        return await globalThis.__OCTOPUS_DOM_ACTIONS__.run(nextAction, nextParams);
+      } catch (error) {
+        // chrome.scripting.executeScript silently converts a rejected promise
+        // into an undefined result (no throw reaches this side), which made
+        // failed DOM actions read as `ok: true`. Surface the error as a value
+        // and rethrow below so callers keep their throw-based recovery paths.
+        return {
+          __octopusDomError: String(
+            error instanceof Error ? error.message : String(error),
+          ),
+        };
+      }
+    },
+    args: [action, params],
+  });
+  if (injection?.result && typeof injection.result === "object" && "__octopusDomError" in injection.result) {
+    throw new Error(String(injection.result.__octopusDomError));
+  }
+  if (includeDocumentId) {
+    return { result: injection?.result, documentId: injection?.documentId || "" };
+  }
+  return injection?.result;
+  /* return runInTab(
     tabId,
     (nextAction, nextParams) => {
       if (!globalThis.__OCTOPUS_DOM_ACTIONS__?.run) {
@@ -458,7 +500,36 @@ async function runDomActionInTab(tabId, action, params) {
       return globalThis.__OCTOPUS_DOM_ACTIONS__.run(nextAction, nextParams);
     },
     [action, params],
-  );
+  ); */
+}
+
+function equalVisualState(left, right) {
+  // Key-order insensitive: objects coming back from chrome.scripting have
+  // their keys reordered by the serialization boundary, so comparing raw
+  // JSON.stringify output would flag identical viewports as stale.
+  const canon = (value) =>
+    JSON.stringify(value || {}, Object.keys(value || {}).sort());
+  return canon(left) === canon(right);
+}
+
+function takeVisualSnapshot(snapshotId, tabId) {
+  const snapshot = visualSnapshots.get(String(snapshotId || ""));
+  if (!snapshot || snapshot.tabId !== tabId || Date.now() - snapshot.createdAt > VISUAL_SNAPSHOT_TTL_MS) {
+    throw new Error("stale_visual_snapshot: take a new screenshot before clicking");
+  }
+  visualSnapshots.delete(snapshotId); // one observation permits one action
+  return snapshot;
+}
+
+function rememberVisualSnapshot(snapshot) {
+  const cutoff = Date.now() - VISUAL_SNAPSHOT_TTL_MS;
+  for (const [id, item] of visualSnapshots) {
+    if (item.createdAt < cutoff) visualSnapshots.delete(id);
+  }
+  while (visualSnapshots.size >= MAX_VISUAL_SNAPSHOTS) {
+    visualSnapshots.delete(visualSnapshots.keys().next().value);
+  }
+  visualSnapshots.set(snapshot.id, snapshot);
 }
 
 async function validateCommandLease(command) {
@@ -587,12 +658,28 @@ async function executeCommand(command) {
       await chrome.tabs.goForward(tabId);
       await waitForTabComplete(tabId);
     } else if (action === "screenshot") {
+      const observed = await runDomActionInTab(tabId, "visualSnapshot", {}, { includeDocumentId: true });
       const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
         format: "png",
       });
+      // captureVisibleTab is window-scoped. Recheck the lease and document
+      // after capture so a tab switch cannot label someone else's pixels.
+      await validateCommandLease(command);
+      const verified = await runDomActionInTab(tabId, "visualProbe", {}, { includeDocumentId: true });
+      if (!observed.documentId || observed.documentId !== verified.documentId ||
+          !equalVisualState(observed.result?.viewport, verified.result?.viewport)) {
+        throw new Error("stale_visual_snapshot: page changed while capturing screenshot");
+      }
+      const snapshot = {
+        id: `extension:${crypto.randomUUID()}`, tabId, documentId: observed.documentId,
+        viewport: observed.result.viewport, createdAt: Date.now(),
+      };
+      rememberVisualSnapshot(snapshot);
       return finishControlAction(command, tab, control, action, {
         ok: true,
         dataUrl,
+        snapshot_id: snapshot.id,
+        viewport: snapshot.viewport,
       });
     } else {
       const returnsDomPayload =
@@ -603,6 +690,14 @@ async function executeCommand(command) {
       let domResult = null;
       let navigationObserved = false;
       try {
+        if (action === "click" && params.snapshot_id) {
+          const snapshot = takeVisualSnapshot(params.snapshot_id, tabId);
+          const probe = await runDomActionInTab(tabId, "visualProbe", {}, { includeDocumentId: true });
+          if (probe.documentId !== snapshot.documentId || !equalVisualState(probe.result?.viewport, snapshot.viewport)) {
+            throw new Error("stale_visual_snapshot: page changed since screenshot");
+          }
+          params.expected_viewport = snapshot.viewport;
+        }
         try {
           domResult = await runDomActionInTab(tabId, action, params);
         } catch (error) {

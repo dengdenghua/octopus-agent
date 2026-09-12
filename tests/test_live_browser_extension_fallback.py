@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import pytest
+
 from runtime.execution.suckers import browser_act_skills as browser_act
 from runtime.execution.suckers import browser_backends
 from runtime.execution.suckers.browser_backend import BrowserResult, Track
@@ -246,3 +248,56 @@ def test_live_browser_execute_js_never_expands_to_extension(monkeypatch) -> None
         "error": "execute-js unavailable",
         "code": "document.title",
     }
+
+
+@pytest.mark.parametrize("error", [OSError, TypeError, ValueError])
+def test_uncertain_extension_result_never_replays_on_electron(monkeypatch, error):
+    calls = []
+
+    class UncertainExtension(_FakeExtensionBackend):
+        def click(self, selector):
+            calls.append(selector)
+            raise error("reply lost after click")
+
+    monkeypatch.setattr(browser_act, "_electron_webview_available", lambda: False)
+    monkeypatch.setattr(browser_backends, "ExtensionBackend", lambda: UncertainExtension([]))
+    monkeypatch.setattr(browser_act, "_bridge_call", lambda *_: pytest.fail("duplicated click"))
+    result = browser_act._h_click("#save")
+    assert result["ok"] is False and result["track"] == "extension"
+    assert calls == ["#save"]
+
+
+def test_visual_click_stays_on_observed_track(monkeypatch):
+    calls = []
+    backend = browser_backends.ExtensionBackend(
+        transport=lambda action, payload: calls.append((action, payload)) or {"ok": True},
+    )
+    monkeypatch.setattr(browser_backends, "ExtensionBackend", lambda: backend)
+    monkeypatch.setattr(
+        browser_act, "_electron_webview_available", lambda: pytest.fail("must not reroute")
+    )
+    params = dict(x=400, y=300, image_width=800, image_height=600, snapshot_id="extension:test")
+    assert browser_act._h_click(**params)["ok"] is True
+    assert calls == [("click", params)]
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"x": -1},
+        {"x": True},
+        {"y": 600},
+        {"image_width": None},
+        {"image_height": 0},
+        {"snapshot_id": ""},
+        {"snapshot_id": "electron:other"},
+        {"selector": "#other"},
+    ],
+)
+def test_invalid_visual_click_never_dispatches(monkeypatch, override):
+    monkeypatch.setattr(
+        browser_backends, "ExtensionBackend", lambda: pytest.fail("invalid input dispatched")
+    )
+    params = dict(x=400, y=300, image_width=800, image_height=600, snapshot_id="extension:test")
+    params.update(override)
+    assert browser_act._h_click(**params)["ok"] is False

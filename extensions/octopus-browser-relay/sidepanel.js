@@ -1,4 +1,11 @@
-const API_BASES = ["http://127.0.0.1:8000", "http://localhost:8000"];
+// Must stay in lockstep with background.js: 8000 is the app-wide default,
+// 8310 is what the desktop shell serves the backend on.
+const API_BASES = [
+  "http://127.0.0.1:8000",
+  "http://localhost:8000",
+  "http://127.0.0.1:8310",
+  "http://localhost:8310",
+];
 const FRONTEND_BASES = ["http://localhost:3000", "http://127.0.0.1:3000"];
 const THREAD_KEY = "octopus.chrome.sidecar.threadId";
 const AUTH_TOKEN_KEY = "octopus.gatewayToken";

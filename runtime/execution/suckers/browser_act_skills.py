@@ -201,9 +201,11 @@ def _extension_fallback_result(
     from runtime.execution.suckers.browser_backends import ExtensionBackend
 
     backend = ExtensionBackend()
+    dispatched = False
     try:
         if not backend.available():
             return None
+        dispatched = True
         if action == "click":
             result = backend.click(str(params.get("selector") or ""))
         elif action == "type":
@@ -231,9 +233,12 @@ def _extension_fallback_result(
         else:
             result = backend.state(max_items=int(params.get("max_items") or 30))
     except (OSError, TypeError, ValueError):
-        # Availability can change between the read-only probe and dispatch.
-        # Return to the legacy Electron error path rather than raising from a
-        # live-browser skill or attempting a second mutating action.
+        if dispatched:
+            return {
+                "ok": False,
+                "track": "extension",
+                "error": "Extension result is unknown; inspect the page before retrying",
+            }
         return None
     return _extension_result_payload(result)
 
@@ -245,7 +250,55 @@ def _live_browser_call(action: str, params: dict[str, Any]) -> dict[str, Any]:
     return _bridge_call(action, params)
 
 
-def _h_click(selector: str) -> dict[str, Any]:
+def _h_click(
+    selector: str = "",
+    *,
+    x: int | None = None,
+    y: int | None = None,
+    image_width: int | None = None,
+    image_height: int | None = None,
+    snapshot_id: str = "",
+) -> dict[str, Any]:
+    if any(value is not None for value in (x, y, image_width, image_height)) or snapshot_id:
+        if selector:
+            return {"ok": False, "error": "Use either a selector or screenshot coordinates"}
+        if (
+            any(type(value) is not int for value in (x, y, image_width, image_height))
+            or not 0 < image_width <= 20_000
+            or not 0 < image_height <= 20_000
+            or not 0 <= x < image_width
+            or not 0 <= y < image_height
+        ):
+            return {
+                "ok": False,
+                "error": "Coordinates must lie within the supplied image dimensions",
+            }
+        if not isinstance(snapshot_id, str) or not snapshot_id.startswith("extension:"):
+            return {
+                "ok": False,
+                "error": "Coordinate clicks require a fresh Chrome relay screenshot snapshot_id",
+            }
+        from runtime.execution.suckers.browser_backends import ExtensionBackend
+
+        # Bind visual actions to the screenshot's backend. Never route a point
+        # observed in Chrome to a newly active Electron page.
+        try:
+            return _extension_result_payload(
+                ExtensionBackend().click_at(
+                    x=x,
+                    y=y,
+                    image_width=image_width,
+                    image_height=image_height,
+                    snapshot_id=snapshot_id,
+                )
+            )
+        except (OSError, TypeError, ValueError):
+            return {
+                "ok": False,
+                "error": "Visual click result is unknown; take a new screenshot before continuing",
+            }
+    if not selector:
+        return {"ok": False, "error": "A selector or screenshot coordinates are required"}
     return _live_browser_call("click", {"selector": selector})
 
 
@@ -723,6 +776,12 @@ def register_browser_act_skills(registry: SkillRegistry) -> int:
                 "the signed-in Chrome relay when no desktop webview is active.\n"
                 "Args: {selector: CSS selector, e.g. 'button[type=submit]' "
                 "or '#login'}.\n"
+                "For Chrome relay screenshots, alternatively pass {x, y, image_width, "
+                "image_height, snapshot_id} with NO selector. x/y are pixels in the "
+                "returned image; use visual_observation.image_width/image_height and "
+                "the screenshot's snapshot_id. Coordinates are scaled to the viewport. "
+                "A snapshot permits one click and expires after 120 seconds; take a new "
+                "screenshot after navigation, scroll, resize, or a rejected click.\n"
                 "Returns {ok, tag, text, error?}. Use `browser_extract` "
                 "after click to read the resulting page."
             ),

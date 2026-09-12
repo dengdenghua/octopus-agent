@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -8,9 +9,52 @@ from fastapi.testclient import TestClient
 from runtime.memory.learning.review_queue import ReviewQueue
 from runtime.safety.evolution.automation_radar import compute_automation_radar
 from runtime.safety.evolution.browser_desktop_quality import (
+    RELAY_BACKGROUND_PATH,
+    RELAY_MANIFEST_PATH,
+    _relay_manifest_findings,
     compute_browser_desktop_quality,
 )
 from runtime.sensing.gateway.evolution_router import create_evolution_router
+
+_LOOPBACK_CSP = (
+    "script-src 'self'; connect-src 'self' "
+    "http://127.0.0.1:8000 http://localhost:8000 "
+    "ws://127.0.0.1:8000 ws://localhost:8000;"
+)
+_LOOPBACK_HOST_PERMISSIONS = [
+    "<all_urls>",
+    "http://127.0.0.1:8000/*",
+    "http://localhost:8000/*",
+]
+
+
+def _write_relay_extension(
+    root: Path,
+    csp: str = _LOOPBACK_CSP,
+    host_permissions: list[str] | None = None,
+    api_bases: tuple[str, ...] = ("http://127.0.0.1:8000", "http://localhost:8000"),
+    manifest_version: int = 3,
+) -> None:
+    manifest_path = root / RELAY_MANIFEST_PATH
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "manifest_version": manifest_version,
+                "name": "Echo Browser Relay",
+                "content_security_policy": {"extension_pages": csp},
+                "host_permissions": (
+                    _LOOPBACK_HOST_PERMISSIONS if host_permissions is None else host_permissions
+                ),
+            }
+        ),
+        encoding="utf-8",
+    )
+    body = ",\n  ".join(f'"{base}"' for base in api_bases)
+    (root / RELAY_BACKGROUND_PATH).write_text(
+        f"const API_BASES = [\n  {body},\n];\n",
+        encoding="utf-8",
+    )
 
 
 def test_browser_desktop_quality_reports_all_local_checks() -> None:
@@ -22,7 +66,10 @@ def test_browser_desktop_quality_reports_all_local_checks() -> None:
     chrome_activation = next(
         row for row in report["checks"] if row["id"] == "thread_native_external_chrome_activation"
     )
-    assert "echoai browser relay" in chrome_activation["required_terms"]
+    # The relay ships as its own artifact, so its manifest is asserted as data.
+    # It previously asserted the literal "echoai browser relay", which the
+    # shipped relay satisfied with a comment in background.js.
+    assert chrome_activation["contract_findings"] == []
     assert "octopus chrome sidecar" not in chrome_activation["required_terms"]
     assert report["browser_relay_bridge"]["schema"] == "octopus.browser_relay_bridge.v1"
     assert report["browser_relay_bridge"]["base_url"].endswith("/api/browser/relay")
@@ -40,6 +87,81 @@ def test_browser_desktop_quality_reports_all_local_checks() -> None:
         "browser_session_recovery_rerun",
         "operator_visibility",
     }
+
+
+def test_relay_manifest_contract_rejects_a_base_the_csp_does_not_allow(
+    tmp_path: Path,
+) -> None:
+    """The regression that shipped.
+
+    The relay dials 8310 (the desktop shell's backend port, see
+    frontend/electron/backend-runtime.cjs) while its own CSP and host
+    permissions only admitted 8000. Nothing else surfaced the drift: the
+    extension loaded, the WS socket simply never opened.
+    """
+    _write_relay_extension(
+        tmp_path,
+        api_bases=(
+            "http://127.0.0.1:8000",
+            "http://localhost:8000",
+            "http://127.0.0.1:8310",
+        ),
+    )
+
+    findings = _relay_manifest_findings(tmp_path)
+
+    assert any("8310" in row and "connect-src" in row for row in findings)
+    assert any("8310" in row and "host_permissions" in row for row in findings)
+
+
+def test_relay_manifest_contract_accepts_a_manifest_covering_every_base(
+    tmp_path: Path,
+) -> None:
+    _write_relay_extension(
+        tmp_path,
+        csp=(
+            "script-src 'self'; connect-src 'self' "
+            "http://127.0.0.1:8000 http://localhost:8000 "
+            "ws://127.0.0.1:8000 ws://localhost:8000 "
+            "http://127.0.0.1:8310 http://localhost:8310 "
+            "ws://127.0.0.1:8310 ws://localhost:8310;"
+        ),
+        host_permissions=[
+            "<all_urls>",
+            "http://127.0.0.1:8000/*",
+            "http://localhost:8000/*",
+            "http://127.0.0.1:8310/*",
+            "http://localhost:8310/*",
+        ],
+        api_bases=(
+            "http://127.0.0.1:8000",
+            "http://localhost:8000",
+            "http://127.0.0.1:8310",
+            "http://localhost:8310",
+        ),
+    )
+
+    assert _relay_manifest_findings(tmp_path) == []
+
+
+def test_relay_manifest_contract_requires_a_websocket_origin(tmp_path: Path) -> None:
+    """The relay push socket is a websocket; an http-only connect-src blocks it."""
+    _write_relay_extension(
+        tmp_path,
+        csp="script-src 'self'; connect-src 'self' http://127.0.0.1:8000;",
+    )
+
+    assert any("ws origin" in row for row in _relay_manifest_findings(tmp_path))
+
+
+def test_relay_manifest_contract_requires_manifest_v3(tmp_path: Path) -> None:
+    _write_relay_extension(tmp_path, manifest_version=2)
+
+    assert "manifest_version must be 3" in _relay_manifest_findings(tmp_path)
+
+
+def test_relay_manifest_contract_reports_a_missing_manifest(tmp_path: Path) -> None:
+    assert _relay_manifest_findings(tmp_path) == [f"{RELAY_MANIFEST_PATH} is missing or empty"]
 
 
 def test_browser_desktop_quality_detects_missing_workspace(tmp_path: Path) -> None:

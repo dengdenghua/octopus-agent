@@ -428,6 +428,26 @@ class ExtensionBackend:
     def click(self, selector: str) -> BrowserResult:
         return self._call("click", {"selector": selector})
 
+    def click_at(
+        self,
+        *,
+        x: int,
+        y: int,
+        image_width: int,
+        image_height: int,
+        snapshot_id: str,
+    ) -> BrowserResult:
+        return self._call(
+            "click",
+            {
+                "x": x,
+                "y": y,
+                "image_width": image_width,
+                "image_height": image_height,
+                "snapshot_id": snapshot_id,
+            },
+        )
+
     def type(self, selector: str, text: str, *, clear: bool = False) -> BrowserResult:
         return self._call("type", {"selector": selector, "text": text, "clear": clear})
 

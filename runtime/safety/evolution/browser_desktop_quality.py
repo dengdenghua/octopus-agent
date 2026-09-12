@@ -1,11 +1,21 @@
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from runtime.platform.process.paths import app_paths
 from runtime.platform.process.paths import project_root as default_project_root
+
+RELAY_MANIFEST_PATH = "extensions/octopus-browser-relay/manifest.json"
+RELAY_BACKGROUND_PATH = "extensions/octopus-browser-relay/background.js"
+_LOOPBACK_HOSTS = ("127.0.0.1", "localhost")
+_LOOPBACK_BASE = re.compile(r"http://(?:127\.0\.0\.1|localhost)(?::\d+)?")
+_SOURCE_SCHEME = re.compile(
+    r"^(?P<scheme>wss?|https?)://(?P<host>[^/:*]+)(?::(?P<port>\*|\d+))?"
+)
 
 
 @dataclass(frozen=True)
@@ -15,6 +25,7 @@ class BrowserDesktopCheck:
     paths: tuple[str, ...]
     required_terms: tuple[str, ...]
     weight: int = 1
+    relay_manifest_contract: bool = False
 
 
 CHECKS: tuple[BrowserDesktopCheck, ...] = (
@@ -150,8 +161,6 @@ CHECKS: tuple[BrowserDesktopCheck, ...] = (
             "chrome.sidepanel",
             "openpanelonactionclick",
             "connect-src",
-            "ws://127.0.0.1:8310",
-            "echoai browser relay",
             "turn/start",
             "item/agentmessage/delta",
             "request.params",
@@ -167,6 +176,10 @@ CHECKS: tuple[BrowserDesktopCheck, ...] = (
             "browser_state",
             "browser_screenshot",
         ),
+        # The relay is a separately shipped artifact, so its identity and its
+        # reachability are asserted from manifest.json data below instead of
+        # from prose that happens to sit in the checked source files.
+        relay_manifest_contract=True,
     ),
     BrowserDesktopCheck(
         id="desktop_preview_execute_lease",
@@ -307,20 +320,146 @@ def compute_browser_desktop_quality(
     }
 
 
+def _directive_sources(csp: str, directive: str) -> list[str]:
+    """Return the source expressions of one CSP directive, lower-cased."""
+    for chunk in csp.split(";"):
+        parts = chunk.split()
+        if parts and parts[0].lower() == directive:
+            return [part.lower() for part in parts[1:]]
+    return []
+
+
+def _parse_source(source: str) -> tuple[str, str, str] | None:
+    """Split a CSP source / match pattern into ``(scheme, host, port)``.
+
+    ``port`` is ``"*"`` when the source does not pin one. Both CSP host-sources
+    and extension match patterns treat an omitted port as "any port", which is
+    what the relay needs: the gateway picks its port at runtime.
+    """
+    match = _SOURCE_SCHEME.match(source)
+    if match is None:
+        return None
+    return match.group("scheme"), match.group("host"), match.group("port") or "*"
+
+
+def _relay_candidate_bases(base: Path) -> list[str]:
+    """Loopback bases the relay dials, read from ``API_BASES`` in background.js.
+
+    Reading the list out of the extension is the point: the check compares the
+    relay's own runtime candidates against the manifest it ships with, so it
+    needs no third copy of the port numbers that could drift out of date.
+    """
+    text = _read_text(base / RELAY_BACKGROUND_PATH)
+    block = re.search(r"API_BASES\s*=\s*\[(?P<body>[^\]]*)\]", text)
+    if block is None:
+        return []
+    return sorted(set(_LOOPBACK_BASE.findall(block.group("body"))))
+
+
+def _covers(
+    sources: list[tuple[str, str, str]],
+    schemes: tuple[str, ...],
+    host: str,
+    port: str,
+) -> bool:
+    """True when some source admits this host/port for one of ``schemes``.
+
+    A source without a port (or with ``*``) covers every port on that host;
+    otherwise the ports must match exactly.
+    """
+    return any(
+        scheme in schemes and source_host == host and (source_port in {"*", port})
+        for scheme, source_host, source_port in sources
+    )
+
+
+def _relay_manifest_findings(base: Path) -> list[str]:
+    """Validate the shipped relay manifest as data rather than as a substring.
+
+    This check used to list ``echoai browser relay`` among its required terms
+    and read that string out of a comment in ``background.js``. A substring
+    search over prose cannot disagree with the artifact it is meant to guard:
+    it stayed green while ``manifest.json`` advertised a different name, and it
+    would have stayed green after any rename that somebody remembered to copy
+    into the comment. It also hid a real defect — the manifest pinned loopback
+    to port 8000 while the desktop shell serves the backend on 8310, so the
+    relay could not reach a packaged install at all.
+
+    So parse the JSON and cross-check it against the loopback bases the relay
+    actually dials (``API_BASES`` in ``background.js``). The manifest and the
+    runtime candidate list are two hand-kept lists in two different languages,
+    and this check exists to catch the day they drift: a base the relay dials
+    but the CSP does not permit is a dead relay with no other symptom.
+    """
+    raw = _read_text(base / RELAY_MANIFEST_PATH)
+    if not raw:
+        return [f"{RELAY_MANIFEST_PATH} is missing or empty"]
+    try:
+        manifest = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        return [f"{RELAY_MANIFEST_PATH} is not valid JSON: {exc}"]
+    if not isinstance(manifest, dict):
+        return [f"{RELAY_MANIFEST_PATH} must contain a JSON object"]
+    findings: list[str] = []
+    if manifest.get("manifest_version") != 3:
+        findings.append("manifest_version must be 3")
+    if not str(manifest.get("name") or "").strip():
+        findings.append("name must carry the shipped product name")
+
+    csp = str((manifest.get("content_security_policy") or {}).get("extension_pages") or "")
+    connect_src = [
+        parsed
+        for source in _directive_sources(csp, "connect-src")
+        if (parsed := _parse_source(source)) is not None
+    ]
+    ws_loopback = [row for row in connect_src if row[0] in {"ws", "wss"} and row[1] in _LOOPBACK_HOSTS]
+    if not ws_loopback:
+        findings.append("connect-src must allow a ws:// loopback origin for the relay push socket")
+
+    host_patterns = [
+        parsed
+        for entry in manifest.get("host_permissions") or []
+        if (parsed := _parse_source(str(entry))) is not None
+    ]
+    for candidate in _relay_candidate_bases(base):
+        parsed_candidate = _parse_source(candidate)
+        if parsed_candidate is None:
+            continue
+        _, host, port = parsed_candidate
+        if not _covers(connect_src, ("http", "https"), host, port):
+            findings.append(
+                f"background.js dials {candidate} but connect-src allows no "
+                f"http origin for {host}:{port}"
+            )
+        if not _covers(connect_src, ("ws", "wss"), host, port):
+            findings.append(
+                f"background.js dials {candidate} but connect-src allows no "
+                f"ws origin for {host}:{port} (the relay push socket)"
+            )
+        if not _covers(host_patterns, ("http", "https"), host, port):
+            findings.append(
+                f"background.js dials {candidate} but host_permissions covers no "
+                f"pattern for {host}:{port}"
+            )
+    return findings
+
+
 def _check_row(base: Path, check: BrowserDesktopCheck) -> dict[str, Any]:
     paths = [{"path": path, "exists": (base / path).exists()} for path in check.paths]
     text = "\n".join(_read_text(base / row["path"]) for row in paths if row["exists"]).lower()
     missing_paths = [str(row["path"]) for row in paths if not row["exists"]]
     missing_terms = [term for term in check.required_terms if term.lower() not in text]
+    contract_findings = _relay_manifest_findings(base) if check.relay_manifest_contract else []
     return {
         "id": check.id,
         "title": check.title,
         "weight": check.weight,
-        "passed": not missing_paths and not missing_terms,
+        "passed": not missing_paths and not missing_terms and not contract_findings,
         "paths": paths,
         "missing_paths": missing_paths,
         "required_terms": list(check.required_terms),
         "missing_terms": missing_terms,
+        "contract_findings": contract_findings,
         "next_action": f"Complete browser/desktop quality check: {check.title}.",
     }
 

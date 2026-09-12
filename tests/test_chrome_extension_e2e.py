@@ -33,6 +33,76 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE_EXTENSION = ROOT / "extensions" / "octopus-browser-relay"
 
 
+def test_relay_manifest_allows_capture_of_the_leased_page() -> None:
+    manifest = json.loads((SOURCE_EXTENSION / "manifest.json").read_text(encoding="utf-8"))
+    assert "activeTab" in manifest["permissions"]
+    # activeTab is not granted to a background service worker without a user
+    # gesture. The extension already injects its relay content scripts on every
+    # permitted page; this permission makes screenshot capture match that scope.
+    assert "<all_urls>" in manifest["host_permissions"]
+
+
+def test_relay_visual_click_scales_pixels_and_rejects_stale_snapshots(live_extension_runtime):
+    from runtime.execution.suckers.browser_act_skills import _h_click, _h_screenshot
+
+    base_url, context, _extension, _api_key = live_extension_runtime
+    page = context.pages[0] if context.pages else context.new_page()
+    page.set_viewport_size({"width": 800, "height": 600})
+    page.goto(f"{base_url}/fixture")
+    wait_until(
+        lambda: (
+            "/fixture"
+            in str(
+                request_json(base_url, "/api/browser/relay/status")
+                .get("active_tab", {})
+                .get("url", "")
+            )
+        )
+    )
+    page.evaluate("""() => {
+      document.body.style.cssText = 'margin:0;min-height:1400px';
+      document.body.replaceChildren();
+      const canvas = document.createElement('canvas');
+      canvas.width=800; canvas.height=600; document.body.append(canvas);
+      const ctx=canvas.getContext('2d'); ctx.fillStyle='orange'; ctx.fillRect(300,200,200,200);
+      window.clicks=[];
+      canvas.onclick=e=>window.clicks.push([e.offsetX,e.offsetY]);
+    }""")
+
+    def capture():
+        result = _h_screenshot()
+        assert result["ok"], result
+        assert result["snapshot_id"].startswith("extension:")
+        return result
+
+    def click(snapshot, **override):
+        # Simulate the image bridge downsampling the image to half size.
+        params = dict(
+            x=200, y=150, image_width=400, image_height=300, snapshot_id=snapshot["snapshot_id"]
+        )
+        params.update(override)
+        return _h_click(**params)
+
+    snapshot = capture()
+    assert click(snapshot)["ok"] is True
+    assert page.evaluate("window.clicks") == [[400, 300]]
+    consumed = click(snapshot)
+    assert consumed["ok"] is False, consumed  # one snapshot, one action
+    snapshot = capture()
+    assert click(snapshot, image_width=300)["ok"] is False  # mismatched aspect ratio
+    page.evaluate("scrollTo(0,100)")
+    assert click(snapshot)["ok"] is False
+    page.evaluate("scrollTo(0,0)")
+    snapshot = capture()
+    page.set_viewport_size({"width": 1000, "height": 600})
+    assert click(snapshot)["ok"] is False
+    page.set_viewport_size({"width": 800, "height": 600})
+    snapshot = capture()
+    page.reload()
+    assert click(snapshot)["ok"] is False  # same URL, new document
+    assert page.locator("#submitted").text_content() == "0"
+
+
 def free_port() -> int:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -111,10 +181,15 @@ def live_extension_runtime(
     shutil.copytree(SOURCE_EXTENSION, extension)
     for filename in ("background.js", "manifest.json"):
         path = extension / filename
-        path.write_text(
-            path.read_text(encoding="utf-8").replace(":8000", f":{port}"),
-            encoding="utf-8",
-        )
+        text = path.read_text(encoding="utf-8")
+        # Hermetic gateway pinning: rewrite EVERY loopback candidate the relay
+        # dials (background.js API_BASES / manifest CSP) to the fixture port.
+        # A candidate left pointing at a dead port turns apiFetch's failover
+        # into a multi-second stall on machines where loopback refusals are
+        # slow (firewall/TUN), which breaks the pairing timeout assertions.
+        for candidate in (":8000", ":8310"):
+            text = text.replace(candidate, f":{port}")
+        path.write_text(text, encoding="utf-8")
 
     monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("OCTOPUS_BROWSER_EXTENSION_DIR", str(extension))

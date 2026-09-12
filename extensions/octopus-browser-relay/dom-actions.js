@@ -8,6 +8,62 @@
   const snapshotCache = existingCache instanceof Map ? existingCache : new Map();
   globalThis.__OCTOPUS_DOM_ACTION_CACHE__ = snapshotCache;
 
+  function visualState() {
+    return {
+      url: location.href, width: innerWidth, height: innerHeight,
+      scrollX, scrollY, dpr: devicePixelRatio,
+      scale: visualViewport?.scale ?? 1,
+      offsetX: visualViewport?.offsetLeft ?? 0,
+      offsetY: visualViewport?.offsetTop ?? 0,
+    };
+  }
+
+  // Field-wise viewport equality. The snapshot's viewport crosses the
+  // chrome.scripting serialization boundary, which reorders object keys, so a
+  // JSON.stringify comparison against a freshly built visualState() fails on
+  // key order alone even when every value matches.
+  function sameVisualViewport(a, b) {
+    return Boolean(a && b) &&
+      a.url === b.url && a.width === b.width && a.height === b.height &&
+      a.scrollX === b.scrollX && a.scrollY === b.scrollY &&
+      a.dpr === b.dpr && a.scale === b.scale &&
+      a.offsetX === b.offsetX && a.offsetY === b.offsetY;
+  }
+
+  function clickVisualPoint(params) {
+    const { x, y, image_width: width, image_height: height } = params;
+    if (params.selector || ![x, y, width, height].every(Number.isInteger) ||
+        width <= 0 || height <= 0 || width > 20_000 || height > 20_000 ||
+        x < 0 || y < 0 || x >= width || y >= height ||
+        Math.abs((width / height) / (innerWidth / innerHeight) - 1) > 0.01 ||
+        !sameVisualViewport(params.expected_viewport, visualState()) ||
+        params.expected_viewport.scale !== 1 || params.expected_viewport.offsetX !== 0 ||
+        params.expected_viewport.offsetY !== 0) {
+      throw new Error("invalid_visual_coordinates: use the returned image dimensions");
+    }
+    const clientX = x * innerWidth / width;
+    const clientY = y * innerHeight / height;
+    let element = document.elementFromPoint(clientX, clientY);
+    while (element?.shadowRoot) {
+      const child = element.shadowRoot.elementFromPoint(clientX, clientY);
+      if (!child || child === element) break;
+      element = child;
+    }
+    if (!element || element.matches("iframe,frame")) {
+      throw new Error("visual_target_unavailable: use a frame-aware browser tool");
+    }
+    assertActionable(element, "click");
+    focusElement(element);
+    const init = { bubbles: true, cancelable: true, composed: true,
+      clientX, clientY, button: 0, view: window };
+    element.dispatchEvent(new PointerEvent("pointerdown", { ...init, buttons: 1, pointerId: 1, pointerType: "mouse", isPrimary: true }));
+    element.dispatchEvent(new MouseEvent("mousedown", { ...init, buttons: 1 }));
+    element.dispatchEvent(new PointerEvent("pointerup", { ...init, buttons: 0, pointerId: 1, pointerType: "mouse", isPrimary: true }));
+    element.dispatchEvent(new MouseEvent("mouseup", { ...init, buttons: 0 }));
+    element.dispatchEvent(new MouseEvent("click", { ...init, buttons: 0, detail: 1 }));
+    return { ok: true, clicked: { x: clientX, y: clientY }, coordinateSpace: "css_viewport" };
+  }
+
   function textOf(element) {
     return String(
       element.innerText ||
@@ -543,6 +599,12 @@
   async function run(action, rawParams = {}) {
     const params = rawParams && typeof rawParams === "object" ? rawParams : {};
     const selector = String(params.selector || "");
+    if (action === "visualSnapshot") {
+      return { viewport: visualState() };
+    }
+    if (action === "visualProbe") {
+      return { viewport: visualState() };
+    }
     if (action === "pageAction" || action === "pageInput" || action === "pageCapability") {
       if (!globalThis.__octopusPageAgent?.run) {
         throw new Error("page agent bridge is not available on this page");
@@ -566,6 +628,9 @@
       return globalThis.__octopusPageAgent.run(payload);
     }
     if (action === "click") {
+      if (params.snapshot_id || params.x != null || params.y != null) {
+        return clickVisualPoint(params);
+      }
       const target = await waitForActionable(selector, "click", params, { hitTest: true });
       const { element } = target;
       assertActionable(element, "click");
