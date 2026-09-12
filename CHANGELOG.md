@@ -8,6 +8,8 @@ Versions follow [SemVer](https://semver.org/), pre-1.0 so breaking changes are a
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-09-13
+
 ### 2026-08 · UI refactor + composition layer
 
 Non-breaking cleanup pass across frontend and runtime composition.
